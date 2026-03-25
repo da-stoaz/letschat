@@ -134,11 +134,6 @@ fn main() {
             get_app_version
         ])
         .setup(|app| {
-            #[cfg(target_os = "macos")]
-            if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-                let _ = window.set_decorations(false);
-            }
-
             let open_item = MenuItem::with_id(app, "tray_open", "Open", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
             let separator = PredefinedMenuItem::separator(app)?;
