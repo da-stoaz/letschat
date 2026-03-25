@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { reducers, spacetimedbClient } from '../lib/spacetimedb'
+import { reducers } from '../lib/spacetimedb'
 import { useSelfStore } from '../stores/selfStore'
 
 export function AuthPage() {
@@ -8,10 +8,6 @@ export function AuthPage() {
   const user = useSelfStore((s) => s.user)
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
-
-  useEffect(() => {
-    void spacetimedbClient.connect()
-  }, [])
 
   useEffect(() => {
     if (user) navigate('/app', { replace: true })

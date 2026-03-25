@@ -1,7 +1,7 @@
 :root {
   font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
-  color: #141413;
-  background: radial-gradient(circle at top left, #f2f6ff, #f7f3ea 55%, #e7ebf1 100%);
+  color: #f3f7ff;
+  background: radial-gradient(circle at 20% -10%, #2a3f5f, #10161f 45%, #0a0f16 100%);
 }
 
 * {
@@ -11,6 +11,8 @@
 body {
   margin: 0;
   min-height: 100vh;
+  color: #f3f7ff;
+  background: #0a0f16;
 }
 
 button,
@@ -23,33 +25,41 @@ textarea {
   display: grid;
   grid-template-columns: 48px 220px minmax(0, 1fr);
   min-height: 100vh;
+  background: radial-gradient(circle at top right, #1b2f47, #0e1520 35%, #090d14 100%);
 }
 
 .server-rail {
-  background: #1f2a33;
+  background: #111a27;
   color: #fff;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
   padding: 8px 0;
+  border-right: 1px solid #2b3e58;
 }
 
 .server-pill {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  border: 0;
-  background: #30526f;
+  border: 1px solid #3a557a;
+  background: linear-gradient(145deg, #223751, #1a2a3f);
   color: #fff;
   display: grid;
   place-items: center;
   text-decoration: none;
+  cursor: pointer;
+}
+
+.server-pill.active {
+  border-color: #6ec2ff;
+  box-shadow: 0 0 0 2px #6ec2ff22;
 }
 
 .sidebar {
-  border-right: 1px solid #d8deea;
-  background: #f9fbff;
+  border-right: 1px solid #2b3e58;
+  background: #111a27cc;
   padding: 10px;
 }
 
@@ -61,11 +71,18 @@ textarea {
 .channel-row {
   width: 100%;
   text-align: left;
-  border: 0;
-  background: #e8eef8;
+  border: 1px solid #304661;
+  background: #182638;
+  color: #eaf3ff;
   border-radius: 8px;
   padding: 8px;
   margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.channel-row.active {
+  border-color: #6ec2ff;
+  background: #1f344c;
 }
 
 .main-pane {
@@ -73,8 +90,8 @@ textarea {
 }
 
 .pane {
-  background: #fff;
-  border: 1px solid #dde4f0;
+  background: #0f1826e6;
+  border: 1px solid #2f425d;
   border-radius: 12px;
   display: flex;
   flex-direction: column;
@@ -82,7 +99,7 @@ textarea {
 }
 
 .pane-header {
-  border-bottom: 1px solid #edf1f8;
+  border-bottom: 1px solid #2a3c55;
   padding: 12px;
   display: flex;
   justify-content: space-between;
@@ -93,9 +110,22 @@ textarea {
   display: grid;
   place-items: center;
   min-height: calc(100vh - 24px);
-  background: #fff;
-  border: 1px dashed #cad4e6;
+  background: #0f1826e6;
+  border: 1px dashed #355173;
   border-radius: 12px;
+}
+
+.empty-stack {
+  text-align: center;
+}
+
+.empty-stack h2 {
+  margin: 0 0 6px;
+}
+
+.empty-stack p {
+  margin: 0 0 14px;
+  color: #a8bdd8;
 }
 
 .message-list {
@@ -108,34 +138,38 @@ textarea {
   margin-bottom: 12px;
   padding: 10px;
   border-radius: 10px;
-  background: #f5f8fe;
+  background: #1a2940;
+  border: 1px solid #314b6b;
 }
 
 .message-meta {
   display: flex;
   gap: 8px;
   font-size: 12px;
-  color: #4a5768;
+  color: #9fb4cf;
 }
 
 .message-deleted {
-  color: #7b8492;
+  color: #9ca9bb;
   font-style: italic;
 }
 
 .composer {
-  border-top: 1px solid #edf1f8;
+  border-top: 1px solid #2a3c55;
   padding: 10px;
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .composer textarea {
   flex: 1;
   min-height: 70px;
-  border: 1px solid #cad4e6;
+  border: 1px solid #365274;
   border-radius: 8px;
   padding: 8px;
+  background: #132032;
+  color: #f3f7ff;
 }
 
 .voice-grid {
@@ -147,13 +181,14 @@ textarea {
 }
 
 .voice-tile {
-  border: 1px solid #d5dded;
+  border: 1px solid #395474;
+  background: #18293d;
   border-radius: 10px;
   padding: 12px;
 }
 
 .voice-controls {
-  border-top: 1px solid #edf1f8;
+  border-top: 1px solid #2a3c55;
   padding: 10px;
   display: flex;
   gap: 8px;
@@ -173,8 +208,8 @@ textarea {
 
 .auth-card {
   width: min(460px, calc(100vw - 24px));
-  background: #fff;
-  border: 1px solid #d9dfeb;
+  background: #111b2a;
+  border: 1px solid #2f4664;
   border-radius: 12px;
   padding: 16px;
   display: flex;
@@ -190,9 +225,11 @@ textarea {
 
 .auth-card input,
 .inline input {
-  border: 1px solid #cad4e6;
+  border: 1px solid #365274;
   border-radius: 8px;
   padding: 8px;
+  background: #111f31;
+  color: #f3f7ff;
 }
 
 .inline {
@@ -212,7 +249,8 @@ textarea {
 
 .list-row {
   padding: 8px;
-  border: 1px solid #e1e8f5;
+  border: 1px solid #365274;
+  background: #18283b;
   border-radius: 8px;
   margin-bottom: 8px;
   display: flex;
@@ -221,10 +259,75 @@ textarea {
 }
 
 .ghost {
-  border: 1px solid #ccd6e7;
-  background: #fff;
+  border: 1px solid #3f5f85;
+  background: #162438;
+  color: #eaf3ff;
   border-radius: 8px;
   padding: 8px 10px;
+}
+
+button {
+  border: 1px solid #4e739f;
+  background: linear-gradient(180deg, #2f5e93, #24486f);
+  color: #ecf5ff;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+.hint-card {
+  margin-top: 10px;
+  border: 1px dashed #496a91;
+  border-radius: 10px;
+  padding: 10px;
+  background: #132033;
+}
+
+.hint-card p {
+  margin: 0 0 8px;
+  color: #acc2df;
+}
+
+.fatal-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #0a0f16;
+}
+
+.fatal-card {
+  width: min(620px, calc(100vw - 32px));
+  background: #111b2a;
+  border: 1px solid #456486;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.fatal-card h1 {
+  margin: 0 0 8px;
+}
+
+.fatal-card p {
+  margin: 0 0 12px;
+  color: #a9bedb;
+}
+
+.fatal-card code {
+  display: block;
+  margin-bottom: 14px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #0c1522;
+  border: 1px solid #2f4664;
+  color: #d1e2f6;
+}
+
+.error-text {
+  margin: 0 12px 6px;
+  color: #ffb0b0;
 }
 
 @media (max-width: 940px) {

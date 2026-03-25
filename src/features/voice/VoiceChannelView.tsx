@@ -1,13 +1,27 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { joinLiveKitVoice, leaveLiveKitVoice } from '../../lib/livekit'
 import { reducers } from '../../lib/spacetimedb'
 import { useVoiceStore } from '../../stores/voiceStore'
 import type { u64 } from '../../types/domain'
 import type { Room } from 'livekit-client'
+import { useUiStore } from '../../stores/uiStore'
 
 export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const participants = useVoiceStore((s) => (channelId ? s.participantsByChannel[channelId] ?? [] : []))
   const [room, setRoom] = useState<Room | null>(null)
+  const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
+  const clearUnread = useUiStore((s) => s.clearUnread)
+
+  useEffect(() => {
+    if (channelId === null) return
+    const ui = useUiStore.getState()
+    if (ui.activeChannelId !== channelId) {
+      setActiveChannelId(channelId)
+    }
+    if ((ui.unreadByChannel[channelId] ?? 0) > 0) {
+      clearUnread(channelId)
+    }
+  }, [channelId, clearUnread, setActiveChannelId])
 
   if (channelId === null) {
     return <div className="pane-empty">Select a voice channel</div>

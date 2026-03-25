@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
+import { Link, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { useServersStore } from '../stores/serversStore'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useUiStore } from '../stores/uiStore'
@@ -15,6 +15,20 @@ export function AppLayout() {
   const activeChannels = activeServerId ? channelsByServer[activeServerId] ?? [] : []
   const textChannels = activeChannels.filter((c) => c.kind === 'Text')
   const voiceChannels = activeChannels.filter((c) => c.kind === 'Voice')
+  const activeServer = servers.find((server) => server.id === activeServerId) ?? null
+
+  const openServer = (serverId: number) => {
+    const channels = channelsByServer[serverId] ?? []
+    const preferred = channels.find((channel) => channel.kind === 'Text') ?? channels[0]
+
+    if (preferred) {
+      setActiveChannelId(preferred.id)
+      navigate(`/app/${serverId}/${preferred.id}`)
+      return
+    }
+
+    navigate(`/app/${serverId}`)
+  }
 
   return (
     <main className="app-grid">
@@ -23,9 +37,14 @@ export function AppLayout() {
           L
         </Link>
         {servers.map((server) => (
-          <NavLink className="server-pill" key={server.id} to={`/app/${server.id}`}>
+          <button
+            className={`server-pill ${activeServerId === server.id ? 'active' : ''}`}
+            key={server.id}
+            onClick={() => openServer(server.id)}
+            title={server.name}
+          >
             {server.name.slice(0, 2).toUpperCase()}
-          </NavLink>
+          </button>
         ))}
         <button className="server-pill" onClick={() => reducers.createServer('New Server')}>
           +
@@ -35,7 +54,7 @@ export function AppLayout() {
       <aside className="sidebar">
         {activeServerId ? (
           <>
-            <header className="sidebar-header">Server {activeServerId}</header>
+            <header className="sidebar-header">{activeServer?.name ?? `Server ${activeServerId}`}</header>
             <section>
               <h4>Text Channels</h4>
               {textChannels.map((channel) => (
@@ -66,11 +85,19 @@ export function AppLayout() {
                 </button>
               ))}
             </section>
+            {activeChannels.length === 0 ? (
+              <div className="hint-card">
+                <p>This server has no channels yet.</p>
+                <button onClick={() => reducers.createChannel(activeServerId, 'general', 'Text', false)}>
+                  Create #general
+                </button>
+              </div>
+            ) : null}
           </>
         ) : (
           <>
             <header className="sidebar-header">Direct Messages</header>
-            <button className="channel-row" onClick={() => navigate('/app/dm/friends')}>
+            <button className="channel-row active" onClick={() => navigate('/app/dm/friends')}>
               Friends
             </button>
           </>

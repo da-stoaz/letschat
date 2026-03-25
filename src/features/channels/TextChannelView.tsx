@@ -1,37 +1,43 @@
-import { useMemo, useState } from 'react'
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
 import { useMessagesStore } from '../../stores/messagesStore'
 import { useUiStore } from '../../stores/uiStore'
 import { reducers } from '../../lib/spacetimedb'
-import type { Message, u64 } from '../../types/domain'
-
-function paginateMessages(messages: Message[], page: number, pageSize: number): Message[] {
-  const start = Math.max(messages.length - (page + 1) * pageSize, 0)
-  const end = messages.length - page * pageSize
-  return messages.slice(start, end)
-}
+import type { u64 } from '../../types/domain'
+import { useChannelsStore } from '../../stores/channelsStore'
+import { useServerRole } from '../../hooks/useServerRole'
 
 export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const [draft, setDraft] = useState('')
   const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
   const clearUnread = useUiStore((s) => s.clearUnread)
+  const channelsByServer = useChannelsStore((s) => s.channelsByServer)
   const messages = useMessagesStore((s) => (channelId ? s.messagesByChannel[channelId] ?? [] : []))
-
-  const query = useInfiniteQuery({
-    queryKey: ['messages', channelId],
-    enabled: channelId !== null,
-    initialPageParam: 0,
-    queryFn: async ({ pageParam }) => paginateMessages(messages, pageParam, 50),
-    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
-      if (lastPage.length < 50) return undefined
-      return lastPageParam + 1
-    },
-  })
+  const channel = useMemo(
+    () =>
+      channelId === null
+        ? null
+        : Object.values(channelsByServer)
+            .flat()
+            .find((row) => row.id === channelId) ?? null,
+    [channelId, channelsByServer],
+  )
+  const role = useServerRole(channel?.serverId ?? null)
+  const readOnlyForMember = Boolean(channel?.moderatorOnly && role === 'Member')
 
   const flattened = useMemo(() => {
-    const pages = query.data?.pages ?? []
-    return pages.flat().sort((a, b) => a.sentAt.localeCompare(b.sentAt))
-  }, [query.data?.pages])
+    return [...messages].sort((a, b) => a.sentAt.localeCompare(b.sentAt))
+  }, [messages])
+
+  useEffect(() => {
+    if (channelId === null) return
+    const ui = useUiStore.getState()
+    if (ui.activeChannelId !== channelId) {
+      setActiveChannelId(channelId)
+    }
+    if ((ui.unreadByChannel[channelId] ?? 0) > 0) {
+      clearUnread(channelId)
+    }
+  }, [channelId, clearUnread, setActiveChannelId])
 
   if (channelId === null) {
     return <div className="pane-empty">Select a text channel</div>
@@ -66,18 +72,13 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
           </article>
         ))}
 
-        {query.hasNextPage ? (
-          <button className="ghost" onClick={() => query.fetchNextPage()}>
-            Load older
-          </button>
-        ) : null}
       </div>
 
       <form
         className="composer"
         onSubmit={async (event) => {
           event.preventDefault()
-          if (!draft.trim()) return
+          if (!draft.trim() || readOnlyForMember) return
           await reducers.sendMessage(channelId, draft.trim())
           setDraft('')
         }}
@@ -85,9 +86,17 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              event.currentTarget.form?.requestSubmit()
+            }
+          }}
           maxLength={4000}
-          placeholder="Message #channel"
+          placeholder={readOnlyForMember ? 'This channel is read-only for members' : 'Message #channel'}
+          disabled={readOnlyForMember}
         />
+        {draft.length >= 3500 ? <small>{draft.length}/4000</small> : null}
         <button type="submit">Send</button>
       </form>
     </section>
