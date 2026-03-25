@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { MicIcon, MicOffIcon, MonitorUpIcon, PhoneOffIcon, VideoIcon, VolumeXIcon } from 'lucide-react'
-import { joinLiveKitVoice, leaveLiveKitVoice } from '../../lib/livekit'
+import { joinLiveKitVoice, leaveLiveKitVoice, useLiveKitRoom } from '../../lib/livekit'
 import { reducers } from '../../lib/spacetimedb'
 import { useVoiceStore } from '../../stores/voiceStore'
+import { useConnectionStore } from '../../stores/connectionStore'
 import type { VoiceParticipant, u64 } from '../../types/domain'
-import type { Room } from 'livekit-client'
+import { ConnectionState, type Room } from 'livekit-client'
 import { warnOnce } from '../../lib/devWarnings'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,13 +27,19 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   }, [channelId, participants])
 
   const [room, setRoom] = useState<Room | null>(null)
+  const [joining, setJoining] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const selfIdentity = useConnectionStore((s) => s.identity)
+  const { activeSpeakerIds, connectionState } = useLiveKitRoom(room)
 
   if (channelId === null) {
     return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a voice channel</div>
   }
 
-  const joined = room !== null
+  const selfParticipant = participants.find((p) => p.userIdentity === selfIdentity) ?? null
+  const joined = room !== null && connectionState === ConnectionState.Connected && selfParticipant !== null
+  const statusBadge = joining ? 'Joining...' : joined ? 'Joined' : 'Not joined'
+  const statusVariant = joining ? 'outline' : joined ? 'default' : 'secondary'
 
   return (
     <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 rounded-xl border border-border/70 bg-card/60 p-3">
@@ -41,7 +48,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
           <h2 className="text-lg font-semibold">Voice Channel {channelId}</h2>
           <p className="text-sm text-muted-foreground">{participants.length}/15 participants</p>
         </div>
-        {joined ? <Badge>Connected</Badge> : <Badge variant="secondary">Not joined</Badge>}
+        <Badge variant={statusVariant}>{statusBadge}</Badge>
       </header>
 
       <ScrollArea className="min-h-0">
@@ -53,13 +60,11 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
                 <CardDescription>Joined {new Date(p.joinedAt).toLocaleTimeString()}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-1">
+                {activeSpeakerIds.has(p.userIdentity) ? <Badge>Speaking</Badge> : null}
                 {p.muted ? <Badge variant="secondary">Muted</Badge> : null}
                 {p.deafened ? <Badge variant="secondary">Deafened</Badge> : null}
                 {p.sharingScreen ? <Badge variant="secondary">Screen</Badge> : null}
                 {p.sharingCamera ? <Badge variant="secondary">Camera</Badge> : null}
-                {!p.muted && !p.deafened && !p.sharingScreen && !p.sharingCamera ? (
-                  <Badge variant="outline">Active</Badge>
-                ) : null}
               </CardContent>
             </Card>
           ))}
@@ -69,19 +74,23 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
       <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
         {!joined ? (
           <Button
+            disabled={joining}
             onClick={async () => {
               setError(null)
+              setJoining(true)
               try {
                 const r = await joinLiveKitVoice(channelId)
                 setRoom(r)
               } catch (e) {
                 const message = e instanceof Error ? e.message : 'Could not join voice channel.'
                 setError(message)
+              } finally {
+                setJoining(false)
               }
             }}
           >
             <MicIcon className="size-4" />
-            Join Voice
+            {joining ? 'Joining...' : 'Join Voice'}
           </Button>
         ) : (
           <>
