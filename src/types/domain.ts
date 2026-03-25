@@ -97,14 +97,3 @@ export interface DirectMessage {
   deletedBySender: boolean
   deletedByRecipient: boolean
 }
-
-export interface AuthCredential {
-  username: string
-  identity: Identity
-  passwordSalt: string
-  passwordHash: string
-  tokenIv: string
-  tokenCipher: string
-  createdAt: string
-  updatedAt: string
-}

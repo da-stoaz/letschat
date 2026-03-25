@@ -50,7 +50,6 @@ import JoinVoiceChannelReducer from "./join_voice_channel_reducer";
 import KickMemberReducer from "./kick_member_reducer";
 import LeaveVoiceChannelReducer from "./leave_voice_channel_reducer";
 import RegisterUserReducer from "./register_user_reducer";
-import RegisterWithCredentialReducer from "./register_with_credential_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
 import RenameServerReducer from "./rename_server_reducer";
 import SendDirectMessageReducer from "./send_direct_message_reducer";
@@ -63,7 +62,6 @@ import UnblockUserReducer from "./unblock_user_reducer";
 import UpdateChannelReducer from "./update_channel_reducer";
 import UpdateProfileReducer from "./update_profile_reducer";
 import UpdateVoiceStateReducer from "./update_voice_state_reducer";
-import UpsertAuthCredentialReducer from "./upsert_auth_credential_reducer";
 import UseInviteReducer from "./use_invite_reducer";
 
 // Import all procedure arg schemas
@@ -312,7 +310,6 @@ const reducersSchema = __reducers(
   __reducerSchema("kick_member", KickMemberReducer),
   __reducerSchema("leave_voice_channel", LeaveVoiceChannelReducer),
   __reducerSchema("register_user", RegisterUserReducer),
-  __reducerSchema("register_with_credential", RegisterWithCredentialReducer),
   __reducerSchema("remove_friend", RemoveFriendReducer),
   __reducerSchema("rename_server", RenameServerReducer),
   __reducerSchema("send_direct_message", SendDirectMessageReducer),
@@ -325,7 +322,6 @@ const reducersSchema = __reducers(
   __reducerSchema("update_channel", UpdateChannelReducer),
   __reducerSchema("update_profile", UpdateProfileReducer),
   __reducerSchema("update_voice_state", UpdateVoiceStateReducer),
-  __reducerSchema("upsert_auth_credential", UpsertAuthCredentialReducer),
   __reducerSchema("use_invite", UseInviteReducer),
 );
 

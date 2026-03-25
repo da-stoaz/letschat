@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { persistCredentialForCurrentUser, reducers, resetLocalAuthSession } from '../lib/spacetimedb'
+import { getCurrentSessionToken, reducers, resetLocalAuthSession } from '../lib/spacetimedb'
+import { authServiceLink } from '../lib/authService'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSelfStore } from '../stores/selfStore'
 import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -76,7 +77,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </div>
           <p className="break-all">{identity ? identity : 'No identity available'}</p>
           <div className="space-y-2 rounded-md border border-border/70 p-2">
-            <Label htmlFor="settings-password">Login password</Label>
+            <Label htmlFor="settings-password">Password Login</Label>
             <Input
               id="settings-password"
               type="password"
@@ -100,6 +101,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   setAccountMessage('Register a user first.')
                   return
                 }
+                if (!identity) {
+                  setAccountMessage('No active identity found.')
+                  return
+                }
+                const sessionToken = getCurrentSessionToken()
+                if (!sessionToken) {
+                  setAccountMessage('No active Spacetime session token found.')
+                  return
+                }
                 if (password.length < 8) {
                   setAccountMessage('Password must be at least 8 characters.')
                   return
@@ -109,7 +119,13 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   return
                 }
                 try {
-                  await persistCredentialForCurrentUser(user.username, password)
+                  await authServiceLink({
+                    username: user.username,
+                    displayName: user.displayName,
+                    password,
+                    spacetimeToken: sessionToken,
+                    spacetimeIdentity: identity,
+                  })
                   setPassword('')
                   setConfirmPassword('')
                   setAccountMessage('Password login updated successfully.')

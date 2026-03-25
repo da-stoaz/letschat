@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ConnectionState, type Participant, Room } from 'livekit-client'
+import { useEffect, useState } from 'react'
+import { ConnectionState, Room } from 'livekit-client'
 import { reducers } from './spacetimedb'
 import { tauriCommands } from './tauri'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -162,7 +162,7 @@ export function useLiveKitRoom(room: Room | null) {
     if (!room) return
 
     const bump = () => setVersion((v) => v + 1)
-    const onParticipantEvent = (_participant: Participant) => bump()
+    const onParticipantEvent = () => bump()
     room.on('participantConnected', onParticipantEvent)
     room.on('participantDisconnected', onParticipantEvent)
     room.on('activeSpeakersChanged', bump)
@@ -176,14 +176,14 @@ export function useLiveKitRoom(room: Room | null) {
     }
   }, [room])
 
-  return useMemo(
-    () => ({
-      room,
-      localParticipant: room?.localParticipant ?? null,
-      remoteParticipants: room ? Array.from(room.remoteParticipants.values()) : [],
-      activeSpeakerIds: new Set((room?.activeSpeakers ?? []).map((p) => p.identity)),
-      connectionState: room?.state ?? ConnectionState.Disconnected,
-    }),
-    [room, version],
-  )
+  // Access version to force recomputation when LiveKit emits tracked events.
+  void version
+
+  return {
+    room,
+    localParticipant: room?.localParticipant ?? null,
+    remoteParticipants: room ? Array.from(room.remoteParticipants.values()) : [],
+    activeSpeakerIds: new Set((room?.activeSpeakers ?? []).map((p) => p.identity)),
+    connectionState: room?.state ?? ConnectionState.Disconnected,
+  }
 }

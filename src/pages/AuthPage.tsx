@@ -8,7 +8,7 @@ import {
   rotateIdentityForRegistration,
   spacetimedbClient,
 } from '../lib/spacetimedb'
-import { encryptTokenForCredential } from '../lib/authCrypto'
+import { authServiceRegister } from '../lib/authService'
 import { useSelfStore } from '../stores/selfStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -74,22 +74,20 @@ export function AuthPage() {
 
                   const registerOnce = async (): Promise<string | null> => {
                     await rotateIdentityForRegistration()
-                    const token = getCurrentSessionToken()
-                    if (!token) {
-                      throw new Error('No authenticated session token is available. Reconnect and try again.')
+                    await reducers.registerUser(normalizedUsername, displayName.trim())
+                    const sessionToken = getCurrentSessionToken()
+                    const sessionIdentity = useConnectionStore.getState().identity
+                    if (!sessionToken || !sessionIdentity) {
+                      throw new Error('Could not obtain active Spacetime session for registration.')
                     }
-
-                    const payload = await encryptTokenForCredential(password, token)
-                    await reducers.registerWithCredential(
-                      normalizedUsername,
-                      displayName.trim(),
-                      payload.passwordSalt,
-                      payload.passwordHash,
-                      payload.tokenIv,
-                      payload.tokenCipher,
-                    )
-
-                    return useConnectionStore.getState().identity
+                    await authServiceRegister({
+                      username: normalizedUsername,
+                      displayName: displayName.trim(),
+                      password,
+                      spacetimeToken: sessionToken,
+                      spacetimeIdentity: sessionIdentity,
+                    })
+                    return sessionIdentity
                   }
 
                   let registeredIdentity: string | null = null

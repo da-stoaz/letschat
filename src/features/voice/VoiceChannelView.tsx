@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MicIcon, MicOffIcon, MonitorUpIcon, PhoneOffIcon, VideoIcon, VolumeXIcon } from 'lucide-react'
 import {
   getMicrophoneUnavailableReason,
@@ -12,6 +12,7 @@ import {
 import { reducers } from '../../lib/spacetimedb'
 import { useVoiceStore } from '../../stores/voiceStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useMembersStore } from '../../stores/membersStore'
 import type { VoiceParticipant, u64 } from '../../types/domain'
 import { ConnectionState, type Room } from 'livekit-client'
 import { warnOnce } from '../../lib/devWarnings'
@@ -22,8 +23,18 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 
 const EMPTY_PARTICIPANTS: VoiceParticipant[] = []
 
+function normalizeIdentityKey(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+function sameIdentity(left: string, right: string | null | undefined): boolean {
+  if (!right) return false
+  return normalizeIdentityKey(left) === normalizeIdentityKey(right)
+}
+
 export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const participantsByChannel = useVoiceStore((s) => s.participantsByChannel)
+  const membersByServer = useMembersStore((s) => s.membersByServer)
   const participants = channelId === null ? EMPTY_PARTICIPANTS : (participantsByChannel[channelId] ?? EMPTY_PARTICIPANTS)
 
   useEffect(() => {
@@ -41,14 +52,27 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const selfIdentity = useConnectionStore((s) => s.identity)
   const { activeSpeakerIds, connectionState, remoteParticipants } = useLiveKitRoom(room)
 
-  if (channelId === null) {
-    return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a voice channel</div>
-  }
+  const displayNameByIdentity = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const serverMembers of Object.values(membersByServer)) {
+      for (const member of serverMembers) {
+        if (!member.user) continue
+        map.set(normalizeIdentityKey(member.userIdentity), member.user.displayName || member.user.username)
+      }
+    }
+    return map
+  }, [membersByServer])
 
-  const selfParticipant = participants.find((p) => p.userIdentity === selfIdentity) ?? null
-  const joined = room !== null && connectionState === ConnectionState.Connected && selfParticipant !== null
-  const displayParticipants =
-    joined || !selfIdentity ? participants : participants.filter((participant) => participant.userIdentity !== selfIdentity)
+  const selfParticipant = useMemo(
+    () => participants.find((participant) => sameIdentity(participant.userIdentity, selfIdentity)) ?? null,
+    [participants, selfIdentity],
+  )
+  const connectedToRoom = room !== null && connectionState === ConnectionState.Connected
+  const connectingToRoom = joining || (room !== null && connectionState === ConnectionState.Connecting)
+  const joined = connectedToRoom
+  const displayParticipants = !selfIdentity
+    ? participants
+    : participants.filter((participant) => joined || !sameIdentity(participant.userIdentity, selfIdentity))
   const muted = selfParticipant?.muted ?? false
   const deafened = selfParticipant?.deafened ?? false
   const sharingCamera = selfParticipant?.sharingCamera ?? false
@@ -81,7 +105,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const patchVoiceState = async (
     patch: Partial<Pick<VoiceParticipant, 'muted' | 'deafened' | 'sharingScreen' | 'sharingCamera'>>,
   ) => {
-    if (!selfParticipant) return
+    if (channelId === null || !selfParticipant) return
     const next = {
       muted: patch.muted ?? selfParticipant.muted,
       deafened: patch.deafened ?? selfParticipant.deafened,
@@ -91,8 +115,8 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     await reducers.updateVoiceState(channelId, next.muted, next.deafened, next.sharingScreen, next.sharingCamera)
   }
 
-  const statusBadge = joining ? 'Joining...' : joined ? 'Joined' : 'Not joined'
-  const statusVariant = joining ? 'outline' : joined ? 'default' : 'secondary'
+  const statusBadge = connectingToRoom ? 'Joining...' : joined ? 'Joined' : selfParticipant ? 'Syncing...' : 'Not joined'
+  const statusVariant = connectingToRoom ? 'outline' : joined ? 'default' : selfParticipant ? 'outline' : 'secondary'
   const ensureMicrophoneCapture = async () => {
     if (supportsMicrophoneCapture()) return
     await requestMicrophonePermission()
@@ -101,12 +125,16 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     }
   }
 
+  if (channelId === null) {
+    return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a voice channel</div>
+  }
+
   return (
     <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 rounded-xl border border-border/70 bg-card/60 p-3">
       <header className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Voice Channel {channelId}</h2>
-          <p className="text-sm text-muted-foreground">{displayParticipants.length}/15 participants</p>
+          <p className="text-sm text-muted-foreground">{participants.length}/15 participants</p>
         </div>
         <Badge variant={statusVariant}>{statusBadge}</Badge>
       </header>
@@ -124,7 +152,9 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
           {displayParticipants.map((p) => (
             <Card key={p.userIdentity} className="border-border/70 bg-background/60 py-0">
               <CardHeader>
-                <CardTitle className="text-sm">{p.userIdentity.slice(0, 12)}</CardTitle>
+                <CardTitle className="text-sm">
+                  {displayNameByIdentity.get(normalizeIdentityKey(p.userIdentity)) ?? p.userIdentity.slice(0, 12)}
+                </CardTitle>
                 <CardDescription>Joined {new Date(p.joinedAt).toLocaleTimeString()}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-1">
@@ -142,7 +172,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
       <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
         {!joined ? (
           <Button
-            disabled={joining}
+            disabled={connectingToRoom}
             onClick={async () => {
               setError(null)
               setJoining(true)
@@ -158,7 +188,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
             }}
           >
             <MicIcon className="size-4" />
-            {joining ? 'Joining...' : 'Join Voice'}
+            {connectingToRoom ? 'Joining...' : 'Join Voice'}
           </Button>
         ) : (
           <>

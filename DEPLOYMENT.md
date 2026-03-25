@@ -22,7 +22,7 @@ spacetime publish --server http://localhost:3000 your-app-name
 Production baseline:
 
 ```bash
-spacetimedb start
+spacetime start
 spacetime publish --server http://your-server:3000 your-app-name
 ```
 
@@ -32,6 +32,24 @@ spacetime publish --server http://your-server:3000 your-app-name
 - Set `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
 - In this implementation, JWT signing is performed by the Tauri shell command `generate_livekit_token`.
 - Provide `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` to the desktop app environment at build/runtime.
+
+## Auth Service (`auth-framework` + SQLite)
+
+Development:
+
+```bash
+cargo run --manifest-path auth-service/Cargo.toml
+```
+
+Key env vars:
+
+- `AUTH_BIND` (default `127.0.0.1:8787`)
+- `AUTH_DATABASE_URL` (default `sqlite://auth-service/auth.db`)
+- `AUTH_JWT_SECRET` (must be set to a strong value in production)
+
+Frontend uses:
+
+- `VITE_AUTH_SERVICE_URL` (default `http://127.0.0.1:8787`)
 
 ## Tauri Build
 

@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Rust auth service
+auth-service/target
+auth-service/*.db
