@@ -1,4 +1,9 @@
-import type { DbConnectionImpl, Identity as SpacetimeIdentity, Timestamp as SpacetimeTimestamp } from 'spacetimedb'
+import {
+  Identity as SpacetimeIdentityClass,
+  type DbConnectionImpl,
+  type Identity as SpacetimeIdentity,
+  type Timestamp as SpacetimeTimestamp,
+} from 'spacetimedb'
 import { DbConnection, tables } from '../generated'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -376,6 +381,40 @@ function reducerEnum(tag: string): { tag: string } {
   return { tag }
 }
 
+type U64Input = number | bigint | string
+
+function toU64(value: U64Input, fieldName: string): bigint {
+  if (typeof value === 'bigint') {
+    if (value < 0n) throw new Error(`${fieldName} must be a non-negative integer`)
+    return value
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+      throw new Error(`${fieldName} must be a non-negative integer`)
+    }
+    return BigInt(value)
+  }
+
+  const normalized = value.trim()
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error(`${fieldName} must be a non-negative integer`)
+  }
+  return BigInt(normalized)
+}
+
+function toOptionalU64(value: U64Input | null | undefined, fieldName: string): bigint | null {
+  if (value === null || value === undefined) return null
+  return toU64(value, fieldName)
+}
+
+function toReducerIdentity(value: Identity | SpacetimeIdentity): SpacetimeIdentityClass {
+  if (value && typeof value === 'object' && 'toHexString' in value) {
+    return value as SpacetimeIdentityClass
+  }
+  return new SpacetimeIdentityClass(String(value))
+}
+
 function getStoredToken(): string | undefined {
   const token = localStorage.getItem(SPACETIMEDB_TOKEN_KEY)
   return token ?? undefined
@@ -481,68 +520,102 @@ export const reducers = {
   updateProfile: (displayName?: string, avatarUrl?: string) =>
     spacetimedbClient.call('updateProfile', { displayName: displayName ?? null, avatarUrl: avatarUrl ?? null }),
   createServer: (name: string) => spacetimedbClient.call('createServer', { name }),
-  renameServer: (serverId: number, newName: string) => spacetimedbClient.call('renameServer', { serverId, newName }),
-  deleteServer: (serverId: number) => spacetimedbClient.call('deleteServer', { serverId }),
+  renameServer: (serverId: number, newName: string) =>
+    spacetimedbClient.call('renameServer', { serverId: toU64(serverId, 'serverId'), newName }),
+  deleteServer: (serverId: number) => spacetimedbClient.call('deleteServer', { serverId: toU64(serverId, 'serverId') }),
   createInvite: (serverId: number, expiresInSeconds?: number, maxUses?: number) =>
     spacetimedbClient.call('createInvite', {
-      serverId,
-      expiresInSeconds: expiresInSeconds ?? null,
+      serverId: toU64(serverId, 'serverId'),
+      expiresInSeconds: toOptionalU64(expiresInSeconds, 'expiresInSeconds'),
       maxUses: maxUses ?? null,
     }),
   useInvite: (token: string) => spacetimedbClient.call('useInvite', { token }),
   kickMember: (serverId: number, targetIdentity: Identity) =>
-    spacetimedbClient.call('kickMember', { serverId, targetIdentity }),
+    spacetimedbClient.call('kickMember', {
+      serverId: toU64(serverId, 'serverId'),
+      targetIdentity: toReducerIdentity(targetIdentity),
+    }),
   banMember: (serverId: number, targetIdentity: Identity, reason?: string) =>
-    spacetimedbClient.call('banMember', { serverId, targetIdentity, reason: reason ?? null }),
+    spacetimedbClient.call('banMember', {
+      serverId: toU64(serverId, 'serverId'),
+      targetIdentity: toReducerIdentity(targetIdentity),
+      reason: reason ?? null,
+    }),
   unbanMember: (serverId: number, targetIdentity: Identity) =>
-    spacetimedbClient.call('unbanMember', { serverId, targetIdentity }),
+    spacetimedbClient.call('unbanMember', {
+      serverId: toU64(serverId, 'serverId'),
+      targetIdentity: toReducerIdentity(targetIdentity),
+    }),
   setMemberRole: (serverId: number, targetIdentity: Identity, newRole: 'Member' | 'Moderator') =>
     spacetimedbClient.call('setMemberRole', {
-      serverId,
-      targetIdentity,
+      serverId: toU64(serverId, 'serverId'),
+      targetIdentity: toReducerIdentity(targetIdentity),
       newRole: reducerEnum(newRole),
     }),
   transferOwnership: (serverId: number, targetIdentity: Identity) =>
-    spacetimedbClient.call('transferOwnership', { serverId, targetIdentity }),
+    spacetimedbClient.call('transferOwnership', {
+      serverId: toU64(serverId, 'serverId'),
+      targetIdentity: toReducerIdentity(targetIdentity),
+    }),
   createChannel: (serverId: number, name: string, kind: 'Text' | 'Voice', moderatorOnly: boolean) =>
     spacetimedbClient.call('createChannel', {
-      serverId,
+      serverId: toU64(serverId, 'serverId'),
       name,
       kind: reducerEnum(kind),
       moderatorOnly,
     }),
   updateChannel: (channelId: number, payload: { name?: string; moderatorOnly?: boolean; position?: number }) =>
     spacetimedbClient.call('updateChannel', {
-      channelId,
+      channelId: toU64(channelId, 'channelId'),
       name: payload.name ?? null,
       moderatorOnly: payload.moderatorOnly ?? null,
       position: payload.position ?? null,
     }),
-  deleteChannel: (channelId: number) => spacetimedbClient.call('deleteChannel', { channelId }),
-  sendMessage: (channelId: number, content: string) => spacetimedbClient.call('sendMessage', { channelId, content }),
+  deleteChannel: (channelId: number) =>
+    spacetimedbClient.call('deleteChannel', { channelId: toU64(channelId, 'channelId') }),
+  sendMessage: (channelId: number, content: string) =>
+    spacetimedbClient.call('sendMessage', { channelId: toU64(channelId, 'channelId'), content }),
   editMessage: (messageId: number, newContent: string) =>
-    spacetimedbClient.call('editMessage', { messageId, newContent }),
-  deleteMessage: (messageId: number) => spacetimedbClient.call('deleteMessage', { messageId }),
-  joinVoiceChannel: (channelId: number) => spacetimedbClient.call('joinVoiceChannel', { channelId }),
-  leaveVoiceChannel: (channelId: number) => spacetimedbClient.call('leaveVoiceChannel', { channelId }),
+    spacetimedbClient.call('editMessage', { messageId: toU64(messageId, 'messageId'), newContent }),
+  deleteMessage: (messageId: number) =>
+    spacetimedbClient.call('deleteMessage', { messageId: toU64(messageId, 'messageId') }),
+  joinVoiceChannel: (channelId: number) =>
+    spacetimedbClient.call('joinVoiceChannel', { channelId: toU64(channelId, 'channelId') }),
+  leaveVoiceChannel: (channelId: number) =>
+    spacetimedbClient.call('leaveVoiceChannel', { channelId: toU64(channelId, 'channelId') }),
   updateVoiceState: (
     channelId: number,
     muted: boolean,
     deafened: boolean,
     sharingScreen: boolean,
     sharingCamera: boolean,
-  ) => spacetimedbClient.call('updateVoiceState', { channelId, muted, deafened, sharingScreen, sharingCamera }),
-  sendFriendRequest: (targetIdentity: Identity) => spacetimedbClient.call('sendFriendRequest', { targetIdentity }),
+  ) =>
+    spacetimedbClient.call('updateVoiceState', {
+      channelId: toU64(channelId, 'channelId'),
+      muted,
+      deafened,
+      sharingScreen,
+      sharingCamera,
+    }),
+  sendFriendRequest: (targetIdentity: Identity) =>
+    spacetimedbClient.call('sendFriendRequest', { targetIdentity: toReducerIdentity(targetIdentity) }),
   acceptFriendRequest: (requesterIdentity: Identity) =>
-    spacetimedbClient.call('acceptFriendRequest', { requesterIdentity }),
+    spacetimedbClient.call('acceptFriendRequest', { requesterIdentity: toReducerIdentity(requesterIdentity) }),
   declineFriendRequest: (requesterIdentity: Identity) =>
-    spacetimedbClient.call('declineFriendRequest', { requesterIdentity }),
-  removeFriend: (otherIdentity: Identity) => spacetimedbClient.call('removeFriend', { otherIdentity }),
-  blockUser: (targetIdentity: Identity) => spacetimedbClient.call('blockUser', { targetIdentity }),
-  unblockUser: (targetIdentity: Identity) => spacetimedbClient.call('unblockUser', { targetIdentity }),
+    spacetimedbClient.call('declineFriendRequest', { requesterIdentity: toReducerIdentity(requesterIdentity) }),
+  removeFriend: (otherIdentity: Identity) =>
+    spacetimedbClient.call('removeFriend', { otherIdentity: toReducerIdentity(otherIdentity) }),
+  blockUser: (targetIdentity: Identity) =>
+    spacetimedbClient.call('blockUser', { targetIdentity: toReducerIdentity(targetIdentity) }),
+  unblockUser: (targetIdentity: Identity) =>
+    spacetimedbClient.call('unblockUser', { targetIdentity: toReducerIdentity(targetIdentity) }),
   sendDirectMessage: (recipientIdentity: Identity, content: string) =>
-    spacetimedbClient.call('sendDirectMessage', { recipientIdentity, content }),
-  deleteDirectMessage: (messageId: number) => spacetimedbClient.call('deleteDirectMessage', { messageId }),
+    spacetimedbClient.call('sendDirectMessage', {
+      recipientIdentity: toReducerIdentity(recipientIdentity),
+      content,
+    }),
+  deleteDirectMessage: (messageId: number) =>
+    spacetimedbClient.call('deleteDirectMessage', { messageId: toU64(messageId, 'messageId') }),
 }
 
 export const onConnect = async (): Promise<void> => {
