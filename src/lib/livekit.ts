@@ -4,12 +4,91 @@ import { reducers } from './spacetimedb'
 import { tauriCommands } from './tauri'
 import { useConnectionStore } from '../stores/connectionStore'
 
+type LegacyGetUserMedia = (
+  constraints: MediaStreamConstraints,
+  onSuccess: (stream: MediaStream) => void,
+  onError: (error: unknown) => void,
+) => void
+
+type NavigatorWithLegacyMedia = Navigator & {
+  mediaDevices?: MediaDevices
+  webkitGetUserMedia?: LegacyGetUserMedia
+  mozGetUserMedia?: LegacyGetUserMedia
+  getUserMedia?: LegacyGetUserMedia
+}
+
+function getNavigator(): NavigatorWithLegacyMedia | null {
+  if (typeof navigator === 'undefined') return null
+  return navigator as NavigatorWithLegacyMedia
+}
+
+function getLegacyGetUserMedia(nav: NavigatorWithLegacyMedia): LegacyGetUserMedia | null {
+  return nav.webkitGetUserMedia ?? nav.mozGetUserMedia ?? nav.getUserMedia ?? null
+}
+
+function ensureMediaDevicesGetUserMedia(): boolean {
+  const nav = getNavigator()
+  if (!nav) return false
+  if (typeof nav.mediaDevices?.getUserMedia === 'function') return true
+
+  const legacyGetUserMedia = getLegacyGetUserMedia(nav)
+  if (!legacyGetUserMedia) return false
+
+  const mediaDevices = nav.mediaDevices ?? ({} as MediaDevices)
+  const mutableMediaDevices = mediaDevices as MediaDevices & {
+    getUserMedia?: (constraints: MediaStreamConstraints) => Promise<MediaStream>
+  }
+
+  if (typeof mutableMediaDevices.getUserMedia !== 'function') {
+    mutableMediaDevices.getUserMedia = (constraints: MediaStreamConstraints) =>
+      new Promise<MediaStream>((resolve, reject) => {
+        legacyGetUserMedia.call(nav, constraints, resolve, reject)
+      })
+  }
+
+  if (!nav.mediaDevices) {
+    try {
+      Object.defineProperty(nav, 'mediaDevices', {
+        configurable: true,
+        enumerable: true,
+        value: mediaDevices,
+      })
+    } catch {
+      ;(nav as { mediaDevices?: MediaDevices }).mediaDevices = mediaDevices
+    }
+  }
+
+  return typeof nav.mediaDevices?.getUserMedia === 'function'
+}
+
+function getMediaRuntimeSummary(): string {
+  const nav = getNavigator()
+  const origin = typeof window === 'undefined' ? 'unknown' : window.location.href
+  const secureContext = typeof window !== 'undefined' && window.isSecureContext
+  const hasMediaDevices = Boolean(nav?.mediaDevices)
+  const hasGetUserMedia = typeof nav?.mediaDevices?.getUserMedia === 'function'
+  const hasLegacyGetUserMedia = nav ? Boolean(getLegacyGetUserMedia(nav)) : false
+  return `origin=${origin}, secureContext=${secureContext}, mediaDevices=${hasMediaDevices}, getUserMedia=${hasGetUserMedia}, legacyGetUserMedia=${hasLegacyGetUserMedia}`
+}
+
 export function supportsMicrophoneCapture(): boolean {
-  return typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getUserMedia === 'function'
+  return ensureMediaDevicesGetUserMedia()
 }
 
 export function supportsScreenCapture(): boolean {
   return typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+}
+
+export function getMicrophoneUnavailableReason(): string {
+  return `Microphone APIs are unavailable in this runtime (${getMediaRuntimeSummary()}).`
+}
+
+export async function requestMicrophonePermission(): Promise<void> {
+  if (!ensureMediaDevicesGetUserMedia()) {
+    throw new Error(getMicrophoneUnavailableReason())
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+  stream.getTracks().forEach((track) => track.stop())
 }
 
 function normalizeLiveKitUrl(raw: string): string {
@@ -56,6 +135,7 @@ export async function joinLiveKitVoice(channelId: number): Promise<Room> {
   }
 
   try {
+    await requestMicrophonePermission()
     await room.localParticipant.setMicrophoneEnabled(true)
     await reducers.updateVoiceState(channelId, false, false, false, false).catch(() => undefined)
   } catch (error) {

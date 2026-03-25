@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { MicIcon, MicOffIcon, MonitorUpIcon, PhoneOffIcon, VideoIcon, VolumeXIcon } from 'lucide-react'
 import {
+  getMicrophoneUnavailableReason,
   joinLiveKitVoice,
   leaveLiveKitVoice,
+  requestMicrophonePermission,
   supportsMicrophoneCapture,
   supportsScreenCapture,
   useLiveKitRoom,
@@ -91,6 +93,13 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
 
   const statusBadge = joining ? 'Joining...' : joined ? 'Joined' : 'Not joined'
   const statusVariant = joining ? 'outline' : joined ? 'default' : 'secondary'
+  const ensureMicrophoneCapture = async () => {
+    if (supportsMicrophoneCapture()) return
+    await requestMicrophonePermission()
+    if (!supportsMicrophoneCapture()) {
+      throw new Error(getMicrophoneUnavailableReason())
+    }
+  }
 
   return (
     <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 rounded-xl border border-border/70 bg-card/60 p-3">
@@ -102,9 +111,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
         <Badge variant={statusVariant}>{statusBadge}</Badge>
       </header>
       {joined && !hasMicCapture ? (
-        <p className="text-xs text-muted-foreground">
-          This runtime does not expose microphone/camera APIs. Voice is listen-only on this device.
-        </p>
+        <p className="text-xs text-muted-foreground">{getMicrophoneUnavailableReason()}</p>
       ) : null}
       {joined && hasMicCapture && !hasScreenCapture ? (
         <p className="text-xs text-muted-foreground">
@@ -157,16 +164,14 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
           <>
             <Button
               variant={muted ? 'secondary' : 'outline'}
-              disabled={!hasMicCapture}
               onClick={async () => {
                 setError(null)
                 if (!room || !selfParticipant) return
-                if (!hasMicCapture) {
-                  setError('Microphone APIs are unavailable in this runtime. Unmute is not supported here.')
-                  return
-                }
                 try {
                   const nextMuted = !selfParticipant.muted
+                  if (!nextMuted) {
+                    await ensureMicrophoneCapture()
+                  }
                   await room.localParticipant.setMicrophoneEnabled(!nextMuted)
                   await patchVoiceState({ muted: nextMuted })
                 } catch (e) {
@@ -196,16 +201,14 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
             </Button>
             <Button
               variant={sharingCamera ? 'secondary' : 'outline'}
-              disabled={!hasMicCapture}
               onClick={async () => {
                 setError(null)
                 if (!room || !selfParticipant) return
-                if (!hasMicCapture) {
-                  setError('Camera APIs are unavailable in this runtime.')
-                  return
-                }
                 try {
                   const next = !selfParticipant.sharingCamera
+                  if (next) {
+                    await ensureMicrophoneCapture()
+                  }
                   await room.localParticipant.setCameraEnabled(next)
                   await patchVoiceState({ sharingCamera: next })
                 } catch (e) {
