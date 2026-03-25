@@ -29,6 +29,62 @@ pub fn register_user(ctx: &ReducerContext, username: String, display_name: Strin
 }
 
 #[spacetimedb::reducer]
+pub fn register_with_credential(
+    ctx: &ReducerContext,
+    username: String,
+    display_name: String,
+    password_salt: String,
+    password_hash: String,
+    token_iv: String,
+    token_cipher: String,
+) -> Result<(), String> {
+    let normalized = normalize_username(&username);
+    assert_or_err(
+        is_valid_username(&normalized),
+        "username must be 2-32 and alphanumeric/underscore",
+    )?;
+    assert_or_err(!display_name.trim().is_empty(), "display_name is required")?;
+    assert_or_err(!password_salt.is_empty(), "password_salt is required")?;
+    assert_or_err(!password_hash.is_empty(), "password_hash is required")?;
+    assert_or_err(!token_iv.is_empty(), "token_iv is required")?;
+    assert_or_err(!token_cipher.is_empty(), "token_cipher is required")?;
+
+    assert_or_err(
+        ctx.db.user().username().find(&normalized).is_none(),
+        "username already exists",
+    )?;
+    assert_or_err(
+        ctx.db.user().identity().find(ctx.sender()).is_none(),
+        "user already registered for this identity",
+    )?;
+    assert_or_err(
+        ctx.db.auth_credential().username().find(&normalized).is_none(),
+        "credential already exists for this username",
+    )?;
+
+    ctx.db.user().insert(User {
+        identity: ctx.sender(),
+        username: normalized.clone(),
+        display_name: display_name.trim().to_string(),
+        avatar_url: None,
+        created_at: ctx.timestamp,
+    });
+
+    ctx.db.auth_credential().insert(AuthCredential {
+        username: normalized,
+        identity: ctx.sender(),
+        password_salt,
+        password_hash,
+        token_iv,
+        token_cipher,
+        created_at: ctx.timestamp,
+        updated_at: ctx.timestamp,
+    });
+
+    Ok(())
+}
+
+#[spacetimedb::reducer]
 pub fn upsert_auth_credential(
     ctx: &ReducerContext,
     username: String,

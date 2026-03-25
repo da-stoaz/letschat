@@ -50,6 +50,7 @@ import JoinVoiceChannelReducer from "./join_voice_channel_reducer";
 import KickMemberReducer from "./kick_member_reducer";
 import LeaveVoiceChannelReducer from "./leave_voice_channel_reducer";
 import RegisterUserReducer from "./register_user_reducer";
+import RegisterWithCredentialReducer from "./register_with_credential_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
 import RenameServerReducer from "./rename_server_reducer";
 import SendDirectMessageReducer from "./send_direct_message_reducer";
@@ -311,6 +312,7 @@ const reducersSchema = __reducers(
   __reducerSchema("kick_member", KickMemberReducer),
   __reducerSchema("leave_voice_channel", LeaveVoiceChannelReducer),
   __reducerSchema("register_user", RegisterUserReducer),
+  __reducerSchema("register_with_credential", RegisterWithCredentialReducer),
   __reducerSchema("remove_friend", RemoveFriendReducer),
   __reducerSchema("rename_server", RenameServerReducer),
   __reducerSchema("send_direct_message", SendDirectMessageReducer),

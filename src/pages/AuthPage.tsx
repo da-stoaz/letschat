@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LogInIcon, UserRoundPlusIcon } from 'lucide-react'
 import {
+  getCurrentSessionToken,
   loginWithPassword,
-  persistCredentialForCurrentUser,
   reducers,
   rotateIdentityForRegistration,
   spacetimedbClient,
 } from '../lib/spacetimedb'
+import { encryptTokenForCredential } from '../lib/authCrypto'
 import { useSelfStore } from '../stores/selfStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -71,19 +72,43 @@ export function AuthPage() {
                     throw new Error('Passwords do not match.')
                   }
 
-                  await rotateIdentityForRegistration()
+                  const registerOnce = async (): Promise<string | null> => {
+                    await rotateIdentityForRegistration()
+                    const token = getCurrentSessionToken()
+                    if (!token) {
+                      throw new Error('No authenticated session token is available. Reconnect and try again.')
+                    }
+
+                    const payload = await encryptTokenForCredential(password, token)
+                    await reducers.registerWithCredential(
+                      normalizedUsername,
+                      displayName.trim(),
+                      payload.passwordSalt,
+                      payload.passwordHash,
+                      payload.tokenIv,
+                      payload.tokenCipher,
+                    )
+
+                    return useConnectionStore.getState().identity
+                  }
+
+                  let registeredIdentity: string | null = null
                   try {
-                    await reducers.registerUser(normalizedUsername, displayName.trim())
+                    registeredIdentity = await registerOnce()
                   } catch (registerError) {
                     const message = registerError instanceof Error ? registerError.message : String(registerError)
                     if (!message.includes('user already registered for this identity')) {
                       throw registerError
                     }
-                    await rotateIdentityForRegistration()
-                    await reducers.registerUser(normalizedUsername, displayName.trim())
+                    registeredIdentity = await registerOnce()
                   }
-                  await persistCredentialForCurrentUser(normalizedUsername, password)
-                  const currentIdentity = useConnectionStore.getState().identity ?? identity
+
+                  let currentIdentity = registeredIdentity ?? useConnectionStore.getState().identity ?? identity
+                  if (!currentIdentity) {
+                    await spacetimedbClient.connect()
+                    currentIdentity = useConnectionStore.getState().identity
+                  }
+
                   if (currentIdentity) {
                     setUser({
                       identity: currentIdentity,
@@ -92,6 +117,8 @@ export function AuthPage() {
                       avatarUrl: null,
                       createdAt: new Date().toISOString(),
                     })
+                  } else {
+                    throw new Error('Registration succeeded but session identity is missing. Please retry.')
                   }
                 } else {
                   await loginWithPassword(normalizedUsername, password)

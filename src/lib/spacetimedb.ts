@@ -196,6 +196,16 @@ function mapAuthCredential(row: any): AuthCredential {
   }
 }
 
+function findAuthCredentialRow(conn: DbConnection, normalizedUsername: string): any | null {
+  const byKey = conn.db.auth_credential.username.find(normalizedUsername)
+  if (byKey) return byKey
+  return (
+    Array.from(conn.db.auth_credential.iter()).find(
+      (row) => normalizeUsername(String(row.username)) === normalizedUsername,
+    ) ?? null
+  )
+}
+
 function mapDirectMessage(row: any): DirectMessage {
   return {
     id: toU64Number(row.id),
@@ -586,6 +596,22 @@ export const spacetimedbClient: SpacetimeDBClient = {
 export const reducers = {
   registerUser: (username: string, displayName: string) =>
     spacetimedbClient.call('registerUser', { username, displayName }),
+  registerWithCredential: (
+    username: string,
+    displayName: string,
+    passwordSalt: string,
+    passwordHash: string,
+    tokenIv: string,
+    tokenCipher: string,
+  ) =>
+    spacetimedbClient.call('registerWithCredential', {
+      username,
+      displayName,
+      passwordSalt,
+      passwordHash,
+      tokenIv,
+      tokenCipher,
+    }),
   upsertAuthCredential: (
     username: string,
     passwordSalt: string,
@@ -765,9 +791,18 @@ export async function loginWithPassword(username: string, password: string): Pro
     await connect()
   }
 
-  const authRow = (connection as DbConnection).db.auth_credential.username.find(normalized)
+  let authRow = findAuthCredentialRow(connection as DbConnection, normalized)
   if (!authRow) {
-    throw new Error('No saved credential exists for this username. Register first or sign in on this device once.')
+    // Retry once with a fresh subscription in case a previous connection cache is stale.
+    disconnect()
+    await connect()
+    authRow = findAuthCredentialRow(connection as DbConnection, normalized)
+  }
+
+  if (!authRow) {
+    throw new Error(
+      'No saved credential exists for this username. Register first, or sign in with an existing session once and click "Save Password Login" in Settings.',
+    )
   }
 
   const credential = mapAuthCredential(authRow)
