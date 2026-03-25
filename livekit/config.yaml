@@ -1,0 +1,6 @@
+port: 7880
+rtc:
+  udp_port: 7881
+keys:
+  devkey: secret
+log_level: info

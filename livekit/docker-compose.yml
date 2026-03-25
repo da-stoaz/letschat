@@ -1,0 +1,11 @@
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: letschat-livekit
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7880:7880"
+      - "7881:7881/udp"
+    volumes:
+      - ./config.yaml:/etc/livekit.yaml:ro
+    restart: unless-stopped
