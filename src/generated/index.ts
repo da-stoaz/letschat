@@ -62,11 +62,13 @@ import UnblockUserReducer from "./unblock_user_reducer";
 import UpdateChannelReducer from "./update_channel_reducer";
 import UpdateProfileReducer from "./update_profile_reducer";
 import UpdateVoiceStateReducer from "./update_voice_state_reducer";
+import UpsertAuthCredentialReducer from "./upsert_auth_credential_reducer";
 import UseInviteReducer from "./use_invite_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import AuthCredentialRow from "./auth_credential_table";
 import BanRow from "./ban_table";
 import BlockRow from "./block_table";
 import ChannelRow from "./channel_table";
@@ -83,6 +85,20 @@ import VoiceParticipantRow from "./voice_participant_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  auth_credential: __table({
+    name: 'auth_credential',
+    indexes: [
+      { accessor: 'identity', name: 'auth_credential_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+      { accessor: 'username', name: 'auth_credential_username_idx_btree', algorithm: 'btree', columns: [
+        'username',
+      ] },
+    ],
+    constraints: [
+      { name: 'auth_credential_username_key', constraint: 'unique', columns: ['username'] },
+    ],
+  }, AuthCredentialRow),
   ban: __table({
     name: 'ban',
     indexes: [
@@ -307,6 +323,7 @@ const reducersSchema = __reducers(
   __reducerSchema("update_channel", UpdateChannelReducer),
   __reducerSchema("update_profile", UpdateProfileReducer),
   __reducerSchema("update_voice_state", UpdateVoiceStateReducer),
+  __reducerSchema("upsert_auth_credential", UpsertAuthCredentialReducer),
   __reducerSchema("use_invite", UseInviteReducer),
 );
 

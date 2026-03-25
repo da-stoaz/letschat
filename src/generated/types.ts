@@ -10,6 +10,18 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AuthCredential = __t.object("AuthCredential", {
+  username: __t.string(),
+  identity: __t.identity(),
+  passwordSalt: __t.string(),
+  passwordHash: __t.string(),
+  tokenIv: __t.string(),
+  tokenCipher: __t.string(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type AuthCredential = __Infer<typeof AuthCredential>;
+
 export const Ban = __t.object("Ban", {
   banKey: __t.string(),
   serverId: __t.u64(),

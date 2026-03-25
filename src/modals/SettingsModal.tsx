@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { reducers, resetLocalAuthSession } from '../lib/spacetimedb'
+import { persistCredentialForCurrentUser, reducers, resetLocalAuthSession } from '../lib/spacetimedb'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSelfStore } from '../stores/selfStore'
 import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -15,7 +15,10 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const identity = useConnectionStore((s) => s.identity)
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? '')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [accountMessage, setAccountMessage] = useState<string | null>(null)
 
   return (
     <section className="space-y-4">
@@ -72,6 +75,53 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <Badge variant="secondary">{user ? `@${user.username}` : 'Unregistered identity'}</Badge>
           </div>
           <p className="break-all">{identity ? identity : 'No identity available'}</p>
+          <div className="space-y-2 rounded-md border border-border/70 p-2">
+            <Label htmlFor="settings-password">Login password</Label>
+            <Input
+              id="settings-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 8 characters"
+            />
+            <Input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm password"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                setAccountMessage(null)
+                if (!user) {
+                  setAccountMessage('Register a user first.')
+                  return
+                }
+                if (password.length < 8) {
+                  setAccountMessage('Password must be at least 8 characters.')
+                  return
+                }
+                if (password !== confirmPassword) {
+                  setAccountMessage('Passwords do not match.')
+                  return
+                }
+                try {
+                  await persistCredentialForCurrentUser(user.username, password)
+                  setPassword('')
+                  setConfirmPassword('')
+                  setAccountMessage('Password login updated successfully.')
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Could not update password login.'
+                  setAccountMessage(message)
+                }
+              }}
+            >
+              Save Password Login
+            </Button>
+          </div>
           <Button
             type="button"
             variant="destructive"
@@ -84,6 +134,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <LogOutIcon className="size-4" />
             Sign Out (Reset Local Session)
           </Button>
+          {accountMessage ? <p className="text-xs text-muted-foreground">{accountMessage}</p> : null}
         </CardContent>
       </Card>
 

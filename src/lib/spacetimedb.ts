@@ -5,6 +5,7 @@ import {
   type Timestamp as SpacetimeTimestamp,
 } from 'spacetimedb'
 import { DbConnection, tables } from '../generated'
+import { decryptTokenFromCredential, encryptTokenForCredential } from './authCrypto'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useDmStore } from '../stores/dmStore'
@@ -19,6 +20,7 @@ import { tauriCommands } from './tauri'
 import type { ServerMemberWithUser } from '../stores/membersStore'
 import type {
   Block,
+  AuthCredential,
   Channel,
   ChannelKind,
   DirectMessage,
@@ -93,6 +95,10 @@ function enumTag(value: unknown): string {
   }
 
   return String(value)
+}
+
+function normalizeUsername(username: string): string {
+  return username.trim().toLowerCase()
 }
 
 function mapUser(row: any): User {
@@ -174,6 +180,19 @@ function mapBlock(row: any): Block {
     blocker: toIdentityString(row.blocker),
     blocked: toIdentityString(row.blocked),
     createdAt: toIsoString(row.createdAt),
+  }
+}
+
+function mapAuthCredential(row: any): AuthCredential {
+  return {
+    username: row.username,
+    identity: toIdentityString(row.identity),
+    passwordSalt: row.passwordSalt,
+    passwordHash: row.passwordHash,
+    tokenIv: row.tokenIv,
+    tokenCipher: row.tokenCipher,
+    createdAt: toIsoString(row.createdAt),
+    updatedAt: toIsoString(row.updatedAt),
   }
 }
 
@@ -329,6 +348,26 @@ function syncAll(conn: DbConnection): void {
   syncDirectMessages(conn)
 }
 
+function resetClientState(): void {
+  useConnectionStore.getState().setIdentity(null)
+  useSelfStore.getState().setUser(null)
+
+  useServersStore.setState({ servers: [], activeServerId: null })
+  useChannelsStore.setState({ channelsByServer: {} })
+  useMembersStore.setState({ membersByServer: {} })
+  useMessagesStore.setState({ messagesByChannel: {} })
+  useVoiceStore.setState({ participantsByChannel: {}, activeChannelId: null, localTracks: [] })
+  useFriendsStore.setState({ friends: [], blocked: [] })
+  useDmStore.setState({ conversations: {} })
+  useUiStore.setState({
+    activeChannelId: null,
+    activeDmPartner: null,
+    rightPanelOpen: false,
+    modals: {},
+    unreadByChannel: {},
+  })
+}
+
 function watchLiveTables(conn: DbConnection): void {
   conn.db.user.onInsert(() => syncUsers(conn))
   conn.db.user.onUpdate(() => syncUsers(conn))
@@ -463,17 +502,34 @@ async function connect(): Promise<void> {
     connection = builder.build()
     watchLiveTables(connection)
 
+    let appliedOnce = false
+    let resolveApplied: (() => void) | null = null
+    let rejectApplied: ((error: unknown) => void) | null = null
+    const firstSyncApplied = new Promise<void>((resolve, reject) => {
+      resolveApplied = resolve
+      rejectApplied = reject
+    })
+
     subscriptionHandle = connection
       .subscriptionBuilder()
       .onApplied(() => {
         syncAll(connection as DbConnection)
         liveEventsEnabled = true
+        if (!appliedOnce) {
+          appliedOnce = true
+          resolveApplied?.()
+        }
       })
       .onError((_ctx) => {
         void onError(new Error('Subscription failed'))
+        if (!appliedOnce) {
+          appliedOnce = true
+          rejectApplied?.(new Error('Subscription failed'))
+        }
       })
       .subscribe([
         tables.user,
+        tables.auth_credential,
         tables.server,
         tables.server_member,
         tables.channel,
@@ -484,7 +540,7 @@ async function connect(): Promise<void> {
         tables.direct_message,
       ])
 
-    await Promise.resolve()
+    await firstSyncApplied
   })()
 
   try {
@@ -500,7 +556,9 @@ function disconnect(): void {
   liveEventsEnabled = false
   connection?.disconnect()
   connection = null
+  connectPromise = null
   useConnectionStore.getState().setStatus('disconnected')
+  resetClientState()
 }
 
 async function call<TArgs extends Record<string, unknown>>(reducer: string, args?: TArgs): Promise<void> {
@@ -528,6 +586,20 @@ export const spacetimedbClient: SpacetimeDBClient = {
 export const reducers = {
   registerUser: (username: string, displayName: string) =>
     spacetimedbClient.call('registerUser', { username, displayName }),
+  upsertAuthCredential: (
+    username: string,
+    passwordSalt: string,
+    passwordHash: string,
+    tokenIv: string,
+    tokenCipher: string,
+  ) =>
+    spacetimedbClient.call('upsertAuthCredential', {
+      username,
+      passwordSalt,
+      passwordHash,
+      tokenIv,
+      tokenCipher,
+    }),
   updateProfile: (displayName?: string, avatarUrl?: string) =>
     spacetimedbClient.call('updateProfile', { displayName: displayName ?? null, avatarUrl: avatarUrl ?? null }),
   createServer: (name: string) => spacetimedbClient.call('createServer', { name }),
@@ -647,9 +719,71 @@ export async function initializeSpacetime(): Promise<void> {
   await connect()
 }
 
+export function getCurrentSessionToken(): string | null {
+  return getStoredToken() ?? null
+}
+
 export function resetLocalAuthSession(): void {
   disconnect()
   clearStoredToken()
+}
+
+export async function rotateIdentityForRegistration(): Promise<void> {
+  // Registration always creates a user for the current anonymous identity.
+  // To avoid sticky stale identities, force a fresh tokenless reconnect.
+  disconnect()
+  clearStoredToken()
+  await connect()
+}
+
+export async function persistCredentialForCurrentUser(username: string, password: string): Promise<void> {
+  const normalized = normalizeUsername(username)
+  if (!normalized) throw new Error('Username is required.')
+  if (password.length < 8) throw new Error('Password must be at least 8 characters.')
+
+  const token = getStoredToken()
+  if (!token) {
+    throw new Error('No authenticated session token is available. Reconnect and try again.')
+  }
+
+  const payload = await encryptTokenForCredential(password, token)
+  await reducers.upsertAuthCredential(
+    normalized,
+    payload.passwordSalt,
+    payload.passwordHash,
+    payload.tokenIv,
+    payload.tokenCipher,
+  )
+}
+
+export async function loginWithPassword(username: string, password: string): Promise<void> {
+  const normalized = normalizeUsername(username)
+  if (!normalized) throw new Error('Username is required.')
+  if (password.length < 8) throw new Error('Password must be at least 8 characters.')
+
+  if (!connection) {
+    await connect()
+  }
+
+  const authRow = (connection as DbConnection).db.auth_credential.username.find(normalized)
+  if (!authRow) {
+    throw new Error('No saved credential exists for this username. Register first or sign in on this device once.')
+  }
+
+  const credential = mapAuthCredential(authRow)
+  const token = await decryptTokenFromCredential(password, credential)
+  if (!token) {
+    throw new Error('Invalid username or password.')
+  }
+
+  disconnect()
+  setStoredToken(token)
+  try {
+    await connect()
+  } catch (error) {
+    clearStoredToken()
+    throw error
+  }
 }
 
 export async function resolveIdentityFromUsername(username: string): Promise<Identity | null> {

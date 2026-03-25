@@ -34,6 +34,7 @@ import UnblockUserReducer from "../unblock_user_reducer";
 import UpdateChannelReducer from "../update_channel_reducer";
 import UpdateProfileReducer from "../update_profile_reducer";
 import UpdateVoiceStateReducer from "../update_voice_state_reducer";
+import UpsertAuthCredentialReducer from "../upsert_auth_credential_reducer";
 import UseInviteReducer from "../use_invite_reducer";
 
 export type AcceptFriendRequestParams = __Infer<typeof AcceptFriendRequestReducer>;
@@ -64,5 +65,6 @@ export type UnblockUserParams = __Infer<typeof UnblockUserReducer>;
 export type UpdateChannelParams = __Infer<typeof UpdateChannelReducer>;
 export type UpdateProfileParams = __Infer<typeof UpdateProfileReducer>;
 export type UpdateVoiceStateParams = __Infer<typeof UpdateVoiceStateReducer>;
+export type UpsertAuthCredentialParams = __Infer<typeof UpsertAuthCredentialReducer>;
 export type UseInviteParams = __Infer<typeof UseInviteReducer>;
 
