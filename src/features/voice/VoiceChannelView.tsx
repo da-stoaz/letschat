@@ -2,26 +2,26 @@ import { useEffect, useState } from 'react'
 import { joinLiveKitVoice, leaveLiveKitVoice } from '../../lib/livekit'
 import { reducers } from '../../lib/spacetimedb'
 import { useVoiceStore } from '../../stores/voiceStore'
-import type { u64 } from '../../types/domain'
+import type { VoiceParticipant, u64 } from '../../types/domain'
 import type { Room } from 'livekit-client'
-import { useUiStore } from '../../stores/uiStore'
+import { warnOnce } from '../../lib/devWarnings'
+
+const EMPTY_PARTICIPANTS: VoiceParticipant[] = []
 
 export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
-  const participants = useVoiceStore((s) => (channelId ? s.participantsByChannel[channelId] ?? [] : []))
-  const [room, setRoom] = useState<Room | null>(null)
-  const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
-  const clearUnread = useUiStore((s) => s.clearUnread)
+  const participantsByChannel = useVoiceStore((s) => s.participantsByChannel)
+  const participants = channelId === null ? EMPTY_PARTICIPANTS : (participantsByChannel[channelId] ?? EMPTY_PARTICIPANTS)
 
   useEffect(() => {
-    if (channelId === null) return
-    const ui = useUiStore.getState()
-    if (ui.activeChannelId !== channelId) {
-      setActiveChannelId(channelId)
-    }
-    if ((ui.unreadByChannel[channelId] ?? 0) > 0) {
-      clearUnread(channelId)
-    }
-  }, [channelId, clearUnread, setActiveChannelId])
+    if (channelId === null || participants !== EMPTY_PARTICIPANTS) return
+    warnOnce(
+      `missing_voice_participants_${channelId}`,
+      `[zustand-stability] Missing participant array for voice channel ${channelId}; using stable EMPTY_PARTICIPANTS fallback.`,
+    )
+  }, [channelId, participants])
+
+  const [room, setRoom] = useState<Room | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   if (channelId === null) {
     return <div className="pane-empty">Select a voice channel</div>
@@ -56,8 +56,14 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
         {!joined ? (
           <button
             onClick={async () => {
-              const r = await joinLiveKitVoice(channelId)
-              setRoom(r)
+              setError(null)
+              try {
+                const r = await joinLiveKitVoice(channelId)
+                setRoom(r)
+              } catch (e) {
+                const message = e instanceof Error ? e.message : 'Could not join voice channel.'
+                setError(message)
+              }
             }}
           >
             Join Voice
@@ -71,8 +77,14 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
             <button
               className="danger"
               onClick={async () => {
-                await leaveLiveKitVoice(channelId, room)
-                setRoom(null)
+                setError(null)
+                try {
+                  await leaveLiveKitVoice(channelId, room)
+                  setRoom(null)
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Could not leave voice channel.'
+                  setError(message)
+                }
               }}
             >
               Leave
@@ -80,6 +92,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
           </>
         )}
       </div>
+      {error ? <p className="error-text">{error}</p> : null}
     </section>
   )
 }

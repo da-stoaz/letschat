@@ -44,6 +44,19 @@ let subscriptionHandle: { unsubscribe: () => void } | null = null
 let connectPromise: Promise<void> | null = null
 let liveEventsEnabled = false
 
+function joinedServerIds(conn: DbConnection): Set<number> {
+  const me = useConnectionStore.getState().identity
+  if (!me) return new Set<number>()
+
+  const joined = new Set<number>()
+  for (const member of conn.db.server_member.iter()) {
+    if (toIdentityString(member.userIdentity) === me) {
+      joined.add(toU64Number(member.serverId))
+    }
+  }
+  return joined
+}
+
 function toIdentityString(value: unknown): Identity {
   if (value && typeof value === 'object' && 'toHexString' in value) {
     const hex = (value as SpacetimeIdentity).toHexString()
@@ -183,14 +196,20 @@ function syncUsers(conn: DbConnection): User[] {
 }
 
 function syncServers(conn: DbConnection): void {
-  const servers = Array.from(conn.db.server.iter()).map(mapServer)
+  const allowedServerIds = joinedServerIds(conn)
+  const servers = Array.from(conn.db.server.iter())
+    .map(mapServer)
+    .filter((server) => allowedServerIds.has(server.id))
   useServersStore.getState().setServers(servers)
 }
 
 function syncMembers(conn: DbConnection): void {
   const users = syncUsers(conn)
+  const allowedServerIds = joinedServerIds(conn)
   const usersByIdentity = new Map(users.map((user) => [user.identity, user]))
-  const members = Array.from(conn.db.server_member.iter()).map(mapServerMember)
+  const members = Array.from(conn.db.server_member.iter())
+    .map(mapServerMember)
+    .filter((member) => allowedServerIds.has(member.serverId))
   const grouped = new Map<number, ServerMemberWithUser[]>()
 
   for (const member of members) {
@@ -206,7 +225,10 @@ function syncMembers(conn: DbConnection): void {
 }
 
 function syncChannels(conn: DbConnection): void {
-  const channels = Array.from(conn.db.channel.iter()).map(mapChannel)
+  const allowedServerIds = joinedServerIds(conn)
+  const channels = Array.from(conn.db.channel.iter())
+    .map(mapChannel)
+    .filter((channel) => allowedServerIds.has(channel.serverId))
   const grouped = new Map<number, Channel[]>()
   for (const channel of channels) {
     const byServer = grouped.get(channel.serverId) ?? []
@@ -215,6 +237,13 @@ function syncChannels(conn: DbConnection): void {
   }
 
   const store = useChannelsStore.getState()
+  const existingServerIds = Object.keys(store.channelsByServer).map(Number)
+  for (const serverId of existingServerIds) {
+    if (!grouped.has(serverId)) {
+      store.setServerChannels(serverId, [])
+    }
+  }
+
   for (const [serverId, rows] of grouped.entries()) {
     rows.sort((a, b) => a.position - b.position)
     store.setServerChannels(serverId, rows)

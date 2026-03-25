@@ -21,13 +21,18 @@ export const useUiStore = create<UiState>((set) => ({
   rightPanelOpen: false,
   modals: {},
   unreadByChannel: {},
-  setActiveChannelId: (channelId) => set({ activeChannelId: channelId }),
-  setActiveDmPartner: (identity) => set({ activeDmPartner: identity }),
+  setActiveChannelId: (channelId) =>
+    set((state) => (state.activeChannelId === channelId ? state : { activeChannelId: channelId })),
+  setActiveDmPartner: (identity) =>
+    set((state) => (state.activeDmPartner === identity ? state : { activeDmPartner: identity })),
   toggleRightPanel: () => set((state) => ({ rightPanelOpen: !state.rightPanelOpen })),
   setModal: (name, open) =>
-    set((state) => ({
-      modals: { ...state.modals, [name]: open },
-    })),
+    set((state) => {
+      if (state.modals[name] === open) return state
+      return {
+        modals: { ...state.modals, [name]: open },
+      }
+    }),
   incrementUnread: (channelId) =>
     set((state) => ({
       unreadByChannel: {
@@ -36,10 +41,13 @@ export const useUiStore = create<UiState>((set) => ({
       },
     })),
   clearUnread: (channelId) =>
-    set((state) => ({
-      unreadByChannel: {
-        ...state.unreadByChannel,
-        [channelId]: 0,
-      },
-    })),
+    set((state) => {
+      if ((state.unreadByChannel[channelId] ?? 0) === 0) return state
+      return {
+        unreadByChannel: {
+          ...state.unreadByChannel,
+          [channelId]: 0,
+        },
+      }
+    }),
 }))

@@ -2,16 +2,29 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMessagesStore } from '../../stores/messagesStore'
 import { useUiStore } from '../../stores/uiStore'
 import { reducers } from '../../lib/spacetimedb'
-import type { u64 } from '../../types/domain'
+import type { Message, u64 } from '../../types/domain'
 import { useChannelsStore } from '../../stores/channelsStore'
 import { useServerRole } from '../../hooks/useServerRole'
+import { warnOnce } from '../../lib/devWarnings'
+
+const EMPTY_MESSAGES: Message[] = []
 
 export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const [draft, setDraft] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
   const clearUnread = useUiStore((s) => s.clearUnread)
   const channelsByServer = useChannelsStore((s) => s.channelsByServer)
-  const messages = useMessagesStore((s) => (channelId ? s.messagesByChannel[channelId] ?? [] : []))
+  const messagesByChannel = useMessagesStore((s) => s.messagesByChannel)
+  const messages = channelId === null ? EMPTY_MESSAGES : (messagesByChannel[channelId] ?? EMPTY_MESSAGES)
+
+  useEffect(() => {
+    if (channelId === null || messages !== EMPTY_MESSAGES) return
+    warnOnce(
+      `missing_channel_messages_${channelId}`,
+      `[zustand-stability] Missing messages array for channel ${channelId}; using stable EMPTY_MESSAGES fallback.`,
+    )
+  }, [channelId, messages])
   const channel = useMemo(
     () =>
       channelId === null
@@ -27,17 +40,6 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const flattened = useMemo(() => {
     return [...messages].sort((a, b) => a.sentAt.localeCompare(b.sentAt))
   }, [messages])
-
-  useEffect(() => {
-    if (channelId === null) return
-    const ui = useUiStore.getState()
-    if (ui.activeChannelId !== channelId) {
-      setActiveChannelId(channelId)
-    }
-    if ((ui.unreadByChannel[channelId] ?? 0) > 0) {
-      clearUnread(channelId)
-    }
-  }, [channelId, clearUnread, setActiveChannelId])
 
   if (channelId === null) {
     return <div className="pane-empty">Select a text channel</div>
@@ -79,8 +81,14 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         onSubmit={async (event) => {
           event.preventDefault()
           if (!draft.trim() || readOnlyForMember) return
-          await reducers.sendMessage(channelId, draft.trim())
-          setDraft('')
+          setError(null)
+          try {
+            await reducers.sendMessage(channelId, draft.trim())
+            setDraft('')
+          } catch (e) {
+            const message = e instanceof Error ? e.message : 'Could not send message.'
+            setError(message)
+          }
         }}
       >
         <textarea
@@ -99,6 +107,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         {draft.length >= 3500 ? <small>{draft.length}/4000</small> : null}
         <button type="submit">Send</button>
       </form>
+      {error ? <p className="error-text">{error}</p> : null}
     </section>
   )
 }

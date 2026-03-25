@@ -63,6 +63,12 @@ textarea {
   padding: 10px;
 }
 
+.sidebar-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
 .sidebar-header {
   font-weight: 700;
   margin-bottom: 10px;
@@ -160,6 +166,7 @@ textarea {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .composer textarea {
@@ -325,9 +332,40 @@ button:hover {
   color: #d1e2f6;
 }
 
+.fatal-card pre {
+  margin: 0 0 14px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #0c1522;
+  border: 1px solid #2f4664;
+  color: #a8bdd8;
+  max-height: 180px;
+  overflow: auto;
+}
+
 .error-text {
   margin: 0 12px 6px;
   color: #ffb0b0;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 10, 16, 0.65);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+  padding: 18px;
+}
+
+.modal-shell {
+  width: min(520px, 100%);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 @media (max-width: 940px) {
