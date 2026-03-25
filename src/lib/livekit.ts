@@ -28,6 +28,9 @@ export async function joinLiveKitVoice(channelId: number): Promise<Room> {
   } catch (error) {
     await reducers.leaveVoiceChannel(channelId).catch(() => undefined)
     room.disconnect()
+    if (error instanceof Error && error.message.includes('Bad Configuration Parameters')) {
+      throw new Error('LiveKit returned invalid ICE parameters. Verify LiveKit config and restart the server.')
+    }
     if (error instanceof Error && error.message.toLowerCase().includes('pc connection')) {
       throw new Error(
         'Could not establish peer connection. Check LiveKit URL/ports (7880 + UDP 7881) and try again.',

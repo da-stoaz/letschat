@@ -36,7 +36,8 @@ fn get_livekit_url() -> String {
 #[tauri::command]
 fn generate_livekit_token(room: String, identity: String) -> Result<String, String> {
     let api_key = std::env::var("LIVEKIT_API_KEY").unwrap_or_else(|_| "devkey".to_string());
-    let api_secret = std::env::var("LIVEKIT_API_SECRET").unwrap_or_else(|_| "secret".to_string());
+    let api_secret = std::env::var("LIVEKIT_API_SECRET")
+        .unwrap_or_else(|_| "devsecret0123456789devsecret0123456789".to_string());
 
     let now_secs = (std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

@@ -281,6 +281,13 @@ function syncVoiceParticipants(conn: DbConnection): void {
   }
 
   const store = useVoiceStore.getState()
+  const existingChannelIds = Object.keys(store.participantsByChannel).map(Number)
+  for (const channelId of existingChannelIds) {
+    if (!grouped.has(channelId)) {
+      store.setParticipants(channelId, [])
+    }
+  }
+
   for (const [channelId, rows] of grouped.entries()) {
     store.setParticipants(channelId, rows)
   }

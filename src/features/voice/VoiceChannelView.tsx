@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MicIcon, MicOffIcon, MonitorUpIcon, PhoneOffIcon, VideoIcon, VolumeXIcon } from 'lucide-react'
 import { joinLiveKitVoice, leaveLiveKitVoice, useLiveKitRoom } from '../../lib/livekit'
 import { reducers } from '../../lib/spacetimedb'
@@ -29,6 +29,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const [room, setRoom] = useState<Room | null>(null)
   const [joining, setJoining] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const staleCleanupMarker = useRef<string | null>(null)
   const selfIdentity = useConnectionStore((s) => s.identity)
   const { activeSpeakerIds, connectionState } = useLiveKitRoom(room)
 
@@ -38,6 +39,23 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
 
   const selfParticipant = participants.find((p) => p.userIdentity === selfIdentity) ?? null
   const joined = room !== null && connectionState === ConnectionState.Connected && selfParticipant !== null
+  const displayParticipants =
+    joined || !selfIdentity ? participants : participants.filter((participant) => participant.userIdentity !== selfIdentity)
+
+  useEffect(() => {
+    if (channelId === null || !selfIdentity || joining) return
+    const localDisconnected = room === null || connectionState !== ConnectionState.Connected
+    if (!localDisconnected || !selfParticipant) {
+      staleCleanupMarker.current = null
+      return
+    }
+
+    const marker = `${channelId}:${selfParticipant.userIdentity}:${selfParticipant.joinedAt}`
+    if (staleCleanupMarker.current === marker) return
+    staleCleanupMarker.current = marker
+    void reducers.leaveVoiceChannel(channelId).catch(() => undefined)
+  }, [channelId, selfIdentity, joining, room, connectionState, selfParticipant])
+
   const statusBadge = joining ? 'Joining...' : joined ? 'Joined' : 'Not joined'
   const statusVariant = joining ? 'outline' : joined ? 'default' : 'secondary'
 
@@ -46,14 +64,14 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
       <header className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Voice Channel {channelId}</h2>
-          <p className="text-sm text-muted-foreground">{participants.length}/15 participants</p>
+          <p className="text-sm text-muted-foreground">{displayParticipants.length}/15 participants</p>
         </div>
         <Badge variant={statusVariant}>{statusBadge}</Badge>
       </header>
 
       <ScrollArea className="min-h-0">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {participants.map((p) => (
+          {displayParticipants.map((p) => (
             <Card key={p.userIdentity} className="border-border/70 bg-background/60 py-0">
               <CardHeader>
                 <CardTitle className="text-sm">{p.userIdentity.slice(0, 12)}</CardTitle>
