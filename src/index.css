@@ -39,6 +39,10 @@ textarea {
   border-right: 1px solid #2b3e58;
 }
 
+.server-rail-spacer {
+  flex: 1;
+}
+
 .server-pill {
   width: 34px;
   height: 34px;

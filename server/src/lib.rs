@@ -20,6 +20,7 @@ pub enum FriendStatus {
     Accepted,
 }
 
+
 #[spacetimedb::table(accessor = user, public)]
 pub struct User {
     #[primary_key]

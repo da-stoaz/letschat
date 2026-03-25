@@ -424,6 +424,10 @@ function setStoredToken(token: string): void {
   localStorage.setItem(SPACETIMEDB_TOKEN_KEY, token)
 }
 
+function clearStoredToken(): void {
+  localStorage.removeItem(SPACETIMEDB_TOKEN_KEY)
+}
+
 async function connect(): Promise<void> {
   if (connection?.isActive) return
   if (connectPromise) return connectPromise
@@ -634,6 +638,11 @@ export const onError = async (error: unknown): Promise<void> => {
 
 export async function initializeSpacetime(): Promise<void> {
   await connect()
+}
+
+export function resetLocalAuthSession(): void {
+  disconnect()
+  clearStoredToken()
 }
 
 export async function resolveIdentityFromUsername(username: string): Promise<Identity | null> {

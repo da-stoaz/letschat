@@ -6,6 +6,7 @@ import { useUiStore } from '../stores/uiStore'
 import { CreateServerModal } from '../modals/CreateServerModal'
 import { EditServerModal } from '../modals/EditServerModal'
 import { CreateChannelModal } from '../modals/CreateChannelModal'
+import { SettingsModal } from '../modals/SettingsModal'
 import { useServerRole } from '../hooks/useServerRole'
 import { canManageChannels, canRenameServer } from '../lib/permissions'
 
@@ -15,6 +16,7 @@ export function AppLayout() {
   const [showCreateServer, setShowCreateServer] = useState(false)
   const [showEditServer, setShowEditServer] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const servers = useServersStore((s) => s.servers)
   const channelsByServer = useChannelsStore((s) => s.channelsByServer)
@@ -63,6 +65,10 @@ export function AppLayout() {
           ))}
           <button className="server-pill" onClick={() => setShowCreateServer(true)} title="Create server">
             +
+          </button>
+          <div className="server-rail-spacer" />
+          <button className="server-pill" onClick={() => setShowSettings(true)} title="Settings">
+            ⚙
           </button>
         </aside>
 
@@ -165,6 +171,14 @@ export function AppLayout() {
         <div className="modal-backdrop" onClick={() => setShowCreateChannel(false)}>
           <div className="modal-shell" onClick={(event) => event.stopPropagation()}>
             <CreateChannelModal serverId={activeServerId} onClose={() => setShowCreateChannel(false)} />
+          </div>
+        </div>
+      ) : null}
+
+      {showSettings ? (
+        <div className="modal-backdrop" onClick={() => setShowSettings(false)}>
+          <div className="modal-shell" onClick={(event) => event.stopPropagation()}>
+            <SettingsModal onClose={() => setShowSettings(false)} />
           </div>
         </div>
       ) : null}
