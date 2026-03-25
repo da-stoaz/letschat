@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { MicIcon, MicOffIcon, MonitorUpIcon, PhoneOffIcon, VideoIcon, VolumeXIcon } from 'lucide-react'
-import { joinLiveKitVoice, leaveLiveKitVoice, useLiveKitRoom } from '../../lib/livekit'
+import {
+  joinLiveKitVoice,
+  leaveLiveKitVoice,
+  supportsMicrophoneCapture,
+  supportsScreenCapture,
+  useLiveKitRoom,
+} from '../../lib/livekit'
 import { reducers } from '../../lib/spacetimedb'
 import { useVoiceStore } from '../../stores/voiceStore'
 import { useConnectionStore } from '../../stores/connectionStore'
@@ -31,7 +37,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const [error, setError] = useState<string | null>(null)
   const staleCleanupMarker = useRef<string | null>(null)
   const selfIdentity = useConnectionStore((s) => s.identity)
-  const { activeSpeakerIds, connectionState } = useLiveKitRoom(room)
+  const { activeSpeakerIds, connectionState, remoteParticipants } = useLiveKitRoom(room)
 
   if (channelId === null) {
     return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a voice channel</div>
@@ -41,6 +47,12 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const joined = room !== null && connectionState === ConnectionState.Connected && selfParticipant !== null
   const displayParticipants =
     joined || !selfIdentity ? participants : participants.filter((participant) => participant.userIdentity !== selfIdentity)
+  const muted = selfParticipant?.muted ?? false
+  const deafened = selfParticipant?.deafened ?? false
+  const sharingCamera = selfParticipant?.sharingCamera ?? false
+  const sharingScreen = selfParticipant?.sharingScreen ?? false
+  const hasMicCapture = supportsMicrophoneCapture()
+  const hasScreenCapture = supportsScreenCapture()
 
   useEffect(() => {
     if (channelId === null || !selfIdentity || joining) return
@@ -56,6 +68,27 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     void reducers.leaveVoiceChannel(channelId).catch(() => undefined)
   }, [channelId, selfIdentity, joining, room, connectionState, selfParticipant])
 
+  useEffect(() => {
+    if (!joined) return
+    const volume = deafened ? 0 : 1
+    for (const participant of remoteParticipants) {
+      participant.setVolume(volume)
+    }
+  }, [joined, deafened, remoteParticipants])
+
+  const patchVoiceState = async (
+    patch: Partial<Pick<VoiceParticipant, 'muted' | 'deafened' | 'sharingScreen' | 'sharingCamera'>>,
+  ) => {
+    if (!selfParticipant) return
+    const next = {
+      muted: patch.muted ?? selfParticipant.muted,
+      deafened: patch.deafened ?? selfParticipant.deafened,
+      sharingScreen: patch.sharingScreen ?? selfParticipant.sharingScreen,
+      sharingCamera: patch.sharingCamera ?? selfParticipant.sharingCamera,
+    }
+    await reducers.updateVoiceState(channelId, next.muted, next.deafened, next.sharingScreen, next.sharingCamera)
+  }
+
   const statusBadge = joining ? 'Joining...' : joined ? 'Joined' : 'Not joined'
   const statusVariant = joining ? 'outline' : joined ? 'default' : 'secondary'
 
@@ -68,6 +101,16 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
         </div>
         <Badge variant={statusVariant}>{statusBadge}</Badge>
       </header>
+      {joined && !hasMicCapture ? (
+        <p className="text-xs text-muted-foreground">
+          This runtime does not expose microphone/camera APIs. Voice is listen-only on this device.
+        </p>
+      ) : null}
+      {joined && hasMicCapture && !hasScreenCapture ? (
+        <p className="text-xs text-muted-foreground">
+          Screen sharing is not available in this runtime.
+        </p>
+      ) : null}
 
       <ScrollArea className="min-h-0">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -112,21 +155,90 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
           </Button>
         ) : (
           <>
-            <Button variant="outline" onClick={() => reducers.updateVoiceState(channelId, true, false, false, false)}>
-              <MicOffIcon className="size-4" />
-              Mute
+            <Button
+              variant={muted ? 'secondary' : 'outline'}
+              disabled={!hasMicCapture}
+              onClick={async () => {
+                setError(null)
+                if (!room || !selfParticipant) return
+                if (!hasMicCapture) {
+                  setError('Microphone APIs are unavailable in this runtime. Unmute is not supported here.')
+                  return
+                }
+                try {
+                  const nextMuted = !selfParticipant.muted
+                  await room.localParticipant.setMicrophoneEnabled(!nextMuted)
+                  await patchVoiceState({ muted: nextMuted })
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Could not toggle microphone.'
+                  setError(message)
+                }
+              }}
+            >
+              {muted ? <MicOffIcon className="size-4" /> : <MicIcon className="size-4" />}
+              {muted ? 'Unmute' : 'Mute'}
             </Button>
-            <Button variant="outline" onClick={() => reducers.updateVoiceState(channelId, false, true, false, false)}>
+            <Button
+              variant={deafened ? 'secondary' : 'outline'}
+              onClick={async () => {
+                setError(null)
+                if (!selfParticipant) return
+                try {
+                  await patchVoiceState({ deafened: !selfParticipant.deafened })
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Could not toggle deafen.'
+                  setError(message)
+                }
+              }}
+            >
               <VolumeXIcon className="size-4" />
-              Deafen
+              {deafened ? 'Undeafen' : 'Deafen'}
             </Button>
-            <Button variant="outline" onClick={() => reducers.updateVoiceState(channelId, false, false, false, true)}>
+            <Button
+              variant={sharingCamera ? 'secondary' : 'outline'}
+              disabled={!hasMicCapture}
+              onClick={async () => {
+                setError(null)
+                if (!room || !selfParticipant) return
+                if (!hasMicCapture) {
+                  setError('Camera APIs are unavailable in this runtime.')
+                  return
+                }
+                try {
+                  const next = !selfParticipant.sharingCamera
+                  await room.localParticipant.setCameraEnabled(next)
+                  await patchVoiceState({ sharingCamera: next })
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Could not toggle camera.'
+                  setError(message)
+                }
+              }}
+            >
               <VideoIcon className="size-4" />
-              Camera
+              {sharingCamera ? 'Stop Camera' : 'Camera'}
             </Button>
-            <Button variant="outline" onClick={() => reducers.updateVoiceState(channelId, false, false, true, false)}>
+            <Button
+              variant={sharingScreen ? 'secondary' : 'outline'}
+              disabled={!hasScreenCapture}
+              onClick={async () => {
+                setError(null)
+                if (!room || !selfParticipant) return
+                if (!hasScreenCapture) {
+                  setError('Screen sharing APIs are unavailable in this runtime.')
+                  return
+                }
+                try {
+                  const next = !selfParticipant.sharingScreen
+                  await room.localParticipant.setScreenShareEnabled(next)
+                  await patchVoiceState({ sharingScreen: next })
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Could not toggle screen share.'
+                  setError(message)
+                }
+              }}
+            >
               <MonitorUpIcon className="size-4" />
-              Share Screen
+              {sharingScreen ? 'Stop Share' : 'Share Screen'}
             </Button>
             <Button
               variant="destructive"

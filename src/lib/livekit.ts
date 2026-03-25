@@ -4,6 +4,14 @@ import { reducers } from './spacetimedb'
 import { tauriCommands } from './tauri'
 import { useConnectionStore } from '../stores/connectionStore'
 
+export function supportsMicrophoneCapture(): boolean {
+  return typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getUserMedia === 'function'
+}
+
+export function supportsScreenCapture(): boolean {
+  return typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+}
+
 function normalizeLiveKitUrl(raw: string): string {
   const normalized = raw.trim()
   if (normalized.startsWith('ws://') || normalized.startsWith('wss://')) return normalized
@@ -31,12 +39,32 @@ export async function joinLiveKitVoice(channelId: number): Promise<Room> {
     if (error instanceof Error && error.message.includes('Bad Configuration Parameters')) {
       throw new Error('LiveKit returned invalid ICE parameters. Verify LiveKit config and restart the server.')
     }
+    if (error instanceof Error && /(notallowederror|permission denied|permission dismissed)/i.test(error.message)) {
+      throw new Error('Microphone permission is required to join voice. Please allow microphone access and try again.')
+    }
     if (error instanceof Error && error.message.toLowerCase().includes('pc connection')) {
       throw new Error(
         'Could not establish peer connection. Check LiveKit URL/ports (7880 + UDP 7881) and try again.',
       )
     }
     throw error
+  }
+
+  if (!supportsMicrophoneCapture()) {
+    await reducers.updateVoiceState(channelId, true, false, false, false).catch(() => undefined)
+    return room
+  }
+
+  try {
+    await room.localParticipant.setMicrophoneEnabled(true)
+    await reducers.updateVoiceState(channelId, false, false, false, false).catch(() => undefined)
+  } catch (error) {
+    await reducers.updateVoiceState(channelId, true, false, false, false).catch(() => undefined)
+    if (error instanceof Error && /(notallowederror|permission denied|permission dismissed)/i.test(error.message)) {
+      console.warn('Microphone permission denied; joined voice in listen-only mode.')
+      return room
+    }
+    console.warn('Could not enable microphone automatically; joined voice in listen-only mode.', error)
   }
 
   return room
