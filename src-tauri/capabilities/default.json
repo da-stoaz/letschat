@@ -3,5 +3,9 @@
   "identifier": "default",
   "description": "Default capability for LetsChat",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    "notification:default",
+    "opener:default"
+  ]
 }

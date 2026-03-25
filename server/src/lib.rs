@@ -1,5 +1,3 @@
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
-use serde::Serialize;
 use spacetimedb::rand::{distributions::Alphanumeric, Rng};
 use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table, TimeDuration, Timestamp};
 
@@ -278,35 +276,6 @@ fn find_friend_row(ctx: &ReducerContext, a: Identity, b: Identity) -> Option<Fri
 fn has_block_either_direction(ctx: &ReducerContext, a: Identity, b: Identity) -> bool {
     ctx.db.block().block_key().find(block_key(a, b)).is_some()
         || ctx.db.block().block_key().find(block_key(b, a)).is_some()
-}
-
-fn livekit_secret() -> String {
-    option_env!("LIVEKIT_API_SECRET")
-        .unwrap_or("secret")
-        .to_string()
-}
-
-fn livekit_key() -> String {
-    option_env!("LIVEKIT_API_KEY")
-        .unwrap_or("devkey")
-        .to_string()
-}
-
-#[derive(Serialize)]
-struct LivekitVideoGrant {
-    room_join: bool,
-    room: String,
-    can_publish: bool,
-    can_subscribe: bool,
-}
-
-#[derive(Serialize)]
-struct LivekitClaims {
-    iss: String,
-    sub: String,
-    nbf: usize,
-    exp: usize,
-    video: LivekitVideoGrant,
 }
 
 #[spacetimedb::reducer]
@@ -906,27 +875,6 @@ pub fn join_voice_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), S
         sharing_screen: false,
         sharing_camera: false,
     });
-
-    let now_secs = (ctx.timestamp.to_micros_since_unix_epoch() / 1_000_000) as usize;
-    let claims = LivekitClaims {
-        iss: livekit_key(),
-        sub: ctx.sender().to_string(),
-        nbf: now_secs,
-        exp: now_secs + 3600,
-        video: LivekitVideoGrant {
-            room_join: true,
-            room: channel_id.to_string(),
-            can_publish: true,
-            can_subscribe: true,
-        },
-    };
-
-    let _jwt = encode(
-        &Header::new(Algorithm::HS256),
-        &claims,
-        &EncodingKey::from_secret(livekit_secret().as_bytes()),
-    )
-    .map_err(|e| format!("failed to generate livekit token: {e}"))?;
 
     Ok(())
 }
