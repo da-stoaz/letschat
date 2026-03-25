@@ -1,5 +1,9 @@
 import { useState } from 'react'
 import { reducers } from '../lib/spacetimedb'
+import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 export function CreateServerModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
@@ -7,7 +11,7 @@ export function CreateServerModal({ onClose }: { onClose: () => void }) {
 
   return (
     <form
-      className="auth-card"
+      className="space-y-4"
       onSubmit={async (event) => {
         event.preventDefault()
         setError(null)
@@ -20,14 +24,31 @@ export function CreateServerModal({ onClose }: { onClose: () => void }) {
         }
       }}
     >
-      <h3>Create Server</h3>
-      <input value={name} onChange={(e) => setName(e.target.value)} minLength={2} maxLength={100} required />
-      {error ? <p className="error-text">{error}</p> : null}
-      <div className="modal-actions">
-        <button type="button" className="ghost" onClick={onClose}>
+      <DialogHeader>
+        <DialogTitle>Create Server</DialogTitle>
+        <DialogDescription>Set a name for your new server space.</DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-2">
+        <Label htmlFor="server-name">Server name</Label>
+        <Input
+          id="server-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          minLength={2}
+          maxLength={100}
+          required
+          placeholder="e.g. Product Guild"
+        />
+      </div>
+
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+      <div className="flex items-center justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancel
-        </button>
-        <button type="submit">Create</button>
+        </Button>
+        <Button type="submit">Create</Button>
       </div>
     </form>
   )

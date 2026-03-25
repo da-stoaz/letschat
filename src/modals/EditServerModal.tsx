@@ -1,5 +1,9 @@
 import { useState } from 'react'
 import { reducers } from '../lib/spacetimedb'
+import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 export function EditServerModal({ serverId, currentName, onClose }: { serverId: number; currentName: string; onClose: () => void }) {
   const [name, setName] = useState(currentName)
@@ -7,7 +11,7 @@ export function EditServerModal({ serverId, currentName, onClose }: { serverId: 
 
   return (
     <form
-      className="auth-card"
+      className="space-y-4"
       onSubmit={async (event) => {
         event.preventDefault()
         setError(null)
@@ -20,16 +24,23 @@ export function EditServerModal({ serverId, currentName, onClose }: { serverId: 
         }
       }}
     >
-      <h3>Edit Server</h3>
-      <input value={name} onChange={(e) => setName(e.target.value)} minLength={2} maxLength={100} required />
-      {error ? <p className="error-text">{error}</p> : null}
-      <div className="modal-actions">
-        <button type="button" className="ghost" onClick={onClose}>
+      <DialogHeader>
+        <DialogTitle>Edit Server</DialogTitle>
+        <DialogDescription>Rename this server or permanently delete it.</DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-2">
+        <Label htmlFor="edit-server-name">Server name</Label>
+        <Input id="edit-server-name" value={name} onChange={(e) => setName(e.target.value)} minLength={2} maxLength={100} required />
+      </div>
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      <div className="flex items-center justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancel
-        </button>
-        <button type="submit">Save</button>
-        <button
-          className="danger"
+        </Button>
+        <Button type="submit">Save</Button>
+        <Button
+          variant="destructive"
           type="button"
           onClick={async () => {
             setError(null)
@@ -43,7 +54,7 @@ export function EditServerModal({ serverId, currentName, onClose }: { serverId: 
           }}
         >
           Delete Server
-        </button>
+        </Button>
       </div>
     </form>
   )

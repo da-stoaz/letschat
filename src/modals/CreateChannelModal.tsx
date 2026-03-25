@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { reducers } from '../lib/spacetimedb'
 import type { ChannelKind } from '../types/domain'
+import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 
 export function CreateChannelModal({ serverId, onClose }: { serverId: number; onClose: () => void }) {
   const [name, setName] = useState('')
@@ -10,7 +16,7 @@ export function CreateChannelModal({ serverId, onClose }: { serverId: number; on
 
   return (
     <form
-      className="auth-card"
+      className="space-y-4"
       onSubmit={async (event) => {
         event.preventDefault()
         setError(null)
@@ -23,22 +29,43 @@ export function CreateChannelModal({ serverId, onClose }: { serverId: number; on
         }
       }}
     >
-      <h3>Create Channel</h3>
-      <input value={name} onChange={(e) => setName(e.target.value)} required minLength={1} maxLength={100} />
-      <select value={kind} onChange={(e) => setKind(e.target.value as ChannelKind)}>
-        <option value="Text">Text</option>
-        <option value="Voice">Voice</option>
-      </select>
-      <label>
-        <input type="checkbox" checked={moderatorOnly} onChange={(e) => setModeratorOnly(e.target.checked)} />
-        Moderator only
-      </label>
-      {error ? <p className="error-text">{error}</p> : null}
-      <div className="modal-actions">
-        <button type="button" className="ghost" onClick={onClose}>
+      <DialogHeader>
+        <DialogTitle>Create Channel</DialogTitle>
+        <DialogDescription>Choose a channel type and permissions.</DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-2">
+        <Label htmlFor="channel-name">Channel name</Label>
+        <Input id="channel-name" value={name} onChange={(e) => setName(e.target.value)} required minLength={1} maxLength={100} />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Channel type</Label>
+        <Select value={kind} onValueChange={(value) => setKind(value as ChannelKind)}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select channel type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Text">Text</SelectItem>
+            <SelectItem value="Voice">Voice</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
+        <div>
+          <p className="text-sm font-medium">Moderator only</p>
+          <p className="text-xs text-muted-foreground">Restrict posting/joining to moderators and owners.</p>
+        </div>
+        <Switch checked={moderatorOnly} onCheckedChange={setModeratorOnly} />
+      </div>
+
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      <div className="flex items-center justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancel
-        </button>
-        <button type="submit">Create</button>
+        </Button>
+        <Button type="submit">Create</Button>
       </div>
     </form>
   )

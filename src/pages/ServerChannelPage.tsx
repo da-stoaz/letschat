@@ -3,6 +3,9 @@ import { useChannelsStore } from '../stores/channelsStore'
 import { TextChannelView } from '../features/channels/TextChannelView'
 import { VoiceChannelView } from '../features/voice/VoiceChannelView'
 import { reducers } from '../lib/spacetimedb'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { HashIcon } from 'lucide-react'
 
 export function ServerChannelPage() {
   const { serverId, channelId } = useParams()
@@ -20,25 +23,28 @@ export function ServerChannelPage() {
   if (!channel) {
     if (serverChannels.length === 0 && Number.isFinite(serverNumericId)) {
       return (
-        <section className="pane-empty">
-          <div className="empty-stack">
-            <h2>No channels in this server yet</h2>
-            <p>Create your first text channel to start chatting.</p>
-            <button onClick={() => reducers.createChannel(serverNumericId, 'general', 'Text', false)}>
+        <Card className="h-full border-border/70 bg-card/70">
+          <CardHeader>
+            <CardTitle>No channels in this server yet</CardTitle>
+            <CardDescription>Create your first text channel to start chatting.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => reducers.createChannel(serverNumericId, 'general', 'Text', false)}>
+              <HashIcon className="size-4" />
               Create #general
-            </button>
-          </div>
-        </section>
+            </Button>
+          </CardContent>
+        </Card>
       )
     }
 
     return (
-      <section className="pane-empty">
-        <div className="empty-stack">
-          <h2>Channel not found</h2>
-          <p>Pick a channel from the sidebar.</p>
-        </div>
-      </section>
+      <Card className="h-full border-border/70 bg-card/70">
+        <CardHeader>
+          <CardTitle>Channel not found</CardTitle>
+          <CardDescription>Pick a channel from the sidebar.</CardDescription>
+        </CardHeader>
+      </Card>
     )
   }
   if (channel.kind === 'Voice') return <VoiceChannelView channelId={channel.id} />

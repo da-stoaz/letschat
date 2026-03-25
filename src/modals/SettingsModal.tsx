@@ -2,6 +2,13 @@ import { useState } from 'react'
 import { reducers, resetLocalAuthSession } from '../lib/spacetimedb'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSelfStore } from '../stores/selfStore'
+import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { LogOutIcon } from 'lucide-react'
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const user = useSelfStore((s) => s.user)
@@ -11,9 +18,13 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null)
 
   return (
-    <section className="auth-card">
-      <h3>Settings</h3>
+    <section className="space-y-4">
+      <DialogHeader>
+        <DialogTitle>Settings</DialogTitle>
+        <DialogDescription>Update your profile and manage your local session.</DialogDescription>
+      </DialogHeader>
       <form
+        className="space-y-4"
         onSubmit={async (event) => {
           event.preventDefault()
           setError(null)
@@ -26,39 +37,57 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           }
         }}
       >
-        <label>
-          Display name
-          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Display name" />
-        </label>
-        <label>
-          Avatar URL
-          <input value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} placeholder="Avatar URL" />
-        </label>
-        <div className="modal-actions">
-          <button type="button" onClick={onClose}>
+        <div className="space-y-2">
+          <Label htmlFor="settings-display-name">Display name</Label>
+          <Input
+            id="settings-display-name"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Display name"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="settings-avatar">Avatar URL</Label>
+          <Input
+            id="settings-avatar"
+            value={avatarUrl}
+            onChange={(e) => setAvatarUrl(e.target.value)}
+            placeholder="https://..."
+          />
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>
             Cancel
-          </button>
-          <button type="submit">Save</button>
+          </Button>
+          <Button type="submit">Save</Button>
         </div>
       </form>
 
-      <section className="hint-card">
-        <p><strong>Account</strong></p>
-        <p>{user ? `@${user.username}` : 'Unregistered identity'}</p>
-        <p>{identity ? identity : 'No identity available'}</p>
-        <button
-          type="button"
-          className="danger"
-          onClick={() => {
-            resetLocalAuthSession()
-            window.location.assign('/auth')
-          }}
-        >
-          Sign Out (Reset Local Session)
-        </button>
-      </section>
+      <Card className="border-border/70 bg-muted/25 py-0">
+        <CardHeader>
+          <CardTitle className="text-sm">Account</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">{user ? `@${user.username}` : 'Unregistered identity'}</Badge>
+          </div>
+          <p className="break-all">{identity ? identity : 'No identity available'}</p>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              resetLocalAuthSession()
+              window.location.assign('/auth')
+            }}
+          >
+            <LogOutIcon className="size-4" />
+            Sign Out (Reset Local Session)
+          </Button>
+        </CardContent>
+      </Card>
 
-      {error ? <p className="error-text">{error}</p> : null}
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </section>
   )
 }
