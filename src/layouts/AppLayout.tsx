@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import stealthChatLogo from '../../src-tauri/icons/stealthchat-nobg.png'
 
 function serverInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -100,7 +101,7 @@ export function AppLayout() {
                   }
                   onClick={() => navigate('/app')}
                 >
-                  <span className="grid h-full w-full place-items-center font-semibold">L</span>
+                  <img src={stealthChatLogo} alt="StealthChat" className="h-7 w-7 object-contain" />
                 </TooltipTrigger>
                 <TooltipContent>Home</TooltipContent>
               </Tooltip>
