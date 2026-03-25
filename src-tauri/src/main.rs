@@ -138,7 +138,12 @@ fn main() {
             let quit_item = MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
             let separator = PredefinedMenuItem::separator(app)?;
             let tray_menu = Menu::with_items(app, &[&open_item, &separator, &quit_item])?;
-            let tray_icon = tauri::include_image!("icons/icon-stealthchat.png");
+            let app_icon = tauri::include_image!("icons/icon-stealthchat.png");
+            let tray_icon = app_icon.clone();
+
+            if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                let _ = window.set_icon(app_icon);
+            }
 
             let app_handle = app.handle().clone();
             TrayIconBuilder::with_id("main-tray")
