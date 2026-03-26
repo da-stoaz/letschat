@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ConnectionState } from 'livekit-client'
 import {
   AudioLinesIcon,
+  ChevronDownIcon,
   LogOutIcon,
   MicIcon,
   MicOffIcon,
@@ -39,13 +40,16 @@ import { normalizeIdentity } from './helpers'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { cn } from '../../lib/utils'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 const EMPTY_VOICE_PARTICIPANTS: Array<{
   userIdentity: string
@@ -76,7 +80,44 @@ function selectInitialDevice(
   return options[0]?.deviceId ?? null
 }
 
-export function ActiveCallCard() {
+function selectedDeviceLabel(
+  selectedId: string | null,
+  options: LivekitDeviceOption[],
+  fallback: string,
+): string {
+  if (!selectedId) return fallback
+  const device = options.find((item) => item.deviceId === selectedId)
+  if (!device) return fallback
+  return device.label || fallback
+}
+
+function shortLabel(label: string, max = 12): string {
+  return label.length > max ? `${label.slice(0, max - 1)}…` : label
+}
+
+function supportsAudioOutputSwitching(): boolean {
+  if (typeof window === 'undefined') return false
+
+  const htmlMediaElementProto = window.HTMLMediaElement?.prototype as
+    | { setSinkId?: unknown }
+    | undefined
+  if (typeof htmlMediaElementProto?.setSinkId === 'function') {
+    return true
+  }
+
+  const maybeAudioContext = (window as unknown as {
+    AudioContext?: { prototype?: { setSinkId?: unknown } }
+    webkitAudioContext?: { prototype?: { setSinkId?: unknown } }
+  }).AudioContext
+    ?? (window as unknown as {
+      AudioContext?: { prototype?: { setSinkId?: unknown } }
+      webkitAudioContext?: { prototype?: { setSinkId?: unknown } }
+    }).webkitAudioContext
+
+  return typeof maybeAudioContext?.prototype?.setSinkId === 'function'
+}
+
+export function ActiveCallCard({ className }: { className?: string }) {
   const selfIdentity = useConnectionStore((s) => s.identity)
   const voiceRoom = useVoiceSessionStore((s) => s.room)
   const joinedVoiceChannelId = useVoiceSessionStore((s) => s.joinedChannelId)
@@ -174,6 +215,10 @@ export function ActiveCallCard() {
   const [audioOutputs, setAudioOutputs] = useState<LivekitDeviceOption[]>([])
   const [videoInputs, setVideoInputs] = useState<LivekitDeviceOption[]>([])
   const [localError, setLocalError] = useState<string | null>(null)
+  const [entered, setEntered] = useState(false)
+  const [audioOutputSwitchSupported, setAudioOutputSwitchSupported] = useState(
+    supportsAudioOutputSwitching(),
+  )
 
   const connected = connectionState === ConnectionState.Connected
   const connecting = (mode === 'server' ? voiceJoining : dmJoining) || connectionState === ConnectionState.Connecting
@@ -227,6 +272,19 @@ export function ActiveCallCard() {
     videoInputId,
   ])
 
+  useEffect(() => {
+    if (mode === null) {
+      setEntered(false)
+      return
+    }
+    const frame = requestAnimationFrame(() => setEntered(true))
+    return () => cancelAnimationFrame(frame)
+  }, [mode])
+
+  useEffect(() => {
+    setAudioOutputSwitchSupported(supportsAudioOutputSwitching())
+  }, [activeRoom])
+
   if (mode === null || !selfIdentity) {
     return null
   }
@@ -279,12 +337,20 @@ export function ActiveCallCard() {
     if (kind === 'audioinput') setAudioInputId(deviceId)
     if (kind === 'audiooutput') setAudioOutputId(deviceId)
     if (kind === 'videoinput') setVideoInputId(deviceId)
+    if (kind === 'audiooutput' && !audioOutputSwitchSupported) {
+      return
+    }
     if (!activeRoom) return
     try {
       await switchRoomDevice(activeRoom, kind, deviceId)
       setCurrentError(null)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not switch media device.'
+      if (kind === 'audiooutput' && /cannot switch audio output/i.test(message)) {
+        setAudioOutputSwitchSupported(false)
+        setCurrentError(null)
+        return
+      }
       setCurrentError(message)
     }
   }
@@ -380,13 +446,23 @@ export function ActiveCallCard() {
 
   const hasSpeakingActivity = activeSpeakerIds.size > 0
   const statusLabel = getStatusLabel(connected, connecting)
+  const micLabel = shortLabel(selectedDeviceLabel(audioInputId, audioInputs, 'Mic'))
+  const cameraLabel = shortLabel(selectedDeviceLabel(videoInputId, videoInputs, 'Camera'))
+  const outputLabel = shortLabel(selectedDeviceLabel(audioOutputId, audioOutputs, 'Output'))
+  const canSwitchAudioOutput = audioOutputSwitchSupported
 
   return (
-    <Card className="mt-3 border-border/60 bg-card/90">
-      <CardContent className="space-y-3 p-3">
+    <Card
+      className={cn(
+        'border-border/60 bg-card/90 shadow-xl transition-all duration-300',
+        entered ? 'translate-y-0 opacity-100' : 'translate-y-5 opacity-0',
+        className,
+      )}
+    >
+      <CardContent className="space-y-2 p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{callTitle}</p>
+            <p className="truncate text-base font-semibold">{callTitle}</p>
             <p className="text-xs text-muted-foreground">
               {participants.length} participant{participants.length === 1 ? '' : 's'}
             </p>
@@ -395,72 +471,124 @@ export function ActiveCallCard() {
             <Badge variant={connected ? 'default' : connecting ? 'outline' : 'secondary'}>
               {statusLabel}
             </Badge>
-            <AudioLinesIcon className={`size-4 ${hasSpeakingActivity ? 'text-emerald-400' : 'text-muted-foreground'}`} />
+            <AudioLinesIcon className={`size-5 ${hasSpeakingActivity ? 'text-emerald-400' : 'text-muted-foreground'}`} />
           </div>
         </div>
 
-        <div className="grid grid-cols-5 gap-2">
-          <Button size="icon-sm" variant={muted ? 'secondary' : 'outline'} onClick={toggleMute}>
-            {muted ? <MicOffIcon className="size-4" /> : <MicIcon className="size-4" />}
-          </Button>
-          <Button size="icon-sm" variant={deafened ? 'secondary' : 'outline'} onClick={toggleDeafen}>
-            {deafened ? <VolumeXIcon className="size-4" /> : <Volume2Icon className="size-4" />}
-          </Button>
-          <Button size="icon-sm" variant={sharingCamera ? 'secondary' : 'outline'} onClick={toggleCamera}>
-            <VideoIcon className="size-4" />
-          </Button>
+        <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto_auto] gap-2 max-md:grid-cols-2">
+          <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-lg border border-border/70 bg-background/40">
+            <Button
+              size="icon"
+              variant={muted ? 'secondary' : 'ghost'}
+              className="h-9 w-10 rounded-none border-0"
+              onClick={toggleMute}
+            >
+              {muted ? <MicOffIcon className="size-5" /> : <MicIcon className="size-5" />}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex h-9 min-w-0 flex-1 items-center justify-between gap-1 border-l border-border/70 px-2 text-xs text-muted-foreground hover:bg-muted/60">
+                <span className="truncate">{micLabel}</span>
+                <ChevronDownIcon className="size-3.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Microphone Source</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={audioInputId ?? ''}
+                    onValueChange={(value) => void applyDeviceSelection('audioinput', value)}
+                  >
+                    {audioInputs.map((device) => (
+                      <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
+                        {device.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-lg border border-border/70 bg-background/40">
+            <Button
+              size="icon"
+              variant={deafened ? 'secondary' : 'ghost'}
+              className="h-9 w-10 rounded-none border-0"
+              onClick={toggleDeafen}
+            >
+              {deafened ? <VolumeXIcon className="size-5" /> : <Volume2Icon className="size-5" />}
+            </Button>
+            {canSwitchAudioOutput ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger className="inline-flex h-9 min-w-0 flex-1 items-center justify-between gap-1 border-l border-border/70 px-2 text-xs text-muted-foreground hover:bg-muted/60">
+                  <span className="truncate">{outputLabel}</span>
+                  <ChevronDownIcon className="size-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Output Device</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={audioOutputId ?? ''}
+                      onValueChange={(value) => void applyDeviceSelection('audiooutput', value)}
+                    >
+                      {audioOutputs.map((device) => (
+                        <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
+                          {device.label}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="inline-flex h-9 min-w-0 flex-1 items-center border-l border-border/70 px-2 text-xs text-muted-foreground/80">
+                <span className="truncate">System output</span>
+              </div>
+            )}
+          </div>
+
+          <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-lg border border-border/70 bg-background/40">
+            <Button
+              size="icon"
+              variant={sharingCamera ? 'secondary' : 'ghost'}
+              className="h-9 w-10 rounded-none border-0"
+              onClick={toggleCamera}
+            >
+              <VideoIcon className="size-5" />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex h-9 min-w-0 flex-1 items-center justify-between gap-1 border-l border-border/70 px-2 text-xs text-muted-foreground hover:bg-muted/60">
+                <span className="truncate">{cameraLabel}</span>
+                <ChevronDownIcon className="size-3.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Camera Source</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={videoInputId ?? ''}
+                    onValueChange={(value) => void applyDeviceSelection('videoinput', value)}
+                  >
+                    {videoInputs.map((device) => (
+                      <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
+                        {device.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
           <Button
             size="icon-sm"
             variant={sharingScreen ? 'secondary' : 'outline'}
             onClick={toggleScreenShare}
             disabled={!hasScreenCapture}
           >
-            <MonitorUpIcon className="size-4" />
+            <MonitorUpIcon className="size-5" />
           </Button>
           <Button size="icon-sm" variant="destructive" onClick={leaveCall}>
-            <LogOutIcon className="size-4" />
+            <LogOutIcon className="size-5" />
           </Button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <Select value={audioInputId ?? ''} onValueChange={(value) => void applyDeviceSelection('audioinput', value)}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Mic" />
-            </SelectTrigger>
-            <SelectContent>
-              {audioInputs.map((device) => (
-                <SelectItem key={device.deviceId} value={device.deviceId}>
-                  {device.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={videoInputId ?? ''} onValueChange={(value) => void applyDeviceSelection('videoinput', value)}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Camera" />
-            </SelectTrigger>
-            <SelectContent>
-              {videoInputs.map((device) => (
-                <SelectItem key={device.deviceId} value={device.deviceId}>
-                  {device.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={audioOutputId ?? ''} onValueChange={(value) => void applyDeviceSelection('audiooutput', value)}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Output" />
-            </SelectTrigger>
-            <SelectContent>
-              {audioOutputs.map((device) => (
-                <SelectItem key={device.deviceId} value={device.deviceId}>
-                  {device.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         {localError ? <p className="text-xs text-destructive">{localError}</p> : null}

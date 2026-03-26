@@ -13,7 +13,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { VoiceChannelButton } from './VoiceChannelButton'
-import { ActiveCallCard } from './ActiveCallCard'
 import { userInitials } from './helpers'
 import type { Channel, Role, Server, VoiceParticipant } from '../../types/domain'
 
@@ -224,9 +223,6 @@ export function ServerSidebar({
           </ScrollArea>
         )}
       </CardContent>
-      <div className="shrink-0 px-3 pb-3">
-        <ActiveCallCard />
-      </div>
     </Card>
   )
 }
