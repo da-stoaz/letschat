@@ -467,29 +467,30 @@ export function ActiveCallCard({
           className,
         )}
       >
-        <CardContent className="space-y-2 p-2">
-          <div className="flex items-center justify-between gap-2">
+        <CardContent className="space-y-2.5 p-2.5">
+          <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">{callTitle}</p>
+              <p className="truncate text-sm font-semibold leading-5">{callTitle}</p>
               <p className="text-[11px] text-muted-foreground">
-                {participants.length} in call
+                {participants.length} participant{participants.length === 1 ? '' : 's'}
               </p>
             </div>
             <div className="flex items-center gap-1">
-              <Badge variant={connected ? 'default' : connecting ? 'outline' : 'secondary'} className="px-2 py-0 text-[11px]">
+              <Badge variant={connected ? 'default' : connecting ? 'outline' : 'secondary'} className="px-2 py-0.5 text-[11px]">
                 {statusLabel}
               </Badge>
               <AudioLinesIcon className={`size-4 ${hasSpeakingActivity ? 'text-emerald-400' : 'text-muted-foreground'}`} />
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
-            <div className="inline-flex items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={muted ? 'secondary' : 'ghost'} className="size-7 rounded-none border-0" onClick={toggleMute}>
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1.5">
+            <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
+              <Button size="icon-xs" variant={muted ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={toggleMute}>
                 {muted ? <MicOffIcon className="size-4" /> : <MicIcon className="size-4" />}
               </Button>
               <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex size-7 items-center justify-center border-l border-border/70 text-muted-foreground hover:bg-muted/60">
+                <DropdownMenuTrigger className="inline-flex h-8 min-w-0 flex-1 items-center justify-between border-l border-border/70 px-1.5 text-[11px] text-muted-foreground hover:bg-muted/60">
+                  <span className="truncate">{micLabel}</span>
                   <ChevronDownIcon className="size-3.5" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-56">
@@ -510,13 +511,14 @@ export function ActiveCallCard({
               </DropdownMenu>
             </div>
 
-            <div className="inline-flex items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={deafened ? 'secondary' : 'ghost'} className="size-7 rounded-none border-0" onClick={toggleDeafen}>
+            <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
+              <Button size="icon-xs" variant={deafened ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={toggleDeafen}>
                 {deafened ? <VolumeXIcon className="size-4" /> : <Volume2Icon className="size-4" />}
               </Button>
               {canSwitchAudioOutput ? (
                 <DropdownMenu>
-                  <DropdownMenuTrigger className="inline-flex size-7 items-center justify-center border-l border-border/70 text-muted-foreground hover:bg-muted/60">
+                  <DropdownMenuTrigger className="inline-flex h-8 min-w-0 flex-1 items-center justify-between border-l border-border/70 px-1.5 text-[11px] text-muted-foreground hover:bg-muted/60">
+                    <span className="truncate">{outputLabel}</span>
                     <ChevronDownIcon className="size-3.5" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-56">
@@ -536,18 +538,21 @@ export function ActiveCallCard({
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
-                <div className="inline-flex size-7 items-center justify-center border-l border-border/70 text-muted-foreground/70">
-                  <Volume2Icon className="size-3.5" />
+                <div className="inline-flex h-8 min-w-0 flex-1 items-center border-l border-border/70 px-1.5 text-[11px] text-muted-foreground/80">
+                  <span className="truncate">System</span>
                 </div>
               )}
             </div>
+          </div>
 
-            <div className="inline-flex items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={sharingCamera ? 'secondary' : 'ghost'} className="size-7 rounded-none border-0" onClick={toggleCamera}>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1.5">
+            <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
+              <Button size="icon-xs" variant={sharingCamera ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={toggleCamera}>
                 <VideoIcon className="size-4" />
               </Button>
               <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex size-7 items-center justify-center border-l border-border/70 text-muted-foreground hover:bg-muted/60">
+                <DropdownMenuTrigger className="inline-flex h-8 min-w-0 flex-1 items-center justify-between border-l border-border/70 px-1.5 text-[11px] text-muted-foreground hover:bg-muted/60">
+                  <span className="truncate">{cameraLabel}</span>
                   <ChevronDownIcon className="size-3.5" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-56">
@@ -571,14 +576,14 @@ export function ActiveCallCard({
             <Button
               size="icon-xs"
               variant={sharingScreen ? 'secondary' : 'outline'}
-              className="size-7"
+              className="h-8 w-8"
               onClick={toggleScreenShare}
               disabled={!hasScreenCapture}
             >
               <MonitorUpIcon className="size-4" />
             </Button>
 
-            <Button size="icon-xs" variant="destructive" className="size-7" onClick={leaveCall}>
+            <Button size="icon-xs" variant="destructive" className="h-8 w-8" onClick={leaveCall}>
               <LogOutIcon className="size-4" />
             </Button>
           </div>

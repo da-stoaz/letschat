@@ -14,7 +14,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { VoiceChannelButton } from './VoiceChannelButton'
 import { userInitials } from './helpers'
-import { cn } from '../../lib/utils'
 import type { Channel, Role, Server, VoiceParticipant } from '../../types/domain'
 
 interface DmContact {
@@ -49,7 +48,6 @@ interface ServerSidebarProps {
   activeDmIdentity: string | null
   dmCallActiveByIdentity: Record<string, boolean>
   onOpenDmContact: (identity: string) => void
-  hasActiveCallDock: boolean
 }
 
 export function ServerSidebar({
@@ -74,7 +72,6 @@ export function ServerSidebar({
   activeDmIdentity,
   dmCallActiveByIdentity,
   onOpenDmContact,
-  hasActiveCallDock,
 }: ServerSidebarProps) {
   return (
     <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur max-md:hidden">
@@ -107,7 +104,7 @@ export function ServerSidebar({
         )}
       </CardHeader>
 
-      <CardContent className={cn('min-h-0 flex-1 overflow-hidden p-3', hasActiveCallDock ? 'pb-28' : '')}>
+      <CardContent className="min-h-0 flex-1 overflow-hidden p-3">
         {activeServerId ? (
           <ScrollArea className="h-full pr-2">
             <section className="space-y-2">
