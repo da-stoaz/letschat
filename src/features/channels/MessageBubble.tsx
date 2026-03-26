@@ -7,20 +7,29 @@ import { Button } from '@/components/ui/button'
 import { PresenceDot } from '@/components/user/PresenceDot'
 import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { userInitials } from '../../layouts/app-layout/helpers'
-import type { Message } from '../../types/domain'
+
+export interface RenderableMessage {
+  id: number
+  senderIdentity: string
+  content: string
+  sentAt: string
+  editedAt: string | null
+  deleted: boolean
+}
 
 export interface MessageGroup {
   id: string
   senderIdentity: string
-  messages: Message[]
+  messages: RenderableMessage[]
 }
 
 interface MessageBubbleProps {
   group: MessageGroup
   canModerate: boolean
+  allowEditOwn?: boolean
   selfIdentity: string | null
-  onEditMessage: (message: Message) => void
-  onDeleteMessage: (message: Message) => void
+  onEditMessage: (message: RenderableMessage) => void
+  onDeleteMessage: (message: RenderableMessage) => void
 }
 
 function sameIdentity(left: string, right: string | null): boolean {
@@ -35,6 +44,7 @@ function formatTimestamp(iso: string): string {
 export function MessageBubble({
   group,
   canModerate,
+  allowEditOwn = true,
   selfIdentity,
   onEditMessage,
   onDeleteMessage,
@@ -69,7 +79,7 @@ export function MessageBubble({
           <div className="space-y-1">
             {group.messages.map((message) => {
               const isOwn = sameIdentity(message.senderIdentity, selfIdentity)
-              const canEdit = isOwn && !message.deleted
+              const canEdit = allowEditOwn && isOwn && !message.deleted
               const canDelete = canDeleteGroupMessage[message.id]
 
               return (

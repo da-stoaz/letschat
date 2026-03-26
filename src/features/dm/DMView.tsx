@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { reducers } from '../../lib/spacetimedb'
+import { useConnectionStore } from '../../stores/connectionStore'
 import { useDmStore } from '../../stores/dmStore'
 import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { ChatComposer } from '../chat/ChatComposer'
+import { ChatMessageFeed } from '../chat/ChatMessageFeed'
+import { TypingIndicator } from '../chat/TypingIndicator'
 import { DmVoicePanel } from './DmVoicePanel'
 import { PresenceDot } from '@/components/user/PresenceDot'
 import type { DirectMessage, Identity } from '../../types/domain'
 import { warnOnce } from '../../lib/devWarnings'
-import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 
@@ -18,33 +19,47 @@ function toInitials(identity: string): string {
   return identity.replace(/^0x/, '').slice(0, 2).toUpperCase()
 }
 
-function DMMessageCard({ message }: { message: DirectMessage }) {
-  const sender = useUserPresentation(message.senderIdentity)
+function dmTypingScope(selfIdentity: string | null, partnerIdentity: string): string {
+  if (!selfIdentity) return `dm:${partnerIdentity}`
+  const a = selfIdentity.toLowerCase()
+  const b = partnerIdentity.toLowerCase()
+  return a <= b ? `dm:${a}:${b}` : `dm:${b}:${a}`
+}
 
-  return (
-    <article className="rounded-xl border border-border/70 bg-background/50 p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Avatar className="size-7 rounded-lg">
-            {sender.avatarUrl ? <AvatarImage src={sender.avatarUrl} alt={sender.displayName} /> : null}
-            <AvatarFallback className="rounded-lg bg-secondary text-xs">{toInitials(message.senderIdentity)}</AvatarFallback>
-          </Avatar>
-          <span className="text-sm font-medium">{sender.displayName}</span>
-          <PresenceDot status={sender.status} className="size-1.5" />
-        </div>
-        <Badge variant="secondary">{new Date(message.sentAt).toLocaleTimeString()}</Badge>
-      </div>
-      <p className="text-sm">{message.content}</p>
-    </article>
-  )
+function normalizeIdentity(identity: string | null | undefined): string {
+  if (!identity) return ''
+  return identity.trim().toLowerCase()
+}
+
+function isDeletedForViewer(message: DirectMessage, selfIdentity: string | null): boolean {
+  if (!selfIdentity) return false
+  if (normalizeIdentity(message.senderIdentity) === normalizeIdentity(selfIdentity)) {
+    return message.deletedBySender
+  }
+  return message.deletedByRecipient
 }
 
 export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [scrollToBottomToken, setScrollToBottomToken] = useState(0)
+  const selfIdentity = useConnectionStore((s) => s.identity)
   const conversations = useDmStore((s) => s.conversations)
   const messages = conversations[partnerIdentity] ?? EMPTY_DM_MESSAGES
   const partner = useUserPresentation(partnerIdentity)
+  const typingScopeKey = dmTypingScope(selfIdentity, partnerIdentity)
+  const renderMessages = useMemo(
+    () =>
+      messages.map((message) => ({
+        id: message.id,
+        senderIdentity: message.senderIdentity,
+        content: message.content,
+        sentAt: message.sentAt,
+        editedAt: null,
+        deleted: isDeletedForViewer(message, selfIdentity),
+      })),
+    [messages, selfIdentity],
+  )
 
   useEffect(() => {
     if (messages !== EMPTY_DM_MESSAGES) return
@@ -74,13 +89,23 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         <DmVoicePanel partnerIdentity={partnerIdentity} />
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-3 p-4">
-          {messages.map((msg) => (
-            <DMMessageCard key={msg.id} message={msg} />
-          ))}
-        </div>
-      </ScrollArea>
+      <ChatMessageFeed
+        scopeKey={`dm:${partnerIdentity}`}
+        messages={renderMessages}
+        selfIdentity={selfIdentity}
+        canDeleteAny
+        allowEditOwn={false}
+        onDeleteMessage={async (message) => {
+          setError(null)
+          try {
+            await reducers.deleteDirectMessage(message.id)
+          } catch (e) {
+            const nextError = e instanceof Error ? e.message : 'Could not delete direct message.'
+            setError(nextError)
+          }
+        }}
+        scrollToBottomToken={scrollToBottomToken}
+      />
 
       <Separator />
 
@@ -88,12 +113,16 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         value={draft}
         onChange={setDraft}
         placeholder={`Message @${partner.username}`}
+        typingScopeKey={typingScopeKey}
+        typingIdentity={selfIdentity}
+        typingIndicator={<TypingIndicator scopeKey={typingScopeKey} selfIdentity={selfIdentity} />}
         error={error}
         onSubmit={async (trimmed) => {
           setError(null)
           try {
             await reducers.sendDirectMessage(partnerIdentity, trimmed)
             setDraft('')
+            setScrollToBottomToken((current) => current + 1)
           } catch (e) {
             const message = e instanceof Error ? e.message : 'Could not send direct message.'
             setError(message)

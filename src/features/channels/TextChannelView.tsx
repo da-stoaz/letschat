@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
-import { ArrowDownIcon, HashIcon, PinIcon, SearchIcon, SidebarIcon } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { HashIcon, PinIcon, SearchIcon, SidebarIcon } from 'lucide-react'
 import { reducers } from '../../lib/spacetimedb'
 import { useChannelsStore } from '../../stores/channelsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
@@ -9,7 +8,8 @@ import { useMessagesStore } from '../../stores/messagesStore'
 import { useUiStore } from '../../stores/uiStore'
 import { useServerRole } from '../../hooks/useServerRole'
 import { warnOnce } from '../../lib/devWarnings'
-import { MessageBubble, type MessageGroup } from './MessageBubble'
+import { ChatMessageFeed } from '../chat/ChatMessageFeed'
+import { TypingIndicator } from '../chat/TypingIndicator'
 import { ChatComposer } from '../chat/ChatComposer'
 import type { Message, u64 } from '../../types/domain'
 import { Badge } from '@/components/ui/badge'
@@ -17,51 +17,11 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 
 const EMPTY_MESSAGES: Message[] = []
-const HISTORY_PAGE_SIZE = 50
-const GROUP_WINDOW_MS = 7 * 60 * 1000
-
-type FeedItem =
-  | { key: string; type: 'date'; dateLabel: string }
-  | { key: string; type: 'group'; group: MessageGroup }
-
-function normalizeIdentity(identity: string | null | undefined): string {
-  if (!identity) return ''
-  return identity.trim().toLowerCase()
-}
-
-function sameIdentity(left: string | null | undefined, right: string | null | undefined): boolean {
-  return normalizeIdentity(left) === normalizeIdentity(right)
-}
-
-function dayKey(iso: string): string {
-  const date = new Date(iso)
-  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
-}
-
-function formatDayLabel(iso: string): string {
-  const date = new Date(iso)
-  return date.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-function isSameGroup(previous: Message, next: Message): boolean {
-  if (!sameIdentity(previous.senderIdentity, next.senderIdentity)) return false
-  if (dayKey(previous.sentAt) !== dayKey(next.sentAt)) return false
-  const previousMs = Date.parse(previous.sentAt)
-  const nextMs = Date.parse(next.sentAt)
-  if (!Number.isFinite(previousMs) || !Number.isFinite(nextMs)) return false
-  return nextMs - previousMs <= GROUP_WINDOW_MS
-}
-
-function estimateGroupHeight(group: MessageGroup): number {
-  return 48 + group.messages.length * 28
-}
 
 export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE_SIZE)
-  const [isAtBottom, setIsAtBottom] = useState(true)
-  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const [scrollToBottomToken, setScrollToBottomToken] = useState(0)
 
   const selfIdentity = useConnectionStore((s) => s.identity)
   const channelsByServer = useChannelsStore((s) => s.channelsByServer)
@@ -96,80 +56,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const readOnlyForMember = Boolean(channel?.moderatorOnly && role === 'Member')
   const memberCount = channel?.serverId ? (membersByServer[channel.serverId] ?? []).length : 0
   const unreadCount = channelId === null ? 0 : (unreadByChannel[channelId] ?? 0)
-
-  const sortedMessages = useMemo(
-    () => [...messages].sort((a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt)),
-    [messages],
-  )
-
-  useEffect(() => {
-    setHistoryLimit(HISTORY_PAGE_SIZE)
-  }, [channelId])
-
-  const visibleMessages = useMemo(() => {
-    if (historyLimit >= sortedMessages.length) return sortedMessages
-    return sortedMessages.slice(sortedMessages.length - historyLimit)
-  }, [historyLimit, sortedMessages])
-
-  const feedItems = useMemo<FeedItem[]>(() => {
-    const items: FeedItem[] = []
-    let currentDay: string | null = null
-    let currentGroup: MessageGroup | null = null
-
-    for (const message of visibleMessages) {
-      const messageDay = dayKey(message.sentAt)
-      if (messageDay !== currentDay) {
-        currentDay = messageDay
-        currentGroup = null
-        items.push({
-          key: `date-${messageDay}`,
-          type: 'date',
-          dateLabel: formatDayLabel(message.sentAt),
-        })
-      }
-
-      if (!currentGroup || !isSameGroup(currentGroup.messages[currentGroup.messages.length - 1], message)) {
-        currentGroup = {
-          id: `group-${message.id}`,
-          senderIdentity: message.senderIdentity,
-          messages: [message],
-        }
-        items.push({
-          key: currentGroup.id,
-          type: 'group',
-          group: currentGroup,
-        })
-      } else {
-        currentGroup.messages.push(message)
-      }
-    }
-
-    return items
-  }, [visibleMessages])
-
-  const rowVirtualizer = useVirtualizer({
-    count: feedItems.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: (index) => {
-      const item = feedItems[index]
-      if (!item) return 80
-      if (item.type === 'date') return 36
-      return estimateGroupHeight(item.group)
-    },
-    overscan: 8,
-  })
-
-  const scrollToBottom = () => {
-    const element = scrollRef.current
-    if (!element) return
-    element.scrollTop = element.scrollHeight
-    setIsAtBottom(true)
-  }
-
-  useEffect(() => {
-    if (!isAtBottom) return
-    requestAnimationFrame(() => scrollToBottom())
-  }, [feedItems.length, isAtBottom])
+  const typingScopeKey = `channel:${channelId}`
 
   if (channelId === null) {
     return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a text channel</div>
@@ -198,97 +85,36 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         </div>
       </header>
 
-      <div className="relative min-h-0 flex-1">
-        <div
-          ref={scrollRef}
-          className="h-full overflow-y-auto"
-          onScroll={(event) => {
-            const target = event.currentTarget
-            const atBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 80
-            setIsAtBottom((previous) => (previous === atBottom ? previous : atBottom))
-
-            if (target.scrollTop <= 60) {
-              setHistoryLimit((previous) => {
-                const next = Math.min(sortedMessages.length, previous + HISTORY_PAGE_SIZE)
-                return next === previous ? previous : next
-              })
-            }
-          }}
-        >
-          <div
-            style={{
-              height: `${rowVirtualizer.getTotalSize()}px`,
-              position: 'relative',
-            }}
-          >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const item = feedItems[virtualRow.index]
-              if (!item) return null
-
-              return (
-                <div
-                  key={item.key}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                >
-                  {item.type === 'date' ? (
-                    <div className="my-2 flex items-center gap-2 px-3">
-                      <Separator className="flex-1" />
-                      <span className="text-xs text-muted-foreground">{item.dateLabel}</span>
-                      <Separator className="flex-1" />
-                    </div>
-                  ) : (
-                    <MessageBubble
-                      group={item.group}
-                      canModerate={canModerate}
-                      selfIdentity={selfIdentity}
-                      onEditMessage={async (message) => {
-                        const next = window.prompt('Edit message', message.content)
-                        if (next === null) return
-                        const trimmed = next.trim()
-                        if (!trimmed) return
-                        setError(null)
-                        try {
-                          await reducers.editMessage(message.id, trimmed)
-                        } catch (e) {
-                          const messageText = e instanceof Error ? e.message : 'Could not edit message.'
-                          setError(messageText)
-                        }
-                      }}
-                      onDeleteMessage={async (message) => {
-                        setError(null)
-                        try {
-                          await reducers.deleteMessage(message.id)
-                        } catch (e) {
-                          const messageText = e instanceof Error ? e.message : 'Could not delete message.'
-                          setError(messageText)
-                        }
-                      }}
-                    />
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {!isAtBottom ? (
-          <Button
-            type="button"
-            size="sm"
-            className="absolute bottom-4 right-4 gap-1.5 rounded-full shadow-lg"
-            onClick={scrollToBottom}
-          >
-            <ArrowDownIcon className="size-4" />
-            {unreadCount > 0 ? `${unreadCount} unread` : 'Jump to latest'}
-          </Button>
-        ) : null}
-      </div>
+      <ChatMessageFeed
+        scopeKey={`channel:${channelId}`}
+        messages={messages}
+        selfIdentity={selfIdentity}
+        unreadCount={unreadCount}
+        canDeleteAny={canModerate}
+        onEditMessage={async (message) => {
+          const next = window.prompt('Edit message', message.content)
+          if (next === null) return
+          const trimmed = next.trim()
+          if (!trimmed) return
+          setError(null)
+          try {
+            await reducers.editMessage(message.id, trimmed)
+          } catch (e) {
+            const messageText = e instanceof Error ? e.message : 'Could not edit message.'
+            setError(messageText)
+          }
+        }}
+        onDeleteMessage={async (message) => {
+          setError(null)
+          try {
+            await reducers.deleteMessage(message.id)
+          } catch (e) {
+            const messageText = e instanceof Error ? e.message : 'Could not delete message.'
+            setError(messageText)
+          }
+        }}
+        scrollToBottomToken={scrollToBottomToken}
+      />
 
       <Separator />
 
@@ -297,6 +123,9 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         onChange={setDraft}
         disabled={readOnlyForMember}
         placeholder={readOnlyForMember ? 'This channel is read-only for members' : `Message #${channel?.name ?? 'channel'}`}
+        typingScopeKey={typingScopeKey}
+        typingIdentity={selfIdentity}
+        typingIndicator={<TypingIndicator scopeKey={typingScopeKey} selfIdentity={selfIdentity} />}
         error={error}
         onSubmit={async (trimmed) => {
           setError(null)
@@ -305,7 +134,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
             setDraft('')
             setActiveChannelId(channelId)
             clearUnread(channelId)
-            requestAnimationFrame(() => scrollToBottom())
+            setScrollToBottomToken((current) => current + 1)
           } catch (e) {
             const message = e instanceof Error ? e.message : 'Could not send message.'
             setError(message)
