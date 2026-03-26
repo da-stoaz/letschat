@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ArrowDownIcon, HashIcon, PinIcon, SearchIcon, SendHorizonalIcon, SidebarIcon } from 'lucide-react'
+import { ArrowDownIcon, HashIcon, PinIcon, SearchIcon, SidebarIcon } from 'lucide-react'
 import { reducers } from '../../lib/spacetimedb'
 import { useChannelsStore } from '../../stores/channelsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
@@ -10,11 +10,11 @@ import { useUiStore } from '../../stores/uiStore'
 import { useServerRole } from '../../hooks/useServerRole'
 import { warnOnce } from '../../lib/devWarnings'
 import { MessageBubble, type MessageGroup } from './MessageBubble'
+import { ChatComposer } from '../chat/ChatComposer'
 import type { Message, u64 } from '../../types/domain'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { Textarea } from '@/components/ui/textarea'
 
 const EMPTY_MESSAGES: Message[] = []
 const HISTORY_PAGE_SIZE = 50
@@ -62,7 +62,6 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE_SIZE)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const selfIdentity = useConnectionStore((s) => s.identity)
   const channelsByServer = useChannelsStore((s) => s.channelsByServer)
@@ -171,12 +170,6 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
     if (!isAtBottom) return
     requestAnimationFrame(() => scrollToBottom())
   }, [feedItems.length, isAtBottom])
-
-  useEffect(() => {
-    if (!textareaRef.current) return
-    textareaRef.current.style.height = 'auto'
-    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`
-  }, [draft])
 
   if (channelId === null) {
     return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a text channel</div>
@@ -299,14 +292,16 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
 
       <Separator />
 
-      <form
-        className="space-y-2 p-3"
-        onSubmit={async (event) => {
-          event.preventDefault()
-          if (!draft.trim() || readOnlyForMember) return
+      <ChatComposer
+        value={draft}
+        onChange={setDraft}
+        disabled={readOnlyForMember}
+        placeholder={readOnlyForMember ? 'This channel is read-only for members' : `Message #${channel?.name ?? 'channel'}`}
+        error={error}
+        onSubmit={async (trimmed) => {
           setError(null)
           try {
-            await reducers.sendMessage(channelId, draft.trim())
+            await reducers.sendMessage(channelId, trimmed)
             setDraft('')
             setActiveChannelId(channelId)
             clearUnread(channelId)
@@ -316,32 +311,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
             setError(message)
           }
         }}
-      >
-        <Textarea
-          ref={textareaRef}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              event.currentTarget.form?.requestSubmit()
-            }
-          }}
-          maxLength={4000}
-          placeholder={readOnlyForMember ? 'This channel is read-only for members' : `Message #${channel?.name ?? 'channel'}`}
-          disabled={readOnlyForMember}
-          className="min-h-12 resize-none overflow-y-auto"
-        />
-        {readOnlyForMember ? <p className="text-xs text-muted-foreground">This channel is read-only for members.</p> : <p className="text-xs text-muted-foreground">Typing indicator coming soon.</p>}
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">{draft.length >= 3500 ? `${draft.length}/4000` : 'Shift+Enter for newline'}</p>
-          <Button type="submit" disabled={readOnlyForMember}>
-            <SendHorizonalIcon className="size-4" />
-            Send
-          </Button>
-        </div>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      </form>
+      />
     </section>
   )
 }

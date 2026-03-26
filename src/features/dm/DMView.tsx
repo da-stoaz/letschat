@@ -1,16 +1,14 @@
 import { useEffect, useState } from 'react'
-import { SendHorizonalIcon } from 'lucide-react'
 import { reducers } from '../../lib/spacetimedb'
 import { useDmStore } from '../../stores/dmStore'
 import { useUserPresentation } from '../../hooks/useUserPresentation'
+import { ChatComposer } from '../chat/ChatComposer'
 import { DmVoicePanel } from './DmVoicePanel'
 import { PresenceDot } from '@/components/user/PresenceDot'
 import type { DirectMessage, Identity } from '../../types/domain'
 import { warnOnce } from '../../lib/devWarnings'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 
@@ -86,31 +84,22 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
 
       <Separator />
 
-      <form
-        className="space-y-2 p-3"
-        onSubmit={async (event) => {
-          event.preventDefault()
-          if (!draft.trim()) return
+      <ChatComposer
+        value={draft}
+        onChange={setDraft}
+        placeholder={`Message @${partner.username}`}
+        error={error}
+        onSubmit={async (trimmed) => {
           setError(null)
           try {
-            await reducers.sendDirectMessage(partnerIdentity, draft.trim())
+            await reducers.sendDirectMessage(partnerIdentity, trimmed)
             setDraft('')
           } catch (e) {
             const message = e instanceof Error ? e.message : 'Could not send direct message.'
             setError(message)
           }
         }}
-      >
-        <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={4000} className="min-h-24" />
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">{draft.length}/4000</p>
-          <Button type="submit">
-            <SendHorizonalIcon className="size-4" />
-            Send DM
-          </Button>
-        </div>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      </form>
+      />
     </section>
   )
 }
