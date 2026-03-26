@@ -112,6 +112,13 @@ export async function authServiceLogin(payload: LoginPayload): Promise<AuthServi
   return result
 }
 
+export async function authServiceRefreshSpacetimeToken(payload: {
+  sessionToken: AuthFrameworkToken
+  spacetimeToken: string
+}): Promise<void> {
+  await postJson<Record<string, never>, typeof payload>('/auth/refresh-spacetime-token', payload)
+}
+
 export async function authServiceGenerateLivekitToken(payload: LivekitTokenPayload): Promise<string> {
   const result = await postJson<{ token: string }, LivekitTokenPayload>('/livekit/token', payload)
   return result.token

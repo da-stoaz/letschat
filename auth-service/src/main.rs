@@ -311,6 +311,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/verify", post(verify))
         .route("/livekit/token", post(livekit_token))
         // File uploads
+        .route("/auth/refresh-spacetime-token", post(refresh_spacetime_token))
         .route("/uploads/request", post(uploads::upload_request))
         .route("/uploads/confirm", post(uploads::upload_confirm))
         .route("/uploads/download-url", post(uploads::download_url))
@@ -647,6 +648,32 @@ fn verify_password(password: &str, hash: &str) -> anyhow::Result<()> {
     Argon2::default()
         .verify_password(password.as_bytes(), &parsed_hash)
         .context("password verification failed")
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RefreshSpacetimeTokenRequest {
+    session_token: AuthToken,
+    spacetime_token: String,
+}
+
+async fn refresh_spacetime_token(
+    State(state): State<AppState>,
+    Json(request): Json<RefreshSpacetimeTokenRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let username = require_valid_session(&state, &request.session_token).await?;
+    if request.spacetime_token.trim().is_empty() {
+        return Err(ApiError::BadRequest("spacetimeToken is required.".to_string()));
+    }
+    sqlx::query(
+        "UPDATE accounts SET spacetime_token = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?",
+    )
+    .bind(request.spacetime_token.trim())
+    .bind(&username)
+    .execute(&state.db)
+    .await
+    .map_err(internal)?;
+    Ok(Json(serde_json::json!({})))
 }
 
 pub(crate) fn internal(error: impl std::fmt::Display) -> ApiError {

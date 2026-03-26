@@ -5,7 +5,7 @@ import {
   type Timestamp as SpacetimeTimestamp,
 } from 'spacetimedb'
 import { DbConnection, tables } from '../generated'
-import { authServiceLogin, clearStoredAuthSessionToken } from './authService'
+import { authServiceLogin, authServiceRefreshSpacetimeToken, clearStoredAuthSessionToken } from './authService'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useDmStore } from '../stores/dmStore'
@@ -944,6 +944,14 @@ export async function loginWithPassword(username: string, password: string): Pro
     throw new Error(
       'Login token is stale for this account. Sign in from a linked session and relink this device in Settings.',
     )
+  }
+
+  // Update the auth service with the fresh token SpacetimeDB issued during this connection,
+  // so the next login won't hit a stale token.
+  const freshToken = getCurrentSessionToken()
+  if (freshToken) {
+    authServiceRefreshSpacetimeToken({ sessionToken: auth.sessionToken, spacetimeToken: freshToken })
+      .catch(() => undefined) // best-effort, never fail login over this
   }
 
   await ensureAuthenticatedUserRow(normalized, auth.displayName)
