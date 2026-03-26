@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { RoomConnectOptions, RoomOptions } from 'livekit-client'
 import { ConnectionState, Room } from 'livekit-client'
 import { reducers } from './spacetimedb'
 import { tauriCommands } from './tauri'
@@ -122,29 +123,7 @@ function normalizeLiveKitUrl(raw: string): string {
 }
 
 function buildLiveKitUrls(raw: string): string[] {
-  const primary = normalizeLiveKitUrl(raw)
-  const candidates: string[] = []
-  try {
-    const parsed = new URL(primary)
-    if (parsed.hostname === 'localhost') {
-      const localIpv4 = new URL(primary)
-      localIpv4.hostname = '127.0.0.1'
-      // Prefer IPv4 loopback first to avoid localhost/IPv6 stalls.
-      candidates.push(localIpv4.toString())
-      candidates.push(primary)
-    } else if (parsed.hostname === '127.0.0.1') {
-      candidates.push(primary)
-      const localHost = new URL(primary)
-      localHost.hostname = 'localhost'
-      candidates.push(localHost.toString())
-    } else {
-      candidates.push(primary)
-    }
-  } catch {
-    // Ignore URL parse fallback generation if the input format is custom.
-    candidates.push(primary)
-  }
-  return Array.from(new Set(candidates))
+  return [normalizeLiveKitUrl(raw)]
 }
 
 function normalizeIdentityKey(value: string): string {
@@ -157,39 +136,72 @@ export function dmVoiceRoomKey(identityA: Identity, identityB: Identity): string
   return a <= b ? `${a}:${b}` : `${b}:${a}`
 }
 
-function isTauriRuntime(): boolean {
-  if (typeof window === 'undefined') return false
-  return typeof (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== 'undefined'
+type ConnectProfile = {
+  roomOptions?: RoomOptions
+  connectOptions?: RoomConnectOptions
 }
 
-function roomConnectOptions() {
-  const useWebIceHints = !isTauriRuntime()
-  const rtcConfig = useWebIceHints
-    ? ({
-        // Explicit STUN servers improve candidate gathering in some browser/network combos.
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' },
-        ],
-        iceTransportPolicy: 'all',
-      } satisfies RTCConfiguration)
-    : undefined
+const CONNECT_TIMEOUT_MS = 5_000
+
+function isLoopbackLivekitUrl(livekitUrl: string): boolean {
+  try {
+    const parsed = new URL(livekitUrl)
+    return parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost' || parsed.hostname === '::1'
+  } catch {
+    return false
+  }
+}
+
+function connectProfileForUrl(livekitUrl: string): ConnectProfile {
+  const base: ConnectProfile = {
+    connectOptions: {
+      peerConnectionTimeout: CONNECT_TIMEOUT_MS,
+      websocketTimeout: CONNECT_TIMEOUT_MS,
+    },
+  }
+
+  if (!isLoopbackLivekitUrl(livekitUrl)) {
+    return base
+  }
 
   return {
-    websocketTimeout: 20_000,
-    peerConnectionTimeout: 20_000,
-    ...(rtcConfig ? { rtcConfig } : {}),
+    ...base,
+    connectOptions: {
+      ...base.connectOptions,
+      rtcConfig: {
+        // Local Docker development:
+        // avoid srflx path selection (seen failing in logs), keep host/mDNS candidates.
+        iceServers: [],
+        iceTransportPolicy: 'all',
+      },
+    },
   }
 }
 
 async function connectRoomWithFallback(livekitUrls: string[], token: string): Promise<Room> {
   let lastError: unknown = null
   for (const livekitUrl of livekitUrls) {
-    const room = new Room()
+    const profile = connectProfileForUrl(livekitUrl)
+    const room = new Room(profile.roomOptions)
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null
     try {
-      await room.connect(livekitUrl, token, roomConnectOptions())
+      await Promise.race([
+        room.connect(livekitUrl, token, profile.connectOptions),
+        new Promise<never>((_resolve, reject) => {
+          timeoutHandle = setTimeout(() => {
+            reject(new Error(`LiveKit connect timeout after ${CONNECT_TIMEOUT_MS}ms`))
+          }, CONNECT_TIMEOUT_MS)
+        }),
+      ])
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle)
+        timeoutHandle = null
+      }
       return room
     } catch (error) {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle)
+      }
       lastError = error
       room.disconnect()
     }
@@ -205,6 +217,12 @@ function mapLiveKitConnectionError(error: unknown, livekitUrls: string[]): Error
   }
   if (error instanceof Error && /(notallowederror|permission denied|permission dismissed)/i.test(error.message)) {
     return new Error('Microphone permission is required to join voice. Please allow microphone access and try again.')
+  }
+  if (error instanceof Error && /duplicate|restart participant/i.test(error.message)) {
+    return new Error('This account is already in the same call from another client/session. Leave there first.')
+  }
+  if (error instanceof Error && error.message.toLowerCase().includes('connect timeout')) {
+    return new Error(`LiveKit connect timed out at ${livekitUrls[0]}.`)
   }
   if (error instanceof Error && error.message.toLowerCase().includes('pc connection')) {
     return new Error(
