@@ -7,6 +7,7 @@ import './index.css'
 import { initializeSpacetime } from './lib/spacetimedb'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { Toaster } from '@/components/ui/sonner'
 
 const queryClient = new QueryClient()
 void initializeSpacetime()
@@ -20,6 +21,7 @@ createRoot(document.getElementById('root')!).render(
           <BrowserRouter>
             <App />
           </BrowserRouter>
+          <Toaster richColors position="top-right" />
         </TooltipProvider>
       </QueryClientProvider>
     </AppErrorBoundary>

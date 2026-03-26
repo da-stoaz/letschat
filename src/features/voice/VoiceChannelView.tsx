@@ -1,13 +1,9 @@
 import { Fragment, useEffect, useMemo, useRef } from 'react'
 import type { LocalParticipant, RemoteParticipant } from 'livekit-client'
 import {
-  getCameraErrorMessage,
   getMicrophoneUnavailableReason,
   joinLiveKitVoice,
   leaveLiveKitVoice,
-  requestMicrophonePermission,
-  setLocalCameraEnabled,
-  switchRoomDevice,
   supportsMicrophoneCapture,
   supportsScreenCapture,
   useLiveKitRoom,
@@ -17,7 +13,6 @@ import { useVoiceStore } from '../../stores/voiceStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useMembersStore } from '../../stores/membersStore'
 import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
-import { useMediaDeviceStore } from '../../stores/mediaDeviceStore'
 import type { VoiceParticipant, u64 } from '../../types/domain'
 import { ConnectionState } from 'livekit-client'
 import { warnOnce } from '../../lib/devWarnings'
@@ -60,8 +55,6 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const setError = useVoiceSessionStore((s) => s.setError)
   const staleCleanupMarker = useRef<string | null>(null)
   const selfIdentity = useConnectionStore((s) => s.identity)
-  const audioInputId = useMediaDeviceStore((s) => s.audioInputId)
-  const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
   useEffect(() => {
     setError(null)
   }, [channelId, setError])
@@ -113,6 +106,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const connectedToRoom = roomForChannel !== null && connectionState === ConnectionState.Connected
   const connectingToRoom = joining || (roomForChannel !== null && connectionState === ConnectionState.Connecting)
   const joined = connectedToRoom
+  const dockControlsActive = roomForChannel !== null || joining || connectedToRoom || connectionState === ConnectionState.Connecting
   const displayParticipants = !selfIdentity
     ? participants
     : participants.filter((participant) => joined || !sameIdentity(participant.userIdentity, selfIdentity))
@@ -145,29 +139,8 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     }
   }, [joined, deafened, remoteParticipants])
 
-  const patchVoiceState = async (
-    patch: Partial<Pick<VoiceParticipant, 'muted' | 'deafened' | 'sharingScreen' | 'sharingCamera'>>,
-  ) => {
-    if (channelId === null || !selfParticipant) return
-    const next = {
-      muted: patch.muted ?? selfParticipant.muted,
-      deafened: patch.deafened ?? selfParticipant.deafened,
-      sharingScreen: patch.sharingScreen ?? selfParticipant.sharingScreen,
-      sharingCamera: patch.sharingCamera ?? selfParticipant.sharingCamera,
-    }
-    await reducers.updateVoiceState(channelId, next.muted, next.deafened, next.sharingScreen, next.sharingCamera)
-  }
-
   const statusBadge = connectingToRoom ? 'Joining...' : joined ? 'Joined' : selfParticipant ? 'Syncing...' : 'Not joined'
   const statusVariant = connectingToRoom ? 'outline' : joined ? 'default' : selfParticipant ? 'outline' : 'secondary'
-  const ensureMicrophoneCapture = async () => {
-    if (supportsMicrophoneCapture()) return
-    await requestMicrophonePermission()
-    if (!supportsMicrophoneCapture()) {
-      throw new Error(getMicrophoneUnavailableReason())
-    }
-  }
-
   if (channelId === null) {
     return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a voice channel</div>
   }
@@ -232,103 +205,54 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
         </div>
       </ScrollArea>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
-        <VoiceControlBar
-          joined={joined}
-          connecting={connectingToRoom}
-          muted={muted}
-          deafened={deafened}
-          sharingCamera={sharingCamera}
-          sharingScreen={sharingScreen}
-          hasScreenCapture={hasScreenCapture}
-          error={error}
-          onJoin={async () => {
-            setError(null)
-            setJoining(true)
-            try {
-              if (room && joinedChannelId !== null && joinedChannelId !== channelId) {
-                await leaveLiveKitVoice(joinedChannelId, room)
-                setRoom(null)
-                setJoinedChannelId(null)
-              }
-              const nextRoom = await joinLiveKitVoice(channelId)
-              setRoom(nextRoom)
-              setJoinedChannelId(channelId)
-            } catch (e) {
-              const message = e instanceof Error ? e.message : 'Could not join voice channel.'
-              setError(message)
-            } finally {
-              setJoining(false)
-            }
-          }}
-          onToggleMute={async () => {
-            setError(null)
-            if (!roomForChannel || !selfParticipant) return
-            try {
-              const nextMuted = !selfParticipant.muted
-              if (!nextMuted) {
-                await ensureMicrophoneCapture()
-                if (audioInputId) {
-                  await switchRoomDevice(roomForChannel, 'audioinput', audioInputId)
-                }
-              }
-              await roomForChannel.localParticipant.setMicrophoneEnabled(!nextMuted)
-              await patchVoiceState({ muted: nextMuted })
-            } catch (e) {
-              const message = e instanceof Error ? e.message : 'Could not toggle microphone.'
-              setError(message)
-            }
-          }}
-          onToggleDeafen={async () => {
-            setError(null)
-            if (!selfParticipant) return
-            try {
-              await patchVoiceState({ deafened: !selfParticipant.deafened })
-            } catch (e) {
-              const message = e instanceof Error ? e.message : 'Could not toggle deafen.'
-              setError(message)
-            }
-          }}
-            onToggleCamera={async () => {
+      {!dockControlsActive ? (
+        <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
+          <VoiceControlBar
+            joined={joined}
+            connecting={connectingToRoom}
+            muted={muted}
+            deafened={deafened}
+            sharingCamera={sharingCamera}
+            sharingScreen={sharingScreen}
+            hasScreenCapture={hasScreenCapture}
+            error={error}
+            onJoin={async () => {
               setError(null)
-              if (!roomForChannel || !selfParticipant) return
+              setJoining(true)
               try {
-                const next = !selfParticipant.sharingCamera
-                await setLocalCameraEnabled(roomForChannel, next, videoInputId ?? undefined)
-                await patchVoiceState({ sharingCamera: next })
+                if (room && joinedChannelId !== null && joinedChannelId !== channelId) {
+                  await leaveLiveKitVoice(joinedChannelId, room)
+                  setRoom(null)
+                  setJoinedChannelId(null)
+                }
+                const nextRoom = await joinLiveKitVoice(channelId)
+                setRoom(nextRoom)
+                setJoinedChannelId(channelId)
               } catch (e) {
-                setError(getCameraErrorMessage(e))
+                const message = e instanceof Error ? e.message : 'Could not join voice channel.'
+                setError(message)
+              } finally {
+                setJoining(false)
               }
             }}
-          onToggleScreenShare={async () => {
-            setError(null)
-            if (!roomForChannel || !selfParticipant) return
-            if (!hasScreenCapture) {
-              setError('Screen sharing APIs are unavailable in this runtime.')
+            onToggleMute={async () => {
               return
-            }
-            try {
-              const next = !selfParticipant.sharingScreen
-              await roomForChannel.localParticipant.setScreenShareEnabled(next)
-              await patchVoiceState({ sharingScreen: next })
-            } catch (e) {
-              const message = e instanceof Error ? e.message : 'Could not toggle screen share.'
-              setError(message)
-            }
-          }}
-          onLeave={async () => {
-            setError(null)
-            try {
-              await leaveLiveKitVoice(channelId, roomForChannel)
-              setRoom(null)
-              setJoinedChannelId(null)
-            } catch (e) {
-              const message = e instanceof Error ? e.message : 'Could not leave voice channel.'
-              setError(message)
-            }
-          }}
-        />
-      </div>
+            }}
+            onToggleDeafen={async () => {
+              return
+            }}
+            onToggleCamera={async () => {
+              return
+            }}
+            onToggleScreenShare={async () => {
+              return
+            }}
+            onLeave={async () => {
+              return
+            }}
+          />
+        </div>
+      ) : null}
     </section>
   )
 }

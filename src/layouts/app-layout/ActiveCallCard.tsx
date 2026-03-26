@@ -40,6 +40,7 @@ import { normalizeIdentity } from './helpers'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { toast } from '@/components/ui/sonner'
 import { cn } from '../../lib/utils'
 import {
   DropdownMenu,
@@ -115,6 +116,15 @@ function supportsAudioOutputSwitching(): boolean {
     }).webkitAudioContext
 
   return typeof maybeAudioContext?.prototype?.setSinkId === 'function'
+}
+
+function isUserAgentPermissionContextError(message: string): boolean {
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('request is not allowed by the user agent')
+    || normalized.includes('user denied permission')
+    || normalized.includes('the user denied permission')
+  )
 }
 
 export function ActiveCallCard({
@@ -296,6 +306,17 @@ export function ActiveCallCard({
   }
 
   const setCurrentError = (message: string | null) => {
+    if (message && isUserAgentPermissionContextError(message)) {
+      toast.error('Permission denied. Please allow media access and try again.')
+      setLocalError(null)
+      if (mode === 'server') {
+        setVoiceError(null)
+      } else {
+        setDmError(null)
+      }
+      return
+    }
+
     setLocalError(message)
     if (mode === 'server') {
       setVoiceError(message)
