@@ -278,7 +278,6 @@ export function AppLayout() {
             }}
             onOpenFriends={() => navigate('/app/dm/friends')}
             dmContacts={dmContactsWithPresence}
-            dmFriends={dmFriendsWithPresence}
             activeDmIdentity={activeDmIdentity}
             dmCallActiveByIdentity={dmCallActiveByIdentity}
             onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}

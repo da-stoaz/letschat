@@ -45,7 +45,6 @@ interface ServerSidebarProps {
   onSelectChannel: (channelId: number) => void
   onOpenFriends: () => void
   dmContacts: DmContact[]
-  dmFriends: DmContact[]
   activeDmIdentity: string | null
   dmCallActiveByIdentity: Record<string, boolean>
   onOpenDmContact: (identity: string) => void
@@ -70,7 +69,6 @@ export function ServerSidebar({
   onSelectChannel,
   onOpenFriends,
   dmContacts,
-  dmFriends,
   activeDmIdentity,
   dmCallActiveByIdentity,
   onOpenDmContact,
@@ -176,11 +174,15 @@ export function ServerSidebar({
             <section className="space-y-2">
               <div className="flex items-center justify-between px-1">
                 <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Direct Messages</p>
-                <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={onOpenFriends}>
-                  <MessageCircleIcon className="size-3.5" />
-                  Friends
-                </Button>
               </div>
+              <Button
+                className="h-auto w-full justify-start gap-2 rounded-lg py-2"
+                variant={activeDmIdentity === null ? 'secondary' : 'ghost'}
+                onClick={onOpenFriends}
+              >
+                <MessageCircleIcon className="size-4" />
+                <span className="truncate">Friends</span>
+              </Button>
               {dmContacts.length > 0 ? (
                 dmContacts.map((contact) => (
                   <Button
@@ -215,35 +217,6 @@ export function ServerSidebar({
                 ))
               ) : (
                 <p className="px-1 pt-1 text-xs text-muted-foreground">No active DM conversations yet.</p>
-              )}
-            </section>
-
-            <Separator />
-
-            <section className="space-y-2">
-              <p className="px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Friends</p>
-              {dmFriends.length > 0 ? (
-                dmFriends.map((contact) => (
-                  <Button
-                    key={`friend-${contact.identity}`}
-                    className="h-auto w-full justify-start gap-2 rounded-lg py-1.5"
-                    variant="ghost"
-                    onClick={() => onOpenDmContact(contact.identity)}
-                  >
-                    <Avatar size="sm" className="rounded-lg">
-                      {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
-                      <AvatarFallback className="rounded-lg bg-primary/10 text-[10px]">
-                        {userInitials(contact.label)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 text-left">
-                      <p className="truncate text-sm">{contact.label}</p>
-                      <p className="truncate text-[11px] text-muted-foreground">@{contact.username}</p>
-                    </div>
-                  </Button>
-                ))
-              ) : (
-                <p className="px-1 text-xs text-muted-foreground">No accepted friends yet.</p>
               )}
             </section>
             </div>
