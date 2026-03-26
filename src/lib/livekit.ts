@@ -93,6 +93,14 @@ export async function requestMicrophonePermission(): Promise<void> {
   stream.getTracks().forEach((track) => track.stop())
 }
 
+export async function requestCameraPermission(): Promise<void> {
+  if (!ensureMediaDevicesGetUserMedia()) {
+    throw new Error(getMicrophoneUnavailableReason())
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+  stream.getTracks().forEach((track) => track.stop())
+}
+
 function normalizeLiveKitUrl(raw: string): string {
   const trimmed = raw.trim()
   if (!trimmed) return 'ws://127.0.0.1:7880'
@@ -338,12 +346,24 @@ export function useLiveKitRoom(room: Room | null) {
     room.on('participantDisconnected', onParticipantEvent)
     room.on('activeSpeakersChanged', bump)
     room.on('connectionStateChanged', bump)
+    room.on('trackPublished', bump)
+    room.on('trackUnpublished', bump)
+    room.on('trackSubscribed', bump)
+    room.on('trackUnsubscribed', bump)
+    room.on('localTrackPublished', bump)
+    room.on('localTrackUnpublished', bump)
 
     return () => {
       room.off('participantConnected', onParticipantEvent)
       room.off('participantDisconnected', onParticipantEvent)
       room.off('activeSpeakersChanged', bump)
       room.off('connectionStateChanged', bump)
+      room.off('trackPublished', bump)
+      room.off('trackUnpublished', bump)
+      room.off('trackSubscribed', bump)
+      room.off('trackUnsubscribed', bump)
+      room.off('localTrackPublished', bump)
+      room.off('localTrackUnpublished', bump)
     }
   }, [room])
 

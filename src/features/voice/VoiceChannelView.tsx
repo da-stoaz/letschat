@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react'
+import type { LocalParticipant, RemoteParticipant } from 'livekit-client'
 import {
   getMicrophoneUnavailableReason,
   joinLiveKitVoice,
   leaveLiveKitVoice,
+  requestCameraPermission,
   requestMicrophonePermission,
   supportsMicrophoneCapture,
   supportsScreenCapture,
@@ -17,8 +19,8 @@ import type { VoiceParticipant, u64 } from '../../types/domain'
 import { ConnectionState } from 'livekit-client'
 import { warnOnce } from '../../lib/devWarnings'
 import { VoiceControlBar } from './components/VoiceControlBar'
+import { ParticipantMediaTile } from './components/ParticipantMediaTile'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 const EMPTY_PARTICIPANTS: VoiceParticipant[] = []
@@ -60,7 +62,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   }, [channelId, setError])
 
   const roomForChannel = channelId !== null && joinedChannelId === channelId ? room : null
-  const { activeSpeakerIds, connectionState, remoteParticipants } = useLiveKitRoom(roomForChannel)
+  const { activeSpeakerIds, connectionState, remoteParticipants, localParticipant } = useLiveKitRoom(roomForChannel)
 
   const displayNameByIdentity = useMemo(() => {
     const map = new Map<string, string>()
@@ -72,6 +74,32 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     }
     return map
   }, [membersByServer])
+
+  const avatarByIdentity = useMemo(() => {
+    const map = new Map<string, string | null>()
+    for (const serverMembers of Object.values(membersByServer)) {
+      for (const member of serverMembers) {
+        map.set(normalizeIdentityKey(member.userIdentity), member.user?.avatarUrl ?? null)
+      }
+    }
+    return map
+  }, [membersByServer])
+
+  const livekitParticipantByIdentity = useMemo(() => {
+    const map = new Map<string, LocalParticipant | RemoteParticipant>()
+    if (localParticipant?.identity) {
+      map.set(normalizeIdentityKey(localParticipant.identity), localParticipant)
+    }
+    for (const participant of remoteParticipants) {
+      map.set(normalizeIdentityKey(participant.identity), participant)
+    }
+    return map
+  }, [localParticipant, remoteParticipants])
+
+  const normalizedActiveSpeakers = useMemo(
+    () => new Set(Array.from(activeSpeakerIds).map((identity) => normalizeIdentityKey(identity))),
+    [activeSpeakerIds],
+  )
 
   const selfParticipant = useMemo(
     () => participants.find((participant) => sameIdentity(participant.userIdentity, selfIdentity)) ?? null,
@@ -160,21 +188,19 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
       <ScrollArea className="min-h-0">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {displayParticipants.map((p) => (
-            <Card key={p.userIdentity} className="border-border/70 bg-background/60 py-0">
-              <CardHeader>
-                <CardTitle className="text-sm">
-                  {displayNameByIdentity.get(normalizeIdentityKey(p.userIdentity)) ?? p.userIdentity.slice(0, 12)}
-                </CardTitle>
-                <CardDescription>Joined {new Date(p.joinedAt).toLocaleTimeString()}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-1">
-                {activeSpeakerIds.has(p.userIdentity) ? <Badge>Speaking</Badge> : null}
-                {p.muted ? <Badge variant="secondary">Muted</Badge> : null}
-                {p.deafened ? <Badge variant="secondary">Deafened</Badge> : null}
-                {p.sharingScreen ? <Badge variant="secondary">Screen</Badge> : null}
-                {p.sharingCamera ? <Badge variant="secondary">Camera</Badge> : null}
-              </CardContent>
-            </Card>
+            <ParticipantMediaTile
+              key={p.userIdentity}
+              displayName={displayNameByIdentity.get(normalizeIdentityKey(p.userIdentity)) ?? p.userIdentity.slice(0, 12)}
+              avatarUrl={avatarByIdentity.get(normalizeIdentityKey(p.userIdentity)) ?? null}
+              joinedAt={p.joinedAt}
+              participant={livekitParticipantByIdentity.get(normalizeIdentityKey(p.userIdentity)) ?? null}
+              isLocal={sameIdentity(p.userIdentity, selfIdentity)}
+              isSpeaking={normalizedActiveSpeakers.has(normalizeIdentityKey(p.userIdentity))}
+              muted={p.muted}
+              deafened={p.deafened}
+              sharingScreen={p.sharingScreen}
+              sharingCamera={p.sharingCamera}
+            />
           ))}
         </div>
       </ScrollArea>
@@ -233,21 +259,26 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
               setError(message)
             }
           }}
-          onToggleCamera={async () => {
-            setError(null)
-            if (!roomForChannel || !selfParticipant) return
-            try {
-              const next = !selfParticipant.sharingCamera
-              if (next) {
-                await ensureMicrophoneCapture()
+            onToggleCamera={async () => {
+              setError(null)
+              if (!roomForChannel || !selfParticipant) return
+              try {
+                const next = !selfParticipant.sharingCamera
+                if (next) {
+                  await requestCameraPermission()
+                }
+                await roomForChannel.localParticipant.setCameraEnabled(next)
+                await patchVoiceState({ sharingCamera: next })
+              } catch (e) {
+                const message =
+                  e instanceof Error && /invalid constraint/i.test(e.message)
+                    ? 'Camera constraint is unsupported in this runtime. Check camera permission and try again.'
+                    : e instanceof Error
+                      ? e.message
+                      : 'Could not toggle camera.'
+                setError(message)
               }
-              await roomForChannel.localParticipant.setCameraEnabled(next)
-              await patchVoiceState({ sharingCamera: next })
-            } catch (e) {
-              const message = e instanceof Error ? e.message : 'Could not toggle camera.'
-              setError(message)
-            }
-          }}
+            }}
           onToggleScreenShare={async () => {
             setError(null)
             if (!roomForChannel || !selfParticipant) return

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { ConnectionState } from 'livekit-client'
+import { ConnectionState, type LocalParticipant, type RemoteParticipant } from 'livekit-client'
 import {
   dmVoiceRoomKey,
   getMicrophoneUnavailableReason,
   joinLiveKitDmVoice,
   leaveLiveKitDmVoice,
+  requestCameraPermission,
   requestMicrophonePermission,
   supportsMicrophoneCapture,
   supportsScreenCapture,
@@ -17,6 +18,7 @@ import { useDmVoiceStore } from '../../stores/dmVoiceStore'
 import { useUsersStore } from '../../stores/usersStore'
 import type { DmVoiceParticipant, Identity } from '../../types/domain'
 import { VoiceControlBar } from '../voice/components/VoiceControlBar'
+import { ParticipantMediaTile } from '../voice/components/ParticipantMediaTile'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -54,7 +56,7 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
 
   const roomForPartner =
     room !== null && joinedPartnerIdentity !== null && sameIdentity(joinedPartnerIdentity, partnerIdentity) ? room : null
-  const { activeSpeakerIds, connectionState, remoteParticipants } = useLiveKitRoom(roomForPartner)
+  const { activeSpeakerIds, connectionState, remoteParticipants, localParticipant } = useLiveKitRoom(roomForPartner)
   const selfParticipant = useMemo(
     () => participants.find((participant) => sameIdentity(participant.userIdentity, selfIdentity)) ?? null,
     [participants, selfIdentity],
@@ -67,6 +69,30 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
     }
     return map
   }, [usersByIdentity])
+
+  const avatarByIdentity = useMemo(() => {
+    const map = new Map<string, string | null>()
+    for (const user of Object.values(usersByIdentity)) {
+      map.set(normalizeIdentityKey(user.identity), user.avatarUrl ?? null)
+    }
+    return map
+  }, [usersByIdentity])
+
+  const livekitParticipantByIdentity = useMemo(() => {
+    const map = new Map<string, LocalParticipant | RemoteParticipant>()
+    if (localParticipant?.identity) {
+      map.set(normalizeIdentityKey(localParticipant.identity), localParticipant)
+    }
+    for (const participant of remoteParticipants) {
+      map.set(normalizeIdentityKey(participant.identity), participant)
+    }
+    return map
+  }, [localParticipant, remoteParticipants])
+
+  const normalizedActiveSpeakers = useMemo(
+    () => new Set(Array.from(activeSpeakerIds).map((identity) => normalizeIdentityKey(identity))),
+    [activeSpeakerIds],
+  )
 
   const joined = roomForPartner !== null && connectionState === ConnectionState.Connected
   const connecting = joining || (roomForPartner !== null && connectionState === ConnectionState.Connecting)
@@ -137,14 +163,28 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
       </CardHeader>
       <CardContent className="space-y-2">
         <div className="flex flex-wrap gap-2">
-          {participants.map((participant) => (
-            <Badge key={`${participant.roomKey}:${participant.userIdentity}`} variant="secondary">
-              {displayNameByIdentity.get(normalizeIdentityKey(participant.userIdentity)) ??
-                participant.userIdentity.slice(0, 10)}
-              {activeSpeakerIds.has(participant.userIdentity) ? ' • Speaking' : ''}
-            </Badge>
-          ))}
           {participants.length === 0 ? <Badge variant="outline">No one in call</Badge> : null}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {participants.map((participant) => (
+            <ParticipantMediaTile
+              key={`${participant.roomKey}:${participant.userIdentity}`}
+              displayName={
+                displayNameByIdentity.get(normalizeIdentityKey(participant.userIdentity)) ??
+                participant.userIdentity.slice(0, 10)
+              }
+              avatarUrl={avatarByIdentity.get(normalizeIdentityKey(participant.userIdentity)) ?? null}
+              joinedAt={participant.joinedAt}
+              participant={livekitParticipantByIdentity.get(normalizeIdentityKey(participant.userIdentity)) ?? null}
+              isLocal={sameIdentity(participant.userIdentity, selfIdentity)}
+              isSpeaking={normalizedActiveSpeakers.has(normalizeIdentityKey(participant.userIdentity))}
+              muted={participant.muted}
+              deafened={participant.deafened}
+              sharingScreen={participant.sharingScreen}
+              sharingCamera={participant.sharingCamera}
+            />
+          ))}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -210,12 +250,17 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
               try {
                 const next = !selfParticipant.sharingCamera
                 if (next) {
-                  await ensureMicrophoneCapture()
+                  await requestCameraPermission()
                 }
                 await roomForPartner.localParticipant.setCameraEnabled(next)
                 await patchVoiceState({ sharingCamera: next })
               } catch (e) {
-                const message = e instanceof Error ? e.message : 'Could not toggle camera.'
+                const message =
+                  e instanceof Error && /invalid constraint/i.test(e.message)
+                    ? 'Camera constraint is unsupported in this runtime. Check camera permission and try again.'
+                    : e instanceof Error
+                      ? e.message
+                      : 'Could not toggle camera.'
                 setError(message)
               }
             }}
