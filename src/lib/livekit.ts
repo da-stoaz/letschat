@@ -85,6 +85,10 @@ export function getMicrophoneUnavailableReason(): string {
   return `Microphone APIs are unavailable in this runtime (${getMediaRuntimeSummary()}).`
 }
 
+export function getCameraUnavailableReason(): string {
+  return `Camera APIs are unavailable in this runtime (${getMediaRuntimeSummary()}).`
+}
+
 export async function requestMicrophonePermission(): Promise<void> {
   if (!ensureMediaDevicesGetUserMedia()) {
     throw new Error(getMicrophoneUnavailableReason())
@@ -95,10 +99,61 @@ export async function requestMicrophonePermission(): Promise<void> {
 
 export async function requestCameraPermission(): Promise<void> {
   if (!ensureMediaDevicesGetUserMedia()) {
-    throw new Error(getMicrophoneUnavailableReason())
+    throw new Error(getCameraUnavailableReason())
   }
   const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
   stream.getTracks().forEach((track) => track.stop())
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function errorName(error: unknown): string {
+  if (error && typeof error === 'object' && 'name' in error) {
+    return String((error as { name: unknown }).name || '')
+  }
+  return ''
+}
+
+function isPermissionDeniedError(error: unknown): boolean {
+  const name = errorName(error).toLowerCase()
+  const message = errorMessage(error).toLowerCase()
+  return (
+    name === 'notallowederror' ||
+    /permission denied|permission dismissed|not allowed/i.test(message)
+  )
+}
+
+function isCameraConstraintError(error: unknown): boolean {
+  const name = errorName(error).toLowerCase()
+  const message = errorMessage(error).toLowerCase()
+  return (
+    name === 'overconstrainederror' ||
+    /invalid constraint|overconstrained/i.test(message)
+  )
+}
+
+function isCameraDeviceNotFoundError(error: unknown): boolean {
+  const name = errorName(error).toLowerCase()
+  const message = errorMessage(error).toLowerCase()
+  return name === 'notfounderror' || /requested device not found|device not found|no device/i.test(message)
+}
+
+export function getCameraErrorMessage(error: unknown): string {
+  if (!supportsMicrophoneCapture()) {
+    return getCameraUnavailableReason()
+  }
+  if (isPermissionDeniedError(error)) {
+    return 'Camera permission denied. Allow camera access and try again.'
+  }
+  if (isCameraDeviceNotFoundError(error)) {
+    return 'No camera device is available (or the selected camera was disconnected).'
+  }
+  if (isCameraConstraintError(error)) {
+    return 'Camera constraints were rejected by this runtime. Falling back to safer defaults did not succeed.'
+  }
+  return errorMessage(error) || 'Could not toggle camera.'
 }
 
 function normalizeLiveKitUrl(raw: string): string {
@@ -211,6 +266,28 @@ async function getPreferredCameraCaptureOptions(): Promise<VideoCaptureOptions> 
   }
 }
 
+async function setCameraEnabledWithFallback(room: Room, options: Array<VideoCaptureOptions | undefined>): Promise<void> {
+  let lastError: unknown = null
+  for (const option of options) {
+    try {
+      if (option) {
+        await room.localParticipant.setCameraEnabled(true, option)
+      } else {
+        await room.localParticipant.setCameraEnabled(true)
+      }
+      return
+    } catch (error) {
+      lastError = error
+      // Retry for common cross-runtime camera failures.
+      if (isCameraConstraintError(error) || isCameraDeviceNotFoundError(error)) {
+        continue
+      }
+      throw error
+    }
+  }
+  throw (lastError ?? new Error('Could not enable camera.'))
+}
+
 async function waitForLocalCameraTrack(room: Room, timeoutMs = CAMERA_TRACK_WAIT_MS): Promise<boolean> {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
@@ -231,29 +308,30 @@ export async function setLocalCameraEnabled(room: Room, enabled: boolean): Promi
 
   await requestCameraPermission()
   const preferredCaptureOptions = await getPreferredCameraCaptureOptions()
-
-  try {
-    await room.localParticipant.setCameraEnabled(true, preferredCaptureOptions)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (!/invalid constraint/i.test(message)) {
-      throw error
-    }
-
-    await room.localParticipant.setCameraEnabled(true, {
-      resolution: { width: 640, height: 480 },
-      frameRate: 24,
-    })
+  const safeCaptureOptions: VideoCaptureOptions = {
+    resolution: { width: 640, height: 480 },
+    frameRate: 24,
   }
+
+  await setCameraEnabledWithFallback(room, [
+    preferredCaptureOptions,
+    safeCaptureOptions,
+    undefined,
+  ])
 
   if (await waitForLocalCameraTrack(room)) {
     return
   }
 
-  const manualTrack = await createLocalVideoTrack({
-    resolution: { width: 640, height: 480 },
-    frameRate: 24,
-  })
+  let manualTrack: Awaited<ReturnType<typeof createLocalVideoTrack>> | null = null
+  try {
+    manualTrack = await createLocalVideoTrack(safeCaptureOptions)
+  } catch (error) {
+    if (!(isCameraConstraintError(error) || isCameraDeviceNotFoundError(error))) {
+      throw error
+    }
+    manualTrack = await createLocalVideoTrack({})
+  }
 
   try {
     await room.localParticipant.publishTrack(manualTrack, { source: Track.Source.Camera })

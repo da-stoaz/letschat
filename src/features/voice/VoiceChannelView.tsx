@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef } from 'react'
 import type { LocalParticipant, RemoteParticipant } from 'livekit-client'
 import {
+  getCameraErrorMessage,
   getMicrophoneUnavailableReason,
   joinLiveKitVoice,
   leaveLiveKitVoice,
@@ -289,13 +290,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
                 await setLocalCameraEnabled(roomForChannel, next)
                 await patchVoiceState({ sharingCamera: next })
               } catch (e) {
-                const message =
-                  e instanceof Error && /invalid constraint/i.test(e.message)
-                    ? 'Camera constraint is unsupported in this runtime. Check camera permission and try again.'
-                    : e instanceof Error
-                      ? e.message
-                      : 'Could not toggle camera.'
-                setError(message)
+                setError(getCameraErrorMessage(e))
               }
             }}
           onToggleScreenShare={async () => {
