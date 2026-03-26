@@ -3,6 +3,7 @@ import { ConnectionState, Room } from 'livekit-client'
 import { reducers } from './spacetimedb'
 import { tauriCommands } from './tauri'
 import { useConnectionStore } from '../stores/connectionStore'
+import type { Identity } from '../types/domain'
 
 type LegacyGetUserMedia = (
   constraints: MediaStreamConstraints,
@@ -99,59 +100,115 @@ function normalizeLiveKitUrl(raw: string): string {
   return `ws://${normalized}`
 }
 
-export async function joinLiveKitVoice(channelId: number): Promise<Room> {
+function normalizeIdentityKey(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+export function dmVoiceRoomKey(identityA: Identity, identityB: Identity): string {
+  const a = normalizeIdentityKey(identityA)
+  const b = normalizeIdentityKey(identityB)
+  return a <= b ? `${a}:${b}` : `${b}:${a}`
+}
+
+function mapLiveKitConnectionError(error: unknown): Error {
+  if (error instanceof Error && error.message.includes('Bad Configuration Parameters')) {
+    return new Error('LiveKit returned invalid ICE parameters. Verify LiveKit config and restart the server.')
+  }
+  if (error instanceof Error && /(notallowederror|permission denied|permission dismissed)/i.test(error.message)) {
+    return new Error('Microphone permission is required to join voice. Please allow microphone access and try again.')
+  }
+  if (error instanceof Error && error.message.toLowerCase().includes('pc connection')) {
+    return new Error('Could not establish peer connection. Check LiveKit URL/ports (7880 + UDP 7881) and try again.')
+  }
+  return error instanceof Error ? error : new Error('Failed to connect to LiveKit.')
+}
+
+type ConnectLiveKitWithPresenceParams = {
+  roomName: string
+  identityErrorMessage: string
+  permissionDeniedWarning: string
+  micEnableWarning: string
+  onJoinPresence: () => Promise<void>
+  onLeavePresence: () => Promise<void>
+  onSyncMutedState: (muted: boolean) => Promise<void>
+}
+
+async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresenceParams): Promise<Room> {
   const room = new Room()
   const rawLivekitUrl = await tauriCommands.getLivekitUrl()
   const livekitUrl = normalizeLiveKitUrl(rawLivekitUrl)
   const identity = useConnectionStore.getState().identity
   if (!identity) {
-    throw new Error('Cannot join voice: no local identity')
+    throw new Error(params.identityErrorMessage)
   }
 
-  await reducers.joinVoiceChannel(channelId)
+  await params.onJoinPresence()
   try {
-    const token = await tauriCommands.generateLivekitToken(String(channelId), identity)
+    const token = await tauriCommands.generateLivekitToken(params.roomName, identity)
     await room.connect(livekitUrl, token)
   } catch (error) {
-    await reducers.leaveVoiceChannel(channelId).catch(() => undefined)
+    await params.onLeavePresence().catch(() => undefined)
     room.disconnect()
-    if (error instanceof Error && error.message.includes('Bad Configuration Parameters')) {
-      throw new Error('LiveKit returned invalid ICE parameters. Verify LiveKit config and restart the server.')
-    }
-    if (error instanceof Error && /(notallowederror|permission denied|permission dismissed)/i.test(error.message)) {
-      throw new Error('Microphone permission is required to join voice. Please allow microphone access and try again.')
-    }
-    if (error instanceof Error && error.message.toLowerCase().includes('pc connection')) {
-      throw new Error(
-        'Could not establish peer connection. Check LiveKit URL/ports (7880 + UDP 7881) and try again.',
-      )
-    }
-    throw error
+    throw mapLiveKitConnectionError(error)
   }
 
   if (!supportsMicrophoneCapture()) {
-    await reducers.updateVoiceState(channelId, true, false, false, false).catch(() => undefined)
+    await params.onSyncMutedState(true).catch(() => undefined)
     return room
   }
 
   try {
     await requestMicrophonePermission()
     await room.localParticipant.setMicrophoneEnabled(true)
-    await reducers.updateVoiceState(channelId, false, false, false, false).catch(() => undefined)
+    await params.onSyncMutedState(false).catch(() => undefined)
   } catch (error) {
-    await reducers.updateVoiceState(channelId, true, false, false, false).catch(() => undefined)
+    await params.onSyncMutedState(true).catch(() => undefined)
     if (error instanceof Error && /(notallowederror|permission denied|permission dismissed)/i.test(error.message)) {
-      console.warn('Microphone permission denied; joined voice in listen-only mode.')
+      console.warn(params.permissionDeniedWarning)
       return room
     }
-    console.warn('Could not enable microphone automatically; joined voice in listen-only mode.', error)
+    console.warn(params.micEnableWarning, error)
   }
 
   return room
 }
 
+export async function joinLiveKitVoice(channelId: number): Promise<Room> {
+  return connectLiveKitWithPresence({
+    roomName: String(channelId),
+    identityErrorMessage: 'Cannot join voice: no local identity',
+    permissionDeniedWarning: 'Microphone permission denied; joined voice in listen-only mode.',
+    micEnableWarning: 'Could not enable microphone automatically; joined voice in listen-only mode.',
+    onJoinPresence: () => reducers.joinVoiceChannel(channelId),
+    onLeavePresence: () => reducers.leaveVoiceChannel(channelId),
+    onSyncMutedState: (muted) => reducers.updateVoiceState(channelId, muted, false, false, false),
+  })
+}
+
+export async function joinLiveKitDmVoice(partnerIdentity: Identity): Promise<Room> {
+  const identity = useConnectionStore.getState().identity
+  if (!identity) {
+    throw new Error('Cannot join DM voice: no local identity')
+  }
+  const roomName = `dm:${dmVoiceRoomKey(identity, partnerIdentity)}`
+  return connectLiveKitWithPresence({
+    roomName,
+    identityErrorMessage: 'Cannot join DM voice: no local identity',
+    permissionDeniedWarning: 'Microphone permission denied; joined DM voice in listen-only mode.',
+    micEnableWarning: 'Could not enable microphone automatically; joined DM voice in listen-only mode.',
+    onJoinPresence: () => reducers.joinDmVoice(partnerIdentity),
+    onLeavePresence: () => reducers.leaveDmVoice(partnerIdentity),
+    onSyncMutedState: (muted) => reducers.updateDmVoiceState(partnerIdentity, muted, false, false, false),
+  })
+}
+
 export async function leaveLiveKitVoice(channelId: number, room: Room | null): Promise<void> {
   await reducers.leaveVoiceChannel(channelId)
+  room?.disconnect()
+}
+
+export async function leaveLiveKitDmVoice(partnerIdentity: Identity, room: Room | null): Promise<void> {
+  await reducers.leaveDmVoice(partnerIdentity)
   room?.disconnect()
 }
 

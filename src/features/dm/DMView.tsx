@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { SendHorizonalIcon } from 'lucide-react'
 import { reducers } from '../../lib/spacetimedb'
 import { useDmStore } from '../../stores/dmStore'
+import { DmVoicePanel } from './DmVoicePanel'
 import type { DirectMessage, Identity } from '../../types/domain'
 import { warnOnce } from '../../lib/devWarnings'
 import { Badge } from '@/components/ui/badge'
@@ -42,6 +43,10 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           <p className="text-xs text-muted-foreground">Direct conversation</p>
         </div>
       </header>
+
+      <div className="border-b border-border/70 p-3">
+        <DmVoicePanel partnerIdentity={partnerIdentity} />
+      </div>
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-3 p-4">

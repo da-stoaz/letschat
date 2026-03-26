@@ -40,6 +40,7 @@ interface ServerSidebarProps {
   onOpenFriends: () => void
   dmContacts: DmContact[]
   activeDmIdentity: string | null
+  dmCallActiveByIdentity: Record<string, boolean>
   onOpenDmContact: (identity: string) => void
 }
 
@@ -61,6 +62,7 @@ export function ServerSidebar({
   onOpenFriends,
   dmContacts,
   activeDmIdentity,
+  dmCallActiveByIdentity,
   onOpenDmContact,
 }: ServerSidebarProps) {
   return (
@@ -176,6 +178,12 @@ export function ServerSidebar({
                       <p className="truncate text-sm">{contact.label}</p>
                       <p className="truncate text-xs text-muted-foreground">@{contact.username}</p>
                     </div>
+                    {dmCallActiveByIdentity[contact.identity] ? (
+                      <Badge variant="secondary" className="ml-auto gap-1">
+                        <Volume2Icon className="size-3" />
+                        In Call
+                      </Badge>
+                    ) : null}
                   </Button>
                 ))}
               </div>

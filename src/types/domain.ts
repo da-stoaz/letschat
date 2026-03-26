@@ -97,3 +97,15 @@ export interface DirectMessage {
   deletedBySender: boolean
   deletedByRecipient: boolean
 }
+
+export interface DmVoiceParticipant {
+  roomKey: string
+  userIdentity: Identity
+  userA: Identity
+  userB: Identity
+  joinedAt: string
+  muted: boolean
+  deafened: boolean
+  sharingScreen: boolean
+  sharingCamera: boolean
+}

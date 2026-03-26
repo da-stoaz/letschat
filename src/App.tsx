@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
 import { AuthPage } from './pages/AuthPage'
 import { InvitePage } from './pages/InvitePage'
@@ -13,8 +13,10 @@ import { LoaderCircleIcon } from 'lucide-react'
 function App() {
   const user = useSelfStore((s) => s.user)
   const connectionStatus = useConnectionStore((s) => s.status)
+  const location = useLocation()
+  const onAuthRoute = location.pathname.startsWith('/auth')
 
-  if (connectionStatus === 'connecting' && !user) {
+  if (connectionStatus === 'connecting' && !user && !onAuthRoute) {
     return (
       <main className="grid min-h-screen place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/20),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/15),transparent)] p-4">
         <Card className="w-full max-w-md border-border/70 bg-card/90 backdrop-blur">

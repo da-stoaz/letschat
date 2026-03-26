@@ -51,6 +51,12 @@ type LoginPayload = {
   password: string
 }
 
+type LivekitTokenPayload = {
+  room: string
+  identity: Identity
+  sessionToken: AuthFrameworkToken
+}
+
 async function postJson<TResponse, TPayload extends Record<string, unknown>>(
   path: string,
   payload: TPayload,
@@ -88,6 +94,11 @@ export async function authServiceLogin(payload: LoginPayload): Promise<AuthServi
   const result = await postJson<AuthServiceResponse, LoginPayload>('/auth/login', payload)
   setStoredAuthSessionToken(result.sessionToken)
   return result
+}
+
+export async function authServiceGenerateLivekitToken(payload: LivekitTokenPayload): Promise<string> {
+  const result = await postJson<{ token: string }, LivekitTokenPayload>('/livekit/token', payload)
+  return result.token
 }
 
 export async function authServiceVerify(): Promise<boolean> {

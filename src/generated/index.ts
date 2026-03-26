@@ -46,8 +46,10 @@ import DeleteDirectMessageReducer from "./delete_direct_message_reducer";
 import DeleteMessageReducer from "./delete_message_reducer";
 import DeleteServerReducer from "./delete_server_reducer";
 import EditMessageReducer from "./edit_message_reducer";
+import JoinDmVoiceReducer from "./join_dm_voice_reducer";
 import JoinVoiceChannelReducer from "./join_voice_channel_reducer";
 import KickMemberReducer from "./kick_member_reducer";
+import LeaveDmVoiceReducer from "./leave_dm_voice_reducer";
 import LeaveVoiceChannelReducer from "./leave_voice_channel_reducer";
 import RegisterUserReducer from "./register_user_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
@@ -60,6 +62,7 @@ import TransferOwnershipReducer from "./transfer_ownership_reducer";
 import UnbanMemberReducer from "./unban_member_reducer";
 import UnblockUserReducer from "./unblock_user_reducer";
 import UpdateChannelReducer from "./update_channel_reducer";
+import UpdateDmVoiceStateReducer from "./update_dm_voice_state_reducer";
 import UpdateProfileReducer from "./update_profile_reducer";
 import UpdateVoiceStateReducer from "./update_voice_state_reducer";
 import UseInviteReducer from "./use_invite_reducer";
@@ -73,6 +76,7 @@ import DirectMessageRow from "./direct_message_table";
 import InviteRow from "./invite_table";
 import MessageRow from "./message_table";
 import MyBlocksRow from "./my_blocks_table";
+import MyDmVoiceParticipantsRow from "./my_dm_voice_participants_table";
 import MyFriendsRow from "./my_friends_table";
 import ServerRow from "./server_table";
 import ServerMemberRow from "./server_member_table";
@@ -248,6 +252,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyBlocksRow),
+  my_dm_voice_participants: __table({
+    name: 'my_dm_voice_participants',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyDmVoiceParticipantsRow),
   my_friends: __table({
     name: 'my_friends',
     indexes: [
@@ -271,8 +282,10 @@ const reducersSchema = __reducers(
   __reducerSchema("delete_message", DeleteMessageReducer),
   __reducerSchema("delete_server", DeleteServerReducer),
   __reducerSchema("edit_message", EditMessageReducer),
+  __reducerSchema("join_dm_voice", JoinDmVoiceReducer),
   __reducerSchema("join_voice_channel", JoinVoiceChannelReducer),
   __reducerSchema("kick_member", KickMemberReducer),
+  __reducerSchema("leave_dm_voice", LeaveDmVoiceReducer),
   __reducerSchema("leave_voice_channel", LeaveVoiceChannelReducer),
   __reducerSchema("register_user", RegisterUserReducer),
   __reducerSchema("remove_friend", RemoveFriendReducer),
@@ -285,6 +298,7 @@ const reducersSchema = __reducers(
   __reducerSchema("unban_member", UnbanMemberReducer),
   __reducerSchema("unblock_user", UnblockUserReducer),
   __reducerSchema("update_channel", UpdateChannelReducer),
+  __reducerSchema("update_dm_voice_state", UpdateDmVoiceStateReducer),
   __reducerSchema("update_profile", UpdateProfileReducer),
   __reducerSchema("update_voice_state", UpdateVoiceStateReducer),
   __reducerSchema("use_invite", UseInviteReducer),

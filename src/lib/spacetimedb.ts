@@ -9,6 +9,8 @@ import { authServiceLogin, clearStoredAuthSessionToken } from './authService'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useDmStore } from '../stores/dmStore'
+import { useDmVoiceStore } from '../stores/dmVoiceStore'
+import { useDmVoiceSessionStore } from '../stores/dmVoiceSessionStore'
 import { useFriendsStore } from '../stores/friendsStore'
 import { useMembersStore } from '../stores/membersStore'
 import { useMessagesStore } from '../stores/messagesStore'
@@ -25,6 +27,7 @@ import type {
   Channel,
   ChannelKind,
   DirectMessage,
+  DmVoiceParticipant,
   Friend,
   FriendStatus,
   Identity,
@@ -204,6 +207,20 @@ function mapDirectMessage(row: any): DirectMessage {
   }
 }
 
+function mapDmVoiceParticipant(row: any): DmVoiceParticipant {
+  return {
+    roomKey: row.roomKey,
+    userIdentity: toIdentityString(row.userIdentity),
+    userA: toIdentityString(row.userA),
+    userB: toIdentityString(row.userB),
+    joinedAt: toIsoString(row.joinedAt),
+    muted: Boolean(row.muted),
+    deafened: Boolean(row.deafened),
+    sharingScreen: Boolean(row.sharingScreen),
+    sharingCamera: Boolean(row.sharingCamera),
+  }
+}
+
 function syncUsers(conn: DbConnection): User[] {
   const users = Array.from(conn.db.user.iter()).map(mapUser)
   useUsersStore.getState().setUsers(users)
@@ -344,6 +361,28 @@ function syncDirectMessages(conn: DbConnection): void {
   }
 }
 
+function syncDmVoiceParticipants(conn: DbConnection): void {
+  const participants = Array.from(conn.db.my_dm_voice_participants.iter()).map(mapDmVoiceParticipant)
+  const grouped = new Map<string, DmVoiceParticipant[]>()
+  for (const participant of participants) {
+    const byRoom = grouped.get(participant.roomKey) ?? []
+    byRoom.push(participant)
+    grouped.set(participant.roomKey, byRoom)
+  }
+
+  const store = useDmVoiceStore.getState()
+  const existingRoomKeys = Object.keys(store.participantsByRoom)
+  for (const roomKey of existingRoomKeys) {
+    if (!grouped.has(roomKey)) {
+      store.setRoomParticipants(roomKey, [])
+    }
+  }
+
+  for (const [roomKey, rows] of grouped.entries()) {
+    store.setRoomParticipants(roomKey, rows)
+  }
+}
+
 function syncAll(conn: DbConnection): void {
   syncUsers(conn)
   syncServers(conn)
@@ -353,12 +392,16 @@ function syncAll(conn: DbConnection): void {
   syncVoiceParticipants(conn)
   syncFriends(conn)
   syncDirectMessages(conn)
+  syncDmVoiceParticipants(conn)
 }
 
 function resetClientState(): void {
   const voiceSession = useVoiceSessionStore.getState()
   voiceSession.room?.disconnect()
   voiceSession.reset()
+  const dmVoiceSession = useDmVoiceSessionStore.getState()
+  dmVoiceSession.room?.disconnect()
+  dmVoiceSession.reset()
 
   useConnectionStore.getState().setIdentity(null)
   useSelfStore.getState().setUser(null)
@@ -371,6 +414,7 @@ function resetClientState(): void {
   useVoiceStore.setState({ participantsByChannel: {}, activeChannelId: null, localTracks: [] })
   useFriendsStore.setState({ friends: [], blocked: [] })
   useDmStore.setState({ conversations: {} })
+  useDmVoiceStore.setState({ participantsByRoom: {} })
   useUiStore.setState({
     activeChannelId: null,
     activeDmPartner: null,
@@ -423,6 +467,9 @@ function watchLiveTables(conn: DbConnection): void {
   conn.db.direct_message.onInsert(() => syncDirectMessages(conn))
   conn.db.direct_message.onUpdate(() => syncDirectMessages(conn))
   conn.db.direct_message.onDelete(() => syncDirectMessages(conn))
+  conn.db.my_dm_voice_participants.onInsert(() => syncDmVoiceParticipants(conn))
+  conn.db.my_dm_voice_participants.onUpdate(() => syncDmVoiceParticipants(conn))
+  conn.db.my_dm_voice_participants.onDelete(() => syncDmVoiceParticipants(conn))
   conn.db.message.onInsert((_ctx, row) => {
     syncMessages(conn)
     if (!liveEventsEnabled) return
@@ -549,6 +596,7 @@ async function connect(): Promise<void> {
         tables.my_friends,
         tables.my_blocks,
         tables.direct_message,
+        tables.my_dm_voice_participants,
       ])
 
     await firstSyncApplied
@@ -677,6 +725,24 @@ export const reducers = {
       sharingScreen,
       sharingCamera,
     }),
+  joinDmVoice: (otherIdentity: Identity) =>
+    spacetimedbClient.call('joinDmVoice', { otherIdentity: toReducerIdentity(otherIdentity) }),
+  leaveDmVoice: (otherIdentity: Identity) =>
+    spacetimedbClient.call('leaveDmVoice', { otherIdentity: toReducerIdentity(otherIdentity) }),
+  updateDmVoiceState: (
+    otherIdentity: Identity,
+    muted: boolean,
+    deafened: boolean,
+    sharingScreen: boolean,
+    sharingCamera: boolean,
+  ) =>
+    spacetimedbClient.call('updateDmVoiceState', {
+      otherIdentity: toReducerIdentity(otherIdentity),
+      muted,
+      deafened,
+      sharingScreen,
+      sharingCamera,
+    }),
   sendFriendRequest: (targetIdentity: Identity) =>
     spacetimedbClient.call('sendFriendRequest', { targetIdentity: toReducerIdentity(targetIdentity) }),
   acceptFriendRequest: (requesterIdentity: Identity) =>
@@ -734,6 +800,46 @@ export async function rotateIdentityForRegistration(): Promise<void> {
   await connect()
 }
 
+async function ensureAuthenticatedUserRow(normalizedUsername: string, displayName: string): Promise<void> {
+  if (!connection) {
+    await connect()
+  }
+  const conn = connection as DbConnection
+  syncUsers(conn)
+  if (useSelfStore.getState().user) return
+
+  const currentIdentity = useConnectionStore.getState().identity
+  if (!currentIdentity) {
+    throw new Error('Login succeeded but no Spacetime identity is active.')
+  }
+
+  const existingUsernameOwner = Array.from(conn.db.user.iter()).find(
+    (row) => row.username.toLowerCase() === normalizedUsername,
+  )
+  if (existingUsernameOwner) {
+    const ownerIdentity = toIdentityString(existingUsernameOwner.identity)
+    if (!sameIdentity(ownerIdentity, currentIdentity)) {
+      throw new Error(
+        'This username is linked to a different Spacetime identity. Re-link from a currently signed-in session.',
+      )
+    }
+  }
+
+  try {
+    await reducers.registerUser(normalizedUsername, displayName)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!message.includes('user already registered for this identity')) {
+      throw error
+    }
+  }
+
+  syncUsers(conn)
+  if (!useSelfStore.getState().user) {
+    throw new Error('Login succeeded but user profile is not available for this identity.')
+  }
+}
+
 export async function loginWithPassword(username: string, password: string): Promise<void> {
   const normalized = normalizeUsername(username)
   if (!normalized) throw new Error('Username is required.')
@@ -752,6 +858,23 @@ export async function loginWithPassword(username: string, password: string): Pro
     clearStoredToken()
     throw error
   }
+
+  const connectedIdentity = useConnectionStore.getState().identity
+  if (!connectedIdentity) {
+    disconnect()
+    clearStoredToken()
+    throw new Error('Login failed: authenticated session has no active identity.')
+  }
+
+  if (!sameIdentity(connectedIdentity, auth.spacetimeIdentity)) {
+    disconnect()
+    clearStoredToken()
+    throw new Error(
+      'Login token is stale for this account. Sign in from a linked session and relink this device in Settings.',
+    )
+  }
+
+  await ensureAuthenticatedUserRow(normalized, auth.displayName)
 }
 
 export async function resolveIdentityFromUsername(username: string): Promise<Identity | null> {

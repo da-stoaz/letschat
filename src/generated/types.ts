@@ -70,6 +70,20 @@ export const DirectMessage = __t.object("DirectMessage", {
 });
 export type DirectMessage = __Infer<typeof DirectMessage>;
 
+export const DmVoiceParticipant = __t.object("DmVoiceParticipant", {
+  dmVoiceKey: __t.string(),
+  roomKey: __t.string(),
+  userA: __t.identity(),
+  userB: __t.identity(),
+  userIdentity: __t.identity(),
+  joinedAt: __t.timestamp(),
+  muted: __t.bool(),
+  deafened: __t.bool(),
+  sharingScreen: __t.bool(),
+  sharingCamera: __t.bool(),
+});
+export type DmVoiceParticipant = __Infer<typeof DmVoiceParticipant>;
+
 export const Friend = __t.object("Friend", {
   pairKey: __t.string(),
   userA: __t.identity(),

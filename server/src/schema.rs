@@ -195,3 +195,25 @@ pub struct DirectMessage {
     pub deleted_by_sender: bool,
     pub deleted_by_recipient: bool,
 }
+
+#[spacetimedb::table(
+    accessor = dm_voice_participant,
+    index(accessor = by_room_and_user, btree(columns = [room_key, user_identity]))
+)]
+pub struct DmVoiceParticipant {
+    #[primary_key]
+    pub dm_voice_key: String,
+    #[index(btree)]
+    pub room_key: String,
+    #[index(btree)]
+    pub user_a: Identity,
+    #[index(btree)]
+    pub user_b: Identity,
+    #[index(btree)]
+    pub user_identity: Identity,
+    pub joined_at: Timestamp,
+    pub muted: bool,
+    pub deafened: bool,
+    pub sharing_screen: bool,
+    pub sharing_camera: bool,
+}

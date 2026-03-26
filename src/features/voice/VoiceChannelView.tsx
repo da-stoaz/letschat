@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { MicIcon, MicOffIcon, MonitorUpIcon, PhoneOffIcon, VideoIcon, VolumeXIcon } from 'lucide-react'
 import {
   getMicrophoneUnavailableReason,
   joinLiveKitVoice,
@@ -17,8 +16,8 @@ import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
 import type { VoiceParticipant, u64 } from '../../types/domain'
 import { ConnectionState } from 'livekit-client'
 import { warnOnce } from '../../lib/devWarnings'
+import { VoiceControlBar } from './components/VoiceControlBar'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
@@ -181,135 +180,102 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
       </ScrollArea>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
-        {!joined ? (
-          <Button
-            disabled={connectingToRoom}
-            onClick={async () => {
-                setError(null)
-                setJoining(true)
-                try {
-                  if (room && joinedChannelId !== null && joinedChannelId !== channelId) {
-                    await leaveLiveKitVoice(joinedChannelId, room)
-                    setRoom(null)
-                    setJoinedChannelId(null)
-                  }
-                  const r = await joinLiveKitVoice(channelId)
-                  setRoom(r)
-                  setJoinedChannelId(channelId)
-                } catch (e) {
-                  const message = e instanceof Error ? e.message : 'Could not join voice channel.'
-                  setError(message)
-                } finally {
-                  setJoining(false)
+        <VoiceControlBar
+          joined={joined}
+          connecting={connectingToRoom}
+          muted={muted}
+          deafened={deafened}
+          sharingCamera={sharingCamera}
+          sharingScreen={sharingScreen}
+          hasScreenCapture={hasScreenCapture}
+          error={error}
+          onJoin={async () => {
+            setError(null)
+            setJoining(true)
+            try {
+              if (room && joinedChannelId !== null && joinedChannelId !== channelId) {
+                await leaveLiveKitVoice(joinedChannelId, room)
+                setRoom(null)
+                setJoinedChannelId(null)
               }
-            }}
-          >
-            <MicIcon className="size-4" />
-            {connectingToRoom ? 'Joining...' : 'Join Voice'}
-          </Button>
-        ) : (
-          <>
-            <Button
-              variant={muted ? 'secondary' : 'outline'}
-              onClick={async () => {
-                setError(null)
-                if (!roomForChannel || !selfParticipant) return
-                try {
-                  const nextMuted = !selfParticipant.muted
-                  if (!nextMuted) {
-                    await ensureMicrophoneCapture()
-                  }
-                  await roomForChannel.localParticipant.setMicrophoneEnabled(!nextMuted)
-                  await patchVoiceState({ muted: nextMuted })
-                } catch (e) {
-                  const message = e instanceof Error ? e.message : 'Could not toggle microphone.'
-                  setError(message)
-                }
-              }}
-            >
-              {muted ? <MicOffIcon className="size-4" /> : <MicIcon className="size-4" />}
-              {muted ? 'Unmute' : 'Mute'}
-            </Button>
-            <Button
-              variant={deafened ? 'secondary' : 'outline'}
-              onClick={async () => {
-                setError(null)
-                if (!selfParticipant) return
-                try {
-                  await patchVoiceState({ deafened: !selfParticipant.deafened })
-                } catch (e) {
-                  const message = e instanceof Error ? e.message : 'Could not toggle deafen.'
-                  setError(message)
-                }
-              }}
-            >
-              <VolumeXIcon className="size-4" />
-              {deafened ? 'Undeafen' : 'Deafen'}
-            </Button>
-            <Button
-              variant={sharingCamera ? 'secondary' : 'outline'}
-              onClick={async () => {
-                setError(null)
-                if (!roomForChannel || !selfParticipant) return
-                try {
-                  const next = !selfParticipant.sharingCamera
-                  if (next) {
-                    await ensureMicrophoneCapture()
-                  }
-                  await roomForChannel.localParticipant.setCameraEnabled(next)
-                  await patchVoiceState({ sharingCamera: next })
-                } catch (e) {
-                  const message = e instanceof Error ? e.message : 'Could not toggle camera.'
-                  setError(message)
-                }
-              }}
-            >
-              <VideoIcon className="size-4" />
-              {sharingCamera ? 'Stop Camera' : 'Camera'}
-            </Button>
-            <Button
-              variant={sharingScreen ? 'secondary' : 'outline'}
-              disabled={!hasScreenCapture}
-              onClick={async () => {
-                setError(null)
-                if (!roomForChannel || !selfParticipant) return
-                if (!hasScreenCapture) {
-                  setError('Screen sharing APIs are unavailable in this runtime.')
-                  return
-                }
-                try {
-                  const next = !selfParticipant.sharingScreen
-                  await roomForChannel.localParticipant.setScreenShareEnabled(next)
-                  await patchVoiceState({ sharingScreen: next })
-                } catch (e) {
-                  const message = e instanceof Error ? e.message : 'Could not toggle screen share.'
-                  setError(message)
-                }
-              }}
-            >
-              <MonitorUpIcon className="size-4" />
-              {sharingScreen ? 'Stop Share' : 'Share Screen'}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={async () => {
-                setError(null)
-                try {
-                  await leaveLiveKitVoice(channelId, roomForChannel)
-                  setRoom(null)
-                  setJoinedChannelId(null)
-                } catch (e) {
-                  const message = e instanceof Error ? e.message : 'Could not leave voice channel.'
-                  setError(message)
-                }
-              }}
-            >
-              <PhoneOffIcon className="size-4" />
-              Leave
-            </Button>
-          </>
-        )}
-        {error ? <p className="w-full text-sm text-destructive">{error}</p> : null}
+              const nextRoom = await joinLiveKitVoice(channelId)
+              setRoom(nextRoom)
+              setJoinedChannelId(channelId)
+            } catch (e) {
+              const message = e instanceof Error ? e.message : 'Could not join voice channel.'
+              setError(message)
+            } finally {
+              setJoining(false)
+            }
+          }}
+          onToggleMute={async () => {
+            setError(null)
+            if (!roomForChannel || !selfParticipant) return
+            try {
+              const nextMuted = !selfParticipant.muted
+              if (!nextMuted) {
+                await ensureMicrophoneCapture()
+              }
+              await roomForChannel.localParticipant.setMicrophoneEnabled(!nextMuted)
+              await patchVoiceState({ muted: nextMuted })
+            } catch (e) {
+              const message = e instanceof Error ? e.message : 'Could not toggle microphone.'
+              setError(message)
+            }
+          }}
+          onToggleDeafen={async () => {
+            setError(null)
+            if (!selfParticipant) return
+            try {
+              await patchVoiceState({ deafened: !selfParticipant.deafened })
+            } catch (e) {
+              const message = e instanceof Error ? e.message : 'Could not toggle deafen.'
+              setError(message)
+            }
+          }}
+          onToggleCamera={async () => {
+            setError(null)
+            if (!roomForChannel || !selfParticipant) return
+            try {
+              const next = !selfParticipant.sharingCamera
+              if (next) {
+                await ensureMicrophoneCapture()
+              }
+              await roomForChannel.localParticipant.setCameraEnabled(next)
+              await patchVoiceState({ sharingCamera: next })
+            } catch (e) {
+              const message = e instanceof Error ? e.message : 'Could not toggle camera.'
+              setError(message)
+            }
+          }}
+          onToggleScreenShare={async () => {
+            setError(null)
+            if (!roomForChannel || !selfParticipant) return
+            if (!hasScreenCapture) {
+              setError('Screen sharing APIs are unavailable in this runtime.')
+              return
+            }
+            try {
+              const next = !selfParticipant.sharingScreen
+              await roomForChannel.localParticipant.setScreenShareEnabled(next)
+              await patchVoiceState({ sharingScreen: next })
+            } catch (e) {
+              const message = e instanceof Error ? e.message : 'Could not toggle screen share.'
+              setError(message)
+            }
+          }}
+          onLeave={async () => {
+            setError(null)
+            try {
+              await leaveLiveKitVoice(channelId, roomForChannel)
+              setRoom(null)
+              setJoinedChannelId(null)
+            } catch (e) {
+              const message = e instanceof Error ? e.message : 'Could not leave voice channel.'
+              setError(message)
+            }
+          }}
+        />
       </div>
     </section>
   )

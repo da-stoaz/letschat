@@ -21,23 +21,18 @@ export function AuthPage() {
   const navigate = useNavigate()
   const user = useSelfStore((s) => s.user)
   const setUser = useSelfStore((s) => s.setUser)
-  const connectionStatus = useConnectionStore((s) => s.status)
   const identity = useConnectionStore((s) => s.identity)
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (user) navigate('/app', { replace: true })
   }, [navigate, user])
-
-  useEffect(() => {
-    if (connectionStatus !== 'disconnected') return
-    void spacetimedbClient.connect()
-  }, [connectionStatus])
 
   return (
     <section className="grid min-h-screen place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-4">
@@ -57,7 +52,9 @@ export function AuthPage() {
             className="space-y-4"
             onSubmit={async (event) => {
               event.preventDefault()
+              if (submitting) return
               setError(null)
+              setSubmitting(true)
               try {
                 const normalizedUsername = username.trim().toLowerCase()
                 if (password.length < 8) {
@@ -120,12 +117,15 @@ export function AuthPage() {
                   }
                 } else {
                   await loginWithPassword(normalizedUsername, password)
+                  if (!useSelfStore.getState().user) {
+                    throw new Error('Login did not complete. Please retry and check auth-service + spacetime processes.')
+                  }
                 }
-
-                navigate('/app', { replace: true })
               } catch (e) {
                 const message = e instanceof Error ? e.message : 'Authentication failed.'
                 setError(message)
+              } finally {
+                setSubmitting(false)
               }
             }}
           >
@@ -181,9 +181,9 @@ export function AuthPage() {
             ) : null}
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <div className="flex items-center justify-end gap-2">
-              <Button type="submit" className="min-w-36">
+              <Button type="submit" className="min-w-36" disabled={submitting}>
                 {mode === 'register' ? <UserRoundPlusIcon className="size-4" /> : <LogInIcon className="size-4" />}
-                {mode === 'register' ? 'Create Account' : 'Log In'}
+                {submitting ? 'Please wait…' : mode === 'register' ? 'Create Account' : 'Log In'}
               </Button>
             </div>
           </form>

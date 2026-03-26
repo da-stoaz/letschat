@@ -3,6 +3,7 @@ use spacetimedb::{Identity, ReducerContext, Table};
 use crate::helpers::{
     assert_or_err,
     block_key,
+    dm_room_key,
     find_friend_row,
     friend_pair_key,
     has_block_either_direction,
@@ -64,6 +65,7 @@ pub fn decline_friend_request(ctx: &ReducerContext, requester_identity: Identity
         .friend()
         .pair_key()
         .delete(friend_pair_key(ctx.sender(), requester_identity));
+    remove_dm_voice_rows_for_pair(ctx, ctx.sender(), requester_identity);
     Ok(())
 }
 
@@ -73,6 +75,7 @@ pub fn remove_friend(ctx: &ReducerContext, other_identity: Identity) -> Result<(
         .friend()
         .pair_key()
         .delete(friend_pair_key(ctx.sender(), other_identity));
+    remove_dm_voice_rows_for_pair(ctx, ctx.sender(), other_identity);
     Ok(())
 }
 
@@ -94,6 +97,7 @@ pub fn block_user(ctx: &ReducerContext, target_identity: Identity) -> Result<(),
         .friend()
         .pair_key()
         .delete(friend_pair_key(ctx.sender(), target_identity));
+    remove_dm_voice_rows_for_pair(ctx, ctx.sender(), target_identity);
 
     Ok(())
 }
@@ -105,4 +109,18 @@ pub fn unblock_user(ctx: &ReducerContext, target_identity: Identity) -> Result<(
         .block_key()
         .delete(block_key(ctx.sender(), target_identity));
     Ok(())
+}
+
+fn remove_dm_voice_rows_for_pair(ctx: &ReducerContext, a: Identity, b: Identity) {
+    let room_key = dm_room_key(a, b);
+    let keys: Vec<String> = ctx
+        .db
+        .dm_voice_participant()
+        .iter()
+        .filter(|row| row.room_key == room_key)
+        .map(|row| row.dm_voice_key)
+        .collect();
+    for key in keys {
+        ctx.db.dm_voice_participant().dm_voice_key().delete(key);
+    }
 }

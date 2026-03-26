@@ -19,6 +19,7 @@ interface ServerRailProps {
   onOpenSettings: () => void
   hasUnreadInServer: (serverId: number) => boolean
   hasVoiceActivityInServer: (serverId: number) => boolean
+  hasActiveDmCall: boolean
 }
 
 export function ServerRail({
@@ -31,6 +32,7 @@ export function ServerRail({
   onOpenSettings,
   hasUnreadInServer,
   hasVoiceActivityInServer,
+  hasActiveDmCall,
 }: ServerRailProps) {
   return (
     <Card className="border-border/60 bg-card/80 backdrop-blur">
@@ -98,12 +100,17 @@ export function ServerRail({
               <Button
                 variant={activeServerId ? 'ghost' : 'secondary'}
                 size="icon"
-                className="h-10 w-10 rounded-xl"
+                className="relative h-10 w-10 rounded-xl"
                 onClick={onOpenDm}
               />
             }
           >
             <MessageCircleIcon className="size-4" />
+            {hasActiveDmCall ? (
+              <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
+                <Volume2Icon className="size-2.5" />
+              </span>
+            ) : null}
           </TooltipTrigger>
           <TooltipContent side="right">Direct Messages</TooltipContent>
         </Tooltip>

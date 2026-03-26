@@ -9,6 +9,8 @@ import { useMembersStore } from '../stores/membersStore'
 import { useServersStore } from '../stores/serversStore'
 import { useUiStore } from '../stores/uiStore'
 import { useUsersStore } from '../stores/usersStore'
+import { useDmVoiceStore } from '../stores/dmVoiceStore'
+import { useDmVoiceSessionStore } from '../stores/dmVoiceSessionStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { normalizeIdentity } from './app-layout/helpers'
@@ -37,6 +39,9 @@ export function AppLayout() {
   const conversations = useDmStore((s) => s.conversations)
   const friends = useFriendsStore((s) => s.friends)
   const usersByIdentity = useUsersStore((s) => s.byIdentity)
+  const dmVoiceParticipantsByRoom = useDmVoiceStore((s) => s.participantsByRoom)
+  const dmJoinedPartnerIdentity = useDmVoiceSessionStore((s) => s.joinedPartnerIdentity)
+  const dmVoiceJoining = useDmVoiceSessionStore((s) => s.joining)
   const joinedVoiceChannelId = useVoiceSessionStore((s) => s.joinedChannelId)
   const selfIdentity = useConnectionStore((s) => s.identity)
   const activeServerId = Number(params.serverId ?? 0) || null
@@ -128,6 +133,26 @@ export function AppLayout() {
     return map
   }, [activeServerMembers])
 
+  const dmCallActiveByIdentity = useMemo(() => {
+    const result: Record<string, boolean> = {}
+    if (!selfIdentity) return result
+    const me = normalizeIdentity(selfIdentity)
+    const joinedPartnerKey = dmJoinedPartnerIdentity ? normalizeIdentity(dmJoinedPartnerIdentity) : null
+    for (const contact of dmContacts) {
+      const other = normalizeIdentity(contact.identity)
+      const roomKey = me <= other ? `${me}:${other}` : `${other}:${me}`
+      const participants = dmVoiceParticipantsByRoom[roomKey] ?? []
+      const selfInRoom = participants.some((participant) => normalizeIdentity(participant.userIdentity) === me)
+      result[contact.identity] = selfInRoom || joinedPartnerKey === other
+    }
+    return result
+  }, [dmContacts, dmJoinedPartnerIdentity, dmVoiceParticipantsByRoom, selfIdentity])
+
+  const hasActiveDmCall = useMemo(
+    () => dmVoiceJoining || Object.values(dmCallActiveByIdentity).some(Boolean),
+    [dmCallActiveByIdentity, dmVoiceJoining],
+  )
+
   const hasUnreadInServer = (serverId: number) =>
     (channelsByServer[serverId] ?? []).some((channel) => (unreadByChannel[channel.id] ?? 0) > 0)
 
@@ -178,6 +203,7 @@ export function AppLayout() {
             onOpenSettings={() => setShowSettings(true)}
             hasUnreadInServer={hasUnreadInServer}
             hasVoiceActivityInServer={hasVoiceActivityInServer}
+            hasActiveDmCall={hasActiveDmCall}
           />
 
           <ServerSidebar
@@ -201,6 +227,7 @@ export function AppLayout() {
             onOpenFriends={() => navigate('/app/dm/friends')}
             dmContacts={dmContacts}
             activeDmIdentity={activeDmIdentity}
+            dmCallActiveByIdentity={dmCallActiveByIdentity}
             onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
           />
 

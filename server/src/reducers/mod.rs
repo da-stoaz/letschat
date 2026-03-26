@@ -1,5 +1,6 @@
 mod channels;
 mod direct_messages;
+mod dm_voice;
 mod invites;
 mod member_management;
 mod messages;

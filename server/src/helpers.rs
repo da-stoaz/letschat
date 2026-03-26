@@ -34,6 +34,15 @@ pub(crate) fn voice_key(channel_id: u64, user_identity: Identity) -> String {
     format!("{channel_id}:{user_identity}")
 }
 
+pub(crate) fn dm_room_key(a: Identity, b: Identity) -> String {
+    let (x, y) = ordered_pair(a, b);
+    format!("{x}:{y}")
+}
+
+pub(crate) fn dm_voice_key(room_key: &str, user_identity: Identity) -> String {
+    format!("{room_key}:{user_identity}")
+}
+
 pub(crate) fn ordered_pair(a: Identity, b: Identity) -> (Identity, Identity) {
     if a <= b {
         (a, b)
