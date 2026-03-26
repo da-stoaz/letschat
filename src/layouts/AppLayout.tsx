@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Outlet, useNavigate, useParams } from 'react-router-dom'
 import {
   HashIcon,
@@ -13,6 +13,9 @@ import {
 import { useServersStore } from '../stores/serversStore'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useUiStore } from '../stores/uiStore'
+import { useVoiceStore } from '../stores/voiceStore'
+import { useConnectionStore } from '../stores/connectionStore'
+import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { CreateServerModal } from '../modals/CreateServerModal'
 import { EditServerModal } from '../modals/EditServerModal'
 import { CreateChannelModal } from '../modals/CreateChannelModal'
@@ -34,6 +37,13 @@ import {
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import stealthChatLogo from '../../src-tauri/icons/stealthchat-nobg.png'
+import type { Channel } from '../types/domain'
+
+const EMPTY_CHANNELS: Channel[] = []
+
+function normalizeIdentity(value: string): string {
+  return value.trim().toLowerCase()
+}
 
 function serverInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -51,15 +61,34 @@ export function AppLayout() {
   const [showSettings, setShowSettings] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const servers = useServersStore((s) => s.servers)
+  const setActiveServerId = useServersStore((s) => s.setActiveServerId)
   const channelsByServer = useChannelsStore((s) => s.channelsByServer)
   const unreadByChannel = useUiStore((s) => s.unreadByChannel)
+  const participantsByChannel = useVoiceStore((s) => s.participantsByChannel)
+  const joinedVoiceChannelId = useVoiceSessionStore((s) => s.joinedChannelId)
+  const selfIdentity = useConnectionStore((s) => s.identity)
   const activeServerId = Number(params.serverId ?? 0) || null
   const activeChannelId = Number(params.channelId ?? 0) || null
   const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
   const clearUnread = useUiStore((s) => s.clearUnread)
   const role = useServerRole(activeServerId)
 
-  const activeChannels = activeServerId ? channelsByServer[activeServerId] ?? [] : []
+  useEffect(() => {
+    if (activeServerId !== null) {
+      setActiveServerId(activeServerId)
+    }
+  }, [activeServerId, setActiveServerId])
+
+  useEffect(() => {
+    if (activeChannelId !== null) {
+      setActiveChannelId(activeChannelId)
+    }
+  }, [activeChannelId, setActiveChannelId])
+
+  const activeChannels = useMemo(
+    () => (activeServerId ? channelsByServer[activeServerId] ?? EMPTY_CHANNELS : EMPTY_CHANNELS),
+    [activeServerId, channelsByServer],
+  )
   const textChannels = useMemo(
     () => [...activeChannels].filter((c) => c.kind === 'Text').sort((a, b) => a.position - b.position),
     [activeChannels],
@@ -73,8 +102,24 @@ export function AppLayout() {
   const hasUnreadInServer = (serverId: number) =>
     (channelsByServer[serverId] ?? []).some((channel) => (unreadByChannel[channel.id] ?? 0) > 0)
 
+  const hasVoiceActivityInServer = (serverId: number): boolean => {
+    if (!selfIdentity) return false
+    const me = normalizeIdentity(selfIdentity)
+    const voiceChannelIds = (channelsByServer[serverId] ?? []).filter((channel) => channel.kind === 'Voice').map((channel) => channel.id)
+    if (voiceChannelIds.length === 0) return false
+
+    if (joinedVoiceChannelId !== null && voiceChannelIds.includes(joinedVoiceChannelId)) {
+      return true
+    }
+
+    return voiceChannelIds.some((channelId) =>
+      (participantsByChannel[channelId] ?? []).some((participant) => normalizeIdentity(participant.userIdentity) === me),
+    )
+  }
+
   const openServer = (serverId: number) => {
     setActionError(null)
+    setActiveServerId(serverId)
     const channels = channelsByServer[serverId] ?? []
     const preferred = channels.find((channel) => channel.kind === 'Text') ?? channels[0]
 
@@ -129,6 +174,11 @@ export function AppLayout() {
                         </Avatar>
                         {hasUnreadInServer(server.id) ? (
                           <span className="absolute right-1 top-1 size-2 rounded-full bg-cyan-400" />
+                        ) : null}
+                        {hasVoiceActivityInServer(server.id) ? (
+                          <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
+                            <Volume2Icon className="size-2.5" />
+                          </span>
                         ) : null}
                       </TooltipTrigger>
                       <TooltipContent side="right">{server.name}</TooltipContent>
@@ -238,6 +288,7 @@ export function AppLayout() {
                           variant={activeChannelId === channel.id ? 'secondary' : 'ghost'}
                           className="w-full justify-start gap-2 rounded-lg"
                           onClick={() => {
+                            if (activeServerId !== null) setActiveServerId(activeServerId)
                             setActiveChannelId(channel.id)
                             clearUnread(channel.id)
                             navigate(`/app/${activeServerId}/${channel.id}`)
@@ -265,6 +316,7 @@ export function AppLayout() {
                         variant={activeChannelId === channel.id ? 'secondary' : 'ghost'}
                         className="w-full justify-start gap-2 rounded-lg"
                         onClick={() => {
+                          if (activeServerId !== null) setActiveServerId(activeServerId)
                           setActiveChannelId(channel.id)
                           clearUnread(channel.id)
                           navigate(`/app/${activeServerId}/${channel.id}`)

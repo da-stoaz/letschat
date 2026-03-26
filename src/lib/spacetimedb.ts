@@ -16,6 +16,7 @@ import { useSelfStore } from '../stores/selfStore'
 import { useServersStore } from '../stores/serversStore'
 import { useUiStore } from '../stores/uiStore'
 import { useVoiceStore } from '../stores/voiceStore'
+import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { tauriCommands } from './tauri'
 import type { ServerMemberWithUser } from '../stores/membersStore'
 import type {
@@ -335,6 +336,10 @@ function syncAll(conn: DbConnection): void {
 }
 
 function resetClientState(): void {
+  const voiceSession = useVoiceSessionStore.getState()
+  voiceSession.room?.disconnect()
+  voiceSession.reset()
+
   useConnectionStore.getState().setIdentity(null)
   useSelfStore.getState().setUser(null)
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { MicIcon, MicOffIcon, MonitorUpIcon, PhoneOffIcon, VideoIcon, VolumeXIcon } from 'lucide-react'
 import {
   getMicrophoneUnavailableReason,
@@ -13,8 +13,9 @@ import { reducers } from '../../lib/spacetimedb'
 import { useVoiceStore } from '../../stores/voiceStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useMembersStore } from '../../stores/membersStore'
+import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
 import type { VoiceParticipant, u64 } from '../../types/domain'
-import { ConnectionState, type Room } from 'livekit-client'
+import { ConnectionState } from 'livekit-client'
 import { warnOnce } from '../../lib/devWarnings'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -45,12 +46,22 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     )
   }, [channelId, participants])
 
-  const [room, setRoom] = useState<Room | null>(null)
-  const [joining, setJoining] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const room = useVoiceSessionStore((s) => s.room)
+  const joinedChannelId = useVoiceSessionStore((s) => s.joinedChannelId)
+  const joining = useVoiceSessionStore((s) => s.joining)
+  const error = useVoiceSessionStore((s) => s.error)
+  const setRoom = useVoiceSessionStore((s) => s.setRoom)
+  const setJoinedChannelId = useVoiceSessionStore((s) => s.setJoinedChannelId)
+  const setJoining = useVoiceSessionStore((s) => s.setJoining)
+  const setError = useVoiceSessionStore((s) => s.setError)
   const staleCleanupMarker = useRef<string | null>(null)
   const selfIdentity = useConnectionStore((s) => s.identity)
-  const { activeSpeakerIds, connectionState, remoteParticipants } = useLiveKitRoom(room)
+  useEffect(() => {
+    setError(null)
+  }, [channelId, setError])
+
+  const roomForChannel = channelId !== null && joinedChannelId === channelId ? room : null
+  const { activeSpeakerIds, connectionState, remoteParticipants } = useLiveKitRoom(roomForChannel)
 
   const displayNameByIdentity = useMemo(() => {
     const map = new Map<string, string>()
@@ -67,8 +78,8 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     () => participants.find((participant) => sameIdentity(participant.userIdentity, selfIdentity)) ?? null,
     [participants, selfIdentity],
   )
-  const connectedToRoom = room !== null && connectionState === ConnectionState.Connected
-  const connectingToRoom = joining || (room !== null && connectionState === ConnectionState.Connecting)
+  const connectedToRoom = roomForChannel !== null && connectionState === ConnectionState.Connected
+  const connectingToRoom = joining || (roomForChannel !== null && connectionState === ConnectionState.Connecting)
   const joined = connectedToRoom
   const displayParticipants = !selfIdentity
     ? participants
@@ -82,7 +93,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
 
   useEffect(() => {
     if (channelId === null || !selfIdentity || joining) return
-    const localDisconnected = room === null || connectionState !== ConnectionState.Connected
+    const localDisconnected = roomForChannel === null || connectionState !== ConnectionState.Connected
     if (!localDisconnected || !selfParticipant) {
       staleCleanupMarker.current = null
       return
@@ -92,7 +103,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     if (staleCleanupMarker.current === marker) return
     staleCleanupMarker.current = marker
     void reducers.leaveVoiceChannel(channelId).catch(() => undefined)
-  }, [channelId, selfIdentity, joining, room, connectionState, selfParticipant])
+  }, [channelId, selfIdentity, joining, roomForChannel, connectionState, selfParticipant])
 
   useEffect(() => {
     if (!joined) return
@@ -174,16 +185,22 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
           <Button
             disabled={connectingToRoom}
             onClick={async () => {
-              setError(null)
-              setJoining(true)
-              try {
-                const r = await joinLiveKitVoice(channelId)
-                setRoom(r)
-              } catch (e) {
-                const message = e instanceof Error ? e.message : 'Could not join voice channel.'
-                setError(message)
-              } finally {
-                setJoining(false)
+                setError(null)
+                setJoining(true)
+                try {
+                  if (room && joinedChannelId !== null && joinedChannelId !== channelId) {
+                    await leaveLiveKitVoice(joinedChannelId, room)
+                    setRoom(null)
+                    setJoinedChannelId(null)
+                  }
+                  const r = await joinLiveKitVoice(channelId)
+                  setRoom(r)
+                  setJoinedChannelId(channelId)
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Could not join voice channel.'
+                  setError(message)
+                } finally {
+                  setJoining(false)
               }
             }}
           >
@@ -196,13 +213,13 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
               variant={muted ? 'secondary' : 'outline'}
               onClick={async () => {
                 setError(null)
-                if (!room || !selfParticipant) return
+                if (!roomForChannel || !selfParticipant) return
                 try {
                   const nextMuted = !selfParticipant.muted
                   if (!nextMuted) {
                     await ensureMicrophoneCapture()
                   }
-                  await room.localParticipant.setMicrophoneEnabled(!nextMuted)
+                  await roomForChannel.localParticipant.setMicrophoneEnabled(!nextMuted)
                   await patchVoiceState({ muted: nextMuted })
                 } catch (e) {
                   const message = e instanceof Error ? e.message : 'Could not toggle microphone.'
@@ -233,13 +250,13 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
               variant={sharingCamera ? 'secondary' : 'outline'}
               onClick={async () => {
                 setError(null)
-                if (!room || !selfParticipant) return
+                if (!roomForChannel || !selfParticipant) return
                 try {
                   const next = !selfParticipant.sharingCamera
                   if (next) {
                     await ensureMicrophoneCapture()
                   }
-                  await room.localParticipant.setCameraEnabled(next)
+                  await roomForChannel.localParticipant.setCameraEnabled(next)
                   await patchVoiceState({ sharingCamera: next })
                 } catch (e) {
                   const message = e instanceof Error ? e.message : 'Could not toggle camera.'
@@ -255,14 +272,14 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
               disabled={!hasScreenCapture}
               onClick={async () => {
                 setError(null)
-                if (!room || !selfParticipant) return
+                if (!roomForChannel || !selfParticipant) return
                 if (!hasScreenCapture) {
                   setError('Screen sharing APIs are unavailable in this runtime.')
                   return
                 }
                 try {
                   const next = !selfParticipant.sharingScreen
-                  await room.localParticipant.setScreenShareEnabled(next)
+                  await roomForChannel.localParticipant.setScreenShareEnabled(next)
                   await patchVoiceState({ sharingScreen: next })
                 } catch (e) {
                   const message = e instanceof Error ? e.message : 'Could not toggle screen share.'
@@ -278,8 +295,9 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
               onClick={async () => {
                 setError(null)
                 try {
-                  await leaveLiveKitVoice(channelId, room)
+                  await leaveLiveKitVoice(channelId, roomForChannel)
                   setRoom(null)
+                  setJoinedChannelId(null)
                 } catch (e) {
                   const message = e instanceof Error ? e.message : 'Could not leave voice channel.'
                   setError(message)
