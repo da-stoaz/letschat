@@ -4,6 +4,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { PresenceDot } from '@/components/user/PresenceDot'
+import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { userInitials } from '../../layouts/app-layout/helpers'
 import type { Message } from '../../types/domain'
 
@@ -15,8 +17,6 @@ export interface MessageGroup {
 
 interface MessageBubbleProps {
   group: MessageGroup
-  senderLabel: string
-  avatarUrl: string | null
   canModerate: boolean
   selfIdentity: string | null
   onEditMessage: (message: Message) => void
@@ -34,13 +34,12 @@ function formatTimestamp(iso: string): string {
 
 export function MessageBubble({
   group,
-  senderLabel,
-  avatarUrl,
   canModerate,
   selfIdentity,
   onEditMessage,
   onDeleteMessage,
 }: MessageBubbleProps) {
+  const sender = useUserPresentation(group.senderIdentity)
   const firstMessage = group.messages[0]
 
   const canDeleteGroupMessage = useMemo(
@@ -56,13 +55,14 @@ export function MessageBubble({
     <article className="group/bubble rounded-lg px-2 py-1 transition-colors hover:bg-muted/35">
       <div className="flex items-start gap-3">
         <Avatar className="mt-0.5 size-8 rounded-lg">
-          {avatarUrl ? <AvatarImage src={avatarUrl} alt={senderLabel} /> : null}
-          <AvatarFallback className="rounded-lg bg-primary/10 text-xs">{userInitials(senderLabel)}</AvatarFallback>
+          {sender.avatarUrl ? <AvatarImage src={sender.avatarUrl} alt={sender.displayName} /> : null}
+          <AvatarFallback className="rounded-lg bg-primary/10 text-xs">{userInitials(sender.displayName)}</AvatarFallback>
         </Avatar>
 
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
-            <span className="text-sm font-semibold">{senderLabel}</span>
+            <span className="text-sm font-semibold">{sender.displayName}</span>
+            <PresenceDot status={sender.status} />
             <span className="text-xs text-muted-foreground">{formatTimestamp(firstMessage.sentAt)}</span>
           </div>
 
@@ -113,4 +113,3 @@ export function MessageBubble({
     </article>
   )
 }
-

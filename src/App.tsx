@@ -7,10 +7,12 @@ import { ServerChannelPage } from './pages/ServerChannelPage'
 import { DMPage } from './pages/DMPage'
 import { useSelfStore } from './stores/selfStore'
 import { useConnectionStore } from './stores/connectionStore'
+import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoaderCircleIcon } from 'lucide-react'
 
 function App() {
+  usePresenceLifecycle()
   const user = useSelfStore((s) => s.user)
   const connectionStatus = useConnectionStore((s) => s.status)
   const location = useLocation()

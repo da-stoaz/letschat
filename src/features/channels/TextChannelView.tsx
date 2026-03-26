@@ -7,7 +7,6 @@ import { useConnectionStore } from '../../stores/connectionStore'
 import { useMembersStore } from '../../stores/membersStore'
 import { useMessagesStore } from '../../stores/messagesStore'
 import { useUiStore } from '../../stores/uiStore'
-import { useUsersStore } from '../../stores/usersStore'
 import { useServerRole } from '../../hooks/useServerRole'
 import { warnOnce } from '../../lib/devWarnings'
 import { MessageBubble, type MessageGroup } from './MessageBubble'
@@ -68,7 +67,6 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const selfIdentity = useConnectionStore((s) => s.identity)
   const channelsByServer = useChannelsStore((s) => s.channelsByServer)
   const membersByServer = useMembersStore((s) => s.membersByServer)
-  const usersByIdentity = useUsersStore((s) => s.byIdentity)
   const messagesByChannel = useMessagesStore((s) => s.messagesByChannel)
   const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
   const clearUnread = useUiStore((s) => s.clearUnread)
@@ -254,12 +252,6 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
                   ) : (
                     <MessageBubble
                       group={item.group}
-                      senderLabel={
-                        usersByIdentity[item.group.senderIdentity]?.displayName ||
-                        usersByIdentity[item.group.senderIdentity]?.username ||
-                        item.group.senderIdentity.slice(0, 12)
-                      }
-                      avatarUrl={usersByIdentity[item.group.senderIdentity]?.avatarUrl ?? null}
                       canModerate={canModerate}
                       selfIdentity={selfIdentity}
                       onEditMessage={async (message) => {
@@ -353,4 +345,3 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
     </section>
   )
 }
-

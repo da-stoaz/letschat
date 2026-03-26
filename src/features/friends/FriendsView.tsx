@@ -4,13 +4,15 @@ import { UserPlusIcon, UserCheckIcon, ShieldBanIcon, UserMinusIcon } from 'lucid
 import { reducers, resolveIdentityFromUsername } from '../../lib/spacetimedb'
 import { useFriendsStore } from '../../stores/friendsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
-import { useUsersStore } from '../../stores/usersStore'
+import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent } from '@/components/ui/card'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { PresenceDot } from '@/components/user/PresenceDot'
 import type { Friend, Identity } from '../../types/domain'
 
 type Tab = 'all' | 'pending' | 'blocked'
@@ -28,32 +30,34 @@ function shortIdentity(identity: string): string {
   return identity.slice(0, 14)
 }
 
+function IdentityLabel({ identity, subtitle }: { identity: Identity; subtitle?: string }) {
+  const presentation = useUserPresentation(identity)
+  return (
+    <div className="flex items-center gap-2">
+      <Avatar className="size-8 rounded-lg">
+        {presentation.avatarUrl ? <AvatarImage src={presentation.avatarUrl} alt={presentation.displayName} /> : null}
+        <AvatarFallback className="rounded-lg bg-secondary text-xs">{shortIdentity(identity).slice(0, 2).toUpperCase()}</AvatarFallback>
+      </Avatar>
+      <div>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-medium">{presentation.displayName}</p>
+          <PresenceDot status={presentation.status} className="size-1.5" />
+        </div>
+        <p className="text-xs text-muted-foreground">@{presentation.username || shortIdentity(identity)}</p>
+        {subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
+      </div>
+    </div>
+  )
+}
+
 export function FriendsView() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('all')
   const [username, setUsername] = useState('')
   const [error, setError] = useState<string | null>(null)
   const selfIdentity = useConnectionStore((s) => s.identity)
-  const usersByIdentity = useUsersStore((s) => s.byIdentity)
   const friends = useFriendsStore((s) => s.friends)
   const blocked = useFriendsStore((s) => s.blocked)
-
-  const usersByNormalizedIdentity = useMemo(() => {
-    const map = new Map<string, { displayName: string; username: string }>()
-    for (const user of Object.values(usersByIdentity)) {
-      map.set(normalizeIdentity(user.identity), {
-        displayName: user.displayName,
-        username: user.username,
-      })
-    }
-    return map
-  }, [usersByIdentity])
-
-  const getDisplayLabel = (identity: string): string => {
-    const user = usersByNormalizedIdentity.get(normalizeIdentity(identity))
-    if (!user) return shortIdentity(identity)
-    return user.displayName || user.username || shortIdentity(identity)
-  }
 
   const getOtherIdentity = (friend: Friend): Identity | null => {
     if (!selfIdentity) return null
@@ -125,11 +129,7 @@ export function FriendsView() {
               return (
                 <Card key={`${f.userA}:${f.userB}`} className="border-border/70 bg-background/45 py-0">
                   <CardContent className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium">{getDisplayLabel(targetIdentity)}</p>
-                      <p className="text-xs text-muted-foreground">@{shortIdentity(targetIdentity)}</p>
-                      <p className="text-xs text-muted-foreground">Friend</p>
-                    </div>
+                    <IdentityLabel identity={targetIdentity} subtitle="Friend" />
                     <div className="flex items-center gap-2">
                       <Button variant="secondary" size="sm" onClick={() => navigate(`/app/dm/${targetIdentity}`)}>
                         Message
@@ -167,10 +167,7 @@ export function FriendsView() {
                 return (
                   <Card key={`${f.userA}:${f.userB}:incoming`} className="border-border/70 bg-background/45 py-0">
                     <CardContent className="flex items-center justify-between gap-3">
-                      <div>
-                        <span className="text-sm">{getDisplayLabel(requesterIdentity)}</span>
-                        <p className="text-xs text-muted-foreground">@{shortIdentity(requesterIdentity)}</p>
-                      </div>
+                      <IdentityLabel identity={requesterIdentity} />
                       <div className="flex items-center gap-2">
                         <Button
                           size="sm"
@@ -219,10 +216,7 @@ export function FriendsView() {
                 return (
                   <Card key={`${f.userA}:${f.userB}:outgoing`} className="border-border/70 bg-background/45 py-0">
                     <CardContent className="flex items-center justify-between gap-3">
-                      <div>
-                        <span className="text-sm">{getDisplayLabel(targetIdentity)}</span>
-                        <p className="text-xs text-muted-foreground">@{shortIdentity(targetIdentity)}</p>
-                      </div>
+                      <IdentityLabel identity={targetIdentity} />
                       <Button
                         variant="outline"
                         size="sm"
@@ -249,10 +243,7 @@ export function FriendsView() {
             {blocked.map((b) => (
               <Card key={`${b.blocker}:${b.blocked}`} className="border-border/70 bg-background/45 py-0">
                 <CardContent className="flex items-center justify-between gap-3">
-                  <div>
-                    <span className="text-sm">{getDisplayLabel(b.blocked)}</span>
-                    <p className="text-xs text-muted-foreground">@{shortIdentity(b.blocked)}</p>
-                  </div>
+                  <IdentityLabel identity={b.blocked} />
                   <Button
                     variant="outline"
                     size="sm"

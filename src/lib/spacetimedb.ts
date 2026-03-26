@@ -20,6 +20,7 @@ import { useUiStore } from '../stores/uiStore'
 import { useUsersStore } from '../stores/usersStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
+import { usePresenceStore } from '../stores/presenceStore'
 import { tauriCommands } from './tauri'
 import type { ServerMemberWithUser } from '../stores/membersStore'
 import type {
@@ -290,8 +291,10 @@ function syncChannels(conn: DbConnection): void {
 
 function syncMessages(conn: DbConnection): void {
   const messages = Array.from(conn.db.message.iter()).map(mapMessage)
+  const presence = usePresenceStore.getState()
   const grouped = new Map<number, Message[]>()
   for (const message of messages) {
+    presence.touchActive(message.senderIdentity, Date.parse(message.sentAt))
     const byChannel = grouped.get(message.channelId) ?? []
     byChannel.push(message)
     grouped.set(message.channelId, byChannel)
@@ -306,8 +309,11 @@ function syncMessages(conn: DbConnection): void {
 
 function syncVoiceParticipants(conn: DbConnection): void {
   const participants = Array.from(conn.db.voice_participant.iter()).map(mapVoiceParticipant)
+  const presence = usePresenceStore.getState()
+  const now = Date.now()
   const grouped = new Map<number, VoiceParticipant[]>()
   for (const participant of participants) {
+    presence.touchSeen(participant.userIdentity, now)
     const byChannel = grouped.get(participant.channelId) ?? []
     byChannel.push(participant)
     grouped.set(participant.channelId, byChannel)
@@ -345,9 +351,11 @@ function syncDirectMessages(conn: DbConnection): void {
   const directMessages = Array.from(conn.db.direct_message.iter()).map(mapDirectMessage)
   const me = useConnectionStore.getState().identity
   if (!me) return
+  const presence = usePresenceStore.getState()
 
   const grouped = new Map<Identity, DirectMessage[]>()
   for (const message of directMessages) {
+    presence.touchActive(message.senderIdentity, Date.parse(message.sentAt))
     const partner = message.senderIdentity === me ? message.recipientIdentity : message.senderIdentity
     const thread = grouped.get(partner) ?? []
     thread.push(message)
@@ -363,8 +371,11 @@ function syncDirectMessages(conn: DbConnection): void {
 
 function syncDmVoiceParticipants(conn: DbConnection): void {
   const participants = Array.from(conn.db.my_dm_voice_participants.iter()).map(mapDmVoiceParticipant)
+  const presence = usePresenceStore.getState()
+  const now = Date.now()
   const grouped = new Map<string, DmVoiceParticipant[]>()
   for (const participant of participants) {
+    presence.touchSeen(participant.userIdentity, now)
     const byRoom = grouped.get(participant.roomKey) ?? []
     byRoom.push(participant)
     grouped.set(participant.roomKey, byRoom)
@@ -422,6 +433,7 @@ function resetClientState(): void {
     modals: {},
     unreadByChannel: {},
   })
+  usePresenceStore.getState().reset()
 }
 
 function watchLiveTables(conn: DbConnection): void {
@@ -568,8 +580,10 @@ async function connect(): Promise<void> {
       .withToken(getStoredToken())
       .onConnect((conn, identity, token) => {
         connection = conn
+        const identityString = toIdentityString(identity)
         useConnectionStore.getState().setStatus('connected')
-        useConnectionStore.getState().setIdentity(toIdentityString(identity))
+        useConnectionStore.getState().setIdentity(identityString)
+        usePresenceStore.getState().touchActive(identityString, Date.now())
         setStoredToken(token)
       })
       .onDisconnect(() => {
@@ -648,6 +662,10 @@ async function call<TArgs extends Record<string, unknown>>(reducer: string, args
   }
 
   await reducerFn(args ?? {})
+  const selfIdentity = useConnectionStore.getState().identity
+  if (selfIdentity) {
+    usePresenceStore.getState().touchActive(selfIdentity, Date.now())
+  }
 }
 
 export const spacetimedbClient: SpacetimeDBClient = {
