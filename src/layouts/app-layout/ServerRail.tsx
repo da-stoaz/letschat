@@ -49,23 +49,23 @@ export function ServerRail({
   hasActiveDmCall,
 }: ServerRailProps) {
   return (
-    <Card className="border-border/60 bg-card/80 backdrop-blur">
-      <CardContent className="flex h-full flex-col items-center gap-1.5 p-1.5">
+    <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur">
+      <CardContent className="flex min-h-0 flex-1 flex-col items-center gap-1 p-1">
         <Tooltip>
           <TooltipTrigger
             render={
-              <Button variant="secondary" size="icon" className="relative mt-0.5 h-10 w-10 rounded-xl" />
+              <Button variant="secondary" size="icon" className="relative mt-0.5 h-9 w-9 rounded-lg" />
             }
             onClick={onOpenHome}
           >
-            <img src={stealthChatLogo} alt="StealthChat" className="h-7 w-7 object-contain" />
+            <img src={stealthChatLogo} alt="StealthChat" className="h-6 w-6 object-contain" />
           </TooltipTrigger>
           <TooltipContent>Home</TooltipContent>
         </Tooltip>
 
-        <Separator className="my-1" />
+        <Separator className="my-0.5" />
 
-        <ScrollArea className="w-full flex-1 px-1">
+        <ScrollArea className="w-full min-h-0 flex-1 px-0.5">
           <div className="flex flex-col items-center gap-2 py-1">
             {servers.map((server) => (
               <Tooltip key={server.id}>
@@ -74,12 +74,12 @@ export function ServerRail({
                     <Button
                       variant={activeServerId === server.id ? 'secondary' : 'ghost'}
                       size="icon"
-                      className="relative h-10 w-10 rounded-xl"
+                      className={`relative h-9 w-9 rounded-lg ${activeServerId === server.id ? 'ring-1 ring-primary/70' : ''}`}
                       onClick={() => onOpenServer(server.id)}
                     />
                   }
                 >
-                  <Avatar className={`h-8 w-8 rounded-lg ${activeServerId === server.id ? 'ring-2 ring-primary/70' : ''}`}>
+                  <Avatar className="h-7 w-7 rounded-md">
                     <AvatarFallback className="rounded-xl bg-primary/10 text-xs">{serverInitials(server.name)}</AvatarFallback>
                   </Avatar>
                   {hasUnreadInServer(server.id) ? <span className="absolute right-1 top-1 size-2 rounded-full bg-cyan-400" /> : null}
@@ -96,7 +96,7 @@ export function ServerRail({
             <Tooltip>
               <TooltipTrigger
                 render={
-                  <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl border border-dashed border-border/70" onClick={onOpenCreateServer} />
+                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg border border-dashed border-border/70" onClick={onOpenCreateServer} />
                 }
               >
                 <PlusIcon className="size-4" />
@@ -106,7 +106,7 @@ export function ServerRail({
           </div>
         </ScrollArea>
 
-        <Separator className="my-1" />
+        <Separator className="my-0.5" />
 
         <Tooltip>
           <TooltipTrigger
@@ -114,7 +114,7 @@ export function ServerRail({
               <Button
                 variant={!activeServerId && !activeDmIdentity ? 'secondary' : 'ghost'}
                 size="icon"
-                className="relative h-9 w-9 rounded-lg"
+                className={`relative h-8 w-8 rounded-md ${!activeServerId && !activeDmIdentity ? 'ring-1 ring-primary/70' : ''}`}
                 onClick={onOpenDmHome}
               />
             }
@@ -135,7 +135,7 @@ export function ServerRail({
               <Button
                 variant="ghost"
                 size="icon"
-                className="relative h-9 w-9 rounded-lg"
+                className="relative h-8 w-8 rounded-md"
                 onClick={onOpenDmCompose}
               />
             }
@@ -155,7 +155,7 @@ export function ServerRail({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className={`h-9 w-9 rounded-lg ${activeDmIdentity === contact.identity ? 'ring-2 ring-primary/70' : ''}`}
+                      className={`h-8 w-8 rounded-md ${activeDmIdentity === contact.identity ? 'ring-1 ring-primary/70' : ''}`}
                       onClick={() => onOpenDmContact(contact.identity)}
                     />
                   }
@@ -171,7 +171,7 @@ export function ServerRail({
           </div>
         ) : null}
 
-        <div className="flex-1" />
+        <div className="mt-auto" />
 
         <Tooltip>
           <TooltipTrigger

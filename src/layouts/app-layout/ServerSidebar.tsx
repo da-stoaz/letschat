@@ -76,8 +76,8 @@ export function ServerSidebar({
   onOpenDmContact,
 }: ServerSidebarProps) {
   return (
-    <Card className="border-border/60 bg-card/80 backdrop-blur max-md:hidden">
-      <CardHeader className="space-y-3">
+    <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur max-md:hidden">
+      <CardHeader className="shrink-0 space-y-3">
         {activeServer ? (
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -106,7 +106,7 @@ export function ServerSidebar({
         )}
       </CardHeader>
 
-      <CardContent className="h-[calc(100%-92px)] p-3">
+      <CardContent className="min-h-0 flex-1 overflow-hidden p-3">
         {activeServerId ? (
           <ScrollArea className="h-full pr-2">
             <section className="space-y-2">
@@ -171,7 +171,8 @@ export function ServerSidebar({
             ) : null}
           </ScrollArea>
         ) : (
-          <div className="space-y-3">
+          <ScrollArea className="h-full pr-2">
+            <div className="space-y-3">
             <section className="space-y-2">
               <div className="flex items-center justify-between px-1">
                 <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Direct Messages</p>
@@ -245,7 +246,8 @@ export function ServerSidebar({
                 <p className="px-1 text-xs text-muted-foreground">No accepted friends yet.</p>
               )}
             </section>
-          </div>
+            </div>
+          </ScrollArea>
         )}
       </CardContent>
     </Card>

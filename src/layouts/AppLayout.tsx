@@ -237,8 +237,8 @@ export function AppLayout() {
 
   return (
     <>
-      <main className="min-h-screen bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-3 text-foreground">
-        <div className="grid h-[calc(100vh-1.5rem)] grid-cols-[48px_220px_minmax(0,1fr)] gap-3 max-md:grid-cols-[48px_minmax(0,1fr)]">
+      <main className="h-screen overflow-hidden bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-3 text-foreground">
+        <div className="grid h-full min-h-0 grid-cols-[48px_220px_minmax(0,1fr)] grid-rows-1 gap-3 overflow-hidden max-md:grid-cols-[48px_minmax(0,1fr)]">
           <ServerRail
             servers={servers}
             activeServerId={activeServerId}
@@ -284,8 +284,8 @@ export function AppLayout() {
             onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
           />
 
-          <div className={cn('grid min-w-0 gap-3', rightPanelOpen && activeServerId ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
-            <Card className="relative border-border/60 bg-card/80 backdrop-blur">
+          <div className={cn('grid min-h-0 min-w-0 gap-3 overflow-hidden', rightPanelOpen && activeServerId ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
+            <Card className="relative h-full min-h-0 border-border/60 bg-card/80 backdrop-blur">
               {activeServerId ? (
                 <Button
                   type="button"
@@ -298,7 +298,7 @@ export function AppLayout() {
                   Members
                 </Button>
               ) : null}
-              <CardContent className={cn('h-full p-3', activeServerId ? 'pt-12' : '')}>
+              <CardContent className={cn('h-full min-h-0 overflow-hidden p-3', activeServerId ? 'pt-12' : '')}>
                 <Outlet />
               </CardContent>
             </Card>
