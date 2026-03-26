@@ -1,64 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Outlet, useNavigate, useParams } from 'react-router-dom'
-import {
-  HashIcon,
-  MessageCircleIcon,
-  PlusIcon,
-  SettingsIcon,
-  ShieldIcon,
-  Volume2Icon,
-  LockIcon,
-  ChevronsUpDownIcon,
-} from 'lucide-react'
-import { useServersStore } from '../stores/serversStore'
-import { useChannelsStore } from '../stores/channelsStore'
-import { useUiStore } from '../stores/uiStore'
-import { useMembersStore } from '../stores/membersStore'
-import { useVoiceStore } from '../stores/voiceStore'
-import { useConnectionStore } from '../stores/connectionStore'
-import { useVoiceSessionStore } from '../stores/voiceSessionStore'
-import { CreateServerModal } from '../modals/CreateServerModal'
-import { EditServerModal } from '../modals/EditServerModal'
-import { CreateChannelModal } from '../modals/CreateChannelModal'
-import { SettingsModal } from '../modals/SettingsModal'
 import { useServerRole } from '../hooks/useServerRole'
-import { canManageChannels, canRenameServer } from '../lib/permissions'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
-import { Badge } from '@/components/ui/badge'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from '@/components/ui/avatar'
-import stealthChatLogo from '../../src-tauri/icons/stealthchat-nobg.png'
+import { useChannelsStore } from '../stores/channelsStore'
+import { useConnectionStore } from '../stores/connectionStore'
+import { useMembersStore } from '../stores/membersStore'
+import { useServersStore } from '../stores/serversStore'
+import { useUiStore } from '../stores/uiStore'
+import { useVoiceSessionStore } from '../stores/voiceSessionStore'
+import { useVoiceStore } from '../stores/voiceStore'
+import { normalizeIdentity } from './app-layout/helpers'
+import { LayoutModals } from './app-layout/LayoutModals'
+import { ServerRail } from './app-layout/ServerRail'
+import { ServerSidebar } from './app-layout/ServerSidebar'
+import { Card, CardContent } from '@/components/ui/card'
 import type { Channel } from '../types/domain'
 
 const EMPTY_CHANNELS: Channel[] = []
-
-function normalizeIdentity(value: string): string {
-  return value.trim().toLowerCase()
-}
-
-function serverInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return 'S'
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-}
-
-function userInitials(label: string): string {
-  const parts = label.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-}
 
 export function AppLayout() {
   const navigate = useNavigate()
@@ -67,7 +24,7 @@ export function AppLayout() {
   const [showEditServer, setShowEditServer] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [actionError, setActionError] = useState<string | null>(null)
+
   const servers = useServersStore((s) => s.servers)
   const setActiveServerId = useServersStore((s) => s.setActiveServerId)
   const channelsByServer = useChannelsStore((s) => s.channelsByServer)
@@ -140,297 +97,60 @@ export function AppLayout() {
     )
   }
 
-  const openServer = (serverId: number) => {
-    setActionError(null)
+  const openChannel = (serverId: number, channelId: number) => {
     setActiveServerId(serverId)
+    setActiveChannelId(channelId)
+    clearUnread(channelId)
+    navigate(`/app/${serverId}/${channelId}`)
+  }
+
+  const openServer = (serverId: number) => {
     const channels = channelsByServer[serverId] ?? []
     const preferred = channels.find((channel) => channel.kind === 'Text') ?? channels[0]
-
-    if (preferred) {
-      setActiveChannelId(preferred.id)
-      clearUnread(preferred.id)
-      navigate(`/app/${serverId}/${preferred.id}`)
+    if (!preferred) {
+      setActiveServerId(serverId)
+      navigate(`/app/${serverId}`)
       return
     }
-
-    navigate(`/app/${serverId}`)
+    openChannel(serverId, preferred.id)
   }
 
   return (
     <>
       <main className="min-h-screen bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-3 text-foreground">
         <div className="grid h-[calc(100vh-1.5rem)] grid-cols-[72px_290px_minmax(0,1fr)] gap-3 max-md:grid-cols-[72px_minmax(0,1fr)]">
-          <Card className="border-border/60 bg-card/80 backdrop-blur">
-            <CardContent className="flex h-full flex-col items-center gap-2 p-2">
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button variant="secondary" size="icon" className="relative mt-1 h-11 w-11 rounded-2xl" />
-                  }
-                  onClick={() => navigate('/app')}
-                >
-                  <img src={stealthChatLogo} alt="StealthChat" className="h-7 w-7 object-contain" />
-                </TooltipTrigger>
-                <TooltipContent>Home</TooltipContent>
-              </Tooltip>
+          <ServerRail
+            servers={servers}
+            activeServerId={activeServerId}
+            onOpenHome={() => navigate('/app')}
+            onOpenServer={openServer}
+            onOpenDm={() => navigate('/app/dm/friends')}
+            onOpenCreateServer={() => setShowCreateServer(true)}
+            onOpenSettings={() => setShowSettings(true)}
+            hasUnreadInServer={hasUnreadInServer}
+            hasVoiceActivityInServer={hasVoiceActivityInServer}
+          />
 
-              <Separator className="my-1" />
-
-              <ScrollArea className="w-full flex-1 px-1">
-                <div className="flex flex-col items-center gap-2 py-1">
-                  {servers.map((server) => (
-                    <Tooltip key={server.id}>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            variant={activeServerId === server.id ? 'default' : 'ghost'}
-                            size="icon"
-                            className="relative h-11 w-11 rounded-2xl"
-                            onClick={() => openServer(server.id)}
-                          />
-                        }
-                      >
-                        <Avatar className="h-8 w-8 rounded-xl">
-                          <AvatarFallback className="rounded-xl bg-primary/10 text-xs">
-                            {serverInitials(server.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        {hasUnreadInServer(server.id) ? (
-                          <span className="absolute right-1 top-1 size-2 rounded-full bg-cyan-400" />
-                        ) : null}
-                        {hasVoiceActivityInServer(server.id) ? (
-                          <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
-                            <Volume2Icon className="size-2.5" />
-                          </span>
-                        ) : null}
-                      </TooltipTrigger>
-                      <TooltipContent side="right">{server.name}</TooltipContent>
-                    </Tooltip>
-                  ))}
-                </div>
-              </ScrollArea>
-
-              <Separator className="my-1" />
-
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant={activeServerId ? 'ghost' : 'secondary'}
-                      size="icon"
-                      className="h-10 w-10 rounded-xl"
-                      onClick={() => navigate('/app/dm/friends')}
-                    />
-                  }
-                >
-                  <MessageCircleIcon className="size-4" />
-                </TooltipTrigger>
-                <TooltipContent side="right">Direct Messages</TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-10 w-10 rounded-xl"
-                      onClick={() => setShowCreateServer(true)}
-                    />
-                  }
-                >
-                  <PlusIcon className="size-4" />
-                </TooltipTrigger>
-                <TooltipContent side="right">Create Server</TooltipContent>
-              </Tooltip>
-
-              <div className="flex-1" />
-
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="mb-1 h-10 w-10 rounded-xl"
-                      onClick={() => setShowSettings(true)}
-                    />
-                  }
-                >
-                  <SettingsIcon className="size-4" />
-                </TooltipTrigger>
-                <TooltipContent side="right">Settings</TooltipContent>
-              </Tooltip>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/60 bg-card/80 backdrop-blur max-md:hidden">
-            <CardHeader className="space-y-3">
-              {activeServer ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    className="inline-flex w-full items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-left text-sm font-medium hover:bg-muted/60"
-                  >
-                    <span className="truncate">{activeServer.name}</span>
-                    <ChevronsUpDownIcon className="size-4 text-muted-foreground" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-56">
-                    <DropdownMenuItem
-                      onClick={() => setShowEditServer(true)}
-                      disabled={!role || !canRenameServer(role)}
-                    >
-                      Rename Server
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setShowCreateChannel(true)}
-                      disabled={!role || !canManageChannels(role)}
-                    >
-                      Create Channel
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <CardTitle className="text-base">Direct Messages</CardTitle>
-              )}
-              {actionError ? <p className="text-xs text-destructive">{actionError}</p> : null}
-            </CardHeader>
-
-            <CardContent className="h-[calc(100%-92px)] p-3">
-              {activeServerId ? (
-                <ScrollArea className="h-full pr-2">
-                  <section className="space-y-2">
-                    <div className="flex items-center justify-between px-1">
-                      <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Text Channels</h4>
-                      <HashIcon className="size-3.5 text-muted-foreground" />
-                    </div>
-                    {textChannels.map((channel) => {
-                      const unread = unreadByChannel[channel.id] ?? 0
-                      return (
-                        <Button
-                          key={channel.id}
-                          variant={activeChannelId === channel.id ? 'secondary' : 'ghost'}
-                          className="w-full justify-start gap-2 rounded-lg"
-                          onClick={() => {
-                            if (activeServerId !== null) setActiveServerId(activeServerId)
-                            setActiveChannelId(channel.id)
-                            clearUnread(channel.id)
-                            navigate(`/app/${activeServerId}/${channel.id}`)
-                          }}
-                        >
-                          <HashIcon className="size-4 opacity-70" />
-                          <span className="truncate">{channel.name}</span>
-                          {channel.moderatorOnly ? <LockIcon className="ml-auto size-3.5 opacity-70" /> : null}
-                          {unread > 0 ? <Badge className="ml-auto">{unread}</Badge> : null}
-                        </Button>
-                      )
-                    })}
-                  </section>
-
-                  <Separator className="my-4" />
-
-                  <section className="space-y-2">
-                    <div className="flex items-center justify-between px-1">
-                      <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Voice Channels</h4>
-                      <Volume2Icon className="size-3.5 text-muted-foreground" />
-                    </div>
-                    {voiceChannels.map((channel) => (
-                      (() => {
-                        const channelParticipants = participantsByChannel[channel.id] ?? []
-                        const previewParticipants = channelParticipants.slice(0, 4)
-                        const overflow = Math.max(0, channelParticipants.length - previewParticipants.length)
-                        const selfJoined =
-                          normalizedSelfIdentity !== null &&
-                          channelParticipants.some(
-                            (participant) => normalizeIdentity(participant.userIdentity) === normalizedSelfIdentity,
-                          )
-
-                        return (
-                          <Button
-                            key={channel.id}
-                            variant={activeChannelId === channel.id ? 'secondary' : 'ghost'}
-                            className="h-auto w-full items-start justify-start gap-2 rounded-lg py-2"
-                            onClick={() => {
-                              if (activeServerId !== null) setActiveServerId(activeServerId)
-                              setActiveChannelId(channel.id)
-                              clearUnread(channel.id)
-                              navigate(`/app/${activeServerId}/${channel.id}`)
-                            }}
-                          >
-                            <Volume2Icon className="mt-0.5 size-4 shrink-0 opacity-70" />
-                            <div className="min-w-0 flex-1 text-left">
-                              <div className="flex items-center gap-2">
-                                <span className="truncate">{channel.name}</span>
-                                {selfJoined ? (
-                                  <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
-                                    Joined
-                                  </Badge>
-                                ) : null}
-                              </div>
-                              <div className="mt-1 flex items-center gap-2">
-                                {channelParticipants.length > 0 ? (
-                                  <>
-                                    <AvatarGroup>
-                                      {previewParticipants.map((participant) => {
-                                        const profile = memberProfileByIdentity.get(normalizeIdentity(participant.userIdentity))
-                                        const fallbackLabel = profile?.label ?? participant.userIdentity.slice(0, 10)
-                                        const isSelf =
-                                          normalizedSelfIdentity !== null &&
-                                          normalizeIdentity(participant.userIdentity) === normalizedSelfIdentity
-                                        return (
-                                          <Avatar
-                                            key={`${channel.id}-${participant.userIdentity}`}
-                                            size="sm"
-                                            className={isSelf ? 'ring-2 ring-emerald-400' : undefined}
-                                          >
-                                            {profile?.avatarUrl ? <AvatarImage src={profile.avatarUrl} alt={fallbackLabel} /> : null}
-                                            <AvatarFallback>{userInitials(fallbackLabel)}</AvatarFallback>
-                                          </Avatar>
-                                        )
-                                      })}
-                                      {overflow > 0 ? <AvatarGroupCount className="size-6 text-[10px]">+{overflow}</AvatarGroupCount> : null}
-                                    </AvatarGroup>
-                                    <span className="text-[11px] text-muted-foreground">{channelParticipants.length}/15</span>
-                                  </>
-                                ) : (
-                                  <span className="text-[11px] text-muted-foreground">No one connected</span>
-                                )}
-                              </div>
-                            </div>
-                            {channel.moderatorOnly ? <LockIcon className="mt-0.5 size-3.5 shrink-0 opacity-70" /> : null}
-                          </Button>
-                        )
-                      })()
-                    ))}
-                  </section>
-
-                  {activeChannels.length === 0 ? (
-                    <div className="mt-6 rounded-xl border border-dashed border-border/70 bg-muted/25 p-4 text-sm text-muted-foreground">
-                      <div className="mb-2 flex items-center gap-2 text-foreground">
-                        <ShieldIcon className="size-4" />
-                        No channels yet
-                      </div>
-                      {role && canManageChannels(role) ? (
-                        <Button size="sm" onClick={() => setShowCreateChannel(true)}>
-                          <PlusIcon className="size-4" />
-                          Create Channel
-                        </Button>
-                      ) : (
-                        'A moderator or owner can create channels.'
-                      )}
-                    </div>
-                  ) : null}
-                </ScrollArea>
-              ) : (
-                <div className="space-y-2">
-                  <Button className="w-full justify-start" variant="secondary" onClick={() => navigate('/app/dm/friends')}>
-                    <MessageCircleIcon className="size-4" />
-                    Friends
-                  </Button>
-                  <p className="pt-2 text-xs text-muted-foreground">Select a friend to open a conversation.</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <ServerSidebar
+            activeServerId={activeServerId}
+            activeServer={activeServer}
+            activeChannelId={activeChannelId}
+            role={role}
+            textChannels={textChannels}
+            voiceChannels={voiceChannels}
+            activeChannelsCount={activeChannels.length}
+            unreadByChannel={unreadByChannel}
+            participantsByChannel={participantsByChannel}
+            normalizedSelfIdentity={normalizedSelfIdentity}
+            memberProfileByIdentity={memberProfileByIdentity}
+            onOpenRenameServer={() => setShowEditServer(true)}
+            onOpenCreateChannel={() => setShowCreateChannel(true)}
+            onSelectChannel={(channelId) => {
+              if (activeServerId === null) return
+              openChannel(activeServerId, channelId)
+            }}
+            onOpenFriends={() => navigate('/app/dm/friends')}
+          />
 
           <Card className="border-border/60 bg-card/80 backdrop-blur">
             <CardContent className="h-full p-3">
@@ -440,35 +160,18 @@ export function AppLayout() {
         </div>
       </main>
 
-      <Dialog open={showCreateServer} onOpenChange={setShowCreateServer}>
-        <DialogContent className="max-w-md">
-          <CreateServerModal onClose={() => setShowCreateServer(false)} />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showEditServer && !!activeServer} onOpenChange={setShowEditServer}>
-        <DialogContent className="max-w-md">
-          {activeServer ? (
-            <EditServerModal
-              serverId={activeServer.id}
-              currentName={activeServer.name}
-              onClose={() => setShowEditServer(false)}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showCreateChannel && !!activeServerId} onOpenChange={setShowCreateChannel}>
-        <DialogContent className="max-w-md">
-          {activeServerId ? <CreateChannelModal serverId={activeServerId} onClose={() => setShowCreateChannel(false)} /> : null}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showSettings} onOpenChange={setShowSettings}>
-        <DialogContent className="max-w-md">
-          <SettingsModal onClose={() => setShowSettings(false)} />
-        </DialogContent>
-      </Dialog>
+      <LayoutModals
+        showCreateServer={showCreateServer}
+        showEditServer={showEditServer}
+        showCreateChannel={showCreateChannel}
+        showSettings={showSettings}
+        activeServerId={activeServerId}
+        activeServer={activeServer}
+        setShowCreateServer={setShowCreateServer}
+        setShowEditServer={setShowEditServer}
+        setShowCreateChannel={setShowCreateChannel}
+        setShowSettings={setShowSettings}
+      />
     </>
   )
 }
