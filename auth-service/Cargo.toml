@@ -5,16 +5,20 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1"
+dotenvy = "0.15"
 argon2 = { version = "0.5", features = ["std"] }
 auth-framework = "0.4.2"
 axum = { version = "0.8", features = ["macros"] }
 base64 = "0.22"
+chrono = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
+rust-s3 = { version = "0.34", default-features = false, features = ["tokio-rustls-tls"] }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "macros"] }
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }

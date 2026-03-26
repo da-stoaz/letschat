@@ -1,0 +1,15 @@
+port: 44380
+rtc:
+  # Set to your home server's public IP, or leave blank to let LiveKit
+  # auto-detect it on startup (use_external_ip: true).
+  use_external_ip: true
+  use_ice_lite: false
+  use_mdns: false                   # disable mDNS in production
+  enable_loopback_candidate: false
+  allow_tcp_fallback: true
+  tcp_port: 44381
+  udp_port: 44382
+keys:
+  # Must match LIVEKIT_API_KEY and LIVEKIT_API_SECRET in .env
+  your-api-key-here: your-api-secret-here
+log_level: info

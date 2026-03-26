@@ -1,3 +1,5 @@
+mod uploads;
+
 use std::{net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
 
 use anyhow::Context;
@@ -32,6 +34,7 @@ use tracing::Level;
 struct AppState {
     db: SqlitePool,
     auth: Arc<Mutex<AuthFramework>>,
+    uploads: uploads::UploadConfig,
 }
 
 #[derive(Debug, Error)]
@@ -163,6 +166,13 @@ struct AccountRow {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Load .env.dev when APP_ENV=dev, .env otherwise.
+    // In Docker the file won't exist and this silently no-ops.
+    match std::env::var("APP_ENV").as_deref() {
+        Ok("dev") => { dotenvy::from_filename(".env.development").ok(); }
+        _         => { dotenvy::dotenv().ok(); }
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_max_level(Level::INFO)
@@ -173,6 +183,19 @@ async fn main() -> anyhow::Result<()> {
     let bind = std::env::var("AUTH_BIND").unwrap_or_else(|_| "127.0.0.1:8787".to_string());
     let jwt_secret = std::env::var("AUTH_JWT_SECRET")
         .unwrap_or_else(|_| "w7Qk9R2mN5xH3cV8pL4tJ6dF1sA0zB7uY2gE5nK8qM3rT9hC".to_string());
+
+    // MinIO / S3
+    let minio_access_key =
+        std::env::var("MINIO_ACCESS_KEY").unwrap_or_else(|_| "minioadmin".to_string());
+    let minio_secret_key =
+        std::env::var("MINIO_SECRET_KEY").unwrap_or_else(|_| "minioadmin".to_string());
+    let minio_bucket =
+        std::env::var("MINIO_BUCKET").unwrap_or_else(|_| "letschat-files".to_string());
+    let minio_internal_endpoint =
+        std::env::var("MINIO_INTERNAL_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:9000".to_string());
+    // Public endpoint is what gets baked into presigned URLs that clients use.
+    let minio_public_endpoint =
+        std::env::var("MINIO_PUBLIC_ENDPOINT").unwrap_or_else(|_| minio_internal_endpoint.clone());
 
     ensure_sqlite_parent_exists(&database_url).context("failed to prepare SQLite parent directory")?;
 
@@ -203,6 +226,49 @@ async fn main() -> anyhow::Result<()> {
     .await
     .context("failed to create accounts table")?;
 
+    // TODO: replace CREATE TABLE IF NOT EXISTS with proper sqlx migrations.
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS pending_uploads (
+            id          TEXT    PRIMARY KEY,
+            username    TEXT    NOT NULL,
+            storage_key TEXT    NOT NULL,
+            file_name   TEXT    NOT NULL,
+            file_size   INTEGER NOT NULL,
+            mime_type   TEXT    NOT NULL,
+            expires_at  INTEGER NOT NULL
+        )
+        "#,
+    )
+    .execute(&db)
+    .await
+    .context("failed to create pending_uploads table")?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS upload_quota (
+            username       TEXT    NOT NULL,
+            quota_date     TEXT    NOT NULL,
+            bytes_uploaded INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (username, quota_date)
+        )
+        "#,
+    )
+    .execute(&db)
+    .await
+    .context("failed to create upload_quota table")?;
+
+    // Purge stale pending_uploads left from previous runs.
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    sqlx::query("DELETE FROM pending_uploads WHERE expires_at < ?")
+        .bind(now_unix)
+        .execute(&db)
+        .await
+        .context("failed to clean up expired pending uploads")?;
+
     let config = AuthConfig::new()
         .secret(jwt_secret.clone())
         .token_lifetime(Duration::from_secs(60 * 60))
@@ -216,9 +282,25 @@ async fn main() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("failed to initialize auth-framework: {e}"))?;
 
+    let upload_config = uploads::UploadConfig::new(
+        &minio_access_key,
+        &minio_secret_key,
+        &minio_bucket,
+        &minio_internal_endpoint,
+        &minio_public_endpoint,
+    )
+    .context("failed to initialise MinIO client")?;
+    tracing::info!(
+        internal = %minio_internal_endpoint,
+        public = %minio_public_endpoint,
+        bucket = %minio_bucket,
+        "MinIO configured",
+    );
+
     let state = AppState {
         db,
         auth: Arc::new(Mutex::new(auth)),
+        uploads: upload_config,
     };
 
     let app = Router::new()
@@ -228,6 +310,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/login", post(login))
         .route("/auth/verify", post(verify))
         .route("/livekit/token", post(livekit_token))
+        // File uploads
+        .route("/uploads/request", post(uploads::upload_request))
+        .route("/uploads/confirm", post(uploads::upload_confirm))
+        .route("/uploads/download-url", post(uploads::download_url))
         .with_state(state)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
@@ -563,6 +649,22 @@ fn verify_password(password: &str, hash: &str) -> anyhow::Result<()> {
         .context("password verification failed")
 }
 
-fn internal(error: impl std::fmt::Display) -> ApiError {
+pub(crate) fn internal(error: impl std::fmt::Display) -> ApiError {
     ApiError::Internal(error.to_string())
+}
+
+/// Validates the session token and returns the lowercase username, or
+/// `Unauthorized`. Shared with the `uploads` module.
+pub(crate) async fn require_valid_session(
+    state: &AppState,
+    token: &auth_framework::tokens::AuthToken,
+) -> Result<String, ApiError> {
+    let auth = state.auth.lock().await;
+    let valid = auth.validate_token(token).await.map_err(internal)?;
+    if !valid {
+        return Err(ApiError::Unauthorized(
+            "Invalid or expired session token.".to_string(),
+        ));
+    }
+    Ok(token.user_id.trim().to_lowercase())
 }

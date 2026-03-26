@@ -26,3 +26,9 @@ dist-ssr
 # Rust auth service
 auth-service/target
 auth-service/*.db
+
+# Environment files — gitignore everything with real secrets
+# Committed templates: .env.example, .env.development.example, .env.production
+.env
+.env.development
+.env.prod

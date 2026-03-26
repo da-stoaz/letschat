@@ -1,0 +1,62 @@
+services:
+
+  # ── SpacetimeDB ─────────────────────────────────────────────────────────────
+  spacetimedb:
+    image: clockworklabs/spacetime:latest
+    container_name: letschat-dev-spacetimedb
+    command: start
+    ports:
+      - "4300:3000"
+    volumes:
+      - spacetimedb_dev_home:/home/spacetime
+    restart: unless-stopped
+
+  # ── LiveKit ──────────────────────────────────────────────────────────────────
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: letschat-dev-livekit
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7881:7881/udp"
+      - "7882:7882/udp"
+    volumes:
+      - ./livekit/config.yaml:/etc/livekit.yaml:ro
+    restart: unless-stopped
+
+  # ── MinIO ────────────────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: letschat-dev-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "4390:9000"   # S3 API  →  http://localhost:4390
+      - "4391:9001"   # Web UI  →  http://localhost:4391  (login: minioadmin / minioadmin)
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_dev_data:/data
+    restart: unless-stopped
+
+  # ── MinIO bucket init ─────────────────────────────────────────────────────────
+  minio-init:
+    image: minio/mc:latest
+    container_name: letschat-dev-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+        until mc alias set local http://minio:9000 minioadmin minioadmin 2>/dev/null; do
+          echo 'waiting for MinIO...'; sleep 2;
+        done;
+        mc mb --ignore-existing local/letschat-files;
+        echo 'bucket ready';
+      "
+    restart: "no"
+
+volumes:
+  spacetimedb_dev_home:
+  minio_dev_data:
+
