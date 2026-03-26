@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { Fragment, useEffect, useMemo, useRef } from 'react'
 import type { LocalParticipant, RemoteParticipant } from 'livekit-client'
 import {
   getMicrophoneUnavailableReason,
@@ -192,19 +192,36 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
             const participantIdentityKey = normalizeIdentityKey(p.userIdentity)
             const mediaParticipant = local ? localParticipant : livekitParticipantByIdentity.get(participantIdentityKey) ?? null
             return (
-            <ParticipantMediaTile
-              key={p.userIdentity}
-              displayName={displayNameByIdentity.get(participantIdentityKey) ?? p.userIdentity.slice(0, 12)}
-              avatarUrl={avatarByIdentity.get(participantIdentityKey) ?? null}
-              joinedAt={p.joinedAt}
-              participant={mediaParticipant}
-              isLocal={local}
-              isSpeaking={normalizedActiveSpeakers.has(participantIdentityKey)}
-              muted={p.muted}
-              deafened={p.deafened}
-              sharingScreen={p.sharingScreen}
-              sharingCamera={p.sharingCamera}
-            />
+              <Fragment key={p.userIdentity}>
+                <ParticipantMediaTile
+                  displayName={displayNameByIdentity.get(participantIdentityKey) ?? p.userIdentity.slice(0, 12)}
+                  avatarUrl={avatarByIdentity.get(participantIdentityKey) ?? null}
+                  joinedAt={p.joinedAt}
+                  participant={mediaParticipant}
+                  tileType="profile"
+                  isLocal={local}
+                  isSpeaking={normalizedActiveSpeakers.has(participantIdentityKey)}
+                  muted={p.muted}
+                  deafened={p.deafened}
+                  sharingScreen={p.sharingScreen}
+                  sharingCamera={p.sharingCamera}
+                />
+                {p.sharingScreen ? (
+                  <ParticipantMediaTile
+                    displayName={displayNameByIdentity.get(participantIdentityKey) ?? p.userIdentity.slice(0, 12)}
+                    avatarUrl={avatarByIdentity.get(participantIdentityKey) ?? null}
+                    joinedAt={p.joinedAt}
+                    participant={mediaParticipant}
+                    tileType="screen"
+                    isLocal={local}
+                    isSpeaking={normalizedActiveSpeakers.has(participantIdentityKey)}
+                    muted={p.muted}
+                    deafened={p.deafened}
+                    sharingScreen={p.sharingScreen}
+                    sharingCamera={p.sharingCamera}
+                  />
+                ) : null}
+              </Fragment>
             )
           })}
         </div>

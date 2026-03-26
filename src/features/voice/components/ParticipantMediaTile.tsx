@@ -11,6 +11,7 @@ interface ParticipantMediaTileProps {
   avatarUrl?: string | null
   joinedAt?: string
   participant: MediaParticipant | null
+  tileType?: 'profile' | 'screen'
   isLocal: boolean
   isSpeaking: boolean
   muted: boolean
@@ -50,6 +51,7 @@ export function ParticipantMediaTile({
   avatarUrl = null,
   joinedAt,
   participant,
+  tileType = 'profile',
   isLocal,
   isSpeaking,
   muted,
@@ -58,14 +60,13 @@ export function ParticipantMediaTile({
   sharingCamera,
 }: ParticipantMediaTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const pipVideoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const screenTrack = participant?.getTrackPublication(Track.Source.ScreenShare)?.videoTrack ?? null
   const cameraTrack = participant?.getTrackPublication(Track.Source.Camera)?.videoTrack ?? null
   const fallbackVideoTrack = participant ? pickVideoPublication(participant.videoTrackPublications)?.videoTrack ?? null : null
-  const primaryVideoTrack = screenTrack ?? cameraTrack ?? fallbackVideoTrack
-  const pipVideoTrack = screenTrack && cameraTrack ? cameraTrack : null
+  const primaryVideoTrack =
+    tileType === 'screen' ? screenTrack : cameraTrack ?? fallbackVideoTrack
 
   const audioTrack = participant ? pickAudioPublication(participant.audioTrackPublications)?.track ?? null : null
 
@@ -87,25 +88,6 @@ export function ParticipantMediaTile({
       videoElement.srcObject = null
     }
   }, [primaryVideoTrack])
-
-  useEffect(() => {
-    const videoElement = pipVideoRef.current
-    if (!videoElement) return
-
-    if (!pipVideoTrack || pipVideoTrack.kind !== Track.Kind.Video) {
-      videoElement.srcObject = null
-      return
-    }
-
-    pipVideoTrack.attach(videoElement)
-    videoElement.muted = true
-    void videoElement.play().catch(() => undefined)
-
-    return () => {
-      pipVideoTrack.detach(videoElement)
-      videoElement.srcObject = null
-    }
-  }, [pipVideoTrack])
 
   useEffect(() => {
     const audioElement = audioRef.current
@@ -131,8 +113,16 @@ export function ParticipantMediaTile({
   return (
     <Card className="border-border/70 bg-background/60 py-0">
       <CardHeader>
-        <CardTitle className="text-sm">{displayName}</CardTitle>
-        <CardDescription>{joinedAt ? `Joined ${new Date(joinedAt).toLocaleTimeString()}` : isLocal ? 'You' : 'Participant'}</CardDescription>
+        <CardTitle className="text-sm">{tileType === 'screen' ? `${displayName} Screen` : displayName}</CardTitle>
+        <CardDescription>
+          {tileType === 'screen'
+            ? 'Live screen stream'
+            : joinedAt
+              ? `Joined ${new Date(joinedAt).toLocaleTimeString()}`
+              : isLocal
+                ? 'You'
+                : 'Participant'}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
         <div
@@ -156,17 +146,6 @@ export function ParticipantMediaTile({
               </Avatar>
             </div>
           )}
-          {pipVideoTrack ? (
-            <div className="absolute bottom-2 right-2 h-20 w-32 overflow-hidden rounded-md border border-border/60 bg-black/60">
-              <video
-                ref={pipVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="h-full w-full object-cover"
-              />
-            </div>
-          ) : null}
           {!isLocal ? <audio ref={audioRef} autoPlay /> : null}
         </div>
         <div className="flex flex-wrap gap-1">
