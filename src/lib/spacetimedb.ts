@@ -317,12 +317,8 @@ function syncFriends(conn: DbConnection): void {
     return
   }
 
-  const friends = Array.from(conn.db.friend.iter())
-    .map(mapFriend)
-    .filter((row) => sameIdentity(row.userA, me) || sameIdentity(row.userB, me))
-  const blocked = Array.from(conn.db.block.iter())
-    .map(mapBlock)
-    .filter((row) => sameIdentity(row.blocker, me))
+  const friends = Array.from(conn.db.my_friends.iter()).map(mapFriend)
+  const blocked = Array.from(conn.db.my_blocks.iter()).map(mapBlock)
 
   useFriendsStore.getState().setFriends(friends)
   useFriendsStore.getState().setBlocked(blocked)
@@ -399,7 +395,7 @@ function watchLiveTables(conn: DbConnection): void {
   conn.db.voice_participant.onInsert(() => syncVoiceParticipants(conn))
   conn.db.voice_participant.onUpdate(() => syncVoiceParticipants(conn))
   conn.db.voice_participant.onDelete(() => syncVoiceParticipants(conn))
-  conn.db.friend.onInsert((_ctx, row) => {
+  conn.db.my_friends.onInsert((_ctx, row) => {
     syncFriends(conn)
     if (!liveEventsEnabled) return
     const me = useConnectionStore.getState().identity
@@ -410,7 +406,7 @@ function watchLiveTables(conn: DbConnection): void {
       handleIncomingFriendRequest(mapped.requestedBy)
     }
   })
-  conn.db.friend.onUpdate((_ctx, _oldRow, row) => {
+  conn.db.my_friends.onUpdate((_ctx, _oldRow, row) => {
     syncFriends(conn)
     if (!liveEventsEnabled) return
     const me = useConnectionStore.getState().identity
@@ -421,9 +417,9 @@ function watchLiveTables(conn: DbConnection): void {
       handleFriendAccepted(mapped.userA === me ? mapped.userB : mapped.userA)
     }
   })
-  conn.db.friend.onDelete(() => syncFriends(conn))
-  conn.db.block.onInsert(() => syncFriends(conn))
-  conn.db.block.onDelete(() => syncFriends(conn))
+  conn.db.my_friends.onDelete(() => syncFriends(conn))
+  conn.db.my_blocks.onInsert(() => syncFriends(conn))
+  conn.db.my_blocks.onDelete(() => syncFriends(conn))
   conn.db.direct_message.onInsert(() => syncDirectMessages(conn))
   conn.db.direct_message.onUpdate(() => syncDirectMessages(conn))
   conn.db.direct_message.onDelete(() => syncDirectMessages(conn))
@@ -550,8 +546,8 @@ async function connect(): Promise<void> {
         tables.channel,
         tables.message,
         tables.voice_participant,
-        tables.friend,
-        tables.block,
+        tables.my_friends,
+        tables.my_blocks,
         tables.direct_message,
       ])
 

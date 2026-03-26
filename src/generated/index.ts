@@ -67,14 +67,13 @@ import UseInviteReducer from "./use_invite_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
-import AuthCredentialRow from "./auth_credential_table";
 import BanRow from "./ban_table";
-import BlockRow from "./block_table";
 import ChannelRow from "./channel_table";
 import DirectMessageRow from "./direct_message_table";
-import FriendRow from "./friend_table";
 import InviteRow from "./invite_table";
 import MessageRow from "./message_table";
+import MyBlocksRow from "./my_blocks_table";
+import MyFriendsRow from "./my_friends_table";
 import ServerRow from "./server_table";
 import ServerMemberRow from "./server_member_table";
 import UserRow from "./user_table";
@@ -84,20 +83,6 @@ import VoiceParticipantRow from "./voice_participant_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
-  auth_credential: __table({
-    name: 'auth_credential',
-    indexes: [
-      { accessor: 'identity', name: 'auth_credential_identity_idx_btree', algorithm: 'btree', columns: [
-        'identity',
-      ] },
-      { accessor: 'username', name: 'auth_credential_username_idx_btree', algorithm: 'btree', columns: [
-        'username',
-      ] },
-    ],
-    constraints: [
-      { name: 'auth_credential_username_key', constraint: 'unique', columns: ['username'] },
-    ],
-  }, AuthCredentialRow),
   ban: __table({
     name: 'ban',
     indexes: [
@@ -119,23 +104,6 @@ const tablesSchema = __schema({
       { name: 'ban_ban_key_key', constraint: 'unique', columns: ['banKey'] },
     ],
   }, BanRow),
-  block: __table({
-    name: 'block',
-    indexes: [
-      { accessor: 'block_key', name: 'block_block_key_idx_btree', algorithm: 'btree', columns: [
-        'blockKey',
-      ] },
-      { accessor: 'blocked', name: 'block_blocked_idx_btree', algorithm: 'btree', columns: [
-        'blocked',
-      ] },
-      { accessor: 'blocker', name: 'block_blocker_idx_btree', algorithm: 'btree', columns: [
-        'blocker',
-      ] },
-    ],
-    constraints: [
-      { name: 'block_block_key_key', constraint: 'unique', columns: ['blockKey'] },
-    ],
-  }, BlockRow),
   channel: __table({
     name: 'channel',
     indexes: [
@@ -170,23 +138,6 @@ const tablesSchema = __schema({
       { name: 'direct_message_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, DirectMessageRow),
-  friend: __table({
-    name: 'friend',
-    indexes: [
-      { accessor: 'pair_key', name: 'friend_pair_key_idx_btree', algorithm: 'btree', columns: [
-        'pairKey',
-      ] },
-      { accessor: 'user_a', name: 'friend_user_a_idx_btree', algorithm: 'btree', columns: [
-        'userA',
-      ] },
-      { accessor: 'user_b', name: 'friend_user_b_idx_btree', algorithm: 'btree', columns: [
-        'userB',
-      ] },
-    ],
-    constraints: [
-      { name: 'friend_pair_key_key', constraint: 'unique', columns: ['pairKey'] },
-    ],
-  }, FriendRow),
   invite: __table({
     name: 'invite',
     indexes: [
@@ -290,6 +241,20 @@ const tablesSchema = __schema({
       { name: 'voice_participant_voice_key_key', constraint: 'unique', columns: ['voiceKey'] },
     ],
   }, VoiceParticipantRow),
+  my_blocks: __table({
+    name: 'my_blocks',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyBlocksRow),
+  my_friends: __table({
+    name: 'my_friends',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyFriendsRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */

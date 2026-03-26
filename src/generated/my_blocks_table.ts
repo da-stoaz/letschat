@@ -9,18 +9,10 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
-import {
-  FriendStatus,
-} from "./types";
-
 
 export default __t.row({
-  pairKey: __t.string().primaryKey().name("pair_key"),
-  userA: __t.identity().name("user_a"),
-  userB: __t.identity().name("user_b"),
-  get status() {
-    return FriendStatus;
-  },
-  requestedBy: __t.identity().name("requested_by"),
-  updatedAt: __t.timestamp().name("updated_at"),
+  blockKey: __t.string().name("block_key"),
+  blocker: __t.identity(),
+  blocked: __t.identity(),
+  createdAt: __t.timestamp().name("created_at"),
 });

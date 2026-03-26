@@ -31,7 +31,7 @@ pub struct User {
     pub created_at: Timestamp,
 }
 
-#[spacetimedb::table(accessor = auth_credential, public)]
+#[spacetimedb::table(accessor = auth_credential)]
 pub struct AuthCredential {
     #[primary_key]
     pub username: String,
@@ -155,7 +155,7 @@ pub struct VoiceParticipant {
     pub sharing_camera: bool,
 }
 
-#[spacetimedb::table(accessor = friend, public)]
+#[spacetimedb::table(accessor = friend)]
 pub struct Friend {
     #[primary_key]
     pub pair_key: String,
@@ -168,7 +168,7 @@ pub struct Friend {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(accessor = block, public)]
+#[spacetimedb::table(accessor = block)]
 pub struct Block {
     #[primary_key]
     pub block_key: String,
