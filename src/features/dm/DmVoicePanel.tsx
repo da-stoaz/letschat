@@ -5,8 +5,8 @@ import {
   getMicrophoneUnavailableReason,
   joinLiveKitDmVoice,
   leaveLiveKitDmVoice,
-  requestCameraPermission,
   requestMicrophonePermission,
+  setLocalCameraEnabled,
   supportsMicrophoneCapture,
   supportsScreenCapture,
   useLiveKitRoom,
@@ -167,24 +167,31 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          {participants.map((participant) => (
+          {participants.map((participant) => {
+            const participantIdentityKey = normalizeIdentityKey(participant.userIdentity)
+            const local = sameIdentity(participant.userIdentity, selfIdentity)
+            const mediaParticipant = local
+              ? localParticipant
+              : livekitParticipantByIdentity.get(participantIdentityKey) ?? null
+            return (
             <ParticipantMediaTile
               key={`${participant.roomKey}:${participant.userIdentity}`}
               displayName={
-                displayNameByIdentity.get(normalizeIdentityKey(participant.userIdentity)) ??
+                displayNameByIdentity.get(participantIdentityKey) ??
                 participant.userIdentity.slice(0, 10)
               }
-              avatarUrl={avatarByIdentity.get(normalizeIdentityKey(participant.userIdentity)) ?? null}
+              avatarUrl={avatarByIdentity.get(participantIdentityKey) ?? null}
               joinedAt={participant.joinedAt}
-              participant={livekitParticipantByIdentity.get(normalizeIdentityKey(participant.userIdentity)) ?? null}
-              isLocal={sameIdentity(participant.userIdentity, selfIdentity)}
-              isSpeaking={normalizedActiveSpeakers.has(normalizeIdentityKey(participant.userIdentity))}
+              participant={mediaParticipant}
+              isLocal={local}
+              isSpeaking={normalizedActiveSpeakers.has(participantIdentityKey)}
               muted={participant.muted}
               deafened={participant.deafened}
               sharingScreen={participant.sharingScreen}
               sharingCamera={participant.sharingCamera}
             />
-          ))}
+            )
+          })}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -249,10 +256,7 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
               if (!roomForPartner || !selfParticipant) return
               try {
                 const next = !selfParticipant.sharingCamera
-                if (next) {
-                  await requestCameraPermission()
-                }
-                await roomForPartner.localParticipant.setCameraEnabled(next)
+                await setLocalCameraEnabled(roomForPartner, next)
                 await patchVoiceState({ sharingCamera: next })
               } catch (e) {
                 const message =

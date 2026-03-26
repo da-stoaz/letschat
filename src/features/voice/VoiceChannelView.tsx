@@ -4,8 +4,8 @@ import {
   getMicrophoneUnavailableReason,
   joinLiveKitVoice,
   leaveLiveKitVoice,
-  requestCameraPermission,
   requestMicrophonePermission,
+  setLocalCameraEnabled,
   supportsMicrophoneCapture,
   supportsScreenCapture,
   useLiveKitRoom,
@@ -187,21 +187,26 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
 
       <ScrollArea className="min-h-0">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {displayParticipants.map((p) => (
+          {displayParticipants.map((p) => {
+            const local = sameIdentity(p.userIdentity, selfIdentity)
+            const participantIdentityKey = normalizeIdentityKey(p.userIdentity)
+            const mediaParticipant = local ? localParticipant : livekitParticipantByIdentity.get(participantIdentityKey) ?? null
+            return (
             <ParticipantMediaTile
               key={p.userIdentity}
-              displayName={displayNameByIdentity.get(normalizeIdentityKey(p.userIdentity)) ?? p.userIdentity.slice(0, 12)}
-              avatarUrl={avatarByIdentity.get(normalizeIdentityKey(p.userIdentity)) ?? null}
+              displayName={displayNameByIdentity.get(participantIdentityKey) ?? p.userIdentity.slice(0, 12)}
+              avatarUrl={avatarByIdentity.get(participantIdentityKey) ?? null}
               joinedAt={p.joinedAt}
-              participant={livekitParticipantByIdentity.get(normalizeIdentityKey(p.userIdentity)) ?? null}
-              isLocal={sameIdentity(p.userIdentity, selfIdentity)}
-              isSpeaking={normalizedActiveSpeakers.has(normalizeIdentityKey(p.userIdentity))}
+              participant={mediaParticipant}
+              isLocal={local}
+              isSpeaking={normalizedActiveSpeakers.has(participantIdentityKey)}
               muted={p.muted}
               deafened={p.deafened}
               sharingScreen={p.sharingScreen}
               sharingCamera={p.sharingCamera}
             />
-          ))}
+            )
+          })}
         </div>
       </ScrollArea>
 
@@ -264,10 +269,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
               if (!roomForChannel || !selfParticipant) return
               try {
                 const next = !selfParticipant.sharingCamera
-                if (next) {
-                  await requestCameraPermission()
-                }
-                await roomForChannel.localParticipant.setCameraEnabled(next)
+                await setLocalCameraEnabled(roomForChannel, next)
                 await patchVoiceState({ sharingCamera: next })
               } catch (e) {
                 const message =

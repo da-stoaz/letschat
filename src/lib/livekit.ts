@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { RoomConnectOptions, RoomOptions } from 'livekit-client'
-import { ConnectionState, Room } from 'livekit-client'
+import type { RoomConnectOptions, RoomOptions, VideoCaptureOptions } from 'livekit-client'
+import { ConnectionState, Room, Track, createLocalVideoTrack } from 'livekit-client'
 import { reducers } from './spacetimedb'
 import { tauriCommands } from './tauri'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -150,6 +150,7 @@ type ConnectProfile = {
 }
 
 const CONNECT_TIMEOUT_MS = 5_000
+const CAMERA_TRACK_WAIT_MS = 1_500
 
 function isLoopbackLivekitUrl(livekitUrl: string): boolean {
   try {
@@ -183,6 +184,86 @@ function connectProfileForUrl(livekitUrl: string): ConnectProfile {
         iceTransportPolicy: 'all',
       },
     },
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function getPreferredVideoInputDeviceId(): Promise<string | undefined> {
+  if (!ensureMediaDevicesGetUserMedia()) return undefined
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    const videoInput = devices.find((device) => device.kind === 'videoinput' && device.deviceId)
+    return videoInput?.deviceId || undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function getPreferredCameraCaptureOptions(): Promise<VideoCaptureOptions> {
+  const preferredDeviceId = await getPreferredVideoInputDeviceId()
+  return {
+    ...(preferredDeviceId ? { deviceId: preferredDeviceId } : {}),
+    resolution: { width: 1280, height: 720 },
+    frameRate: 30,
+  }
+}
+
+async function waitForLocalCameraTrack(room: Room, timeoutMs = CAMERA_TRACK_WAIT_MS): Promise<boolean> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const cameraPublication = room.localParticipant.getTrackPublication(Track.Source.Camera)
+    if (cameraPublication?.videoTrack) {
+      return true
+    }
+    await sleep(75)
+  }
+  return false
+}
+
+export async function setLocalCameraEnabled(room: Room, enabled: boolean): Promise<void> {
+  if (!enabled) {
+    await room.localParticipant.setCameraEnabled(false)
+    return
+  }
+
+  await requestCameraPermission()
+  const preferredCaptureOptions = await getPreferredCameraCaptureOptions()
+
+  try {
+    await room.localParticipant.setCameraEnabled(true, preferredCaptureOptions)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!/invalid constraint/i.test(message)) {
+      throw error
+    }
+
+    await room.localParticipant.setCameraEnabled(true, {
+      resolution: { width: 640, height: 480 },
+      frameRate: 24,
+    })
+  }
+
+  if (await waitForLocalCameraTrack(room)) {
+    return
+  }
+
+  const manualTrack = await createLocalVideoTrack({
+    resolution: { width: 640, height: 480 },
+    frameRate: 24,
+  })
+
+  try {
+    await room.localParticipant.publishTrack(manualTrack, { source: Track.Source.Camera })
+  } catch (error) {
+    manualTrack.stop()
+    throw error
+  }
+
+  if (!(await waitForLocalCameraTrack(room, 1_000))) {
+    throw new Error('Camera was enabled, but no local camera track became available.')
   }
 }
 
@@ -350,6 +431,8 @@ export function useLiveKitRoom(room: Room | null) {
     room.on('trackUnpublished', bump)
     room.on('trackSubscribed', bump)
     room.on('trackUnsubscribed', bump)
+    room.on('trackMuted', bump)
+    room.on('trackUnmuted', bump)
     room.on('localTrackPublished', bump)
     room.on('localTrackUnpublished', bump)
 
@@ -362,6 +445,8 @@ export function useLiveKitRoom(room: Room | null) {
       room.off('trackUnpublished', bump)
       room.off('trackSubscribed', bump)
       room.off('trackUnsubscribed', bump)
+      room.off('trackMuted', bump)
+      room.off('trackUnmuted', bump)
       room.off('localTrackPublished', bump)
       room.off('localTrackUnpublished', bump)
     }

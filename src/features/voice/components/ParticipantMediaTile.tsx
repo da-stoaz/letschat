@@ -29,14 +29,12 @@ function initials(value: string): string {
 function pickVideoPublication(
   publications: Map<string, TrackPublication>,
 ): TrackPublication | null {
-  const withTracks = Array.from(publications.values()).filter((publication) => Boolean(publication.track))
-  if (withTracks.length === 0) return null
-
-  return (
-    withTracks.find((publication) => publication.source === Track.Source.ScreenShare) ??
-    withTracks.find((publication) => publication.source === Track.Source.Camera) ??
-    withTracks[0]
-  )
+  for (const publication of publications.values()) {
+    if (!publication.videoTrack) continue
+    if (publication.source === Track.Source.ScreenShare || publication.source === Track.Source.Camera) continue
+    return publication
+  }
+  return null
 }
 
 function pickAudioPublication(
@@ -60,9 +58,14 @@ export function ParticipantMediaTile({
   sharingCamera,
 }: ParticipantMediaTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const pipVideoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  const videoTrack = participant ? pickVideoPublication(participant.videoTrackPublications)?.track ?? null : null
+  const screenTrack = participant?.getTrackPublication(Track.Source.ScreenShare)?.videoTrack ?? null
+  const cameraTrack = participant?.getTrackPublication(Track.Source.Camera)?.videoTrack ?? null
+  const fallbackVideoTrack = participant ? pickVideoPublication(participant.videoTrackPublications)?.videoTrack ?? null : null
+  const primaryVideoTrack = screenTrack ?? cameraTrack ?? fallbackVideoTrack
+  const pipVideoTrack = screenTrack && cameraTrack ? cameraTrack : null
 
   const audioTrack = participant ? pickAudioPublication(participant.audioTrackPublications)?.track ?? null : null
 
@@ -70,20 +73,39 @@ export function ParticipantMediaTile({
     const videoElement = videoRef.current
     if (!videoElement) return
 
-    if (!videoTrack || videoTrack.kind !== Track.Kind.Video) {
+    if (!primaryVideoTrack || primaryVideoTrack.kind !== Track.Kind.Video) {
       videoElement.srcObject = null
       return
     }
 
-    videoTrack.attach(videoElement)
+    primaryVideoTrack.attach(videoElement)
     videoElement.muted = true
     void videoElement.play().catch(() => undefined)
 
     return () => {
-      videoTrack.detach(videoElement)
+      primaryVideoTrack.detach(videoElement)
       videoElement.srcObject = null
     }
-  }, [videoTrack])
+  }, [primaryVideoTrack])
+
+  useEffect(() => {
+    const videoElement = pipVideoRef.current
+    if (!videoElement) return
+
+    if (!pipVideoTrack || pipVideoTrack.kind !== Track.Kind.Video) {
+      videoElement.srcObject = null
+      return
+    }
+
+    pipVideoTrack.attach(videoElement)
+    videoElement.muted = true
+    void videoElement.play().catch(() => undefined)
+
+    return () => {
+      pipVideoTrack.detach(videoElement)
+      videoElement.srcObject = null
+    }
+  }, [pipVideoTrack])
 
   useEffect(() => {
     const audioElement = audioRef.current
@@ -104,7 +126,7 @@ export function ParticipantMediaTile({
     }
   }, [audioTrack, isLocal])
 
-  const showVideo = Boolean(videoTrack && videoTrack.kind === Track.Kind.Video)
+  const showVideo = Boolean(primaryVideoTrack && primaryVideoTrack.kind === Track.Kind.Video)
 
   return (
     <Card className="border-border/70 bg-background/60 py-0">
@@ -134,6 +156,17 @@ export function ParticipantMediaTile({
               </Avatar>
             </div>
           )}
+          {pipVideoTrack ? (
+            <div className="absolute bottom-2 right-2 h-20 w-32 overflow-hidden rounded-md border border-border/60 bg-black/60">
+              <video
+                ref={pipVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="h-full w-full object-cover"
+              />
+            </div>
+          ) : null}
           {!isLocal ? <audio ref={audioRef} autoPlay /> : null}
         </div>
         <div className="flex flex-wrap gap-1">
