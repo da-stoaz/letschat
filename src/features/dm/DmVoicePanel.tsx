@@ -22,6 +22,7 @@ import { useUsersStore } from '../../stores/usersStore'
 import type { DmVoiceParticipant, Identity } from '../../types/domain'
 import { VoiceControlBar } from '../voice/components/VoiceControlBar'
 import { ParticipantMediaTile } from '../voice/components/ParticipantMediaTile'
+import { useLegacyCallControlsVisible } from '../voice/hooks/useLegacyCallControls'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -51,6 +52,7 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
   const audioInputId = useMediaDeviceStore((s) => s.audioInputId)
   const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
   const staleCleanupMarker = useRef<string | null>(null)
+  const showLegacyControls = useLegacyCallControlsVisible()
 
   const roomKey = selfIdentity ? dmVoiceRoomKey(selfIdentity, partnerIdentity) : null
   const participants = roomKey ? (participantsByRoom[roomKey] ?? EMPTY_PARTICIPANTS) : EMPTY_PARTICIPANTS
@@ -219,106 +221,108 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
           })}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <VoiceControlBar
-            joined={joined}
-            connecting={connecting}
-            muted={muted}
-            deafened={deafened}
-            sharingCamera={sharingCamera}
-            sharingScreen={sharingScreen}
-            hasScreenCapture={hasScreenCapture}
-            error={error}
-            onJoin={async () => {
-              setError(null)
-              setJoining(true)
-              try {
-                const existingRoom = useDmVoiceSessionStore.getState().room
-                const existingPartner = useDmVoiceSessionStore.getState().joinedPartnerIdentity
-                if (existingRoom && existingPartner && !sameIdentity(existingPartner, partnerIdentity)) {
-                  await leaveLiveKitDmVoice(existingPartner, existingRoom)
+        {showLegacyControls ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <VoiceControlBar
+              joined={joined}
+              connecting={connecting}
+              muted={muted}
+              deafened={deafened}
+              sharingCamera={sharingCamera}
+              sharingScreen={sharingScreen}
+              hasScreenCapture={hasScreenCapture}
+              error={error}
+              onJoin={async () => {
+                setError(null)
+                setJoining(true)
+                try {
+                  const existingRoom = useDmVoiceSessionStore.getState().room
+                  const existingPartner = useDmVoiceSessionStore.getState().joinedPartnerIdentity
+                  if (existingRoom && existingPartner && !sameIdentity(existingPartner, partnerIdentity)) {
+                    await leaveLiveKitDmVoice(existingPartner, existingRoom)
+                    setRoom(null)
+                    setJoinedPartnerIdentity(null)
+                  }
+
+                  const nextRoom = await joinLiveKitDmVoice(partnerIdentity)
+                  setRoom(nextRoom)
+                  setJoinedPartnerIdentity(partnerIdentity)
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Could not join DM voice call.'
+                  setError(message)
+                } finally {
+                  setJoining(false)
+                }
+              }}
+              onToggleMute={async () => {
+                setError(null)
+                if (!roomForPartner || !selfParticipant) return
+                try {
+                  const nextMuted = !selfParticipant.muted
+                  if (!nextMuted) {
+                    await ensureMicrophoneCapture()
+                    if (audioInputId) {
+                      await switchRoomDevice(roomForPartner, 'audioinput', audioInputId)
+                    }
+                  }
+                  await roomForPartner.localParticipant.setMicrophoneEnabled(!nextMuted)
+                  await patchVoiceState({ muted: nextMuted })
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Could not toggle microphone.'
+                  setError(message)
+                }
+              }}
+              onToggleDeafen={async () => {
+                setError(null)
+                if (!selfParticipant) return
+                try {
+                  await patchVoiceState({ deafened: !selfParticipant.deafened })
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Could not toggle deafen.'
+                  setError(message)
+                }
+              }}
+              onToggleCamera={async () => {
+                setError(null)
+                if (!roomForPartner || !selfParticipant) return
+                try {
+                  const next = !selfParticipant.sharingCamera
+                  await setLocalCameraEnabled(roomForPartner, next, videoInputId ?? undefined)
+                  await patchVoiceState({ sharingCamera: next })
+                } catch (e) {
+                  setError(getCameraErrorMessage(e))
+                }
+              }}
+              onToggleScreenShare={async () => {
+                setError(null)
+                if (!roomForPartner || !selfParticipant) return
+                if (!hasScreenCapture) {
+                  setError('Screen sharing APIs are unavailable in this runtime.')
+                  return
+                }
+                try {
+                  const next = !selfParticipant.sharingScreen
+                  await roomForPartner.localParticipant.setScreenShareEnabled(next)
+                  await patchVoiceState({ sharingScreen: next })
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Could not toggle screen share.'
+                  setError(message)
+                }
+              }}
+              onLeave={async () => {
+                setError(null)
+                try {
+                  await leaveLiveKitDmVoice(partnerIdentity, roomForPartner)
                   setRoom(null)
                   setJoinedPartnerIdentity(null)
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Could not leave DM voice call.'
+                  setError(message)
                 }
-
-                const nextRoom = await joinLiveKitDmVoice(partnerIdentity)
-                setRoom(nextRoom)
-                setJoinedPartnerIdentity(partnerIdentity)
-              } catch (e) {
-                const message = e instanceof Error ? e.message : 'Could not join DM voice call.'
-                setError(message)
-              } finally {
-                setJoining(false)
-              }
-            }}
-            onToggleMute={async () => {
-              setError(null)
-              if (!roomForPartner || !selfParticipant) return
-              try {
-                const nextMuted = !selfParticipant.muted
-                if (!nextMuted) {
-                  await ensureMicrophoneCapture()
-                  if (audioInputId) {
-                    await switchRoomDevice(roomForPartner, 'audioinput', audioInputId)
-                  }
-                }
-                await roomForPartner.localParticipant.setMicrophoneEnabled(!nextMuted)
-                await patchVoiceState({ muted: nextMuted })
-              } catch (e) {
-                const message = e instanceof Error ? e.message : 'Could not toggle microphone.'
-                setError(message)
-              }
-            }}
-            onToggleDeafen={async () => {
-              setError(null)
-              if (!selfParticipant) return
-              try {
-                await patchVoiceState({ deafened: !selfParticipant.deafened })
-              } catch (e) {
-                const message = e instanceof Error ? e.message : 'Could not toggle deafen.'
-                setError(message)
-              }
-            }}
-            onToggleCamera={async () => {
-              setError(null)
-              if (!roomForPartner || !selfParticipant) return
-              try {
-                const next = !selfParticipant.sharingCamera
-                await setLocalCameraEnabled(roomForPartner, next, videoInputId ?? undefined)
-                await patchVoiceState({ sharingCamera: next })
-              } catch (e) {
-                setError(getCameraErrorMessage(e))
-              }
-            }}
-            onToggleScreenShare={async () => {
-              setError(null)
-              if (!roomForPartner || !selfParticipant) return
-              if (!hasScreenCapture) {
-                setError('Screen sharing APIs are unavailable in this runtime.')
-                return
-              }
-              try {
-                const next = !selfParticipant.sharingScreen
-                await roomForPartner.localParticipant.setScreenShareEnabled(next)
-                await patchVoiceState({ sharingScreen: next })
-              } catch (e) {
-                const message = e instanceof Error ? e.message : 'Could not toggle screen share.'
-                setError(message)
-              }
-            }}
-            onLeave={async () => {
-              setError(null)
-              try {
-                await leaveLiveKitDmVoice(partnerIdentity, roomForPartner)
-                setRoom(null)
-                setJoinedPartnerIdentity(null)
-              } catch (e) {
-                const message = e instanceof Error ? e.message : 'Could not leave DM voice call.'
-                setError(message)
-              }
-            }}
-          />
-        </div>
+              }}
+            />
+          </div>
+        ) : null}
 
         {joined && !hasMicCapture ? <p className="text-xs text-muted-foreground">{getMicrophoneUnavailableReason()}</p> : null}
         {joined && hasMicCapture && !hasScreenCapture ? (

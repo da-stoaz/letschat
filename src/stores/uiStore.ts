@@ -6,11 +6,13 @@ interface UiState {
   activeChannelId: u64 | null
   activeDmPartner: Identity | null
   rightPanelOpen: boolean
+  activeCallDockVisible: boolean
   modals: Record<string, boolean>
   unreadByChannel: Record<u64, number>
   setActiveChannelId: (channelId: u64 | null) => void
   setActiveDmPartner: (identity: Identity | null) => void
   toggleRightPanel: () => void
+  setActiveCallDockVisible: (visible: boolean) => void
   setModal: (name: string, open: boolean) => void
   incrementUnread: (channelId: u64) => void
   clearUnread: (channelId: u64) => void
@@ -22,6 +24,7 @@ export const useUiStore = create<UiState>()(
       activeChannelId: null,
       activeDmPartner: null,
       rightPanelOpen: false,
+      activeCallDockVisible: false,
       modals: {},
       unreadByChannel: {},
       setActiveChannelId: (channelId) =>
@@ -29,6 +32,8 @@ export const useUiStore = create<UiState>()(
       setActiveDmPartner: (identity) =>
         set((state) => (state.activeDmPartner === identity ? state : { activeDmPartner: identity })),
       toggleRightPanel: () => set((state) => ({ rightPanelOpen: !state.rightPanelOpen })),
+      setActiveCallDockVisible: (visible) =>
+        set((state) => (state.activeCallDockVisible === visible ? state : { activeCallDockVisible: visible })),
       setModal: (name, open) =>
         set((state) => {
           if (state.modals[name] === open) return state

@@ -24,6 +24,7 @@ import { ActiveCallCard } from './app-layout/ActiveCallCard'
 import { ServerRail } from './app-layout/ServerRail'
 import { ServerSidebar } from './app-layout/ServerSidebar'
 import { cn } from '../lib/utils'
+import { useIsMobile } from '../hooks/use-mobile'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { Channel } from '../types/domain'
@@ -62,10 +63,12 @@ export function AppLayout() {
   const activeChannelId = Number(params.channelId ?? 0) || null
   const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
   const setActiveDmPartner = useUiStore((s) => s.setActiveDmPartner)
+  const setActiveCallDockVisible = useUiStore((s) => s.setActiveCallDockVisible)
   const clearUnread = useUiStore((s) => s.clearUnread)
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen)
   const toggleRightPanel = useUiStore((s) => s.toggleRightPanel)
   const role = useServerRole(activeServerId)
+  const isMobile = useIsMobile()
   const activeDmIdentity = params.identity && params.identity !== 'friends' ? params.identity : null
   const normalizedSelfIdentity = selfIdentity ? normalizeIdentity(selfIdentity) : null
 
@@ -280,6 +283,11 @@ export function AppLayout() {
     dmVoiceRoom !== null ||
     voiceJoining ||
     dmVoiceJoining
+  const activeCallDockVisible = hasActiveCallDock && !isMobile
+
+  useEffect(() => {
+    setActiveCallDockVisible(activeCallDockVisible)
+  }, [activeCallDockVisible, setActiveCallDockVisible])
 
   return (
     <>
@@ -330,7 +338,7 @@ export function AppLayout() {
               onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
             />
 
-            {hasActiveCallDock ? (
+            {activeCallDockVisible ? (
               <ActiveCallCard
                 variant="sidebar"
                 className="col-span-2 max-md:hidden"

@@ -18,6 +18,7 @@ import { ConnectionState } from 'livekit-client'
 import { warnOnce } from '../../lib/devWarnings'
 import { VoiceControlBar } from './components/VoiceControlBar'
 import { ParticipantMediaTile } from './components/ParticipantMediaTile'
+import { useLegacyCallControlsVisible } from './hooks/useLegacyCallControls'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
@@ -106,7 +107,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const connectedToRoom = roomForChannel !== null && connectionState === ConnectionState.Connected
   const connectingToRoom = joining || (roomForChannel !== null && connectionState === ConnectionState.Connecting)
   const joined = connectedToRoom
-  const dockControlsActive = roomForChannel !== null || joining || connectedToRoom || connectionState === ConnectionState.Connecting
+  const showLegacyControls = useLegacyCallControlsVisible()
   const displayParticipants = !selfIdentity
     ? participants
     : participants.filter((participant) => joined || !sameIdentity(participant.userIdentity, selfIdentity))
@@ -205,7 +206,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
         </div>
       </ScrollArea>
 
-      {!dockControlsActive ? (
+      {showLegacyControls ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
           <VoiceControlBar
             joined={joined}
