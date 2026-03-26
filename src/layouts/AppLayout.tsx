@@ -3,9 +3,12 @@ import { Outlet, useNavigate, useParams } from 'react-router-dom'
 import { useServerRole } from '../hooks/useServerRole'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useDmStore } from '../stores/dmStore'
+import { useFriendsStore } from '../stores/friendsStore'
 import { useMembersStore } from '../stores/membersStore'
 import { useServersStore } from '../stores/serversStore'
 import { useUiStore } from '../stores/uiStore'
+import { useUsersStore } from '../stores/usersStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { normalizeIdentity } from './app-layout/helpers'
@@ -31,13 +34,18 @@ export function AppLayout() {
   const membersByServer = useMembersStore((s) => s.membersByServer)
   const unreadByChannel = useUiStore((s) => s.unreadByChannel)
   const participantsByChannel = useVoiceStore((s) => s.participantsByChannel)
+  const conversations = useDmStore((s) => s.conversations)
+  const friends = useFriendsStore((s) => s.friends)
+  const usersByIdentity = useUsersStore((s) => s.byIdentity)
   const joinedVoiceChannelId = useVoiceSessionStore((s) => s.joinedChannelId)
   const selfIdentity = useConnectionStore((s) => s.identity)
   const activeServerId = Number(params.serverId ?? 0) || null
   const activeChannelId = Number(params.channelId ?? 0) || null
   const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
+  const setActiveDmPartner = useUiStore((s) => s.setActiveDmPartner)
   const clearUnread = useUiStore((s) => s.clearUnread)
   const role = useServerRole(activeServerId)
+  const activeDmIdentity = params.identity && params.identity !== 'friends' ? params.identity : null
   const normalizedSelfIdentity = selfIdentity ? normalizeIdentity(selfIdentity) : null
 
   useEffect(() => {
@@ -51,6 +59,10 @@ export function AppLayout() {
       setActiveChannelId(activeChannelId)
     }
   }, [activeChannelId, setActiveChannelId])
+
+  useEffect(() => {
+    setActiveDmPartner(activeDmIdentity)
+  }, [activeDmIdentity, setActiveDmPartner])
 
   const activeChannels = useMemo(
     () => (activeServerId ? channelsByServer[activeServerId] ?? EMPTY_CHANNELS : EMPTY_CHANNELS),
@@ -69,6 +81,43 @@ export function AppLayout() {
     () => (activeServerId ? membersByServer[activeServerId] ?? [] : []),
     [activeServerId, membersByServer],
   )
+  const dmContacts = useMemo(() => {
+    if (!selfIdentity) return []
+
+    const acceptedFriends = friends.filter((friend) => friend.status === 'Accepted')
+    const seen = new Set<string>()
+    const contacts: Array<{ identity: string; label: string; username: string; lastActivityAt: string | null }> = []
+
+    for (const friend of acceptedFriends) {
+      const other =
+        normalizeIdentity(friend.userA) === normalizeIdentity(selfIdentity) ? friend.userB
+        : normalizeIdentity(friend.userB) === normalizeIdentity(selfIdentity) ? friend.userA
+        : null
+      if (!other) continue
+
+      const key = normalizeIdentity(other)
+      if (seen.has(key)) continue
+      seen.add(key)
+
+      const knownUser = Object.values(usersByIdentity).find((user) => normalizeIdentity(user.identity) === key)
+      const thread = conversations[other] ?? []
+      const lastMessage = thread.length > 0 ? thread[thread.length - 1] : null
+      contacts.push({
+        identity: other,
+        label: knownUser?.displayName || knownUser?.username || other.slice(0, 14),
+        username: knownUser?.username || other.slice(0, 12),
+        lastActivityAt: lastMessage?.sentAt ?? friend.updatedAt,
+      })
+    }
+
+    contacts.sort((a, b) => {
+      const aTime = a.lastActivityAt ? Date.parse(a.lastActivityAt) : 0
+      const bTime = b.lastActivityAt ? Date.parse(b.lastActivityAt) : 0
+      return bTime - aTime
+    })
+
+    return contacts.map(({ identity, label, username }) => ({ identity, label, username }))
+  }, [conversations, friends, selfIdentity, usersByIdentity])
   const memberProfileByIdentity = useMemo(() => {
     const map = new Map<string, { label: string; avatarUrl: string | null }>()
     for (const member of activeServerMembers) {
@@ -150,6 +199,9 @@ export function AppLayout() {
               openChannel(activeServerId, channelId)
             }}
             onOpenFriends={() => navigate('/app/dm/friends')}
+            dmContacts={dmContacts}
+            activeDmIdentity={activeDmIdentity}
+            onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
           />
 
           <Card className="border-border/60 bg-card/80 backdrop-blur">

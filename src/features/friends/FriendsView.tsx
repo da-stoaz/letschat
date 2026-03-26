@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { UserPlusIcon, UserCheckIcon, ShieldBanIcon, UserMinusIcon } from 'lucide-react'
 import { reducers, resolveIdentityFromUsername } from '../../lib/spacetimedb'
 import { useFriendsStore } from '../../stores/friendsStore'
@@ -28,6 +29,7 @@ function shortIdentity(identity: string): string {
 }
 
 export function FriendsView() {
+  const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('all')
   const [username, setUsername] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -128,22 +130,27 @@ export function FriendsView() {
                       <p className="text-xs text-muted-foreground">@{shortIdentity(targetIdentity)}</p>
                       <p className="text-xs text-muted-foreground">Friend</p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        setError(null)
-                        try {
-                          await reducers.removeFriend(targetIdentity)
-                        } catch (e) {
-                          const message = e instanceof Error ? e.message : 'Could not remove friend.'
-                          setError(message)
-                        }
-                      }}
-                    >
-                      <UserMinusIcon className="size-4" />
-                      Remove
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => navigate(`/app/dm/${targetIdentity}`)}>
+                        Message
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          setError(null)
+                          try {
+                            await reducers.removeFriend(targetIdentity)
+                          } catch (e) {
+                            const message = e instanceof Error ? e.message : 'Could not remove friend.'
+                            setError(message)
+                          }
+                        }}
+                      >
+                        <UserMinusIcon className="size-4" />
+                        Remove
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               )

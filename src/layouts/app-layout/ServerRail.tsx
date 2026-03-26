@@ -76,6 +76,17 @@ export function ServerRail({
                 <TooltipContent side="right">{server.name}</TooltipContent>
               </Tooltip>
             ))}
+
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button variant="ghost" size="icon" className="h-11 w-11 rounded-2xl border border-dashed border-border/70" onClick={onOpenCreateServer} />
+                }
+              >
+                <PlusIcon className="size-4" />
+              </TooltipTrigger>
+              <TooltipContent side="right">Create Server</TooltipContent>
+            </Tooltip>
           </div>
         </ScrollArea>
 
@@ -95,17 +106,6 @@ export function ServerRail({
             <MessageCircleIcon className="size-4" />
           </TooltipTrigger>
           <TooltipContent side="right">Direct Messages</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl" onClick={onOpenCreateServer} />
-            }
-          >
-            <PlusIcon className="size-4" />
-          </TooltipTrigger>
-          <TooltipContent side="right">Create Server</TooltipContent>
         </Tooltip>
 
         <div className="flex-1" />
