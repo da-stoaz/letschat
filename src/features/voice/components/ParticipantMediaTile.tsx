@@ -146,7 +146,7 @@ export function ParticipantMediaTile({
               </Avatar>
             </div>
           )}
-          {!isLocal ? <audio ref={audioRef} autoPlay /> : null}
+          {!isLocal ? <audio ref={audioRef} autoPlay data-letschat-audio="remote" /> : null}
         </div>
         <div className="flex flex-wrap gap-1">
           {isSpeaking ? <Badge>Speaking</Badge> : null}

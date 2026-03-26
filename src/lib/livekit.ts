@@ -207,6 +207,10 @@ export interface LivekitDeviceOption {
   label: string
 }
 
+type SinkCapableElement = HTMLMediaElement & {
+  setSinkId: (sinkId: string) => Promise<void>
+}
+
 type ConnectProfile = {
   roomOptions?: RoomOptions
   connectOptions?: RoomConnectOptions
@@ -293,8 +297,53 @@ export async function switchRoomDevice(
   room: Room,
   kind: LivekitDeviceKind,
   deviceId: string,
-): Promise<void> {
+): Promise<string> {
   await room.switchActiveDevice(kind, deviceId, false)
+  if (kind !== 'audiooutput') {
+    return room.getActiveDevice(kind) ?? deviceId
+  }
+
+  const sinkId = room.getActiveDevice('audiooutput') ?? deviceId
+
+  // Reinforce sink changes for already-attached remote tracks/elements.
+  await Promise.all(
+    Array.from(room.remoteParticipants.values()).map(async (participant) => {
+      try {
+        await participant.setAudioOutput({ deviceId: sinkId })
+      } catch {
+        // Best-effort fallback below.
+      }
+
+      for (const publication of participant.audioTrackPublications.values()) {
+        const track = publication.audioTrack as { setSinkId?: (id: string) => Promise<void> } | null
+        if (typeof track?.setSinkId !== 'function') continue
+        try {
+          await track.setSinkId(sinkId)
+        } catch {
+          // Keep trying other attached tracks/elements.
+        }
+      }
+    }),
+  )
+
+  if (typeof document !== 'undefined') {
+    const audioElements = Array.from(
+      document.querySelectorAll<HTMLAudioElement>('audio[data-letschat-audio="remote"]'),
+    )
+    await Promise.all(
+      audioElements.map(async (element) => {
+        const sinkElement = element as SinkCapableElement
+        if (typeof sinkElement.setSinkId !== 'function') return
+        try {
+          await sinkElement.setSinkId(sinkId)
+        } catch {
+          // Ignore individual element failures.
+        }
+      }),
+    )
+  }
+
+  return sinkId
 }
 
 async function getAvailableVideoInputDeviceIds(): Promise<string[]> {

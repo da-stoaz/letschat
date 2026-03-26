@@ -259,17 +259,35 @@ export function ActiveCallCard({
       setAudioOutputs(nextAudioOutputs)
       setVideoInputs(nextVideoInputs)
 
-      const nextAudioInput = selectInitialDevice(audioInputId, activeRoom.getActiveDevice('audioinput'), nextAudioInputs)
-      const nextAudioOutput = selectInitialDevice(audioOutputId, activeRoom.getActiveDevice('audiooutput'), nextAudioOutputs)
-      const nextVideoInput = selectInitialDevice(videoInputId, activeRoom.getActiveDevice('videoinput'), nextVideoInputs)
+      const {
+        audioInputId: storedAudioInputId,
+        audioOutputId: storedAudioOutputId,
+        videoInputId: storedVideoInputId,
+      } = useMediaDeviceStore.getState()
 
-      if (nextAudioInput !== audioInputId) {
+      const nextAudioInput = selectInitialDevice(
+        storedAudioInputId,
+        activeRoom.getActiveDevice('audioinput'),
+        nextAudioInputs,
+      )
+      const nextAudioOutput = selectInitialDevice(
+        storedAudioOutputId,
+        activeRoom.getActiveDevice('audiooutput'),
+        nextAudioOutputs,
+      )
+      const nextVideoInput = selectInitialDevice(
+        storedVideoInputId,
+        activeRoom.getActiveDevice('videoinput'),
+        nextVideoInputs,
+      )
+
+      if (nextAudioInput !== storedAudioInputId) {
         setAudioInputId(nextAudioInput)
       }
-      if (nextAudioOutput !== audioOutputId) {
+      if (nextAudioOutput !== storedAudioOutputId) {
         setAudioOutputId(nextAudioOutput)
       }
-      if (nextVideoInput !== videoInputId) {
+      if (nextVideoInput !== storedVideoInputId) {
         setVideoInputId(nextVideoInput)
       }
     }
@@ -280,12 +298,9 @@ export function ActiveCallCard({
     }
   }, [
     activeRoom,
-    audioInputId,
-    audioOutputId,
     setAudioInputId,
     setAudioOutputId,
     setVideoInputId,
-    videoInputId,
   ])
 
   useEffect(() => {
@@ -361,15 +376,24 @@ export function ActiveCallCard({
     deviceId: string | null,
   ) => {
     if (!deviceId) return
-    if (kind === 'audioinput') setAudioInputId(deviceId)
-    if (kind === 'audiooutput') setAudioOutputId(deviceId)
-    if (kind === 'videoinput') setVideoInputId(deviceId)
+
     if (kind === 'audiooutput' && !audioOutputSwitchSupported) {
+      setAudioOutputId(deviceId)
       return
     }
-    if (!activeRoom) return
+
+    if (!activeRoom) {
+      if (kind === 'audioinput') setAudioInputId(deviceId)
+      if (kind === 'audiooutput') setAudioOutputId(deviceId)
+      if (kind === 'videoinput') setVideoInputId(deviceId)
+      return
+    }
+
     try {
-      await switchRoomDevice(activeRoom, kind, deviceId)
+      const appliedDeviceId = await switchRoomDevice(activeRoom, kind, deviceId)
+      if (kind === 'audioinput') setAudioInputId(appliedDeviceId)
+      if (kind === 'audiooutput') setAudioOutputId(appliedDeviceId)
+      if (kind === 'videoinput') setVideoInputId(appliedDeviceId)
       setCurrentError(null)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not switch media device.'
