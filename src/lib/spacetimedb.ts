@@ -15,6 +15,7 @@ import { useMessagesStore } from '../stores/messagesStore'
 import { useSelfStore } from '../stores/selfStore'
 import { useServersStore } from '../stores/serversStore'
 import { useUiStore } from '../stores/uiStore'
+import { useUsersStore } from '../stores/usersStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { tauriCommands } from './tauri'
@@ -99,6 +100,14 @@ function enumTag(value: unknown): string {
 
 function normalizeUsername(username: string): string {
   return username.trim().toLowerCase()
+}
+
+function normalizeIdentity(identity: Identity): string {
+  return identity.trim().toLowerCase()
+}
+
+function sameIdentity(a: Identity, b: Identity): boolean {
+  return normalizeIdentity(a) === normalizeIdentity(b)
 }
 
 function mapUser(row: any): User {
@@ -197,10 +206,11 @@ function mapDirectMessage(row: any): DirectMessage {
 
 function syncUsers(conn: DbConnection): User[] {
   const users = Array.from(conn.db.user.iter()).map(mapUser)
+  useUsersStore.getState().setUsers(users)
   const selfIdentity = useConnectionStore.getState().identity
 
   if (selfIdentity) {
-    useSelfStore.getState().setUser(users.find((user) => user.identity === selfIdentity) ?? null)
+    useSelfStore.getState().setUser(users.find((user) => sameIdentity(user.identity, selfIdentity)) ?? null)
   }
 
   return users
@@ -300,8 +310,22 @@ function syncVoiceParticipants(conn: DbConnection): void {
 }
 
 function syncFriends(conn: DbConnection): void {
-  useFriendsStore.getState().setFriends(Array.from(conn.db.friend.iter()).map(mapFriend))
-  useFriendsStore.getState().setBlocked(Array.from(conn.db.block.iter()).map(mapBlock))
+  const me = useConnectionStore.getState().identity
+  if (!me) {
+    useFriendsStore.getState().setFriends([])
+    useFriendsStore.getState().setBlocked([])
+    return
+  }
+
+  const friends = Array.from(conn.db.friend.iter())
+    .map(mapFriend)
+    .filter((row) => sameIdentity(row.userA, me) || sameIdentity(row.userB, me))
+  const blocked = Array.from(conn.db.block.iter())
+    .map(mapBlock)
+    .filter((row) => sameIdentity(row.blocker, me))
+
+  useFriendsStore.getState().setFriends(friends)
+  useFriendsStore.getState().setBlocked(blocked)
 }
 
 function syncDirectMessages(conn: DbConnection): void {
@@ -342,6 +366,7 @@ function resetClientState(): void {
 
   useConnectionStore.getState().setIdentity(null)
   useSelfStore.getState().setUser(null)
+  useUsersStore.setState({ users: [], byIdentity: {} })
 
   useServersStore.setState({ servers: [], activeServerId: null })
   useChannelsStore.setState({ channelsByServer: {} })

@@ -3,29 +3,73 @@ import { UserPlusIcon, UserCheckIcon, ShieldBanIcon, UserMinusIcon } from 'lucid
 import { reducers, resolveIdentityFromUsername } from '../../lib/spacetimedb'
 import { useFriendsStore } from '../../stores/friendsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useUsersStore } from '../../stores/usersStore'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent } from '@/components/ui/card'
+import type { Friend, Identity } from '../../types/domain'
 
 type Tab = 'all' | 'pending' | 'blocked'
+
+function normalizeIdentity(identity: string): string {
+  return identity.trim().toLowerCase()
+}
+
+function sameIdentity(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false
+  return normalizeIdentity(a) === normalizeIdentity(b)
+}
+
+function shortIdentity(identity: string): string {
+  return identity.slice(0, 14)
+}
 
 export function FriendsView() {
   const [tab, setTab] = useState<Tab>('all')
   const [username, setUsername] = useState('')
   const [error, setError] = useState<string | null>(null)
   const selfIdentity = useConnectionStore((s) => s.identity)
+  const usersByIdentity = useUsersStore((s) => s.byIdentity)
   const friends = useFriendsStore((s) => s.friends)
   const blocked = useFriendsStore((s) => s.blocked)
 
+  const usersByNormalizedIdentity = useMemo(() => {
+    const map = new Map<string, { displayName: string; username: string }>()
+    for (const user of Object.values(usersByIdentity)) {
+      map.set(normalizeIdentity(user.identity), {
+        displayName: user.displayName,
+        username: user.username,
+      })
+    }
+    return map
+  }, [usersByIdentity])
+
+  const getDisplayLabel = (identity: string): string => {
+    const user = usersByNormalizedIdentity.get(normalizeIdentity(identity))
+    if (!user) return shortIdentity(identity)
+    return user.displayName || user.username || shortIdentity(identity)
+  }
+
+  const getOtherIdentity = (friend: Friend): Identity | null => {
+    if (!selfIdentity) return null
+    if (sameIdentity(friend.userA, selfIdentity)) return friend.userB
+    if (sameIdentity(friend.userB, selfIdentity)) return friend.userA
+    return null
+  }
+
   const pending = useMemo(() => friends.filter((f) => f.status === 'Pending'), [friends])
   const accepted = useMemo(() => friends.filter((f) => f.status === 'Accepted'), [friends])
-  const incomingPending = useMemo(() => pending.filter((f) => f.requestedBy !== selfIdentity), [pending, selfIdentity])
-  const outgoingPending = useMemo(() => pending.filter((f) => f.requestedBy === selfIdentity), [pending, selfIdentity])
-
-  const otherIdentity = (a: string, b: string) => (a === selfIdentity ? b : a)
+  const incomingPending = useMemo(
+    () => pending.filter((f) => !sameIdentity(f.requestedBy, selfIdentity)),
+    [pending, selfIdentity],
+  )
+  const outgoingPending = useMemo(
+    () => pending.filter((f) => sameIdentity(f.requestedBy, selfIdentity)),
+    [pending, selfIdentity],
+  )
 
   return (
     <section className="flex h-full min-h-0 flex-col rounded-xl border border-border/70 bg-card/60 p-3">
@@ -45,13 +89,22 @@ export function FriendsView() {
             event.preventDefault()
             if (!username.trim()) return
             setError(null)
-            const targetIdentity = await resolveIdentityFromUsername(username)
-            if (!targetIdentity) {
-              setError(`No user found for username "${username}"`)
-              return
+            try {
+              const targetIdentity = await resolveIdentityFromUsername(username)
+              if (!targetIdentity) {
+                setError(`No user found for username "${username}"`)
+                return
+              }
+              if (sameIdentity(targetIdentity, selfIdentity)) {
+                setError('You cannot add yourself as a friend.')
+                return
+              }
+              await reducers.sendFriendRequest(targetIdentity)
+              setUsername('')
+            } catch (e) {
+              const message = e instanceof Error ? e.message : 'Could not send friend request.'
+              setError(message)
             }
-            await reducers.sendFriendRequest(targetIdentity)
-            setUsername('')
           }}
         >
           <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Add friend by username" />
@@ -65,15 +118,29 @@ export function FriendsView() {
         <ScrollArea className="min-h-0 flex-1">
           <TabsContent value="all" className="space-y-2">
             {accepted.map((f) => {
-              const targetIdentity = otherIdentity(f.userA, f.userB)
+              const targetIdentity = getOtherIdentity(f)
+              if (!targetIdentity || sameIdentity(targetIdentity, selfIdentity)) return null
               return (
                 <Card key={`${f.userA}:${f.userB}`} className="border-border/70 bg-background/45 py-0">
                   <CardContent className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium">{targetIdentity.slice(0, 14)}</p>
+                      <p className="text-sm font-medium">{getDisplayLabel(targetIdentity)}</p>
+                      <p className="text-xs text-muted-foreground">@{shortIdentity(targetIdentity)}</p>
                       <p className="text-xs text-muted-foreground">Friend</p>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => reducers.removeFriend(targetIdentity)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        setError(null)
+                        try {
+                          await reducers.removeFriend(targetIdentity)
+                        } catch (e) {
+                          const message = e instanceof Error ? e.message : 'Could not remove friend.'
+                          setError(message)
+                        }
+                      }}
+                    >
                       <UserMinusIcon className="size-4" />
                       Remove
                     </Button>
@@ -93,13 +160,39 @@ export function FriendsView() {
                 return (
                   <Card key={`${f.userA}:${f.userB}:incoming`} className="border-border/70 bg-background/45 py-0">
                     <CardContent className="flex items-center justify-between gap-3">
-                      <span className="text-sm">{requesterIdentity.slice(0, 14)}</span>
+                      <div>
+                        <span className="text-sm">{getDisplayLabel(requesterIdentity)}</span>
+                        <p className="text-xs text-muted-foreground">@{shortIdentity(requesterIdentity)}</p>
+                      </div>
                       <div className="flex items-center gap-2">
-                        <Button size="sm" onClick={() => reducers.acceptFriendRequest(requesterIdentity)}>
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            setError(null)
+                            try {
+                              await reducers.acceptFriendRequest(requesterIdentity)
+                            } catch (e) {
+                              const message = e instanceof Error ? e.message : 'Could not accept request.'
+                              setError(message)
+                            }
+                          }}
+                        >
                           <UserCheckIcon className="size-4" />
                           Accept
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => reducers.declineFriendRequest(requesterIdentity)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            setError(null)
+                            try {
+                              await reducers.declineFriendRequest(requesterIdentity)
+                            } catch (e) {
+                              const message = e instanceof Error ? e.message : 'Could not decline request.'
+                              setError(message)
+                            }
+                          }}
+                        >
                           Decline
                         </Button>
                       </div>
@@ -114,12 +207,28 @@ export function FriendsView() {
                 <Badge variant="secondary">Outgoing</Badge>
               </div>
               {outgoingPending.map((f) => {
-                const requesterIdentity = f.requestedBy
+                const targetIdentity = getOtherIdentity(f)
+                if (!targetIdentity) return null
                 return (
                   <Card key={`${f.userA}:${f.userB}:outgoing`} className="border-border/70 bg-background/45 py-0">
                     <CardContent className="flex items-center justify-between gap-3">
-                      <span className="text-sm">{otherIdentity(f.userA, f.userB).slice(0, 14)}</span>
-                      <Button variant="outline" size="sm" onClick={() => reducers.declineFriendRequest(requesterIdentity)}>
+                      <div>
+                        <span className="text-sm">{getDisplayLabel(targetIdentity)}</span>
+                        <p className="text-xs text-muted-foreground">@{shortIdentity(targetIdentity)}</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          setError(null)
+                          try {
+                            await reducers.declineFriendRequest(targetIdentity)
+                          } catch (e) {
+                            const message = e instanceof Error ? e.message : 'Could not cancel request.'
+                            setError(message)
+                          }
+                        }}
+                      >
                         Cancel
                       </Button>
                     </CardContent>
@@ -133,8 +242,23 @@ export function FriendsView() {
             {blocked.map((b) => (
               <Card key={`${b.blocker}:${b.blocked}`} className="border-border/70 bg-background/45 py-0">
                 <CardContent className="flex items-center justify-between gap-3">
-                  <span className="text-sm">{b.blocked.slice(0, 14)}</span>
-                  <Button variant="outline" size="sm" onClick={() => reducers.unblockUser(b.blocked)}>
+                  <div>
+                    <span className="text-sm">{getDisplayLabel(b.blocked)}</span>
+                    <p className="text-xs text-muted-foreground">@{shortIdentity(b.blocked)}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      setError(null)
+                      try {
+                        await reducers.unblockUser(b.blocked)
+                      } catch (e) {
+                        const message = e instanceof Error ? e.message : 'Could not unblock user.'
+                        setError(message)
+                      }
+                    }}
+                  >
                     <ShieldBanIcon className="size-4" />
                     Unblock
                   </Button>
