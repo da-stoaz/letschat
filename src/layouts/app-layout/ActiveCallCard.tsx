@@ -488,8 +488,8 @@ export function ActiveCallCard({
           className,
         )}
       >
-        <CardContent className="space-y-2.5 p-2.5">
-          <div className="flex items-start justify-between gap-2">
+        <CardContent className="space-y-1.5 px-2.5">
+          <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold leading-5">{callTitle}</p>
               <p className="text-[11px] text-muted-foreground">
