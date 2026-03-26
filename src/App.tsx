@@ -8,11 +8,13 @@ import { DMPage } from './pages/DMPage'
 import { useSelfStore } from './stores/selfStore'
 import { useConnectionStore } from './stores/connectionStore'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
+import { useVoiceStateReconciler } from './hooks/useVoiceStateReconciler'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoaderCircleIcon } from 'lucide-react'
 
 function App() {
   usePresenceLifecycle()
+  useVoiceStateReconciler()
   const user = useSelfStore((s) => s.user)
   const connectionStatus = useConnectionStore((s) => s.status)
   const location = useLocation()
