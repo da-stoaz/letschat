@@ -8,6 +8,7 @@ import {
   leaveLiveKitDmVoice,
   requestMicrophonePermission,
   setLocalCameraEnabled,
+  switchRoomDevice,
   supportsMicrophoneCapture,
   supportsScreenCapture,
   useLiveKitRoom,
@@ -16,6 +17,7 @@ import { reducers } from '../../lib/spacetimedb'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useDmVoiceSessionStore } from '../../stores/dmVoiceSessionStore'
 import { useDmVoiceStore } from '../../stores/dmVoiceStore'
+import { useMediaDeviceStore } from '../../stores/mediaDeviceStore'
 import { useUsersStore } from '../../stores/usersStore'
 import type { DmVoiceParticipant, Identity } from '../../types/domain'
 import { VoiceControlBar } from '../voice/components/VoiceControlBar'
@@ -46,6 +48,8 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
   const setJoinedPartnerIdentity = useDmVoiceSessionStore((s) => s.setJoinedPartnerIdentity)
   const setJoining = useDmVoiceSessionStore((s) => s.setJoining)
   const setError = useDmVoiceSessionStore((s) => s.setError)
+  const audioInputId = useMediaDeviceStore((s) => s.audioInputId)
+  const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
   const staleCleanupMarker = useRef<string | null>(null)
 
   const roomKey = selfIdentity ? dmVoiceRoomKey(selfIdentity, partnerIdentity) : null
@@ -254,6 +258,9 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
                 const nextMuted = !selfParticipant.muted
                 if (!nextMuted) {
                   await ensureMicrophoneCapture()
+                  if (audioInputId) {
+                    await switchRoomDevice(roomForPartner, 'audioinput', audioInputId)
+                  }
                 }
                 await roomForPartner.localParticipant.setMicrophoneEnabled(!nextMuted)
                 await patchVoiceState({ muted: nextMuted })
@@ -277,7 +284,7 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
               if (!roomForPartner || !selfParticipant) return
               try {
                 const next = !selfParticipant.sharingCamera
-                await setLocalCameraEnabled(roomForPartner, next)
+                await setLocalCameraEnabled(roomForPartner, next, videoInputId ?? undefined)
                 await patchVoiceState({ sharingCamera: next })
               } catch (e) {
                 setError(getCameraErrorMessage(e))

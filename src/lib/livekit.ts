@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { RoomConnectOptions, RoomOptions, VideoCaptureOptions } from 'livekit-client'
-import { ConnectionState, Room, Track, createLocalVideoTrack } from 'livekit-client'
+import { ConnectionState, Room, Track } from 'livekit-client'
 import { reducers } from './spacetimedb'
 import { tauriCommands } from './tauri'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -199,6 +199,14 @@ export function dmVoiceRoomKey(identityA: Identity, identityB: Identity): string
   return a <= b ? `${a}:${b}` : `${b}:${a}`
 }
 
+export type LivekitDeviceKind = 'audioinput' | 'videoinput' | 'audiooutput'
+
+export interface LivekitDeviceOption {
+  deviceId: string
+  kind: LivekitDeviceKind
+  label: string
+}
+
 type ConnectProfile = {
   roomOptions?: RoomOptions
   connectOptions?: RoomConnectOptions
@@ -257,12 +265,47 @@ async function getPreferredVideoInputDeviceId(): Promise<string | undefined> {
   }
 }
 
-async function getPreferredCameraCaptureOptions(): Promise<VideoCaptureOptions> {
-  const preferredDeviceId = await getPreferredVideoInputDeviceId()
-  return {
-    ...(preferredDeviceId ? { deviceId: preferredDeviceId } : {}),
-    resolution: { width: 1280, height: 720 },
-    frameRate: 30,
+function fallbackDeviceLabel(kind: LivekitDeviceKind, index: number): string {
+  if (kind === 'audioinput') return `Microphone ${index + 1}`
+  if (kind === 'audiooutput') return `Speaker ${index + 1}`
+  return `Camera ${index + 1}`
+}
+
+export async function listLivekitDevices(
+  kind: LivekitDeviceKind,
+  requestPermissions = false,
+): Promise<LivekitDeviceOption[]> {
+  try {
+    const devices = await Room.getLocalDevices(kind, requestPermissions)
+    return devices
+      .filter((device) => Boolean(device.deviceId))
+      .map((device, index) => ({
+        deviceId: device.deviceId,
+        kind,
+        label: device.label || fallbackDeviceLabel(kind, index),
+      }))
+  } catch {
+    return []
+  }
+}
+
+export async function switchRoomDevice(
+  room: Room,
+  kind: LivekitDeviceKind,
+  deviceId: string,
+): Promise<void> {
+  await room.switchActiveDevice(kind, deviceId, false)
+}
+
+async function getAvailableVideoInputDeviceIds(): Promise<string[]> {
+  if (!ensureMediaDevicesGetUserMedia()) return []
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    return devices
+      .filter((device) => device.kind === 'videoinput' && Boolean(device.deviceId))
+      .map((device) => device.deviceId)
+  } catch {
+    return []
   }
 }
 
@@ -288,6 +331,82 @@ async function setCameraEnabledWithFallback(room: Room, options: Array<VideoCapt
   throw (lastError ?? new Error('Could not enable camera.'))
 }
 
+async function getUserMediaCameraTrackWithFallback(preferredDeviceId?: string): Promise<MediaStreamTrack> {
+  if (!ensureMediaDevicesGetUserMedia()) {
+    throw new Error(getCameraUnavailableReason())
+  }
+
+  const knownVideoDeviceIds = await getAvailableVideoInputDeviceIds()
+  const deviceAttempts: string[] = []
+  if (preferredDeviceId) {
+    deviceAttempts.push(preferredDeviceId)
+  }
+  for (const deviceId of knownVideoDeviceIds) {
+    if (!deviceAttempts.includes(deviceId)) {
+      deviceAttempts.push(deviceId)
+    }
+  }
+
+  const attempts: Array<MediaTrackConstraints | boolean> = []
+  for (const deviceId of deviceAttempts) {
+    attempts.push({
+      deviceId: { exact: deviceId },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { ideal: 30, max: 30 },
+    })
+  }
+  attempts.push(
+    {
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { ideal: 30, max: 30 },
+    },
+    {
+      width: { ideal: 640 },
+      height: { ideal: 480 },
+      frameRate: { ideal: 24, max: 24 },
+    },
+    true,
+  )
+
+  let lastError: unknown = null
+  for (const video of attempts) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false })
+      const [track, ...extraTracks] = stream.getVideoTracks()
+      if (!track) {
+        stream.getTracks().forEach((t) => t.stop())
+        continue
+      }
+      extraTracks.forEach((t) => t.stop())
+      for (const audioTrack of stream.getAudioTracks()) {
+        audioTrack.stop()
+      }
+      return track
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw (lastError ?? new Error('Could not acquire a camera track.'))
+}
+
+async function publishManualCameraTrack(room: Room, preferredDeviceId?: string): Promise<void> {
+  const manualTrack = await getUserMediaCameraTrackWithFallback(preferredDeviceId)
+
+  try {
+    const existingPublication = room.localParticipant.getTrackPublication(Track.Source.Camera)
+    if (existingPublication?.track) {
+      await room.localParticipant.unpublishTrack(existingPublication.track, true)
+    }
+    await room.localParticipant.publishTrack(manualTrack, { source: Track.Source.Camera })
+  } catch (error) {
+    manualTrack.stop()
+    throw error
+  }
+}
+
 async function waitForLocalCameraTrack(room: Room, timeoutMs = CAMERA_TRACK_WAIT_MS): Promise<boolean> {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
@@ -300,43 +419,50 @@ async function waitForLocalCameraTrack(room: Room, timeoutMs = CAMERA_TRACK_WAIT
   return false
 }
 
-export async function setLocalCameraEnabled(room: Room, enabled: boolean): Promise<void> {
+export async function setLocalCameraEnabled(
+  room: Room,
+  enabled: boolean,
+  preferredDeviceId?: string,
+): Promise<void> {
   if (!enabled) {
     await room.localParticipant.setCameraEnabled(false)
     return
   }
 
-  await requestCameraPermission()
-  const preferredCaptureOptions = await getPreferredCameraCaptureOptions()
+  const effectivePreferredDeviceId = preferredDeviceId ?? (await getPreferredVideoInputDeviceId())
+  if (effectivePreferredDeviceId) {
+    try {
+      await switchRoomDevice(room, 'videoinput', effectivePreferredDeviceId)
+    } catch {
+      // Continue with fallback capture attempts if runtime rejects an explicit device switch.
+    }
+  }
+
   const safeCaptureOptions: VideoCaptureOptions = {
     resolution: { width: 640, height: 480 },
     frameRate: 24,
   }
 
-  await setCameraEnabledWithFallback(room, [
-    preferredCaptureOptions,
-    safeCaptureOptions,
-    undefined,
-  ])
+  let primaryEnableError: unknown = null
+  try {
+    await setCameraEnabledWithFallback(room, [
+      undefined,
+      safeCaptureOptions,
+    ])
+  } catch (error) {
+    primaryEnableError = error
+  }
 
   if (await waitForLocalCameraTrack(room)) {
     return
   }
 
-  let manualTrack: Awaited<ReturnType<typeof createLocalVideoTrack>> | null = null
   try {
-    manualTrack = await createLocalVideoTrack(safeCaptureOptions)
+    await publishManualCameraTrack(room, effectivePreferredDeviceId)
   } catch (error) {
-    if (!(isCameraConstraintError(error) || isCameraDeviceNotFoundError(error))) {
-      throw error
+    if (primaryEnableError) {
+      throw primaryEnableError
     }
-    manualTrack = await createLocalVideoTrack({})
-  }
-
-  try {
-    await room.localParticipant.publishTrack(manualTrack, { source: Track.Source.Camera })
-  } catch (error) {
-    manualTrack.stop()
     throw error
   }
 

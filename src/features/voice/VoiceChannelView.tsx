@@ -7,6 +7,7 @@ import {
   leaveLiveKitVoice,
   requestMicrophonePermission,
   setLocalCameraEnabled,
+  switchRoomDevice,
   supportsMicrophoneCapture,
   supportsScreenCapture,
   useLiveKitRoom,
@@ -16,6 +17,7 @@ import { useVoiceStore } from '../../stores/voiceStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useMembersStore } from '../../stores/membersStore'
 import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
+import { useMediaDeviceStore } from '../../stores/mediaDeviceStore'
 import type { VoiceParticipant, u64 } from '../../types/domain'
 import { ConnectionState } from 'livekit-client'
 import { warnOnce } from '../../lib/devWarnings'
@@ -58,6 +60,8 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const setError = useVoiceSessionStore((s) => s.setError)
   const staleCleanupMarker = useRef<string | null>(null)
   const selfIdentity = useConnectionStore((s) => s.identity)
+  const audioInputId = useMediaDeviceStore((s) => s.audioInputId)
+  const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
   useEffect(() => {
     setError(null)
   }, [channelId, setError])
@@ -264,6 +268,9 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
               const nextMuted = !selfParticipant.muted
               if (!nextMuted) {
                 await ensureMicrophoneCapture()
+                if (audioInputId) {
+                  await switchRoomDevice(roomForChannel, 'audioinput', audioInputId)
+                }
               }
               await roomForChannel.localParticipant.setMicrophoneEnabled(!nextMuted)
               await patchVoiceState({ muted: nextMuted })
@@ -287,7 +294,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
               if (!roomForChannel || !selfParticipant) return
               try {
                 const next = !selfParticipant.sharingCamera
-                await setLocalCameraEnabled(roomForChannel, next)
+                await setLocalCameraEnabled(roomForChannel, next, videoInputId ?? undefined)
                 await patchVoiceState({ sharingCamera: next })
               } catch (e) {
                 setError(getCameraErrorMessage(e))
