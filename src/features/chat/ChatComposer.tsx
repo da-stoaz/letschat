@@ -1,6 +1,7 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef } from 'react'
 import { SendHorizonalIcon } from 'lucide-react'
 import { publishTypingBroadcast } from '../../lib/typingBroadcast'
+import { usePresenceStore } from '../../stores/presenceStore'
 import { useTypingStore } from '../../stores/typingStore'
 import type { Identity } from '../../types/domain'
 import { Button } from '@/components/ui/button'
@@ -14,7 +15,6 @@ type ChatComposerProps = {
   disabled?: boolean
   helperText?: string
   disabledHint?: string
-  typingIndicator?: ReactNode
   typingScopeKey?: string
   typingIdentity?: Identity | null
   error?: string | null
@@ -30,7 +30,6 @@ export function ChatComposer({
   disabled = false,
   helperText = '',
   disabledHint = 'This channel is read-only for members.',
-  typingIndicator,
   typingScopeKey,
   typingIdentity = null,
   error = null,
@@ -44,6 +43,9 @@ export function ChatComposer({
   const emitTypingState = (isTyping: boolean) => {
     if (!typingScopeKey || !typingIdentity) return
     useTypingStore.getState().setTyping(typingScopeKey, typingIdentity, isTyping)
+    if (isTyping) {
+      usePresenceStore.getState().touchActive(typingIdentity, Date.now())
+    }
     publishTypingBroadcast({
       scopeKey: typingScopeKey,
       identity: typingIdentity,
@@ -121,11 +123,7 @@ export function ChatComposer({
         disabled={disabled}
         className="min-h-12 resize-none overflow-y-auto"
       />
-      {disabled ? (
-        <p className="text-xs text-muted-foreground">{disabledHint}</p>
-      ) : (
-        typingIndicator ?? (helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null)
-      )}
+      {disabled ? <p className="text-xs text-muted-foreground">{disabledHint}</p> : (helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null)}
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">{value.length >= 3500 ? `${value.length}/${maxLength}` : 'Shift+Enter for newline'}</p>
         <Button type="submit" disabled={disabled}>

@@ -17,8 +17,10 @@ export interface UserPresentation {
   status: UserPresenceStatus
 }
 
-const AWAY_AFTER_MS = 3 * 60 * 1000
-const CONNECTED_STALE_MS = 75 * 1000
+export const AWAY_AFTER_MS = 3 * 60 * 1000
+// With no dedicated backend heartbeat table yet, a longer staleness window
+// avoids users appearing offline immediately between normal interactions.
+export const CONNECTED_STALE_MS = 30 * 60 * 1000
 
 function normalizeIdentity(value: string): string {
   return value.trim().toLowerCase()

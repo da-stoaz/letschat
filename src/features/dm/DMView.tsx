@@ -115,7 +115,6 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         placeholder={`Message @${partner.username}`}
         typingScopeKey={typingScopeKey}
         typingIdentity={selfIdentity}
-        typingIndicator={<TypingIndicator scopeKey={typingScopeKey} selfIdentity={selfIdentity} />}
         error={error}
         onSubmit={async (trimmed) => {
           setError(null)
@@ -129,6 +128,9 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           }
         }}
       />
+      <div className="px-3 pb-2">
+        <TypingIndicator scopeKey={typingScopeKey} selfIdentity={selfIdentity} />
+      </div>
     </section>
   )
 }

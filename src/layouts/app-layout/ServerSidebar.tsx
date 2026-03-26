@@ -12,8 +12,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { PresenceDot } from '@/components/user/PresenceDot'
 import { VoiceChannelButton } from './VoiceChannelButton'
 import { userInitials } from './helpers'
+import type { UserPresenceStatus } from '../../hooks/useUserPresentation'
 import type { Channel, Role, Server, VoiceParticipant } from '../../types/domain'
 
 interface DmContact {
@@ -23,7 +25,7 @@ interface DmContact {
   avatarUrl: string | null
   lastMessagePreview: string
   lastMessageAt: string | null
-  online: boolean
+  status: UserPresenceStatus
 }
 
 interface ServerSidebarProps {
@@ -200,7 +202,7 @@ export function ServerSidebar({
                     <div className="min-w-0 text-left">
                       <div className="flex items-center gap-2">
                         <p className="truncate text-sm">{contact.label}</p>
-                        <span className={`size-1.5 rounded-full ${contact.online ? 'bg-emerald-400' : 'bg-muted-foreground/40'}`} />
+                        <PresenceDot status={contact.status} className="size-1.5" />
                       </div>
                       <p className="truncate text-xs text-muted-foreground">{contact.lastMessagePreview}</p>
                     </div>

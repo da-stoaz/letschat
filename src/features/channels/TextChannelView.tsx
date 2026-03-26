@@ -125,7 +125,6 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         placeholder={readOnlyForMember ? 'This channel is read-only for members' : `Message #${channel?.name ?? 'channel'}`}
         typingScopeKey={typingScopeKey}
         typingIdentity={selfIdentity}
-        typingIndicator={<TypingIndicator scopeKey={typingScopeKey} selfIdentity={selfIdentity} />}
         error={error}
         onSubmit={async (trimmed) => {
           setError(null)
@@ -141,6 +140,9 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
           }
         }}
       />
+      <div className="px-3 pb-2">
+        <TypingIndicator scopeKey={typingScopeKey} selfIdentity={selfIdentity} />
+      </div>
     </section>
   )
 }

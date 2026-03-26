@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Outlet, useNavigate, useParams } from 'react-router-dom'
 import { PanelRightCloseIcon, PanelRightOpenIcon } from 'lucide-react'
+import { AWAY_AFTER_MS, CONNECTED_STALE_MS, type UserPresenceStatus } from '../hooks/useUserPresentation'
 import { useServerRole } from '../hooks/useServerRole'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -12,6 +13,7 @@ import { useUiStore } from '../stores/uiStore'
 import { useUsersStore } from '../stores/usersStore'
 import { useDmVoiceStore } from '../stores/dmVoiceStore'
 import { useDmVoiceSessionStore } from '../stores/dmVoiceSessionStore'
+import { usePresenceStore } from '../stores/presenceStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { normalizeIdentity } from './app-layout/helpers'
@@ -54,6 +56,7 @@ export function AppLayout() {
   const joinedVoiceChannelId = useVoiceSessionStore((s) => s.joinedChannelId)
   const voiceRoom = useVoiceSessionStore((s) => s.room)
   const voiceJoining = useVoiceSessionStore((s) => s.joining)
+  const connectionStatus = useConnectionStore((s) => s.status)
   const selfIdentity = useConnectionStore((s) => s.identity)
   const activeServerId = Number(params.serverId ?? 0) || null
   const activeChannelId = Number(params.channelId ?? 0) || null
@@ -112,7 +115,7 @@ export function AppLayout() {
       lastMessagePreview: string
       lastMessageAt: string | null
       lastActivityAt: string | null
-      online: boolean
+      status: UserPresenceStatus
     }> = []
 
     for (const friend of acceptedFriends) {
@@ -137,7 +140,7 @@ export function AppLayout() {
         lastMessagePreview: lastMessage?.content || 'No messages yet',
         lastMessageAt: lastMessage?.sentAt ?? null,
         lastActivityAt: lastMessage?.sentAt ?? friend.updatedAt,
-        online: false,
+        status: 'offline',
       })
     }
 
@@ -179,6 +182,33 @@ export function AppLayout() {
     return result
   }, [dmFriends, dmJoinedPartnerIdentity, dmVoiceParticipantsByRoom, selfIdentity])
 
+  const nowMs = usePresenceStore((s) => s.nowMs)
+  const lastSeenByIdentity = usePresenceStore((s) => s.lastSeenByIdentity)
+  const lastActiveByIdentity = usePresenceStore((s) => s.lastActiveByIdentity)
+
+  const resolveDmPresenceStatus = (
+    identity: string,
+    fallbackSeenAtMs: number | null = null,
+  ): UserPresenceStatus => {
+    const normalizedIdentity = normalizeIdentity(identity)
+    const isSelf =
+      normalizedSelfIdentity !== null && normalizedSelfIdentity === normalizedIdentity
+    const presenceSeenAt = lastSeenByIdentity[normalizedIdentity] ?? 0
+    const presenceActiveAt = lastActiveByIdentity[normalizedIdentity] ?? presenceSeenAt
+    const fallbackSeen = fallbackSeenAtMs ?? 0
+    const lastSeenAt = Math.max(presenceSeenAt, fallbackSeen)
+    const lastActiveAt = Math.max(presenceActiveAt, fallbackSeen)
+    const inActiveDmCall = dmCallActiveByIdentity[identity] ?? false
+    const seenRecently =
+      lastSeenAt > 0 && nowMs - lastSeenAt <= CONNECTED_STALE_MS
+    const connected = isSelf
+      ? connectionStatus === 'connected'
+      : inActiveDmCall || seenRecently
+
+    if (!connected) return 'offline'
+    return nowMs - lastActiveAt > AWAY_AFTER_MS ? 'away' : 'online'
+  }
+
   const hasActiveDmCall = useMemo(
     () => dmVoiceJoining || Object.values(dmCallActiveByIdentity).some(Boolean),
     [dmCallActiveByIdentity, dmVoiceJoining],
@@ -188,18 +218,24 @@ export function AppLayout() {
     () =>
       dmContacts.map((contact) => ({
         ...contact,
-        online: dmCallActiveByIdentity[contact.identity] ?? false,
+        status: resolveDmPresenceStatus(
+          contact.identity,
+          contact.lastMessageAt ? Date.parse(contact.lastMessageAt) : null,
+        ),
       })),
-    [dmCallActiveByIdentity, dmContacts],
+    [dmContacts, resolveDmPresenceStatus],
   )
 
   const dmFriendsWithPresence = useMemo(
     () =>
       dmFriends.map((friend) => ({
         ...friend,
-        online: dmCallActiveByIdentity[friend.identity] ?? false,
+        status: resolveDmPresenceStatus(
+          friend.identity,
+          friend.lastMessageAt ? Date.parse(friend.lastMessageAt) : null,
+        ),
       })),
-    [dmCallActiveByIdentity, dmFriends],
+    [dmFriends, resolveDmPresenceStatus],
   )
 
   const quickDmContacts = useMemo(
