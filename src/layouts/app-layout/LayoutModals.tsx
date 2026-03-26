@@ -2,6 +2,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { CreateServerModal } from '../../modals/CreateServerModal'
 import { EditServerModal } from '../../modals/EditServerModal'
 import { CreateChannelModal } from '../../modals/CreateChannelModal'
+import { InviteModal } from '../../modals/InviteModal'
 import { SettingsModal } from '../../modals/SettingsModal'
 import type { Server } from '../../types/domain'
 
@@ -9,12 +10,14 @@ interface LayoutModalsProps {
   showCreateServer: boolean
   showEditServer: boolean
   showCreateChannel: boolean
+  showInvite: boolean
   showSettings: boolean
   activeServerId: number | null
   activeServer: Server | null
   setShowCreateServer: (open: boolean) => void
   setShowEditServer: (open: boolean) => void
   setShowCreateChannel: (open: boolean) => void
+  setShowInvite: (open: boolean) => void
   setShowSettings: (open: boolean) => void
 }
 
@@ -22,12 +25,14 @@ export function LayoutModals({
   showCreateServer,
   showEditServer,
   showCreateChannel,
+  showInvite,
   showSettings,
   activeServerId,
   activeServer,
   setShowCreateServer,
   setShowEditServer,
   setShowCreateChannel,
+  setShowInvite,
   setShowSettings,
 }: LayoutModalsProps) {
   return (
@@ -53,6 +58,12 @@ export function LayoutModals({
       <Dialog open={showCreateChannel && !!activeServerId} onOpenChange={setShowCreateChannel}>
         <DialogContent className="max-w-md">
           {activeServerId ? <CreateChannelModal serverId={activeServerId} onClose={() => setShowCreateChannel(false)} /> : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showInvite && !!activeServerId} onOpenChange={setShowInvite}>
+        <DialogContent className="max-w-md">
+          {activeServerId ? <InviteModal serverId={activeServerId} onClose={() => setShowInvite(false)} /> : null}
         </DialogContent>
       </Dialog>
 

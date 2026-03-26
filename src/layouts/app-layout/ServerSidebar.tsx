@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { VoiceChannelButton } from './VoiceChannelButton'
 import { userInitials } from './helpers'
 import type { Channel, Role, Server, VoiceParticipant } from '../../types/domain'
@@ -20,6 +20,10 @@ interface DmContact {
   identity: string
   label: string
   username: string
+  avatarUrl: string | null
+  lastMessagePreview: string
+  lastMessageAt: string | null
+  online: boolean
 }
 
 interface ServerSidebarProps {
@@ -36,10 +40,12 @@ interface ServerSidebarProps {
   normalizedSelfIdentity: string | null
   memberProfileByIdentity: Map<string, { label: string; avatarUrl: string | null }>
   onOpenRenameServer: () => void
+  onOpenInvite: () => void
   onOpenCreateChannel: () => void
   onSelectChannel: (channelId: number) => void
   onOpenFriends: () => void
   dmContacts: DmContact[]
+  dmFriends: DmContact[]
   activeDmIdentity: string | null
   dmCallActiveByIdentity: Record<string, boolean>
   onOpenDmContact: (identity: string) => void
@@ -59,10 +65,12 @@ export function ServerSidebar({
   normalizedSelfIdentity,
   memberProfileByIdentity,
   onOpenRenameServer,
+  onOpenInvite,
   onOpenCreateChannel,
   onSelectChannel,
   onOpenFriends,
   dmContacts,
+  dmFriends,
   activeDmIdentity,
   dmCallActiveByIdentity,
   onOpenDmContact,
@@ -82,8 +90,14 @@ export function ServerSidebar({
               <DropdownMenuItem onClick={onOpenRenameServer} disabled={!role || !canRenameServer(role)}>
                 Rename Server
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenInvite}>
+                Invite People
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={onOpenCreateChannel} disabled={!role || !canManageChannels(role)}>
                 Create Channel
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                Leave Server (coming soon)
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -158,29 +172,38 @@ export function ServerSidebar({
           </ScrollArea>
         ) : (
           <div className="space-y-3">
-            <Button className="w-full justify-start" variant="secondary" onClick={onOpenFriends}>
-              <MessageCircleIcon className="size-4" />
-              Friends
-            </Button>
-            {dmContacts.length > 0 ? (
-              <div className="space-y-2">
-                <p className="px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Start A Chat</p>
-                {dmContacts.map((contact) => (
+            <section className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Direct Messages</p>
+                <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={onOpenFriends}>
+                  <MessageCircleIcon className="size-3.5" />
+                  Friends
+                </Button>
+              </div>
+              {dmContacts.length > 0 ? (
+                dmContacts.map((contact) => (
                   <Button
                     key={contact.identity}
                     className="h-auto w-full justify-start gap-2 rounded-lg py-2"
                     variant={activeDmIdentity === contact.identity ? 'secondary' : 'ghost'}
                     onClick={() => onOpenDmContact(contact.identity)}
                   >
-                    <Avatar className="size-7 rounded-lg">
+                    <Avatar className="size-8 rounded-lg">
+                      {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
                       <AvatarFallback className="rounded-lg bg-primary/10 text-[10px]">
                         {userInitials(contact.label)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 text-left">
-                      <p className="truncate text-sm">{contact.label}</p>
-                      <p className="truncate text-xs text-muted-foreground">@{contact.username}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm">{contact.label}</p>
+                        <span className={`size-1.5 rounded-full ${contact.online ? 'bg-emerald-400' : 'bg-muted-foreground/40'}`} />
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">{contact.lastMessagePreview}</p>
                     </div>
+                    {contact.lastMessageAt ? (
+                      <span className="ml-auto text-[11px] text-muted-foreground">{new Date(contact.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    ) : null}
                     {dmCallActiveByIdentity[contact.identity] ? (
                       <Badge variant="secondary" className="ml-auto gap-1">
                         <Volume2Icon className="size-3" />
@@ -188,11 +211,40 @@ export function ServerSidebar({
                       </Badge>
                     ) : null}
                   </Button>
-                ))}
-              </div>
-            ) : (
-              <p className="pt-1 text-xs text-muted-foreground">No accepted friends yet.</p>
-            )}
+                ))
+              ) : (
+                <p className="px-1 pt-1 text-xs text-muted-foreground">No active DM conversations yet.</p>
+              )}
+            </section>
+
+            <Separator />
+
+            <section className="space-y-2">
+              <p className="px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Friends</p>
+              {dmFriends.length > 0 ? (
+                dmFriends.map((contact) => (
+                  <Button
+                    key={`friend-${contact.identity}`}
+                    className="h-auto w-full justify-start gap-2 rounded-lg py-1.5"
+                    variant="ghost"
+                    onClick={() => onOpenDmContact(contact.identity)}
+                  >
+                    <Avatar size="sm" className="rounded-lg">
+                      {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
+                      <AvatarFallback className="rounded-lg bg-primary/10 text-[10px]">
+                        {userInitials(contact.label)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 text-left">
+                      <p className="truncate text-sm">{contact.label}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">@{contact.username}</p>
+                    </div>
+                  </Button>
+                ))
+              ) : (
+                <p className="px-1 text-xs text-muted-foreground">No accepted friends yet.</p>
+              )}
+            </section>
           </div>
         )}
       </CardContent>

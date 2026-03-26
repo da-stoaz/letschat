@@ -1,0 +1,116 @@
+import { useMemo } from 'react'
+import { PencilIcon, Trash2Icon } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import { userInitials } from '../../layouts/app-layout/helpers'
+import type { Message } from '../../types/domain'
+
+export interface MessageGroup {
+  id: string
+  senderIdentity: string
+  messages: Message[]
+}
+
+interface MessageBubbleProps {
+  group: MessageGroup
+  senderLabel: string
+  avatarUrl: string | null
+  canModerate: boolean
+  selfIdentity: string | null
+  onEditMessage: (message: Message) => void
+  onDeleteMessage: (message: Message) => void
+}
+
+function sameIdentity(left: string, right: string | null): boolean {
+  if (!right) return false
+  return left.trim().toLowerCase() === right.trim().toLowerCase()
+}
+
+function formatTimestamp(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+export function MessageBubble({
+  group,
+  senderLabel,
+  avatarUrl,
+  canModerate,
+  selfIdentity,
+  onEditMessage,
+  onDeleteMessage,
+}: MessageBubbleProps) {
+  const firstMessage = group.messages[0]
+
+  const canDeleteGroupMessage = useMemo(
+    () =>
+      group.messages.reduce<Record<number, boolean>>((acc, message) => {
+        acc[message.id] = canModerate || sameIdentity(message.senderIdentity, selfIdentity)
+        return acc
+      }, {}),
+    [canModerate, group.messages, selfIdentity],
+  )
+
+  return (
+    <article className="group/bubble rounded-lg px-2 py-1 transition-colors hover:bg-muted/35">
+      <div className="flex items-start gap-3">
+        <Avatar className="mt-0.5 size-8 rounded-lg">
+          {avatarUrl ? <AvatarImage src={avatarUrl} alt={senderLabel} /> : null}
+          <AvatarFallback className="rounded-lg bg-primary/10 text-xs">{userInitials(senderLabel)}</AvatarFallback>
+        </Avatar>
+
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="text-sm font-semibold">{senderLabel}</span>
+            <span className="text-xs text-muted-foreground">{formatTimestamp(firstMessage.sentAt)}</span>
+          </div>
+
+          <div className="space-y-1">
+            {group.messages.map((message) => {
+              const isOwn = sameIdentity(message.senderIdentity, selfIdentity)
+              const canEdit = isOwn && !message.deleted
+              const canDelete = canDeleteGroupMessage[message.id]
+
+              return (
+                <div key={message.id} className="group/message relative rounded-md pr-16">
+                  {message.deleted ? (
+                    <p className="text-sm italic text-muted-foreground">[message deleted]</p>
+                  ) : (
+                    <div className="prose prose-invert max-w-none break-words text-sm text-foreground prose-p:my-0 prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-pre:rounded prose-pre:border prose-pre:border-border/70 prose-pre:bg-muted/70 prose-a:text-sky-400 hover:prose-a:text-sky-300">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer noopener" />,
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                  {message.editedAt ? <span className="ml-1 text-xs text-muted-foreground">[edited]</span> : null}
+
+                  {(canEdit || canDelete) ? (
+                    <div className="absolute right-0 top-0 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100">
+                      {canEdit ? (
+                        <Button size="icon-xs" variant="ghost" onClick={() => onEditMessage(message)}>
+                          <PencilIcon className="size-3.5" />
+                        </Button>
+                      ) : null}
+                      {canDelete ? (
+                        <Button size="icon-xs" variant="ghost" onClick={() => onDeleteMessage(message)}>
+                          <Trash2Icon className="size-3.5" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </article>
+  )
+}
+

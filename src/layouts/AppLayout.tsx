@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Outlet, useNavigate, useParams } from 'react-router-dom'
+import { PanelRightCloseIcon, PanelRightOpenIcon } from 'lucide-react'
 import { useServerRole } from '../hooks/useServerRole'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -14,9 +15,13 @@ import { useDmVoiceSessionStore } from '../stores/dmVoiceSessionStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { normalizeIdentity } from './app-layout/helpers'
+import { ComposeDmDialog } from './app-layout/ComposeDmDialog'
 import { LayoutModals } from './app-layout/LayoutModals'
+import { MemberPanel } from './app-layout/MemberPanel'
 import { ServerRail } from './app-layout/ServerRail'
 import { ServerSidebar } from './app-layout/ServerSidebar'
+import { cn } from '../lib/utils'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { Channel } from '../types/domain'
 
@@ -28,7 +33,9 @@ export function AppLayout() {
   const [showCreateServer, setShowCreateServer] = useState(false)
   const [showEditServer, setShowEditServer] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
+  const [showInvite, setShowInvite] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showComposeDm, setShowComposeDm] = useState(false)
 
   const servers = useServersStore((s) => s.servers)
   const setActiveServerId = useServersStore((s) => s.setActiveServerId)
@@ -49,6 +56,8 @@ export function AppLayout() {
   const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
   const setActiveDmPartner = useUiStore((s) => s.setActiveDmPartner)
   const clearUnread = useUiStore((s) => s.clearUnread)
+  const rightPanelOpen = useUiStore((s) => s.rightPanelOpen)
+  const toggleRightPanel = useUiStore((s) => s.toggleRightPanel)
   const role = useServerRole(activeServerId)
   const activeDmIdentity = params.identity && params.identity !== 'friends' ? params.identity : null
   const normalizedSelfIdentity = selfIdentity ? normalizeIdentity(selfIdentity) : null
@@ -86,12 +95,21 @@ export function AppLayout() {
     () => (activeServerId ? membersByServer[activeServerId] ?? [] : []),
     [activeServerId, membersByServer],
   )
-  const dmContacts = useMemo(() => {
+  const dmFriends = useMemo(() => {
     if (!selfIdentity) return []
 
     const acceptedFriends = friends.filter((friend) => friend.status === 'Accepted')
     const seen = new Set<string>()
-    const contacts: Array<{ identity: string; label: string; username: string; lastActivityAt: string | null }> = []
+    const contacts: Array<{
+      identity: string
+      label: string
+      username: string
+      avatarUrl: string | null
+      lastMessagePreview: string
+      lastMessageAt: string | null
+      lastActivityAt: string | null
+      online: boolean
+    }> = []
 
     for (const friend of acceptedFriends) {
       const other =
@@ -111,7 +129,11 @@ export function AppLayout() {
         identity: other,
         label: knownUser?.displayName || knownUser?.username || other.slice(0, 14),
         username: knownUser?.username || other.slice(0, 12),
+        avatarUrl: knownUser?.avatarUrl ?? null,
+        lastMessagePreview: lastMessage?.content || 'No messages yet',
+        lastMessageAt: lastMessage?.sentAt ?? null,
         lastActivityAt: lastMessage?.sentAt ?? friend.updatedAt,
+        online: false,
       })
     }
 
@@ -121,8 +143,13 @@ export function AppLayout() {
       return bTime - aTime
     })
 
-    return contacts.map(({ identity, label, username }) => ({ identity, label, username }))
+    return contacts.map(({ lastActivityAt: _lastActivityAt, ...contact }) => contact)
   }, [conversations, friends, selfIdentity, usersByIdentity])
+
+  const dmContacts = useMemo(
+    () => dmFriends.filter((contact) => contact.lastMessageAt !== null),
+    [dmFriends],
+  )
   const memberProfileByIdentity = useMemo(() => {
     const map = new Map<string, { label: string; avatarUrl: string | null }>()
     for (const member of activeServerMembers) {
@@ -138,7 +165,7 @@ export function AppLayout() {
     if (!selfIdentity) return result
     const me = normalizeIdentity(selfIdentity)
     const joinedPartnerKey = dmJoinedPartnerIdentity ? normalizeIdentity(dmJoinedPartnerIdentity) : null
-    for (const contact of dmContacts) {
+    for (const contact of dmFriends) {
       const other = normalizeIdentity(contact.identity)
       const roomKey = me <= other ? `${me}:${other}` : `${other}:${me}`
       const participants = dmVoiceParticipantsByRoom[roomKey] ?? []
@@ -146,11 +173,34 @@ export function AppLayout() {
       result[contact.identity] = selfInRoom || joinedPartnerKey === other
     }
     return result
-  }, [dmContacts, dmJoinedPartnerIdentity, dmVoiceParticipantsByRoom, selfIdentity])
+  }, [dmFriends, dmJoinedPartnerIdentity, dmVoiceParticipantsByRoom, selfIdentity])
 
   const hasActiveDmCall = useMemo(
     () => dmVoiceJoining || Object.values(dmCallActiveByIdentity).some(Boolean),
     [dmCallActiveByIdentity, dmVoiceJoining],
+  )
+
+  const dmContactsWithPresence = useMemo(
+    () =>
+      dmContacts.map((contact) => ({
+        ...contact,
+        online: dmCallActiveByIdentity[contact.identity] ?? false,
+      })),
+    [dmCallActiveByIdentity, dmContacts],
+  )
+
+  const dmFriendsWithPresence = useMemo(
+    () =>
+      dmFriends.map((friend) => ({
+        ...friend,
+        online: dmCallActiveByIdentity[friend.identity] ?? false,
+      })),
+    [dmCallActiveByIdentity, dmFriends],
+  )
+
+  const quickDmContacts = useMemo(
+    () => (dmContactsWithPresence.length > 0 ? dmContactsWithPresence : dmFriendsWithPresence).slice(0, 4),
+    [dmContactsWithPresence, dmFriendsWithPresence],
   )
 
   const hasUnreadInServer = (serverId: number) =>
@@ -188,13 +238,17 @@ export function AppLayout() {
   return (
     <>
       <main className="min-h-screen bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-3 text-foreground">
-        <div className="grid h-[calc(100vh-1.5rem)] grid-cols-[72px_290px_minmax(0,1fr)] gap-3 max-md:grid-cols-[72px_minmax(0,1fr)]">
+        <div className="grid h-[calc(100vh-1.5rem)] grid-cols-[48px_220px_minmax(0,1fr)] gap-3 max-md:grid-cols-[48px_minmax(0,1fr)]">
           <ServerRail
             servers={servers}
             activeServerId={activeServerId}
+            activeDmIdentity={activeDmIdentity}
+            quickDmContacts={quickDmContacts}
             onOpenHome={() => navigate('/app')}
             onOpenServer={openServer}
-            onOpenDm={() => navigate('/app/dm/friends')}
+            onOpenDmHome={() => navigate('/app/dm/friends')}
+            onOpenDmCompose={() => setShowComposeDm(true)}
+            onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
             onOpenCreateServer={() => setShowCreateServer(true)}
             onOpenSettings={() => setShowSettings(true)}
             hasUnreadInServer={hasUnreadInServer}
@@ -216,23 +270,43 @@ export function AppLayout() {
             normalizedSelfIdentity={normalizedSelfIdentity}
             memberProfileByIdentity={memberProfileByIdentity}
             onOpenRenameServer={() => setShowEditServer(true)}
+            onOpenInvite={() => setShowInvite(true)}
             onOpenCreateChannel={() => setShowCreateChannel(true)}
             onSelectChannel={(channelId) => {
               if (activeServerId === null) return
               openChannel(activeServerId, channelId)
             }}
             onOpenFriends={() => navigate('/app/dm/friends')}
-            dmContacts={dmContacts}
+            dmContacts={dmContactsWithPresence}
+            dmFriends={dmFriendsWithPresence}
             activeDmIdentity={activeDmIdentity}
             dmCallActiveByIdentity={dmCallActiveByIdentity}
             onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
           />
 
-          <Card className="border-border/60 bg-card/80 backdrop-blur">
-            <CardContent className="h-full p-3">
-              <Outlet />
-            </CardContent>
-          </Card>
+          <div className={cn('grid min-w-0 gap-3', rightPanelOpen && activeServerId ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
+            <Card className="relative border-border/60 bg-card/80 backdrop-blur">
+              {activeServerId ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="absolute right-3 top-3 z-20 h-8 gap-1.5"
+                  onClick={toggleRightPanel}
+                >
+                  {rightPanelOpen ? <PanelRightCloseIcon className="size-4" /> : <PanelRightOpenIcon className="size-4" />}
+                  Members
+                </Button>
+              ) : null}
+              <CardContent className={cn('h-full p-3', activeServerId ? 'pt-12' : '')}>
+                <Outlet />
+              </CardContent>
+            </Card>
+
+            {rightPanelOpen && activeServerId ? (
+              <MemberPanel members={activeServerMembers} selfIdentity={selfIdentity} />
+            ) : null}
+          </div>
         </div>
       </main>
 
@@ -240,13 +314,22 @@ export function AppLayout() {
         showCreateServer={showCreateServer}
         showEditServer={showEditServer}
         showCreateChannel={showCreateChannel}
+        showInvite={showInvite}
         showSettings={showSettings}
         activeServerId={activeServerId}
         activeServer={activeServer}
         setShowCreateServer={setShowCreateServer}
         setShowEditServer={setShowEditServer}
         setShowCreateChannel={setShowCreateChannel}
+        setShowInvite={setShowInvite}
         setShowSettings={setShowSettings}
+      />
+
+      <ComposeDmDialog
+        open={showComposeDm}
+        onOpenChange={setShowComposeDm}
+        friends={dmFriendsWithPresence}
+        onSelectFriend={(identity) => navigate(`/app/dm/${identity}`)}
       />
     </>
   )
