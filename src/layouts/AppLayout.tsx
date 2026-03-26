@@ -250,86 +250,81 @@ export function AppLayout() {
   return (
     <>
       <main className="relative h-screen overflow-hidden bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-3 text-foreground">
-        <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3">
-          <div className="grid min-h-0 grid-cols-[48px_220px_minmax(0,1fr)] grid-rows-1 gap-3 overflow-hidden max-md:grid-cols-[48px_minmax(0,1fr)]">
-            <ServerRail
-              servers={servers}
-              activeServerId={activeServerId}
-              activeDmIdentity={activeDmIdentity}
-              quickDmContacts={quickDmContacts}
-              onOpenHome={() => navigate('/app')}
-              onOpenServer={openServer}
-              onOpenDmHome={() => navigate('/app/dm/friends')}
-              onOpenDmCompose={() => setShowComposeDm(true)}
-              onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
-              onOpenCreateServer={() => setShowCreateServer(true)}
-              onOpenSettings={() => setShowSettings(true)}
-              hasUnreadInServer={hasUnreadInServer}
-              hasVoiceActivityInServer={hasVoiceActivityInServer}
-              hasActiveDmCall={hasActiveDmCall}
-            />
+        <div className="grid h-full min-h-0 grid-cols-[48px_220px_minmax(0,1fr)] grid-rows-1 gap-3 overflow-hidden max-md:grid-cols-[48px_minmax(0,1fr)]">
+          <ServerRail
+            servers={servers}
+            activeServerId={activeServerId}
+            activeDmIdentity={activeDmIdentity}
+            quickDmContacts={quickDmContacts}
+            onOpenHome={() => navigate('/app')}
+            onOpenServer={openServer}
+            onOpenDmHome={() => navigate('/app/dm/friends')}
+            onOpenDmCompose={() => setShowComposeDm(true)}
+            onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
+            onOpenCreateServer={() => setShowCreateServer(true)}
+            onOpenSettings={() => setShowSettings(true)}
+            hasUnreadInServer={hasUnreadInServer}
+            hasVoiceActivityInServer={hasVoiceActivityInServer}
+            hasActiveDmCall={hasActiveDmCall}
+          />
 
-            <ServerSidebar
-              activeServerId={activeServerId}
-              activeServer={activeServer}
-              activeChannelId={activeChannelId}
-              role={role}
-              textChannels={textChannels}
-              voiceChannels={voiceChannels}
-              activeChannelsCount={activeChannels.length}
-              unreadByChannel={unreadByChannel}
-              participantsByChannel={participantsByChannel}
-              joinedVoiceChannelId={joinedVoiceChannelId}
-              normalizedSelfIdentity={normalizedSelfIdentity}
-              memberProfileByIdentity={memberProfileByIdentity}
-              onOpenRenameServer={() => setShowEditServer(true)}
-              onOpenInvite={() => setShowInvite(true)}
-              onOpenCreateChannel={() => setShowCreateChannel(true)}
-              onSelectChannel={(channelId) => {
-                if (activeServerId === null) return
-                openChannel(activeServerId, channelId)
-              }}
-              onOpenFriends={() => navigate('/app/dm/friends')}
-              dmContacts={dmContactsWithPresence}
-              activeDmIdentity={activeDmIdentity}
-              dmCallActiveByIdentity={dmCallActiveByIdentity}
-              onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
-            />
+          <ServerSidebar
+            activeServerId={activeServerId}
+            activeServer={activeServer}
+            activeChannelId={activeChannelId}
+            role={role}
+            textChannels={textChannels}
+            voiceChannels={voiceChannels}
+            activeChannelsCount={activeChannels.length}
+            unreadByChannel={unreadByChannel}
+            participantsByChannel={participantsByChannel}
+            joinedVoiceChannelId={joinedVoiceChannelId}
+            normalizedSelfIdentity={normalizedSelfIdentity}
+            memberProfileByIdentity={memberProfileByIdentity}
+            onOpenRenameServer={() => setShowEditServer(true)}
+            onOpenInvite={() => setShowInvite(true)}
+            onOpenCreateChannel={() => setShowCreateChannel(true)}
+            onSelectChannel={(channelId) => {
+              if (activeServerId === null) return
+              openChannel(activeServerId, channelId)
+            }}
+            onOpenFriends={() => navigate('/app/dm/friends')}
+            dmContacts={dmContactsWithPresence}
+            activeDmIdentity={activeDmIdentity}
+            dmCallActiveByIdentity={dmCallActiveByIdentity}
+            onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
+            hasActiveCallDock={hasActiveCallDock}
+          />
 
-            <div className={cn('grid min-h-0 min-w-0 gap-3 overflow-hidden', rightPanelOpen && activeServerId ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
-              <Card className="relative h-full min-h-0 border-border/60 bg-card/80 backdrop-blur">
-                {activeServerId ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="absolute right-3 top-3 z-20 h-8 gap-1.5"
-                    onClick={toggleRightPanel}
-                  >
-                    {rightPanelOpen ? <PanelRightCloseIcon className="size-4" /> : <PanelRightOpenIcon className="size-4" />}
-                    Members
-                  </Button>
+          <div className={cn('grid min-h-0 min-w-0 gap-3 overflow-hidden', rightPanelOpen && activeServerId ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
+            <Card className="relative h-full min-h-0 border-border/60 bg-card/80 backdrop-blur">
+              {activeServerId ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="absolute right-3 top-3 z-20 h-8 gap-1.5"
+                  onClick={toggleRightPanel}
+                >
+                  {rightPanelOpen ? <PanelRightCloseIcon className="size-4" /> : <PanelRightOpenIcon className="size-4" />}
+                  Members
+                </Button>
                 ) : null}
-                <CardContent className={cn('h-full min-h-0 overflow-hidden p-3', activeServerId ? 'pt-12' : '')}>
+                <CardContent className={cn('h-full min-h-0 overflow-hidden p-3', activeServerId ? 'pt-12' : '', hasActiveCallDock ? 'pb-28' : '')}>
                   <Outlet />
                 </CardContent>
               </Card>
 
-              {rightPanelOpen && activeServerId ? (
-                <MemberPanel members={activeServerMembers} selfIdentity={selfIdentity} />
-              ) : null}
-            </div>
+            {rightPanelOpen && activeServerId ? (
+              <MemberPanel members={activeServerMembers} selfIdentity={selfIdentity} />
+            ) : null}
           </div>
-
-          {hasActiveCallDock ? (
-            <div className="grid grid-cols-[48px_220px_minmax(0,1fr)] gap-3 max-md:grid-cols-[48px_minmax(0,1fr)]">
-              <div />
-              <div className="col-span-2 max-md:col-span-1">
-                <ActiveCallCard className="w-full max-w-[620px]" />
-              </div>
-            </div>
-          ) : null}
         </div>
+        {hasActiveCallDock ? (
+          <div className="pointer-events-none absolute bottom-3 left-[72px] z-40 w-[min(780px,calc(100%-84px))]">
+            <ActiveCallCard className="pointer-events-auto" />
+          </div>
+        ) : null}
       </main>
 
       <LayoutModals

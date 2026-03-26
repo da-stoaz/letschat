@@ -117,7 +117,13 @@ function supportsAudioOutputSwitching(): boolean {
   return typeof maybeAudioContext?.prototype?.setSinkId === 'function'
 }
 
-export function ActiveCallCard({ className }: { className?: string }) {
+export function ActiveCallCard({
+  className,
+  variant = 'wide',
+}: {
+  className?: string
+  variant?: 'wide' | 'sidebar'
+}) {
   const selfIdentity = useConnectionStore((s) => s.identity)
   const voiceRoom = useVoiceSessionStore((s) => s.room)
   const joinedVoiceChannelId = useVoiceSessionStore((s) => s.joinedChannelId)
@@ -450,6 +456,138 @@ export function ActiveCallCard({ className }: { className?: string }) {
   const cameraLabel = shortLabel(selectedDeviceLabel(videoInputId, videoInputs, 'Camera'))
   const outputLabel = shortLabel(selectedDeviceLabel(audioOutputId, audioOutputs, 'Output'))
   const canSwitchAudioOutput = audioOutputSwitchSupported
+  const compact = variant === 'sidebar'
+
+  if (compact) {
+    return (
+      <Card
+        className={cn(
+          'border-border/60 bg-card/95 transition-all duration-300',
+          entered ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0',
+          className,
+        )}
+      >
+        <CardContent className="space-y-2 p-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{callTitle}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {participants.length} in call
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <Badge variant={connected ? 'default' : connecting ? 'outline' : 'secondary'} className="px-2 py-0 text-[11px]">
+                {statusLabel}
+              </Badge>
+              <AudioLinesIcon className={`size-4 ${hasSpeakingActivity ? 'text-emerald-400' : 'text-muted-foreground'}`} />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <div className="inline-flex items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
+              <Button size="icon-xs" variant={muted ? 'secondary' : 'ghost'} className="size-7 rounded-none border-0" onClick={toggleMute}>
+                {muted ? <MicOffIcon className="size-4" /> : <MicIcon className="size-4" />}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger className="inline-flex size-7 items-center justify-center border-l border-border/70 text-muted-foreground hover:bg-muted/60">
+                  <ChevronDownIcon className="size-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Microphone Source</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={audioInputId ?? ''}
+                      onValueChange={(value) => void applyDeviceSelection('audioinput', value)}
+                    >
+                      {audioInputs.map((device) => (
+                        <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
+                          {device.label}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            <div className="inline-flex items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
+              <Button size="icon-xs" variant={deafened ? 'secondary' : 'ghost'} className="size-7 rounded-none border-0" onClick={toggleDeafen}>
+                {deafened ? <VolumeXIcon className="size-4" /> : <Volume2Icon className="size-4" />}
+              </Button>
+              {canSwitchAudioOutput ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="inline-flex size-7 items-center justify-center border-l border-border/70 text-muted-foreground hover:bg-muted/60">
+                    <ChevronDownIcon className="size-3.5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Output Device</DropdownMenuLabel>
+                      <DropdownMenuRadioGroup
+                        value={audioOutputId ?? ''}
+                        onValueChange={(value) => void applyDeviceSelection('audiooutput', value)}
+                      >
+                        {audioOutputs.map((device) => (
+                          <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
+                            {device.label}
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <div className="inline-flex size-7 items-center justify-center border-l border-border/70 text-muted-foreground/70">
+                  <Volume2Icon className="size-3.5" />
+                </div>
+              )}
+            </div>
+
+            <div className="inline-flex items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
+              <Button size="icon-xs" variant={sharingCamera ? 'secondary' : 'ghost'} className="size-7 rounded-none border-0" onClick={toggleCamera}>
+                <VideoIcon className="size-4" />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger className="inline-flex size-7 items-center justify-center border-l border-border/70 text-muted-foreground hover:bg-muted/60">
+                  <ChevronDownIcon className="size-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Camera Source</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={videoInputId ?? ''}
+                      onValueChange={(value) => void applyDeviceSelection('videoinput', value)}
+                    >
+                      {videoInputs.map((device) => (
+                        <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
+                          {device.label}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            <Button
+              size="icon-xs"
+              variant={sharingScreen ? 'secondary' : 'outline'}
+              className="size-7"
+              onClick={toggleScreenShare}
+              disabled={!hasScreenCapture}
+            >
+              <MonitorUpIcon className="size-4" />
+            </Button>
+
+            <Button size="icon-xs" variant="destructive" className="size-7" onClick={leaveCall}>
+              <LogOutIcon className="size-4" />
+            </Button>
+          </div>
+
+          {localError ? <p className="text-[11px] text-destructive">{localError}</p> : null}
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card
