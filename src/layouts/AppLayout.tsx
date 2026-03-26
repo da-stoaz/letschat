@@ -13,6 +13,7 @@ import {
 import { useServersStore } from '../stores/serversStore'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useUiStore } from '../stores/uiStore'
+import { useMembersStore } from '../stores/membersStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
@@ -35,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from '@/components/ui/avatar'
 import stealthChatLogo from '../../src-tauri/icons/stealthchat-nobg.png'
 import type { Channel } from '../types/domain'
 
@@ -52,6 +53,13 @@ function serverInitials(name: string): string {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
 }
 
+function userInitials(label: string): string {
+  const parts = label.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+}
+
 export function AppLayout() {
   const navigate = useNavigate()
   const params = useParams()
@@ -63,6 +71,7 @@ export function AppLayout() {
   const servers = useServersStore((s) => s.servers)
   const setActiveServerId = useServersStore((s) => s.setActiveServerId)
   const channelsByServer = useChannelsStore((s) => s.channelsByServer)
+  const membersByServer = useMembersStore((s) => s.membersByServer)
   const unreadByChannel = useUiStore((s) => s.unreadByChannel)
   const participantsByChannel = useVoiceStore((s) => s.participantsByChannel)
   const joinedVoiceChannelId = useVoiceSessionStore((s) => s.joinedChannelId)
@@ -72,6 +81,7 @@ export function AppLayout() {
   const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
   const clearUnread = useUiStore((s) => s.clearUnread)
   const role = useServerRole(activeServerId)
+  const normalizedSelfIdentity = selfIdentity ? normalizeIdentity(selfIdentity) : null
 
   useEffect(() => {
     if (activeServerId !== null) {
@@ -98,6 +108,19 @@ export function AppLayout() {
     [activeChannels],
   )
   const activeServer = servers.find((server) => server.id === activeServerId) ?? null
+  const activeServerMembers = useMemo(
+    () => (activeServerId ? membersByServer[activeServerId] ?? [] : []),
+    [activeServerId, membersByServer],
+  )
+  const memberProfileByIdentity = useMemo(() => {
+    const map = new Map<string, { label: string; avatarUrl: string | null }>()
+    for (const member of activeServerMembers) {
+      const key = normalizeIdentity(member.userIdentity)
+      const label = member.user?.displayName || member.user?.username || member.userIdentity.slice(0, 10)
+      map.set(key, { label, avatarUrl: member.user?.avatarUrl ?? null })
+    }
+    return map
+  }, [activeServerMembers])
 
   const hasUnreadInServer = (serverId: number) =>
     (channelsByServer[serverId] ?? []).some((channel) => (unreadByChannel[channel.id] ?? 0) > 0)
@@ -311,21 +334,72 @@ export function AppLayout() {
                       <Volume2Icon className="size-3.5 text-muted-foreground" />
                     </div>
                     {voiceChannels.map((channel) => (
-                      <Button
-                        key={channel.id}
-                        variant={activeChannelId === channel.id ? 'secondary' : 'ghost'}
-                        className="w-full justify-start gap-2 rounded-lg"
-                        onClick={() => {
-                          if (activeServerId !== null) setActiveServerId(activeServerId)
-                          setActiveChannelId(channel.id)
-                          clearUnread(channel.id)
-                          navigate(`/app/${activeServerId}/${channel.id}`)
-                        }}
-                      >
-                        <Volume2Icon className="size-4 opacity-70" />
-                        <span className="truncate">{channel.name}</span>
-                        {channel.moderatorOnly ? <LockIcon className="ml-auto size-3.5 opacity-70" /> : null}
-                      </Button>
+                      (() => {
+                        const channelParticipants = participantsByChannel[channel.id] ?? []
+                        const previewParticipants = channelParticipants.slice(0, 4)
+                        const overflow = Math.max(0, channelParticipants.length - previewParticipants.length)
+                        const selfJoined =
+                          normalizedSelfIdentity !== null &&
+                          channelParticipants.some(
+                            (participant) => normalizeIdentity(participant.userIdentity) === normalizedSelfIdentity,
+                          )
+
+                        return (
+                          <Button
+                            key={channel.id}
+                            variant={activeChannelId === channel.id ? 'secondary' : 'ghost'}
+                            className="h-auto w-full items-start justify-start gap-2 rounded-lg py-2"
+                            onClick={() => {
+                              if (activeServerId !== null) setActiveServerId(activeServerId)
+                              setActiveChannelId(channel.id)
+                              clearUnread(channel.id)
+                              navigate(`/app/${activeServerId}/${channel.id}`)
+                            }}
+                          >
+                            <Volume2Icon className="mt-0.5 size-4 shrink-0 opacity-70" />
+                            <div className="min-w-0 flex-1 text-left">
+                              <div className="flex items-center gap-2">
+                                <span className="truncate">{channel.name}</span>
+                                {selfJoined ? (
+                                  <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
+                                    Joined
+                                  </Badge>
+                                ) : null}
+                              </div>
+                              <div className="mt-1 flex items-center gap-2">
+                                {channelParticipants.length > 0 ? (
+                                  <>
+                                    <AvatarGroup>
+                                      {previewParticipants.map((participant) => {
+                                        const profile = memberProfileByIdentity.get(normalizeIdentity(participant.userIdentity))
+                                        const fallbackLabel = profile?.label ?? participant.userIdentity.slice(0, 10)
+                                        const isSelf =
+                                          normalizedSelfIdentity !== null &&
+                                          normalizeIdentity(participant.userIdentity) === normalizedSelfIdentity
+                                        return (
+                                          <Avatar
+                                            key={`${channel.id}-${participant.userIdentity}`}
+                                            size="sm"
+                                            className={isSelf ? 'ring-2 ring-emerald-400' : undefined}
+                                          >
+                                            {profile?.avatarUrl ? <AvatarImage src={profile.avatarUrl} alt={fallbackLabel} /> : null}
+                                            <AvatarFallback>{userInitials(fallbackLabel)}</AvatarFallback>
+                                          </Avatar>
+                                        )
+                                      })}
+                                      {overflow > 0 ? <AvatarGroupCount className="size-6 text-[10px]">+{overflow}</AvatarGroupCount> : null}
+                                    </AvatarGroup>
+                                    <span className="text-[11px] text-muted-foreground">{channelParticipants.length}/15</span>
+                                  </>
+                                ) : (
+                                  <span className="text-[11px] text-muted-foreground">No one connected</span>
+                                )}
+                              </div>
+                            </div>
+                            {channel.moderatorOnly ? <LockIcon className="mt-0.5 size-3.5 shrink-0 opacity-70" /> : null}
+                          </Button>
+                        )
+                      })()
                     ))}
                   </section>
 
