@@ -158,17 +158,13 @@ export function AppLayout() {
 
   const hasVoiceActivityInServer = (serverId: number): boolean => {
     if (!selfIdentity) return false
-    const me = normalizeIdentity(selfIdentity)
     const voiceChannelIds = (channelsByServer[serverId] ?? []).filter((channel) => channel.kind === 'Voice').map((channel) => channel.id)
     if (voiceChannelIds.length === 0) return false
 
     if (joinedVoiceChannelId !== null && voiceChannelIds.includes(joinedVoiceChannelId)) {
       return true
     }
-
-    return voiceChannelIds.some((channelId) =>
-      (participantsByChannel[channelId] ?? []).some((participant) => normalizeIdentity(participant.userIdentity) === me),
-    )
+    return false
   }
 
   const openChannel = (serverId: number, channelId: number) => {
@@ -216,6 +212,7 @@ export function AppLayout() {
             activeChannelsCount={activeChannels.length}
             unreadByChannel={unreadByChannel}
             participantsByChannel={participantsByChannel}
+            joinedVoiceChannelId={joinedVoiceChannelId}
             normalizedSelfIdentity={normalizedSelfIdentity}
             memberProfileByIdentity={memberProfileByIdentity}
             onOpenRenameServer={() => setShowEditServer(true)}

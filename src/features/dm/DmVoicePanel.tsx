@@ -78,12 +78,9 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
   const hasScreenCapture = supportsScreenCapture()
 
   useEffect(() => {
-    if (joining || !selfParticipant) {
-      staleCleanupMarker.current = null
-      return
-    }
-    const localDisconnected = roomForPartner === null || connectionState !== ConnectionState.Connected
-    if (!localDisconnected) {
+    // Only clean stale presence if we have no local room/session at all.
+    // Do not auto-leave while a room exists but is still connecting.
+    if (joining || roomForPartner !== null || !selfParticipant) {
       staleCleanupMarker.current = null
       return
     }
@@ -92,7 +89,7 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
     if (staleCleanupMarker.current === marker) return
     staleCleanupMarker.current = marker
     void reducers.leaveDmVoice(partnerIdentity).catch(() => undefined)
-  }, [connectionState, joining, partnerIdentity, roomForPartner, selfParticipant])
+  }, [joining, partnerIdentity, roomForPartner, selfParticipant])
 
   useEffect(() => {
     if (!joined) return

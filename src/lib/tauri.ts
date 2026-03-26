@@ -1,12 +1,27 @@
 import { invoke } from '@tauri-apps/api/core'
-import { authServiceGenerateLivekitToken, getStoredAuthSessionToken } from './authService'
+import { authServiceGenerateLivekitToken, clearStoredAuthSessionToken, getStoredAuthSessionToken } from './authService'
 import type { Identity } from '../types/domain'
 
-const WEB_LIVEKIT_URL = (import.meta.env.VITE_LIVEKIT_URL as string | undefined) ?? 'http://localhost:7880'
+const DEFAULT_WEB_LIVEKIT_URL = 'http://127.0.0.1:7880'
+const WEB_LIVEKIT_URL = (import.meta.env.VITE_LIVEKIT_URL as string | undefined) ?? DEFAULT_WEB_LIVEKIT_URL
 
 function isTauriRuntime(): boolean {
   if (typeof window === 'undefined') return false
   return typeof (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== 'undefined'
+}
+
+function isInvalidAuthSessionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return error.message.trim().toLowerCase() === 'invalid auth session.'
+}
+
+function forceWebSignOutForExpiredSession(): void {
+  if (typeof window === 'undefined') return
+  clearStoredAuthSessionToken()
+  localStorage.removeItem('spacetimedb.auth_token')
+  setTimeout(() => {
+    window.location.assign('/auth')
+  }, 0)
 }
 
 async function generateWebLivekitToken(room: string, identity: Identity): Promise<string> {
@@ -14,11 +29,19 @@ async function generateWebLivekitToken(room: string, identity: Identity): Promis
   if (!sessionToken) {
     throw new Error('Voice on web requires a valid auth session. Please log in again.')
   }
-  return authServiceGenerateLivekitToken({
-    room,
-    identity,
-    sessionToken,
-  })
+  try {
+    return await authServiceGenerateLivekitToken({
+      room,
+      identity,
+      sessionToken,
+    })
+  } catch (error) {
+    if (isInvalidAuthSessionError(error)) {
+      forceWebSignOutForExpiredSession()
+      throw new Error('Auth session expired. Please log in again.')
+    }
+    throw error
+  }
 }
 
 export const tauriCommands = {

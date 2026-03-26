@@ -91,9 +91,9 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const hasScreenCapture = supportsScreenCapture()
 
   useEffect(() => {
-    if (channelId === null || !selfIdentity || joining) return
-    const localDisconnected = roomForChannel === null || connectionState !== ConnectionState.Connected
-    if (!localDisconnected || !selfParticipant) {
+    // Only clean stale presence if we have no local room/session at all.
+    // Do not auto-leave while a room exists but is still connecting.
+    if (channelId === null || !selfIdentity || joining || roomForChannel !== null || selfParticipant === null) {
       staleCleanupMarker.current = null
       return
     }
@@ -102,7 +102,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     if (staleCleanupMarker.current === marker) return
     staleCleanupMarker.current = marker
     void reducers.leaveVoiceChannel(channelId).catch(() => undefined)
-  }, [channelId, selfIdentity, joining, roomForChannel, connectionState, selfParticipant])
+  }, [channelId, selfIdentity, joining, roomForChannel, selfParticipant])
 
   useEffect(() => {
     if (!joined) return

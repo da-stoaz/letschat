@@ -9,6 +9,7 @@ interface VoiceChannelButtonProps {
   channel: Channel
   active: boolean
   participants: VoiceParticipant[]
+  selfJoined: boolean
   normalizedSelfIdentity: string | null
   memberProfileByIdentity: Map<string, { label: string; avatarUrl: string | null }>
   onSelect: () => void
@@ -18,15 +19,13 @@ export function VoiceChannelButton({
   channel,
   active,
   participants,
+  selfJoined,
   normalizedSelfIdentity,
   memberProfileByIdentity,
   onSelect,
 }: VoiceChannelButtonProps) {
   const previewParticipants = participants.slice(0, 4)
   const overflow = Math.max(0, participants.length - previewParticipants.length)
-  const selfJoined =
-    normalizedSelfIdentity !== null &&
-    participants.some((participant) => normalizeIdentity(participant.userIdentity) === normalizedSelfIdentity)
 
   return (
     <Button
@@ -58,7 +57,7 @@ export function VoiceChannelButton({
                     <Avatar
                       key={`${channel.id}-${participant.userIdentity}`}
                       size="sm"
-                      className={isSelf ? 'ring-2 ring-emerald-400' : undefined}
+                      className={isSelf && selfJoined ? 'ring-2 ring-emerald-400' : undefined}
                     >
                       {profile?.avatarUrl ? <AvatarImage src={profile.avatarUrl} alt={fallbackLabel} /> : null}
                       <AvatarFallback>{userInitials(fallbackLabel)}</AvatarFallback>

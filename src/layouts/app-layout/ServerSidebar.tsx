@@ -32,6 +32,7 @@ interface ServerSidebarProps {
   activeChannelsCount: number
   unreadByChannel: Record<number, number>
   participantsByChannel: Record<number, VoiceParticipant[]>
+  joinedVoiceChannelId: number | null
   normalizedSelfIdentity: string | null
   memberProfileByIdentity: Map<string, { label: string; avatarUrl: string | null }>
   onOpenRenameServer: () => void
@@ -54,6 +55,7 @@ export function ServerSidebar({
   activeChannelsCount,
   unreadByChannel,
   participantsByChannel,
+  joinedVoiceChannelId,
   normalizedSelfIdentity,
   memberProfileByIdentity,
   onOpenRenameServer,
@@ -129,6 +131,7 @@ export function ServerSidebar({
                   channel={channel}
                   active={activeChannelId === channel.id}
                   participants={participantsByChannel[channel.id] ?? []}
+                  selfJoined={joinedVoiceChannelId === channel.id}
                   normalizedSelfIdentity={normalizedSelfIdentity}
                   memberProfileByIdentity={memberProfileByIdentity}
                   onSelect={() => onSelectChannel(channel.id)}

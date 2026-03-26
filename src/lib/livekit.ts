@@ -93,11 +93,58 @@ export async function requestMicrophonePermission(): Promise<void> {
 }
 
 function normalizeLiveKitUrl(raw: string): string {
-  const normalized = raw.trim()
+  const trimmed = raw.trim()
+  if (!trimmed) return 'ws://127.0.0.1:7880'
+
+  let normalized = trimmed
+  if (trimmed.startsWith('/')) {
+    if (typeof window !== 'undefined') {
+      normalized = `${window.location.origin}${trimmed}`
+    } else {
+      normalized = `http://127.0.0.1:7880${trimmed}`
+    }
+  } else if (trimmed.startsWith('//')) {
+    const scheme = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https:' : 'http:'
+    normalized = `${scheme}${trimmed}`
+  } else if (
+    !trimmed.startsWith('http://') &&
+    !trimmed.startsWith('https://') &&
+    !trimmed.startsWith('ws://') &&
+    !trimmed.startsWith('wss://')
+  ) {
+    normalized = `http://${trimmed}`
+  }
+
   if (normalized.startsWith('ws://') || normalized.startsWith('wss://')) return normalized
   if (normalized.startsWith('http://')) return `ws://${normalized.slice('http://'.length)}`
   if (normalized.startsWith('https://')) return `wss://${normalized.slice('https://'.length)}`
-  return `ws://${normalized}`
+  return normalized
+}
+
+function buildLiveKitUrls(raw: string): string[] {
+  const primary = normalizeLiveKitUrl(raw)
+  const candidates: string[] = []
+  try {
+    const parsed = new URL(primary)
+    if (parsed.hostname === 'localhost') {
+      const localIpv4 = new URL(primary)
+      localIpv4.hostname = '127.0.0.1'
+      // Prefer IPv4 loopback first to avoid localhost/IPv6 stalls.
+      candidates.push(localIpv4.toString())
+      candidates.push(primary)
+    } else if (parsed.hostname === '127.0.0.1') {
+      candidates.push(primary)
+      const localHost = new URL(primary)
+      localHost.hostname = 'localhost'
+      candidates.push(localHost.toString())
+    } else {
+      candidates.push(primary)
+    }
+  } catch {
+    // Ignore URL parse fallback generation if the input format is custom.
+    candidates.push(primary)
+  }
+  return Array.from(new Set(candidates))
 }
 
 function normalizeIdentityKey(value: string): string {
@@ -110,15 +157,59 @@ export function dmVoiceRoomKey(identityA: Identity, identityB: Identity): string
   return a <= b ? `${a}:${b}` : `${b}:${a}`
 }
 
-function mapLiveKitConnectionError(error: unknown): Error {
+function isTauriRuntime(): boolean {
+  if (typeof window === 'undefined') return false
+  return typeof (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== 'undefined'
+}
+
+function roomConnectOptions() {
+  const useWebIceHints = !isTauriRuntime()
+  const rtcConfig = useWebIceHints
+    ? ({
+        // Explicit STUN servers improve candidate gathering in some browser/network combos.
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' },
+        ],
+        iceTransportPolicy: 'all',
+      } satisfies RTCConfiguration)
+    : undefined
+
+  return {
+    websocketTimeout: 20_000,
+    peerConnectionTimeout: 20_000,
+    ...(rtcConfig ? { rtcConfig } : {}),
+  }
+}
+
+async function connectRoomWithFallback(livekitUrls: string[], token: string): Promise<Room> {
+  let lastError: unknown = null
+  for (const livekitUrl of livekitUrls) {
+    const room = new Room()
+    try {
+      await room.connect(livekitUrl, token, roomConnectOptions())
+      return room
+    } catch (error) {
+      lastError = error
+      room.disconnect()
+    }
+  }
+  throw (lastError ?? new Error('Failed to connect to LiveKit.'))
+}
+
+function mapLiveKitConnectionError(error: unknown, livekitUrls: string[]): Error {
   if (error instanceof Error && error.message.includes('Bad Configuration Parameters')) {
-    return new Error('LiveKit returned invalid ICE parameters. Verify LiveKit config and restart the server.')
+    return new Error(
+      `LiveKit returned invalid ICE parameters for ${livekitUrls[0]}. Verify LiveKit config and restart the server.`,
+    )
   }
   if (error instanceof Error && /(notallowederror|permission denied|permission dismissed)/i.test(error.message)) {
     return new Error('Microphone permission is required to join voice. Please allow microphone access and try again.')
   }
   if (error instanceof Error && error.message.toLowerCase().includes('pc connection')) {
-    return new Error('Could not establish peer connection. Check LiveKit URL/ports (7880 + UDP 7881) and try again.')
+    return new Error(
+      `Could not establish peer connection. Signal URL ${livekitUrls[0]} responded, but ICE failed. Verify LiveKit TCP 7881 and UDP 7882 mappings (plus UDP 7881 if enabled).`,
+    )
   }
   return error instanceof Error ? error : new Error('Failed to connect to LiveKit.')
 }
@@ -134,22 +225,27 @@ type ConnectLiveKitWithPresenceParams = {
 }
 
 async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresenceParams): Promise<Room> {
-  const room = new Room()
   const rawLivekitUrl = await tauriCommands.getLivekitUrl()
-  const livekitUrl = normalizeLiveKitUrl(rawLivekitUrl)
+  const livekitUrls = buildLiveKitUrls(rawLivekitUrl)
   const identity = useConnectionStore.getState().identity
   if (!identity) {
     throw new Error(params.identityErrorMessage)
   }
 
+  let room: Room | null = null
   await params.onJoinPresence()
   try {
     const token = await tauriCommands.generateLivekitToken(params.roomName, identity)
-    await room.connect(livekitUrl, token)
+    room = await connectRoomWithFallback(livekitUrls, token)
   } catch (error) {
     await params.onLeavePresence().catch(() => undefined)
-    room.disconnect()
-    throw mapLiveKitConnectionError(error)
+    room?.disconnect()
+    throw mapLiveKitConnectionError(error, livekitUrls)
+  }
+
+  if (!room) {
+    await params.onLeavePresence().catch(() => undefined)
+    throw new Error('LiveKit room was not established.')
   }
 
   if (!supportsMicrophoneCapture()) {

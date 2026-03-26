@@ -540,6 +540,27 @@ async function connect(): Promise<void> {
   connectPromise = (async () => {
     useConnectionStore.getState().setStatus('connecting')
 
+    let appliedOnce = false
+    let resolveApplied: (() => void) | null = null
+    let rejectApplied: ((error: unknown) => void) | null = null
+    const firstSyncApplied = new Promise<void>((resolve, reject) => {
+      resolveApplied = resolve
+      rejectApplied = reject
+    })
+    const rejectIfPending = (error: unknown): void => {
+      if (appliedOnce) return
+      appliedOnce = true
+      rejectApplied?.(error)
+    }
+    const connectTimeoutMs = 15000
+    const connectTimeout = setTimeout(() => {
+      rejectIfPending(
+        new Error(
+          'Timed out connecting to SpacetimeDB. Ensure `spacetime start` is running and the module is published.',
+        ),
+      )
+    }, connectTimeoutMs)
+
     const builder = DbConnection.builder()
       .withUri(SPACETIMEDB_URI)
       .withDatabaseName(SPACETIMEDB_DATABASE)
@@ -553,38 +574,30 @@ async function connect(): Promise<void> {
       })
       .onDisconnect(() => {
         useConnectionStore.getState().setStatus('disconnected')
+        rejectIfPending(new Error('Disconnected before initial data sync completed.'))
       })
       .onConnectError((_ctx, error) => {
+        rejectIfPending(error instanceof Error ? error : new Error(String(error)))
         void onError(error)
       })
 
     connection = builder.build()
     watchLiveTables(connection)
 
-    let appliedOnce = false
-    let resolveApplied: (() => void) | null = null
-    let rejectApplied: ((error: unknown) => void) | null = null
-    const firstSyncApplied = new Promise<void>((resolve, reject) => {
-      resolveApplied = resolve
-      rejectApplied = reject
-    })
-
     subscriptionHandle = connection
       .subscriptionBuilder()
       .onApplied(() => {
         syncAll(connection as DbConnection)
         liveEventsEnabled = true
-        if (!appliedOnce) {
-          appliedOnce = true
-          resolveApplied?.()
-        }
+        if (appliedOnce) return
+        appliedOnce = true
+        clearTimeout(connectTimeout)
+        resolveApplied?.()
       })
       .onError((_ctx) => {
         void onError(new Error('Subscription failed'))
-        if (!appliedOnce) {
-          appliedOnce = true
-          rejectApplied?.(new Error('Subscription failed'))
-        }
+        clearTimeout(connectTimeout)
+        rejectIfPending(new Error('Subscription failed'))
       })
       .subscribe([
         tables.user,
@@ -599,7 +612,11 @@ async function connect(): Promise<void> {
         tables.my_dm_voice_participants,
       ])
 
-    await firstSyncApplied
+    try {
+      await firstSyncApplied
+    } finally {
+      clearTimeout(connectTimeout)
+    }
   })()
 
   try {

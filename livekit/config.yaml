@@ -2,10 +2,11 @@ port: 7880
 rtc:
   node_ip: 127.0.0.1
   use_external_ip: false
-  use_mdns: true
+  use_ice_lite: false
+  use_mdns: false
   enable_loopback_candidate: true
   allow_tcp_fallback: true
-  udp_port: 7881
+  udp_port: 7882
   tcp_port: 7881
 keys:
   devkey: devsecret0123456789devsecret0123456789

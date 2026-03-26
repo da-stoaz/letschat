@@ -2,6 +2,7 @@ import type { Identity } from '../types/domain'
 
 const AUTH_SERVICE_URL = (import.meta.env.VITE_AUTH_SERVICE_URL as string | undefined) ?? 'http://127.0.0.1:8787'
 const AUTH_SESSION_KEY = 'letschat.auth_session_token'
+const AUTH_REQUEST_TIMEOUT_MS = 12000
 
 export interface AuthFrameworkToken {
   token_id: string
@@ -61,13 +62,28 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
   path: string,
   payload: TPayload,
 ): Promise<TResponse> {
-  const response = await fetch(`${AUTH_SERVICE_URL}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS)
+  let response: Response
+  try {
+    response = await fetch(`${AUTH_SERVICE_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(
+        `Auth service request timed out after ${AUTH_REQUEST_TIMEOUT_MS / 1000}s. Ensure auth-service is running at ${AUTH_SERVICE_URL}.`,
+      )
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
 
   if (!response.ok) {
     const fallback = `Request failed (${response.status})`

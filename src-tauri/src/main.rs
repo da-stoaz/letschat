@@ -30,7 +30,7 @@ struct LivekitClaims {
 
 #[tauri::command]
 fn get_livekit_url() -> String {
-    std::env::var("LIVEKIT_URL").unwrap_or_else(|_| "http://localhost:7880".to_string())
+    std::env::var("LIVEKIT_URL").unwrap_or_else(|_| "http://127.0.0.1:7880".to_string())
 }
 
 #[tauri::command]
