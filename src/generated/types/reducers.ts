@@ -29,7 +29,10 @@ import RenameServerReducer from "../rename_server_reducer";
 import SendDirectMessageReducer from "../send_direct_message_reducer";
 import SendFriendRequestReducer from "../send_friend_request_reducer";
 import SendMessageReducer from "../send_message_reducer";
+import SetPresenceOfflineReducer from "../set_presence_offline_reducer";
 import SetMemberRoleReducer from "../set_member_role_reducer";
+import SetTypingStateReducer from "../set_typing_state_reducer";
+import TouchPresenceReducer from "../touch_presence_reducer";
 import TransferOwnershipReducer from "../transfer_ownership_reducer";
 import UnbanMemberReducer from "../unban_member_reducer";
 import UnblockUserReducer from "../unblock_user_reducer";
@@ -62,7 +65,10 @@ export type RenameServerParams = __Infer<typeof RenameServerReducer>;
 export type SendDirectMessageParams = __Infer<typeof SendDirectMessageReducer>;
 export type SendFriendRequestParams = __Infer<typeof SendFriendRequestReducer>;
 export type SendMessageParams = __Infer<typeof SendMessageReducer>;
+export type SetPresenceOfflineParams = __Infer<typeof SetPresenceOfflineReducer>;
 export type SetMemberRoleParams = __Infer<typeof SetMemberRoleReducer>;
+export type SetTypingStateParams = __Infer<typeof SetTypingStateReducer>;
+export type TouchPresenceParams = __Infer<typeof TouchPresenceReducer>;
 export type TransferOwnershipParams = __Infer<typeof TransferOwnershipReducer>;
 export type UnbanMemberParams = __Infer<typeof UnbanMemberReducer>;
 export type UnblockUserParams = __Infer<typeof UnblockUserReducer>;
@@ -71,4 +77,3 @@ export type UpdateDmVoiceStateParams = __Infer<typeof UpdateDmVoiceStateReducer>
 export type UpdateProfileParams = __Infer<typeof UpdateProfileReducer>;
 export type UpdateVoiceStateParams = __Infer<typeof UpdateVoiceStateReducer>;
 export type UseInviteParams = __Infer<typeof UseInviteReducer>;
-

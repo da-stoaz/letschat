@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Outlet, useNavigate, useParams } from 'react-router-dom'
 import { PanelRightCloseIcon, PanelRightOpenIcon } from 'lucide-react'
-import { AWAY_AFTER_MS, CONNECTED_STALE_MS, type UserPresenceStatus } from '../hooks/useUserPresentation'
+import { AWAY_AFTER_MS, type UserPresenceStatus } from '../hooks/useUserPresentation'
 import { useServerRole } from '../hooks/useServerRole'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -183,7 +183,7 @@ export function AppLayout() {
   }, [dmFriends, dmJoinedPartnerIdentity, dmVoiceParticipantsByRoom, selfIdentity])
 
   const nowMs = usePresenceStore((s) => s.nowMs)
-  const lastSeenByIdentity = usePresenceStore((s) => s.lastSeenByIdentity)
+  const onlineByIdentity = usePresenceStore((s) => s.onlineByIdentity)
   const lastActiveByIdentity = usePresenceStore((s) => s.lastActiveByIdentity)
 
   const resolveDmPresenceStatus = (
@@ -193,20 +193,18 @@ export function AppLayout() {
     const normalizedIdentity = normalizeIdentity(identity)
     const isSelf =
       normalizedSelfIdentity !== null && normalizedSelfIdentity === normalizedIdentity
-    const presenceSeenAt = lastSeenByIdentity[normalizedIdentity] ?? 0
-    const presenceActiveAt = lastActiveByIdentity[normalizedIdentity] ?? presenceSeenAt
+    const presenceOnline = onlineByIdentity[normalizedIdentity] ?? false
+    const presenceActiveAt = lastActiveByIdentity[normalizedIdentity] ?? 0
     const fallbackSeen = fallbackSeenAtMs ?? 0
-    const lastSeenAt = Math.max(presenceSeenAt, fallbackSeen)
     const lastActiveAt = Math.max(presenceActiveAt, fallbackSeen)
     const inActiveDmCall = dmCallActiveByIdentity[identity] ?? false
-    const seenRecently =
-      lastSeenAt > 0 && nowMs - lastSeenAt <= CONNECTED_STALE_MS
     const connected = isSelf
       ? connectionStatus === 'connected'
-      : inActiveDmCall || seenRecently
+      : inActiveDmCall || presenceOnline
 
     if (!connected) return 'offline'
-    return nowMs - lastActiveAt > AWAY_AFTER_MS ? 'away' : 'online'
+    const effectiveLastActiveAt = lastActiveAt > 0 ? lastActiveAt : nowMs
+    return nowMs - effectiveLastActiveAt > AWAY_AFTER_MS ? 'away' : 'online'
   }
 
   const hasActiveDmCall = useMemo(

@@ -38,7 +38,7 @@ export function TypingIndicator({
   const names = useMemo(() => {
     const current = typingByScope[scopeKey] ?? {}
     const selfKey = normalizeIdentity(selfIdentity)
-    const otherNames = Object.keys(current)
+    return Object.keys(current)
       .filter((identity) => identity !== selfKey)
       .map((identity) => {
         const user = Object.values(usersByIdentity).find(
@@ -46,17 +46,9 @@ export function TypingIndicator({
         )
         return user?.displayName || user?.username || identity.slice(0, 12)
       })
-    const selfTyping = selfKey.length > 0 && Boolean(current[selfKey])
-    return { otherNames, selfTyping }
   }, [scopeKey, selfIdentity, typingByScope, usersByIdentity])
 
-  const text = names.otherNames.length > 0
-    ? renderTypingText(names.otherNames)
-    : names.selfTyping
-      ? 'You are typing...'
-      : ''
-
-  if (!text) return null
+  if (names.length === 0) return null
 
   return (
     <p className={`flex items-center gap-2 text-xs text-muted-foreground ${className}`}>
@@ -65,7 +57,7 @@ export function TypingIndicator({
         <span className="size-1.5 rounded-full bg-muted-foreground/80 animate-pulse [animation-delay:-0.125s]" />
         <span className="size-1.5 rounded-full bg-muted-foreground/80 animate-pulse" />
       </span>
-      <span className="truncate">{text}</span>
+      <span className="truncate">{renderTypingText(names)}</span>
     </p>
   )
 }

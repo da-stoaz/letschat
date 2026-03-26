@@ -21,6 +21,7 @@ import { useUsersStore } from '../stores/usersStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { usePresenceStore } from '../stores/presenceStore'
+import { useTypingStore } from '../stores/typingStore'
 import { tauriCommands } from './tauri'
 import type { ServerMemberWithUser } from '../stores/membersStore'
 import type {
@@ -33,9 +34,11 @@ import type {
   FriendStatus,
   Identity,
   Message,
+  PresenceState,
   Role,
   Server,
   ServerMember,
+  TypingState,
   User,
   VoiceParticipant,
 } from '../types/domain'
@@ -222,6 +225,24 @@ function mapDmVoiceParticipant(row: any): DmVoiceParticipant {
   }
 }
 
+function mapPresenceState(row: any): PresenceState {
+  return {
+    identity: toIdentityString(row.identity),
+    online: Boolean(row.online),
+    lastInteractionAt: toIsoString(row.lastInteractionAt),
+    updatedAt: toIsoString(row.updatedAt),
+  }
+}
+
+function mapTypingState(row: any): TypingState {
+  return {
+    typingKey: row.typingKey,
+    scopeKey: row.scopeKey,
+    userIdentity: toIdentityString(row.userIdentity),
+    updatedAt: toIsoString(row.updatedAt),
+  }
+}
+
 function syncUsers(conn: DbConnection): User[] {
   const users = Array.from(conn.db.user.iter()).map(mapUser)
   useUsersStore.getState().setUsers(users)
@@ -291,10 +312,8 @@ function syncChannels(conn: DbConnection): void {
 
 function syncMessages(conn: DbConnection): void {
   const messages = Array.from(conn.db.message.iter()).map(mapMessage)
-  const presence = usePresenceStore.getState()
   const grouped = new Map<number, Message[]>()
   for (const message of messages) {
-    presence.touchActive(message.senderIdentity, Date.parse(message.sentAt))
     const byChannel = grouped.get(message.channelId) ?? []
     byChannel.push(message)
     grouped.set(message.channelId, byChannel)
@@ -309,11 +328,8 @@ function syncMessages(conn: DbConnection): void {
 
 function syncVoiceParticipants(conn: DbConnection): void {
   const participants = Array.from(conn.db.voice_participant.iter()).map(mapVoiceParticipant)
-  const presence = usePresenceStore.getState()
-  const now = Date.now()
   const grouped = new Map<number, VoiceParticipant[]>()
   for (const participant of participants) {
-    presence.touchSeen(participant.userIdentity, now)
     const byChannel = grouped.get(participant.channelId) ?? []
     byChannel.push(participant)
     grouped.set(participant.channelId, byChannel)
@@ -351,11 +367,9 @@ function syncDirectMessages(conn: DbConnection): void {
   const directMessages = Array.from(conn.db.direct_message.iter()).map(mapDirectMessage)
   const me = useConnectionStore.getState().identity
   if (!me) return
-  const presence = usePresenceStore.getState()
 
   const grouped = new Map<Identity, DirectMessage[]>()
   for (const message of directMessages) {
-    presence.touchActive(message.senderIdentity, Date.parse(message.sentAt))
     const partner = message.senderIdentity === me ? message.recipientIdentity : message.senderIdentity
     const thread = grouped.get(partner) ?? []
     thread.push(message)
@@ -371,11 +385,8 @@ function syncDirectMessages(conn: DbConnection): void {
 
 function syncDmVoiceParticipants(conn: DbConnection): void {
   const participants = Array.from(conn.db.my_dm_voice_participants.iter()).map(mapDmVoiceParticipant)
-  const presence = usePresenceStore.getState()
-  const now = Date.now()
   const grouped = new Map<string, DmVoiceParticipant[]>()
   for (const participant of participants) {
-    presence.touchSeen(participant.userIdentity, now)
     const byRoom = grouped.get(participant.roomKey) ?? []
     byRoom.push(participant)
     grouped.set(participant.roomKey, byRoom)
@@ -394,6 +405,16 @@ function syncDmVoiceParticipants(conn: DbConnection): void {
   }
 }
 
+function syncPresenceStates(conn: DbConnection): void {
+  const rows = Array.from(conn.db.my_presence_states.iter()).map(mapPresenceState)
+  usePresenceStore.getState().setPresenceRows(rows)
+}
+
+function syncTypingStates(conn: DbConnection): void {
+  const rows = Array.from(conn.db.my_typing_states.iter()).map(mapTypingState)
+  useTypingStore.getState().setTypingRows(rows)
+}
+
 function syncAll(conn: DbConnection): void {
   syncUsers(conn)
   syncServers(conn)
@@ -404,6 +425,8 @@ function syncAll(conn: DbConnection): void {
   syncFriends(conn)
   syncDirectMessages(conn)
   syncDmVoiceParticipants(conn)
+  syncPresenceStates(conn)
+  syncTypingStates(conn)
 }
 
 function resetClientState(): void {
@@ -426,6 +449,7 @@ function resetClientState(): void {
   useFriendsStore.setState({ friends: [], blocked: [] })
   useDmStore.setState({ conversations: {} })
   useDmVoiceStore.setState({ participantsByRoom: {} })
+  useTypingStore.getState().reset()
   useUiStore.setState({
     activeChannelId: null,
     activeDmPartner: null,
@@ -482,6 +506,12 @@ function watchLiveTables(conn: DbConnection): void {
   conn.db.my_dm_voice_participants.onInsert(() => syncDmVoiceParticipants(conn))
   conn.db.my_dm_voice_participants.onUpdate(() => syncDmVoiceParticipants(conn))
   conn.db.my_dm_voice_participants.onDelete(() => syncDmVoiceParticipants(conn))
+  conn.db.my_presence_states.onInsert(() => syncPresenceStates(conn))
+  conn.db.my_presence_states.onUpdate(() => syncPresenceStates(conn))
+  conn.db.my_presence_states.onDelete(() => syncPresenceStates(conn))
+  conn.db.my_typing_states.onInsert(() => syncTypingStates(conn))
+  conn.db.my_typing_states.onUpdate(() => syncTypingStates(conn))
+  conn.db.my_typing_states.onDelete(() => syncTypingStates(conn))
   conn.db.message.onInsert((_ctx, row) => {
     syncMessages(conn)
     if (!liveEventsEnabled) return
@@ -583,7 +613,6 @@ async function connect(): Promise<void> {
         const identityString = toIdentityString(identity)
         useConnectionStore.getState().setStatus('connected')
         useConnectionStore.getState().setIdentity(identityString)
-        usePresenceStore.getState().touchActive(identityString, Date.now())
         setStoredToken(token)
       })
       .onDisconnect(() => {
@@ -624,6 +653,8 @@ async function connect(): Promise<void> {
         tables.my_blocks,
         tables.direct_message,
         tables.my_dm_voice_participants,
+        tables.my_presence_states,
+        tables.my_typing_states,
       ])
 
     try {
@@ -641,6 +672,12 @@ async function connect(): Promise<void> {
 }
 
 function disconnect(): void {
+  if (connection) {
+    const offlineReducer = (connection as DbConnectionImpl<any>).reducers?.setPresenceOffline
+    if (typeof offlineReducer === 'function') {
+      void offlineReducer({})
+    }
+  }
   subscriptionHandle?.unsubscribe()
   subscriptionHandle = null
   liveEventsEnabled = false
@@ -662,10 +699,6 @@ async function call<TArgs extends Record<string, unknown>>(reducer: string, args
   }
 
   await reducerFn(args ?? {})
-  const selfIdentity = useConnectionStore.getState().identity
-  if (selfIdentity) {
-    usePresenceStore.getState().touchActive(selfIdentity, Date.now())
-  }
 }
 
 export const spacetimedbClient: SpacetimeDBClient = {
@@ -742,6 +775,10 @@ export const reducers = {
     spacetimedbClient.call('editMessage', { messageId: toU64(messageId, 'messageId'), newContent }),
   deleteMessage: (messageId: number) =>
     spacetimedbClient.call('deleteMessage', { messageId: toU64(messageId, 'messageId') }),
+  touchPresence: () => spacetimedbClient.call('touchPresence'),
+  setPresenceOffline: () => spacetimedbClient.call('setPresenceOffline'),
+  setTypingState: (scopeKey: string, isTyping: boolean) =>
+    spacetimedbClient.call('setTypingState', { scopeKey, isTyping }),
   joinVoiceChannel: (channelId: number) =>
     spacetimedbClient.call('joinVoiceChannel', { channelId: toU64(channelId, 'channelId') }),
   leaveVoiceChannel: (channelId: number) =>

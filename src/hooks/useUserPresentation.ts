@@ -17,10 +17,7 @@ export interface UserPresentation {
   status: UserPresenceStatus
 }
 
-export const AWAY_AFTER_MS = 3 * 60 * 1000
-// With no dedicated backend heartbeat table yet, a longer staleness window
-// avoids users appearing offline immediately between normal interactions.
-export const CONNECTED_STALE_MS = 30 * 60 * 1000
+export const AWAY_AFTER_MS = 5 * 60 * 1000
 
 function normalizeIdentity(value: string): string {
   return value.trim().toLowerCase()
@@ -42,7 +39,7 @@ export function useUserPresentation(identity: Identity): UserPresentation {
   const connectionStatus = useConnectionStore((s) => s.status)
   const selfIdentity = useConnectionStore((s) => s.identity)
   const nowMs = usePresenceStore((s) => s.nowMs)
-  const lastSeenByIdentity = usePresenceStore((s) => s.lastSeenByIdentity)
+  const onlineByIdentity = usePresenceStore((s) => s.onlineByIdentity)
   const lastActiveByIdentity = usePresenceStore((s) => s.lastActiveByIdentity)
   const voiceParticipantsByChannel = useVoiceStore((s) => s.participantsByChannel)
   const dmVoiceParticipantsByRoom = useDmVoiceStore((s) => s.participantsByRoom)
@@ -68,8 +65,7 @@ export function useUserPresentation(identity: Identity): UserPresentation {
     }
 
     const isSelf = selfIdentity ? normalizeIdentity(selfIdentity) === normalized : false
-    const lastSeenAt = lastSeenByIdentity[normalized] ?? 0
-    const lastActiveAt = lastActiveByIdentity[normalized] ?? lastSeenAt
+    const lastActiveAt = lastActiveByIdentity[normalized] ?? 0
 
     const inVoicePresence = Object.values(voiceParticipantsByChannel).some((participants) =>
       participants.some((participant) => normalizeIdentity(participant.userIdentity) === normalized),
@@ -79,12 +75,13 @@ export function useUserPresentation(identity: Identity): UserPresentation {
     )
     const currentlyPresent = inVoicePresence || inDmVoicePresence
 
-    const seenRecently = lastSeenAt > 0 && nowMs - lastSeenAt <= CONNECTED_STALE_MS
-    const connected = isSelf ? connectionStatus === 'connected' : currentlyPresent || seenRecently
+    const presenceOnline = onlineByIdentity[normalized] ?? false
+    const connected = isSelf ? connectionStatus === 'connected' : currentlyPresent || presenceOnline
 
     let status: UserPresenceStatus = 'offline'
     if (connected) {
-      status = nowMs - lastActiveAt > AWAY_AFTER_MS ? 'away' : 'online'
+      const effectiveLastActiveAt = lastActiveAt > 0 ? lastActiveAt : nowMs
+      status = nowMs - effectiveLastActiveAt > AWAY_AFTER_MS ? 'away' : 'online'
     }
 
     return {
@@ -99,9 +96,9 @@ export function useUserPresentation(identity: Identity): UserPresentation {
     dmVoiceParticipantsByRoom,
     identity,
     lastActiveByIdentity,
-    lastSeenByIdentity,
     membersByServer,
     nowMs,
+    onlineByIdentity,
     selfIdentity,
     usersByIdentity,
     voiceParticipantsByChannel,

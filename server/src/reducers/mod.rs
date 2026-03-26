@@ -4,6 +4,7 @@ mod dm_voice;
 mod invites;
 mod member_management;
 mod messages;
+mod presence;
 mod servers;
 mod social;
 mod users;

@@ -113,6 +113,14 @@ export const Invite = __t.object("Invite", {
 });
 export type Invite = __Infer<typeof Invite>;
 
+export const PresenceState = __t.object("PresenceState", {
+  identity: __t.identity(),
+  online: __t.bool(),
+  lastInteractionAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type PresenceState = __Infer<typeof PresenceState>;
+
 export const Message = __t.object("Message", {
   id: __t.u64(),
   channelId: __t.u64(),
@@ -161,6 +169,14 @@ export const User = __t.object("User", {
 });
 export type User = __Infer<typeof User>;
 
+export const TypingState = __t.object("TypingState", {
+  typingKey: __t.string(),
+  scopeKey: __t.string(),
+  userIdentity: __t.identity(),
+  updatedAt: __t.timestamp(),
+});
+export type TypingState = __Infer<typeof TypingState>;
+
 export const VoiceParticipant = __t.object("VoiceParticipant", {
   voiceKey: __t.string(),
   channelId: __t.u64(),
@@ -172,4 +188,3 @@ export const VoiceParticipant = __t.object("VoiceParticipant", {
   sharingCamera: __t.bool(),
 });
 export type VoiceParticipant = __Infer<typeof VoiceParticipant>;
-

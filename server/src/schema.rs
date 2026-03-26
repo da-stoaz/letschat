@@ -217,3 +217,27 @@ pub struct DmVoiceParticipant {
     pub sharing_screen: bool,
     pub sharing_camera: bool,
 }
+
+#[spacetimedb::table(accessor = presence_state)]
+pub struct PresenceState {
+    #[primary_key]
+    pub identity: Identity,
+    pub online: bool,
+    #[index(btree)]
+    pub last_interaction_at: Timestamp,
+    pub updated_at: Timestamp,
+}
+
+#[spacetimedb::table(
+    accessor = typing_state,
+    index(accessor = by_scope, btree(columns = [scope_key])),
+    index(accessor = by_user, btree(columns = [user_identity]))
+)]
+pub struct TypingState {
+    #[primary_key]
+    pub typing_key: String,
+    pub scope_key: String,
+    pub user_identity: Identity,
+    #[index(btree)]
+    pub updated_at: Timestamp,
+}

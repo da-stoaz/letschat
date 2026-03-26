@@ -109,3 +109,17 @@ export interface DmVoiceParticipant {
   sharingScreen: boolean
   sharingCamera: boolean
 }
+
+export interface PresenceState {
+  identity: Identity
+  online: boolean
+  lastInteractionAt: string
+  updatedAt: string
+}
+
+export interface TypingState {
+  typingKey: string
+  scopeKey: string
+  userIdentity: Identity
+  updatedAt: string
+}

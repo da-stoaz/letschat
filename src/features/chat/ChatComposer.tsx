@@ -1,8 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { SendHorizonalIcon } from 'lucide-react'
-import { publishTypingBroadcast } from '../../lib/typingBroadcast'
-import { usePresenceStore } from '../../stores/presenceStore'
-import { useTypingStore } from '../../stores/typingStore'
+import { reducers } from '../../lib/spacetimedb'
 import type { Identity } from '../../types/domain'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -42,15 +40,7 @@ export function ChatComposer({
 
   const emitTypingState = (isTyping: boolean) => {
     if (!typingScopeKey || !typingIdentity) return
-    useTypingStore.getState().setTyping(typingScopeKey, typingIdentity, isTyping)
-    if (isTyping) {
-      usePresenceStore.getState().touchActive(typingIdentity, Date.now())
-    }
-    publishTypingBroadcast({
-      scopeKey: typingScopeKey,
-      identity: typingIdentity,
-      isTyping,
-    })
+    void reducers.setTypingState(typingScopeKey, isTyping).catch(() => undefined)
   }
 
   useEffect(() => {
@@ -78,6 +68,12 @@ export function ChatComposer({
       typingSentRef.current = false
     }
   }, [disabled, typingIdentity, typingScopeKey, value])
+
+  useEffect(() => {
+    if (!disabled || !typingSentRef.current) return
+    emitTypingState(false)
+    typingSentRef.current = false
+  }, [disabled, typingIdentity, typingScopeKey])
 
   useEffect(
     () => () => {

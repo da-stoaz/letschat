@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
+import { reducers } from '../lib/spacetimedb'
 import { useConnectionStore } from '../stores/connectionStore'
 import { usePresenceStore } from '../stores/presenceStore'
 
+const NOW_TICK_INTERVAL_MS = 1000
 const HEARTBEAT_INTERVAL_MS = 30_000
 const ACTIVITY_THROTTLE_MS = 5_000
 
@@ -9,56 +11,61 @@ export function usePresenceLifecycle() {
   const status = useConnectionStore((s) => s.status)
   const selfIdentity = useConnectionStore((s) => s.identity)
   const setNowMs = usePresenceStore((s) => s.setNowMs)
-  const touchSeen = usePresenceStore((s) => s.touchSeen)
-  const touchActive = usePresenceStore((s) => s.touchActive)
 
   useEffect(() => {
-    const heartbeat = window.setInterval(() => {
-      const now = Date.now()
-      setNowMs(now)
-      if (status === 'connected' && selfIdentity) {
-        touchSeen(selfIdentity, now)
-      }
-    }, HEARTBEAT_INTERVAL_MS)
-
+    const ticker = window.setInterval(() => {
+      setNowMs(Date.now())
+    }, NOW_TICK_INTERVAL_MS)
     return () => {
-      window.clearInterval(heartbeat)
+      window.clearInterval(ticker)
     }
-  }, [selfIdentity, setNowMs, status, touchSeen])
+  }, [setNowMs])
 
   useEffect(() => {
     if (status !== 'connected' || !selfIdentity) return
 
-    let lastActivityAt = 0
-    const handleActivity = () => {
+    let lastTouchAt = 0
+    const touchPresence = () => {
       const now = Date.now()
-      if (now - lastActivityAt < ACTIVITY_THROTTLE_MS) return
-      lastActivityAt = now
-      setNowMs(now)
-      touchActive(selfIdentity, now)
+      if (now - lastTouchAt < ACTIVITY_THROTTLE_MS) return
+      lastTouchAt = now
+      void reducers.touchPresence().catch(() => undefined)
     }
 
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        handleActivity()
+        touchPresence()
       }
     }
 
-    window.addEventListener('pointerdown', handleActivity, { passive: true })
-    window.addEventListener('keydown', handleActivity, { passive: true })
-    window.addEventListener('mousemove', handleActivity, { passive: true })
-    window.addEventListener('focus', handleActivity)
-    document.addEventListener('visibilitychange', onVisibility)
+    const onUnload = () => {
+      void reducers.setPresenceOffline().catch(() => undefined)
+    }
 
-    handleActivity()
+    touchPresence()
+
+    const heartbeat = window.setInterval(() => {
+      void reducers.touchPresence().catch(() => undefined)
+    }, HEARTBEAT_INTERVAL_MS)
+
+    window.addEventListener('pointerdown', touchPresence, { passive: true })
+    window.addEventListener('keydown', touchPresence, { passive: true })
+    window.addEventListener('mousemove', touchPresence, { passive: true })
+    window.addEventListener('focus', touchPresence)
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pagehide', onUnload)
+    window.addEventListener('beforeunload', onUnload)
 
     return () => {
-      window.removeEventListener('pointerdown', handleActivity)
-      window.removeEventListener('keydown', handleActivity)
-      window.removeEventListener('mousemove', handleActivity)
-      window.removeEventListener('focus', handleActivity)
+      window.clearInterval(heartbeat)
+      window.removeEventListener('pointerdown', touchPresence)
+      window.removeEventListener('keydown', touchPresence)
+      window.removeEventListener('mousemove', touchPresence)
+      window.removeEventListener('focus', touchPresence)
       document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', onUnload)
+      window.removeEventListener('beforeunload', onUnload)
+      void reducers.setPresenceOffline().catch(() => undefined)
     }
-  }, [selfIdentity, setNowMs, status, touchActive])
+  }, [selfIdentity, status])
 }
-
