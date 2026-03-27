@@ -21,7 +21,7 @@ import { normalizeIdentity } from './app-layout/helpers'
 import { useIncomingDmRing } from '../features/dm/hooks/useIncomingDmRing'
 import { formatDmPreview } from '../features/dm/systemMessages'
 import { useLiveKitRoom } from '../lib/livekit'
-import { tauriCommands } from '../lib/tauri'
+import { syncUnreadBadgeCount } from '../lib/notifications'
 import { ComposeDmDialog } from './app-layout/ComposeDmDialog'
 import { LayoutModals } from './app-layout/LayoutModals'
 import { MemberPanel } from './app-layout/MemberPanel'
@@ -404,9 +404,7 @@ export function AppLayout() {
   }, [activeCallDockVisible, setActiveCallDockVisible])
 
   useEffect(() => {
-    const channelUnread = Object.values(unreadByChannel).reduce((sum, value) => sum + value, 0)
-    const dmUnread = Object.values(unreadByDmPartner).reduce((sum, value) => sum + value, 0)
-    void tauriCommands.setBadgeCount(channelUnread + dmUnread).catch(() => undefined)
+    void syncUnreadBadgeCount()
   }, [unreadByChannel, unreadByDmPartner])
 
   useEffect(() => {

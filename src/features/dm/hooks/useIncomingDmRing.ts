@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { toast } from '@/components/ui/sonner'
-import { tauriCommands } from '../../../lib/tauri'
+import { notify } from '../../../lib/notifications'
 import type { DmVoiceParticipant, Identity, User } from '../../../types/domain'
 
 function normalizeIdentity(value: string | null | undefined): string {
@@ -183,9 +183,10 @@ export function useIncomingDmRing({
     }
 
     const stopTone = startRingtoneLoop()
-    void tauriCommands
-      .showNotification('Incoming DM call', `${incoming.callerLabel} is calling you`)
-      .catch(() => undefined)
+    void notify('incoming_call', {
+      callerLabel: incoming.callerLabel,
+      dedupeKey: incoming.roomKey,
+    })
 
     const toastId = toast('Incoming DM call', {
       description: `${incoming.callerLabel} is calling you`,

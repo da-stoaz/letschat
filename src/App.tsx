@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
 import { AuthPage } from './pages/AuthPage'
@@ -8,8 +9,10 @@ import { DMPage } from './pages/DMPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { useSelfStore } from './stores/selfStore'
 import { useConnectionStore } from './stores/connectionStore'
+import { useUiStore } from './stores/uiStore'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
 import { useVoiceStateReconciler } from './hooks/useVoiceStateReconciler'
+import { ensureNotificationPermission } from './lib/notifications'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoaderCircleIcon } from 'lucide-react'
 
@@ -18,8 +21,14 @@ function App() {
   useVoiceStateReconciler()
   const user = useSelfStore((s) => s.user)
   const connectionStatus = useConnectionStore((s) => s.status)
+  const notificationsEnabled = useUiStore((s) => s.notificationSettings.enabled)
   const location = useLocation()
   const onAuthRoute = location.pathname.startsWith('/auth')
+
+  useEffect(() => {
+    if (!notificationsEnabled) return
+    void ensureNotificationPermission({ prompt: false })
+  }, [notificationsEnabled])
 
   if (connectionStatus === 'connecting' && !user && !onAuthRoute) {
     return (

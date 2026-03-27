@@ -6,6 +6,41 @@ function normalizeIdentityKey(identity: Identity): Identity {
   return identity.trim().toLowerCase() as Identity
 }
 
+export type NotificationPreferenceEvent =
+  | 'channelMessages'
+  | 'directMessages'
+  | 'friendRequests'
+  | 'friendAccepted'
+  | 'incomingCalls'
+  | 'missedCalls'
+  | 'mentions'
+
+export type NotificationSettings = {
+  enabled: boolean
+  eventToggles: Record<NotificationPreferenceEvent, boolean>
+  showPreviews: boolean
+  quietHoursEnabled: boolean
+  quietHoursStart: string
+  quietHoursEnd: string
+}
+
+const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  enabled: true,
+  eventToggles: {
+    channelMessages: true,
+    directMessages: true,
+    friendRequests: true,
+    friendAccepted: true,
+    incomingCalls: true,
+    missedCalls: true,
+    mentions: true,
+  },
+  showPreviews: true,
+  quietHoursEnabled: false,
+  quietHoursStart: '22:00',
+  quietHoursEnd: '07:00',
+}
+
 interface UiState {
   activeChannelId: u64 | null
   activeDmPartner: Identity | null
@@ -17,6 +52,7 @@ interface UiState {
   mutedChannels: Record<u64, boolean>
   mutedServers: Record<u64, boolean>
   mutedUsers: Record<Identity, boolean>
+  notificationSettings: NotificationSettings
   setActiveChannelId: (channelId: u64 | null) => void
   setActiveDmPartner: (identity: Identity | null) => void
   toggleRightPanel: () => void
@@ -29,6 +65,11 @@ interface UiState {
   toggleMutedChannel: (channelId: u64) => void
   toggleMutedServer: (serverId: u64) => void
   toggleMutedUser: (identity: Identity) => void
+  setNotificationsEnabled: (enabled: boolean) => void
+  setNotificationEventEnabled: (event: NotificationPreferenceEvent, enabled: boolean) => void
+  setNotificationPreviewsEnabled: (enabled: boolean) => void
+  setNotificationQuietHoursEnabled: (enabled: boolean) => void
+  setNotificationQuietHoursRange: (start: string, end: string) => void
 }
 
 export const useUiStore = create<UiState>()(
@@ -44,6 +85,7 @@ export const useUiStore = create<UiState>()(
       mutedChannels: {},
       mutedServers: {},
       mutedUsers: {},
+      notificationSettings: DEFAULT_NOTIFICATION_SETTINGS,
       setActiveChannelId: (channelId) =>
         set((state) => (state.activeChannelId === channelId ? state : { activeChannelId: channelId })),
       setActiveDmPartner: (identity) =>
@@ -120,6 +162,71 @@ export const useUiStore = create<UiState>()(
             },
           }
         }),
+      setNotificationsEnabled: (enabled) =>
+        set((state) =>
+          state.notificationSettings.enabled === enabled ?
+            state
+          : {
+              notificationSettings: {
+                ...state.notificationSettings,
+                enabled,
+              },
+            },
+        ),
+      setNotificationEventEnabled: (event, enabled) =>
+        set((state) =>
+          state.notificationSettings.eventToggles[event] === enabled ?
+            state
+          : {
+              notificationSettings: {
+                ...state.notificationSettings,
+                eventToggles: {
+                  ...state.notificationSettings.eventToggles,
+                  [event]: enabled,
+                },
+              },
+            },
+        ),
+      setNotificationPreviewsEnabled: (enabled) =>
+        set((state) =>
+          state.notificationSettings.showPreviews === enabled ?
+            state
+          : {
+              notificationSettings: {
+                ...state.notificationSettings,
+                showPreviews: enabled,
+              },
+            },
+        ),
+      setNotificationQuietHoursEnabled: (enabled) =>
+        set((state) =>
+          state.notificationSettings.quietHoursEnabled === enabled ?
+            state
+          : {
+              notificationSettings: {
+                ...state.notificationSettings,
+                quietHoursEnabled: enabled,
+              },
+            },
+        ),
+      setNotificationQuietHoursRange: (start, end) =>
+        set((state) => {
+          const normalizedStart = start.trim() || DEFAULT_NOTIFICATION_SETTINGS.quietHoursStart
+          const normalizedEnd = end.trim() || DEFAULT_NOTIFICATION_SETTINGS.quietHoursEnd
+          if (
+            state.notificationSettings.quietHoursStart === normalizedStart &&
+            state.notificationSettings.quietHoursEnd === normalizedEnd
+          ) {
+            return state
+          }
+          return {
+            notificationSettings: {
+              ...state.notificationSettings,
+              quietHoursStart: normalizedStart,
+              quietHoursEnd: normalizedEnd,
+            },
+          }
+        }),
     }),
     {
       name: 'letschat.ui',
@@ -133,6 +240,7 @@ export const useUiStore = create<UiState>()(
         mutedChannels: state.mutedChannels,
         mutedServers: state.mutedServers,
         mutedUsers: state.mutedUsers,
+        notificationSettings: state.notificationSettings,
       }),
     },
   ),

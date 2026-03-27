@@ -22,7 +22,7 @@ import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useReadStore } from '../stores/readStore'
 import { useTypingStore } from '../stores/typingStore'
-import { tauriCommands } from './tauri'
+import { clearBadgeCount, notify, syncUnreadBadgeCount } from './notifications'
 import type { ServerMemberWithUser } from '../stores/membersStore'
 import type {
   Block,
@@ -116,12 +116,6 @@ function normalizeIdentity(identity: Identity): string {
 
 function sameIdentity(a: Identity, b: Identity): boolean {
   return normalizeIdentity(a) === normalizeIdentity(b)
-}
-
-function truncateNotificationBody(content: string, maxLength = 80): string {
-  const normalized = content.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, maxLength - 1)}…`
 }
 
 type DbRow = Record<string, unknown>
@@ -394,7 +388,7 @@ function syncMessages(conn: DbConnection): void {
   const messages = Array.from(conn.db.message.iter()).map(mapMessage)
   const grouped = new Map<number, Message[]>()
   for (const message of messages) {
-    const byChannel = grouped.get(message.channelId) ?? []
+  const byChannel = grouped.get(message.channelId) ?? []
     byChannel.push(message)
     grouped.set(message.channelId, byChannel)
   }
@@ -575,7 +569,7 @@ function watchLiveTables(conn: DbConnection): void {
 
     const mapped = mapFriend(row)
     if (mapped.status === 'Pending' && mapped.requestedBy !== me) {
-      handleIncomingFriendRequest(mapped.requestedBy)
+      handleIncomingFriendRequest(findDisplayNameByIdentity(mapped.requestedBy))
     }
   })
   conn.db.my_friends.onUpdate((_ctx, _oldRow, row) => {
@@ -586,7 +580,8 @@ function watchLiveTables(conn: DbConnection): void {
 
     const mapped = mapFriend(row)
     if (mapped.status === 'Accepted' && mapped.requestedBy === me) {
-      handleFriendAccepted(mapped.userA === me ? mapped.userB : mapped.userA)
+      const otherIdentity = mapped.userA === me ? mapped.userB : mapped.userA
+      handleFriendAccepted(findDisplayNameByIdentity(otherIdentity))
     }
   })
   conn.db.my_friends.onDelete(() => syncFriends(conn))
@@ -983,7 +978,11 @@ export const onDisconnect = async (): Promise<void> => {
 export const onError = async (error: unknown): Promise<void> => {
   useConnectionStore.getState().setStatus('disconnected')
   const body = error instanceof Error ? error.message : 'Unknown connection error'
-  await tauriCommands.showNotification('Connection Error', body).catch(() => undefined)
+  await notify('system', {
+    title: 'Connection Error',
+    body,
+    dedupeKey: `connection_error:${body}`,
+  })
 }
 
 export async function initializeSpacetime(): Promise<void> {
@@ -1008,7 +1007,7 @@ export async function signOut(): Promise<void> {
   disconnect()
   clearStoredToken()
   clearStoredAuthSessionToken()
-  await tauriCommands.setBadgeCount(0).catch(() => undefined)
+  await clearBadgeCount()
 }
 
 export async function rotateIdentityForRegistration(): Promise<void> {
@@ -1115,10 +1114,7 @@ export async function resolveIdentityFromUsername(username: string): Promise<Ide
 }
 
 function updateUnreadBadgeCount(): void {
-  const ui = useUiStore.getState()
-  const channelUnread = Object.values(ui.unreadByChannel).reduce((sum, value) => sum + value, 0)
-  const dmUnread = Object.values(ui.unreadByDmPartner).reduce((sum, value) => sum + value, 0)
-  void tauriCommands.setBadgeCount(channelUnread + dmUnread).catch(() => undefined)
+  void syncUnreadBadgeCount()
 }
 
 function findServerIdByChannelId(channelId: number): number | null {
@@ -1127,6 +1123,15 @@ function findServerIdByChannelId(channelId: number): number | null {
     if (channels.some((channel) => channel.id === channelId)) {
       return Number(serverId)
     }
+  }
+  return null
+}
+
+function findChannelNameById(channelId: number): string | null {
+  const channelsByServer = useChannelsStore.getState().channelsByServer
+  for (const channels of Object.values(channelsByServer)) {
+    const channel = channels.find((row) => row.id === channelId)
+    if (channel) return channel.name
   }
   return null
 }
@@ -1141,6 +1146,48 @@ function findDisplayNameByIdentity(identity: Identity): string {
   return identity.slice(0, 12)
 }
 
+function formatDurationLabel(durationSeconds: number): string {
+  const total = Math.max(0, Math.round(durationSeconds))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
+}
+
+function parseDmCallSystemMessage(content: string): { kind: 'call_started' | 'call_ended'; missed: boolean; durationLabel?: string } | null {
+  const prefix = '__letschat_system__:'
+  if (!content.startsWith(prefix)) return null
+
+  const payloadText = content.slice(prefix.length)
+  if (!payloadText.startsWith('{')) return null
+
+  try {
+    const payload = JSON.parse(payloadText) as { kind?: unknown; missed?: unknown; durationSeconds?: unknown }
+    if (payload.kind !== 'call_started' && payload.kind !== 'call_ended') return null
+    const missed = payload.missed === true
+    const durationLabel =
+      typeof payload.durationSeconds === 'number' && Number.isFinite(payload.durationSeconds) ?
+        formatDurationLabel(payload.durationSeconds)
+      : undefined
+    return { kind: payload.kind, missed, durationLabel }
+  } catch {
+    return null
+  }
+}
+
+function isMentionForSelf(content: string): boolean {
+  const self = useSelfStore.getState().user
+  if (!self) return false
+  const normalizedContent = content.toLowerCase()
+  const mentionNeedles = [
+    `@${self.username.toLowerCase()}`,
+    `@${self.displayName.toLowerCase()}`,
+  ]
+  return mentionNeedles.some((needle) => normalizedContent.includes(needle))
+}
+
 export function handleIncomingMessage(message: Message): void {
   const me = useConnectionStore.getState().identity
   if (!me || sameIdentity(message.senderIdentity, me)) return
@@ -1150,8 +1197,6 @@ export function handleIncomingMessage(message: Message): void {
 
   const ui = useUiStore.getState()
   const channelId = message.channelId
-  if (ui.activeChannelId === channelId) return
-
   const serverId = findServerIdByChannelId(channelId)
   const channelMuted = Boolean(ui.mutedChannels[channelId])
   const serverMuted = serverId !== null ? Boolean(ui.mutedServers[serverId]) : false
@@ -1159,8 +1204,18 @@ export function handleIncomingMessage(message: Message): void {
   if (channelMuted || serverMuted || userMuted) return
 
   const senderLabel = findDisplayNameByIdentity(message.senderIdentity)
-  const body = truncateNotificationBody(message.deleted ? '[message deleted]' : message.content)
-  void tauriCommands.showNotification(senderLabel, body).catch(() => undefined)
+  const body = message.deleted ? '[message deleted]' : message.content
+  const channelName = findChannelNameById(channelId) ?? undefined
+  const isMention = isMentionForSelf(body)
+  const isActiveView = ui.activeChannelId === channelId
+
+  void notify(isMention ? 'mention' : 'channel_message', {
+    senderLabel,
+    content: body,
+    channelName,
+    dedupeKey: `${message.id}`,
+    suppressIfFocusedAndActive: isActiveView,
+  })
 }
 
 export function handleIncomingDirectMessage(message: DirectMessage): void {
@@ -1177,19 +1232,42 @@ export function handleIncomingDirectMessage(message: DirectMessage): void {
   const ui = useUiStore.getState()
 
   if (ui.mutedUsers[normalizeIdentity(partnerIdentity) as Identity]) return
+  const isActiveView =
+    ui.activeDmPartner !== null && sameIdentity(ui.activeDmPartner, partnerIdentity)
   const senderLabel = findDisplayNameByIdentity(partnerIdentity)
-  const body = truncateNotificationBody(message.content)
-  void tauriCommands.showNotification(senderLabel, body).catch(() => undefined)
+  const callSystem = parseDmCallSystemMessage(message.content)
+  if (callSystem?.kind === 'call_ended' && callSystem.missed) {
+    void notify('missed_call', {
+      callerLabel: senderLabel,
+      durationLabel: callSystem.durationLabel,
+      dedupeKey: `${message.id}`,
+      suppressIfFocusedAndActive: isActiveView,
+    })
+    return
+  }
+  if (callSystem?.kind === 'call_ended') {
+    void notify('call_ended', {
+      peerLabel: senderLabel,
+      durationLabel: callSystem.durationLabel,
+      dedupeKey: `${message.id}`,
+      suppressIfFocusedAndActive: isActiveView,
+    })
+    return
+  }
+  void notify('direct_message', {
+    senderLabel,
+    content: message.content,
+    dedupeKey: `${message.id}`,
+    suppressIfFocusedAndActive: isActiveView,
+  })
 }
 
 export function handleIncomingFriendRequest(username: string): void {
-  void tauriCommands.showNotification('Friend Request', `New friend request from ${username}`).catch(() => undefined)
+  void notify('friend_request', { username })
 }
 
 export function handleFriendAccepted(username: string): void {
-  void tauriCommands
-    .showNotification('Friend Request Accepted', `${username} accepted your friend request`)
-    .catch(() => undefined)
+  void notify('friend_accepted', { username })
 }
 
 export { tables }
