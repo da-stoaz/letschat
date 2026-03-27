@@ -12,6 +12,7 @@ export interface DmContact {
 }
 
 export interface ChannelBarProps {
+  channelBarWidth: number
   activeServerId: number | null
   activeServer: Server | null
   activeChannelId: number | null
@@ -54,10 +55,10 @@ export interface ServerChannelBarProps {
 }
 
 export interface DmChannelBarProps {
+  channelBarWidth: number
   dmContacts: DmContact[]
   activeDmIdentity: string | null
   dmCallActiveByIdentity: Record<string, boolean>
   onOpenFriends: () => void
   onOpenDmContact: (identity: string) => void
 }
-

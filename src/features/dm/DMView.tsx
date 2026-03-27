@@ -84,6 +84,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           deleted: isDeletedForViewer(message, selfIdentity),
           systemKind: systemMessage?.kind ?? null,
           systemMeta: systemMessage ? formatDmSystemMetadata(message.sentAt) : null,
+          systemMissed: systemMessage?.missed ?? false,
         }
       }),
     [messages, partner.displayName, selfIdentity, selfLabel],

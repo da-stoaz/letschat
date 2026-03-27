@@ -5,6 +5,7 @@ import type { ChannelBarProps } from './channel-bar/types'
 export type { ChannelBarProps } from './channel-bar/types'
 
 export function ChannelBar({
+  channelBarWidth,
   activeServerId,
   activeServer,
   activeChannelId,
@@ -50,7 +51,8 @@ export function ChannelBar({
   }
 
   return (
-    <DmChannelBar
+      <DmChannelBar
+      channelBarWidth={channelBarWidth}
       dmContacts={dmContacts}
       activeDmIdentity={activeDmIdentity}
       dmCallActiveByIdentity={dmCallActiveByIdentity}

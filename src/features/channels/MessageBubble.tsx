@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { PencilIcon, Trash2Icon } from 'lucide-react'
+import { PhoneCallIcon, PhoneMissedIcon, PhoneOffIcon, PencilIcon, Trash2Icon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -17,6 +17,7 @@ export interface RenderableMessage {
   deleted: boolean
   systemKind?: 'call_started' | 'call_ended' | null
   systemMeta?: string | null
+  systemMissed?: boolean
 }
 
 export interface MessageGroup {
@@ -67,10 +68,20 @@ export function MessageBubble({
   )
 
   if (isSystemGroup) {
+    const systemIcon =
+      firstMessage.systemKind === 'call_started' ? (
+        <PhoneCallIcon className="size-3.5 text-emerald-400" />
+      ) : firstMessage.systemMissed ? (
+        <PhoneMissedIcon className="size-3.5 text-red-400" />
+      ) : (
+        <PhoneOffIcon className="size-3.5 text-muted-foreground" />
+      )
+
     return (
       <article className="px-2 py-2">
         <div className="flex justify-center">
-          <span className="rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
+            {systemIcon}
             {firstMessage.content}
           </span>
         </div>

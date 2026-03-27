@@ -365,6 +365,7 @@ export function AppLayout() {
 
             <div className="relative min-h-0">
               <ChannelBar
+                channelBarWidth={channelBarWidth}
                 activeServerId={activeServerId}
                 activeServer={activeServer}
                 activeChannelId={activeChannelId}
