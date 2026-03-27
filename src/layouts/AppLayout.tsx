@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Outlet, useNavigate, useParams } from 'react-router-dom'
 import { PanelRightCloseIcon, PanelRightOpenIcon } from 'lucide-react'
+import { Track } from 'livekit-client'
 import { AWAY_AFTER_MS, type UserPresenceStatus } from '../hooks/useUserPresentation'
 import { useServerRole } from '../hooks/useServerRole'
 import { useChannelsStore } from '../stores/channelsStore'
@@ -19,6 +20,7 @@ import { useVoiceStore } from '../stores/voiceStore'
 import { normalizeIdentity } from './app-layout/helpers'
 import { useIncomingDmRing } from '../features/dm/hooks/useIncomingDmRing'
 import { formatDmPreview } from '../features/dm/systemMessages'
+import { useLiveKitRoom } from '../lib/livekit'
 import { ComposeDmDialog } from './app-layout/ComposeDmDialog'
 import { LayoutModals } from './app-layout/LayoutModals'
 import { MemberPanel } from './app-layout/MemberPanel'
@@ -305,6 +307,35 @@ export function AppLayout() {
     voiceJoining ||
     dmVoiceJoining
   const activeCallDockVisible = hasActiveCallDock && !isMobile
+  const {
+    activeSpeakerIds: roomActiveSpeakerIds,
+    localParticipant: roomLocalParticipant,
+    remoteParticipants: roomRemoteParticipants,
+  } = useLiveKitRoom(voiceRoom)
+  const activeSpeakerIdentityKeys = useMemo(
+    () => {
+      const activeKeys = Array.from(roomActiveSpeakerIds).map((identity) => normalizeIdentity(identity))
+      const result = new Set<string>()
+
+      for (const activeKey of activeKeys) {
+        const localMatch =
+          roomLocalParticipant && normalizeIdentity(roomLocalParticipant.identity) === activeKey
+            ? roomLocalParticipant
+            : null
+        const participant =
+          localMatch ??
+          roomRemoteParticipants.find((remoteParticipant) => normalizeIdentity(remoteParticipant.identity) === activeKey)
+        const hasMicrophoneTrack = Boolean(
+          participant?.getTrackPublication(Track.Source.Microphone)?.audioTrack,
+        )
+        if (hasMicrophoneTrack) {
+          result.add(activeKey)
+        }
+      }
+      return result
+    },
+    [roomActiveSpeakerIds, roomLocalParticipant, roomRemoteParticipants],
+  )
 
   useEffect(() => {
     setActiveCallDockVisible(activeCallDockVisible)
@@ -376,7 +407,7 @@ export function AppLayout() {
                 unreadByChannel={unreadByChannel}
                 participantsByChannel={participantsByChannel}
                 joinedVoiceChannelId={joinedVoiceChannelId}
-                normalizedSelfIdentity={normalizedSelfIdentity}
+                activeSpeakerIdentityKeys={activeSpeakerIdentityKeys}
                 memberProfileByIdentity={memberProfileByIdentity}
                 onOpenRenameServer={() => setShowEditServer(true)}
                 onOpenInvite={() => setShowInvite(true)}

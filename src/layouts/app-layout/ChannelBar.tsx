@@ -16,7 +16,7 @@ export function ChannelBar({
   unreadByChannel,
   participantsByChannel,
   joinedVoiceChannelId,
-  normalizedSelfIdentity,
+  activeSpeakerIdentityKeys,
   memberProfileByIdentity,
   onOpenRenameServer,
   onOpenInvite,
@@ -40,7 +40,7 @@ export function ChannelBar({
         unreadByChannel={unreadByChannel}
         participantsByChannel={participantsByChannel}
         joinedVoiceChannelId={joinedVoiceChannelId}
-        normalizedSelfIdentity={normalizedSelfIdentity}
+        activeSpeakerIdentityKeys={activeSpeakerIdentityKeys}
         memberProfileByIdentity={memberProfileByIdentity}
         onOpenRenameServer={onOpenRenameServer}
         onOpenInvite={onOpenInvite}

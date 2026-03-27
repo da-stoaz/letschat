@@ -23,7 +23,7 @@ export interface ChannelBarProps {
   unreadByChannel: Record<number, number>
   participantsByChannel: Record<number, VoiceParticipant[]>
   joinedVoiceChannelId: number | null
-  normalizedSelfIdentity: string | null
+  activeSpeakerIdentityKeys: Set<string>
   memberProfileByIdentity: Map<string, { label: string; avatarUrl: string | null }>
   onOpenRenameServer: () => void
   onOpenInvite: () => void
@@ -46,7 +46,7 @@ export interface ServerChannelBarProps {
   unreadByChannel: Record<number, number>
   participantsByChannel: Record<number, VoiceParticipant[]>
   joinedVoiceChannelId: number | null
-  normalizedSelfIdentity: string | null
+  activeSpeakerIdentityKeys: Set<string>
   memberProfileByIdentity: Map<string, { label: string; avatarUrl: string | null }>
   onOpenRenameServer: () => void
   onOpenInvite: () => void

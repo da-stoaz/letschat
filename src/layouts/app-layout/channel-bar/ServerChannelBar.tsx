@@ -14,6 +14,8 @@ import { VoiceChannelButton } from '../VoiceChannelButton'
 import { ChannelBarShell } from './ChannelBarShell'
 import type { ServerChannelBarProps } from './types'
 
+const EMPTY_ACTIVE_SPEAKERS = new Set<string>()
+
 export function ServerChannelBar({
   activeServer,
   activeChannelId,
@@ -24,7 +26,7 @@ export function ServerChannelBar({
   unreadByChannel,
   participantsByChannel,
   joinedVoiceChannelId,
-  normalizedSelfIdentity,
+  activeSpeakerIdentityKeys,
   memberProfileByIdentity,
   onOpenRenameServer,
   onOpenInvite,
@@ -94,7 +96,7 @@ export function ServerChannelBar({
               active={activeChannelId === channel.id}
               participants={participantsByChannel[channel.id] ?? []}
               selfJoined={joinedVoiceChannelId === channel.id}
-              normalizedSelfIdentity={normalizedSelfIdentity}
+              activeSpeakerIdentityKeys={joinedVoiceChannelId === channel.id ? activeSpeakerIdentityKeys : EMPTY_ACTIVE_SPEAKERS}
               memberProfileByIdentity={memberProfileByIdentity}
               onSelect={() => onSelectChannel(channel.id)}
             />
@@ -121,4 +123,3 @@ export function ServerChannelBar({
     </ChannelBarShell>
   )
 }
-
