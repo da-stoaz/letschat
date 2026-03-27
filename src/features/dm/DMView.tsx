@@ -237,7 +237,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           <Badge variant={statusVariant}>{statusBadge}</Badge>
           <Button
             size="sm"
-            variant={joined ? 'destructive' : 'secondary'}
+            variant={joined ? 'destructive' : 'default'}
             disabled={connecting}
             onClick={() => {
               void onPrimaryCallAction()

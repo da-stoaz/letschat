@@ -16,7 +16,7 @@ import { useMediaDeviceStore } from '../../stores/mediaDeviceStore'
 import { useMembersStore } from '../../stores/membersStore'
 import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
 import type { VoiceParticipant, u64 } from '../../types/domain'
-import { ConnectionState } from 'livekit-client'
+import { ConnectionState, Track } from 'livekit-client'
 import { PhoneCallIcon, PhoneOffIcon } from 'lucide-react'
 import { warnOnce } from '../../lib/devWarnings'
 import { useOngoingCallDuration } from './hooks/useOngoingCallDuration'
@@ -267,6 +267,15 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
             const local = sameIdentity(p.userIdentity, selfIdentity)
             const participantIdentityKey = normalizeIdentityKey(p.userIdentity)
             const mediaParticipant = local ? localParticipant : livekitParticipantByIdentity.get(participantIdentityKey) ?? null
+            const participantIsActiveSpeaker = normalizedActiveSpeakers.has(participantIdentityKey)
+            const hasMicrophoneTrack = Boolean(
+              mediaParticipant?.getTrackPublication(Track.Source.Microphone)?.audioTrack,
+            )
+            const hasScreenAudioTrack = Boolean(
+              mediaParticipant?.getTrackPublication(Track.Source.ScreenShareAudio)?.audioTrack,
+            )
+            const micSpeaking = participantIsActiveSpeaker && hasMicrophoneTrack
+            const screenAudioActive = participantIsActiveSpeaker && hasScreenAudioTrack
             return (
               <Fragment key={p.userIdentity}>
                 <ParticipantMediaTile
@@ -276,7 +285,8 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
                   participant={mediaParticipant}
                   tileType="profile"
                   isLocal={local}
-                  isSpeaking={normalizedActiveSpeakers.has(participantIdentityKey)}
+                  isSpeaking={micSpeaking}
+                  isScreenAudioActive={false}
                   muted={p.muted}
                   deafened={p.deafened}
                   sharingScreen={p.sharingScreen}
@@ -290,7 +300,8 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
                     participant={mediaParticipant}
                     tileType="screen"
                     isLocal={local}
-                    isSpeaking={normalizedActiveSpeakers.has(participantIdentityKey)}
+                    isSpeaking={false}
+                    isScreenAudioActive={screenAudioActive}
                     muted={p.muted}
                     deafened={p.deafened}
                     sharingScreen={p.sharingScreen}

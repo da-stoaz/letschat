@@ -15,6 +15,7 @@ interface ParticipantMediaTileProps {
   tileType?: 'profile' | 'screen'
   isLocal: boolean
   isSpeaking: boolean
+  isScreenAudioActive?: boolean
   muted: boolean
   deafened: boolean
   sharingScreen: boolean
@@ -55,6 +56,7 @@ export function ParticipantMediaTile({
   tileType = 'profile',
   isLocal,
   isSpeaking,
+  isScreenAudioActive = false,
   muted,
   deafened,
   sharingScreen,
@@ -69,7 +71,15 @@ export function ParticipantMediaTile({
   const primaryVideoTrack =
     tileType === 'screen' ? screenTrack : cameraTrack ?? fallbackVideoTrack
 
-  const audioTrack = participant ? pickAudioPublication(participant.audioTrackPublications)?.track ?? null : null
+  const microphoneAudioTrack =
+    participant?.getTrackPublication(Track.Source.Microphone)?.audioTrack ?? null
+  const screenShareAudioTrack =
+    participant?.getTrackPublication(Track.Source.ScreenShareAudio)?.audioTrack ?? null
+  const fallbackAudioTrack = participant ? pickAudioPublication(participant.audioTrackPublications)?.track ?? null : null
+  const audioTrack =
+    tileType === 'screen'
+      ? screenShareAudioTrack
+      : microphoneAudioTrack ?? fallbackAudioTrack
 
   useEffect(() => {
     const videoElement = videoRef.current
@@ -110,6 +120,7 @@ export function ParticipantMediaTile({
   }, [audioTrack, isLocal])
 
   const showVideo = Boolean(primaryVideoTrack && primaryVideoTrack.kind === Track.Kind.Video)
+  const showActivity = tileType === 'screen' ? isScreenAudioActive : isSpeaking
 
   const subtitle =
     tileType === 'screen'
@@ -124,7 +135,8 @@ export function ParticipantMediaTile({
     <article
       className={cn(
         'overflow-hidden rounded-xl bg-gradient-to-br from-card/90 via-card/80 to-muted/25 p-2.5',
-        isSpeaking && 'ring-1 ring-emerald-400/70',
+        showActivity &&
+          (tileType === 'screen' ? 'ring-1 ring-sky-400/70' : 'ring-1 ring-emerald-400/70'),
       )}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
@@ -135,7 +147,12 @@ export function ParticipantMediaTile({
           <p className="mt-1 truncate text-xs text-muted-foreground">{subtitle}</p>
         </div>
         <div className="flex items-center gap-1">
-          {isSpeaking ? <Badge className="h-5 px-1.5 text-[10px]">Speaking</Badge> : null}
+          {tileType === 'screen' && isScreenAudioActive ? (
+            <Badge className="h-5 px-1.5 text-[10px]">Screen audio</Badge>
+          ) : null}
+          {tileType !== 'screen' && isSpeaking ? (
+            <Badge className="h-5 px-1.5 text-[10px]">Speaking</Badge>
+          ) : null}
           {isLocal ? <Badge variant="outline" className="h-5 px-1.5 text-[10px]">You</Badge> : null}
         </div>
       </div>

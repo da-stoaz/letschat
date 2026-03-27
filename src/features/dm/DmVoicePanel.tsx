@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef } from 'react'
-import { ConnectionState, type LocalParticipant, type RemoteParticipant } from 'livekit-client'
+import { ConnectionState, Track, type LocalParticipant, type RemoteParticipant } from 'livekit-client'
 import {
   dmVoiceRoomKey,
   getMicrophoneUnavailableReason,
@@ -211,10 +211,6 @@ export function DmVoicePanel({
         </CardHeader>
       ) : null}
       <CardContent className="space-y-2">
-        <div className="flex flex-wrap gap-2">
-          {participants.length === 0 ? <Badge variant="outline">No one in call</Badge> : null}
-        </div>
-
         <div className="grid gap-3 sm:grid-cols-2">
           {participants.map((participant) => {
             const participantIdentityKey = normalizeIdentityKey(participant.userIdentity)
@@ -222,6 +218,15 @@ export function DmVoicePanel({
             const mediaParticipant = local
               ? localParticipant
               : livekitParticipantByIdentity.get(participantIdentityKey) ?? null
+            const participantIsActiveSpeaker = normalizedActiveSpeakers.has(participantIdentityKey)
+            const hasMicrophoneTrack = Boolean(
+              mediaParticipant?.getTrackPublication(Track.Source.Microphone)?.audioTrack,
+            )
+            const hasScreenAudioTrack = Boolean(
+              mediaParticipant?.getTrackPublication(Track.Source.ScreenShareAudio)?.audioTrack,
+            )
+            const micSpeaking = participantIsActiveSpeaker && hasMicrophoneTrack
+            const screenAudioActive = participantIsActiveSpeaker && hasScreenAudioTrack
             return (
               <Fragment key={`${participant.roomKey}:${participant.userIdentity}`}>
                 <ParticipantMediaTile
@@ -234,7 +239,8 @@ export function DmVoicePanel({
                   participant={mediaParticipant}
                   tileType="profile"
                   isLocal={local}
-                  isSpeaking={normalizedActiveSpeakers.has(participantIdentityKey)}
+                  isSpeaking={micSpeaking}
+                  isScreenAudioActive={false}
                   muted={participant.muted}
                   deafened={participant.deafened}
                   sharingScreen={participant.sharingScreen}
@@ -251,7 +257,8 @@ export function DmVoicePanel({
                     participant={mediaParticipant}
                     tileType="screen"
                     isLocal={local}
-                    isSpeaking={normalizedActiveSpeakers.has(participantIdentityKey)}
+                    isSpeaking={false}
+                    isScreenAudioActive={screenAudioActive}
                     muted={participant.muted}
                     deafened={participant.deafened}
                     sharingScreen={participant.sharingScreen}
@@ -263,7 +270,7 @@ export function DmVoicePanel({
           })}
         </div>
 
-        {showLegacyControls ? (
+        {showLegacyControls && joined ? (
           <div className="flex flex-wrap items-center gap-2">
             <VoiceControlBar
               joined={joined}
