@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Outlet, useNavigate, useParams } from 'react-router-dom'
 import { PanelRightCloseIcon, PanelRightOpenIcon } from 'lucide-react'
 import { AWAY_AFTER_MS, type UserPresenceStatus } from '../hooks/useUserPresentation'
@@ -31,6 +31,14 @@ import { Card, CardContent } from '@/components/ui/card'
 import type { Channel } from '../types/domain'
 
 const EMPTY_CHANNELS: Channel[] = []
+const CHANNEL_BAR_MIN_WIDTH = 220
+const CHANNEL_BAR_MAX_WIDTH = Math.round(CHANNEL_BAR_MIN_WIDTH * 1.7)
+const CHANNEL_BAR_WIDTH_STORAGE_KEY = 'letschat.channel-bar-width'
+
+function clampChannelBarWidth(value: number): number {
+  if (!Number.isFinite(value)) return CHANNEL_BAR_MIN_WIDTH
+  return Math.min(CHANNEL_BAR_MAX_WIDTH, Math.max(CHANNEL_BAR_MIN_WIDTH, Math.round(value)))
+}
 
 export function AppLayout() {
   const navigate = useNavigate()
@@ -41,6 +49,12 @@ export function AppLayout() {
   const [showInvite, setShowInvite] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showComposeDm, setShowComposeDm] = useState(false)
+  const [channelBarWidth, setChannelBarWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return CHANNEL_BAR_MIN_WIDTH
+    const stored = window.localStorage.getItem(CHANNEL_BAR_WIDTH_STORAGE_KEY)
+    const parsed = stored ? Number(stored) : CHANNEL_BAR_MIN_WIDTH
+    return clampChannelBarWidth(parsed)
+  })
 
   const servers = useServersStore((s) => s.servers)
   const setActiveServerId = useServersStore((s) => s.setActiveServerId)
@@ -300,11 +314,42 @@ export function AppLayout() {
     setActiveCallDockVisible(activeCallDockVisible)
   }, [activeCallDockVisible, setActiveCallDockVisible])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(CHANNEL_BAR_WIDTH_STORAGE_KEY, String(channelBarWidth))
+  }, [channelBarWidth])
+
+  const onChannelBarResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (isMobile) return
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = channelBarWidth
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX
+      setChannelBarWidth(clampChannelBarWidth(startWidth + delta))
+    }
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      document.body.style.removeProperty('cursor')
+      document.body.style.removeProperty('user-select')
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp, { once: true })
+  }, [channelBarWidth, isMobile])
+
   return (
     <>
-      <main className="relative h-screen overflow-hidden bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-3 text-foreground">
-        <div className="grid h-full min-h-0 grid-cols-[48px_220px_minmax(0,1fr)] grid-rows-1 gap-3 overflow-hidden max-md:grid-cols-[48px_minmax(0,1fr)]">
-          <div className="col-span-2 grid min-h-0 grid-cols-[48px_220px] grid-rows-[minmax(0,1fr)_auto] gap-3 max-md:col-span-1 max-md:grid-cols-[48px]">
+      <main
+        className="relative h-screen overflow-hidden bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-3 text-foreground"
+        style={{ ['--channel-bar-width' as string]: `${channelBarWidth}px` }}
+      >
+        <div className="grid h-full min-h-0 grid-cols-[48px_var(--channel-bar-width)_minmax(0,1fr)] grid-rows-1 gap-3 overflow-hidden max-md:grid-cols-[48px_minmax(0,1fr)]">
+          <div className="col-span-2 grid min-h-0 grid-cols-[48px_var(--channel-bar-width)] grid-rows-[minmax(0,1fr)_auto] gap-3 max-md:col-span-1 max-md:grid-cols-[48px]">
             <AppRail
               servers={servers}
               activeServerId={activeServerId}
@@ -322,32 +367,44 @@ export function AppLayout() {
               hasActiveDmCall={hasActiveDmCall}
             />
 
-            <ChannelBar
-              activeServerId={activeServerId}
-              activeServer={activeServer}
-              activeChannelId={activeChannelId}
-              role={role}
-              textChannels={textChannels}
-              voiceChannels={voiceChannels}
-              activeChannelsCount={activeChannels.length}
-              unreadByChannel={unreadByChannel}
-              participantsByChannel={participantsByChannel}
-              joinedVoiceChannelId={joinedVoiceChannelId}
-              normalizedSelfIdentity={normalizedSelfIdentity}
-              memberProfileByIdentity={memberProfileByIdentity}
-              onOpenRenameServer={() => setShowEditServer(true)}
-              onOpenInvite={() => setShowInvite(true)}
-              onOpenCreateChannel={() => setShowCreateChannel(true)}
-              onSelectChannel={(channelId) => {
-                if (activeServerId === null) return
-                openChannel(activeServerId, channelId)
-              }}
-              onOpenFriends={() => navigate('/app/dm/friends')}
-              dmContacts={dmContactsWithPresence}
-              activeDmIdentity={activeDmIdentity}
-              dmCallActiveByIdentity={dmCallActiveByIdentity}
-              onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
-            />
+            <div className="relative min-h-0">
+              <ChannelBar
+                activeServerId={activeServerId}
+                activeServer={activeServer}
+                activeChannelId={activeChannelId}
+                role={role}
+                textChannels={textChannels}
+                voiceChannels={voiceChannels}
+                activeChannelsCount={activeChannels.length}
+                unreadByChannel={unreadByChannel}
+                participantsByChannel={participantsByChannel}
+                joinedVoiceChannelId={joinedVoiceChannelId}
+                normalizedSelfIdentity={normalizedSelfIdentity}
+                memberProfileByIdentity={memberProfileByIdentity}
+                onOpenRenameServer={() => setShowEditServer(true)}
+                onOpenInvite={() => setShowInvite(true)}
+                onOpenCreateChannel={() => setShowCreateChannel(true)}
+                onSelectChannel={(channelId) => {
+                  if (activeServerId === null) return
+                  openChannel(activeServerId, channelId)
+                }}
+                onOpenFriends={() => navigate('/app/dm/friends')}
+                dmContacts={dmContactsWithPresence}
+                activeDmIdentity={activeDmIdentity}
+                dmCallActiveByIdentity={dmCallActiveByIdentity}
+                onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
+              />
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize channel bar"
+                className="group absolute right-0 top-3 z-20 h-[calc(100%-1.5rem)] w-[3px] cursor-col-resize max-md:hidden"
+                onPointerDown={onChannelBarResizeStart}
+                onDoubleClick={() => setChannelBarWidth(CHANNEL_BAR_MIN_WIDTH)}
+              >
+                <div className="h-full w-full rounded-full bg-border/60 shadow-[0_0_0_1px_hsl(var(--background)/0.95)] transition-colors group-hover:bg-primary/55" />
+              </div>
+            </div>
 
             {activeCallDockVisible ? (
               <ActiveCallCard
