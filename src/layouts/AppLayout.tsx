@@ -464,12 +464,12 @@ export function AppLayout() {
   return (
     <>
       <main
-        className="relative h-screen overflow-hidden bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-3 text-foreground"
+        className="relative h-screen overflow-hidden bg-background p-2 text-foreground"
         style={{ ['--channel-bar-width' as string]: `${channelBarWidth}px` }}
       >
         <div
           className={cn(
-            'grid h-full min-h-0 grid-rows-1 gap-3 overflow-hidden',
+            'grid h-full min-h-0 grid-rows-1 gap-2 overflow-hidden',
             isSettingsPage
               ? 'grid-cols-[48px_minmax(0,1fr)]'
               : 'grid-cols-[48px_var(--channel-bar-width)_minmax(0,1fr)] max-md:grid-cols-[48px_minmax(0,1fr)]',
