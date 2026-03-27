@@ -15,7 +15,7 @@ interface QuickDmContact {
   avatarUrl: string | null
 }
 
-interface ServerRailProps {
+export interface AppRailProps {
   servers: Server[]
   activeServerId: number | null
   activeDmIdentity: string | null
@@ -32,7 +32,7 @@ interface ServerRailProps {
   hasActiveDmCall: boolean
 }
 
-export function ServerRail({
+export function AppRail({
   servers,
   activeServerId,
   activeDmIdentity,
@@ -47,7 +47,7 @@ export function ServerRail({
   hasUnreadInServer,
   hasVoiceActivityInServer,
   hasActiveDmCall,
-}: ServerRailProps) {
+}: AppRailProps) {
   return (
     <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur">
       <CardContent className="flex min-h-0 flex-1 flex-col items-center gap-1 p-1">

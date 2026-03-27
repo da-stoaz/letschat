@@ -22,8 +22,8 @@ import { ComposeDmDialog } from './app-layout/ComposeDmDialog'
 import { LayoutModals } from './app-layout/LayoutModals'
 import { MemberPanel } from './app-layout/MemberPanel'
 import { ActiveCallCard } from './app-layout/ActiveCallCard'
-import { ServerRail } from './app-layout/ServerRail'
-import { ServerSidebar } from './app-layout/ServerSidebar'
+import { AppRail } from './app-layout/AppRail'
+import { ChannelBar } from './app-layout/ChannelBar'
 import { cn } from '../lib/utils'
 import { useIsMobile } from '../hooks/use-mobile'
 import { Button } from '@/components/ui/button'
@@ -305,7 +305,7 @@ export function AppLayout() {
       <main className="relative h-screen overflow-hidden bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-3 text-foreground">
         <div className="grid h-full min-h-0 grid-cols-[48px_220px_minmax(0,1fr)] grid-rows-1 gap-3 overflow-hidden max-md:grid-cols-[48px_minmax(0,1fr)]">
           <div className="col-span-2 grid min-h-0 grid-cols-[48px_220px] grid-rows-[minmax(0,1fr)_auto] gap-3 max-md:col-span-1 max-md:grid-cols-[48px]">
-            <ServerRail
+            <AppRail
               servers={servers}
               activeServerId={activeServerId}
               activeDmIdentity={activeDmIdentity}
@@ -322,7 +322,7 @@ export function AppLayout() {
               hasActiveDmCall={hasActiveDmCall}
             />
 
-            <ServerSidebar
+            <ChannelBar
               activeServerId={activeServerId}
               activeServer={activeServer}
               activeChannelId={activeChannelId}
