@@ -51,14 +51,16 @@ import JoinVoiceChannelReducer from "./join_voice_channel_reducer";
 import KickMemberReducer from "./kick_member_reducer";
 import LeaveDmVoiceReducer from "./leave_dm_voice_reducer";
 import LeaveVoiceChannelReducer from "./leave_voice_channel_reducer";
+import MarkChannelReadReducer from "./mark_channel_read_reducer";
+import MarkDmReadReducer from "./mark_dm_read_reducer";
 import RegisterUserReducer from "./register_user_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
 import RenameServerReducer from "./rename_server_reducer";
 import SendDirectMessageReducer from "./send_direct_message_reducer";
 import SendFriendRequestReducer from "./send_friend_request_reducer";
 import SendMessageReducer from "./send_message_reducer";
-import SetPresenceOfflineReducer from "./set_presence_offline_reducer";
 import SetMemberRoleReducer from "./set_member_role_reducer";
+import SetPresenceOfflineReducer from "./set_presence_offline_reducer";
 import SetTypingStateReducer from "./set_typing_state_reducer";
 import TouchPresenceReducer from "./touch_presence_reducer";
 import TransferOwnershipReducer from "./transfer_ownership_reducer";
@@ -82,11 +84,10 @@ import MyBlocksRow from "./my_blocks_table";
 import MyDmVoiceParticipantsRow from "./my_dm_voice_participants_table";
 import MyFriendsRow from "./my_friends_table";
 import MyPresenceStatesRow from "./my_presence_states_table";
+import MyReadStatesRow from "./my_read_states_table";
 import MyTypingStatesRow from "./my_typing_states_table";
-import PresenceStateRow from "./presence_state_table";
 import ServerRow from "./server_table";
 import ServerMemberRow from "./server_member_table";
-import TypingStateRow from "./typing_state_table";
 import UserRow from "./user_table";
 import VoiceParticipantRow from "./voice_participant_table";
 
@@ -181,20 +182,6 @@ const tablesSchema = __schema({
       { name: 'message_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, MessageRow),
-  presence_state: __table({
-    name: 'presence_state',
-    indexes: [
-      { accessor: 'identity', name: 'presence_state_identity_idx_btree', algorithm: 'btree', columns: [
-        'identity',
-      ] },
-      { accessor: 'last_interaction_at', name: 'presence_state_last_interaction_at_idx_btree', algorithm: 'btree', columns: [
-        'lastInteractionAt',
-      ] },
-    ],
-    constraints: [
-      { name: 'presence_state_identity_key', constraint: 'unique', columns: ['identity'] },
-    ],
-  }, PresenceStateRow),
   server: __table({
     name: 'server',
     indexes: [
@@ -248,26 +235,6 @@ const tablesSchema = __schema({
       { name: 'user_username_key', constraint: 'unique', columns: ['username'] },
     ],
   }, UserRow),
-  typing_state: __table({
-    name: 'typing_state',
-    indexes: [
-      { accessor: 'typing_key', name: 'typing_state_typing_key_idx_btree', algorithm: 'btree', columns: [
-        'typingKey',
-      ] },
-      { accessor: 'by_scope', name: 'typing_state_scope_key_idx_btree', algorithm: 'btree', columns: [
-        'scopeKey',
-      ] },
-      { accessor: 'by_user', name: 'typing_state_user_identity_idx_btree', algorithm: 'btree', columns: [
-        'userIdentity',
-      ] },
-      { accessor: 'updated_at', name: 'typing_state_updated_at_idx_btree', algorithm: 'btree', columns: [
-        'updatedAt',
-      ] },
-    ],
-    constraints: [
-      { name: 'typing_state_typing_key_key', constraint: 'unique', columns: ['typingKey'] },
-    ],
-  }, TypingStateRow),
   voice_participant: __table({
     name: 'voice_participant',
     indexes: [
@@ -314,6 +281,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyPresenceStatesRow),
+  my_read_states: __table({
+    name: 'my_read_states',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyReadStatesRow),
   my_typing_states: __table({
     name: 'my_typing_states',
     indexes: [
@@ -342,14 +316,16 @@ const reducersSchema = __reducers(
   __reducerSchema("kick_member", KickMemberReducer),
   __reducerSchema("leave_dm_voice", LeaveDmVoiceReducer),
   __reducerSchema("leave_voice_channel", LeaveVoiceChannelReducer),
+  __reducerSchema("mark_channel_read", MarkChannelReadReducer),
+  __reducerSchema("mark_dm_read", MarkDmReadReducer),
   __reducerSchema("register_user", RegisterUserReducer),
   __reducerSchema("remove_friend", RemoveFriendReducer),
   __reducerSchema("rename_server", RenameServerReducer),
   __reducerSchema("send_direct_message", SendDirectMessageReducer),
   __reducerSchema("send_friend_request", SendFriendRequestReducer),
   __reducerSchema("send_message", SendMessageReducer),
-  __reducerSchema("set_presence_offline", SetPresenceOfflineReducer),
   __reducerSchema("set_member_role", SetMemberRoleReducer),
+  __reducerSchema("set_presence_offline", SetPresenceOfflineReducer),
   __reducerSchema("set_typing_state", SetTypingStateReducer),
   __reducerSchema("touch_presence", TouchPresenceReducer),
   __reducerSchema("transfer_ownership", TransferOwnershipReducer),
@@ -415,3 +391,4 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
+

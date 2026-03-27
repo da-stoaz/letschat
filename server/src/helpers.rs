@@ -22,6 +22,10 @@ pub(crate) fn normalize_username(username: &str) -> String {
     username.trim().to_lowercase()
 }
 
+pub(crate) fn normalize_identity_string(identity: &str) -> String {
+    identity.trim().to_lowercase()
+}
+
 pub(crate) fn member_key(server_id: u64, user_identity: Identity) -> String {
     format!("{server_id}:{user_identity}")
 }

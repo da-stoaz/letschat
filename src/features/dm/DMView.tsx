@@ -7,6 +7,7 @@ import { useConnectionStore } from '../../stores/connectionStore'
 import { useDmStore } from '../../stores/dmStore'
 import { useDmVoiceSessionStore } from '../../stores/dmVoiceSessionStore'
 import { useDmVoiceStore } from '../../stores/dmVoiceStore'
+import { useUiStore } from '../../stores/uiStore'
 import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { useIsMobile } from '../../hooks/use-mobile'
 import { ChatComposer } from '../chat/ChatComposer'
@@ -64,6 +65,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   const [callPanelMinimized, setCallPanelMinimized] = useState(!isMobile)
   const selfIdentity = useConnectionStore((s) => s.identity)
   const conversations = useDmStore((s) => s.conversations)
+  const clearDmUnread = useUiStore((s) => s.clearDmUnread)
   const usersByIdentity = useUsersStore((s) => s.byIdentity)
   const participantsByRoom = useDmVoiceStore((s) => s.participantsByRoom)
   const dmRoom = useDmVoiceSessionStore((s) => s.room)
@@ -214,6 +216,11 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
     )
   }, [messages, partnerIdentity])
 
+  useEffect(() => {
+    clearDmUnread(partnerIdentity)
+    reducers.markDmRead(partnerIdentity).catch(() => undefined)
+  }, [clearDmUnread, partnerIdentity])
+
   return (
     <section className="flex h-full min-h-0 flex-col rounded-xl border border-border/70 bg-card/60">
       <header className="flex items-center gap-2 border-b border-border/70 px-4 py-3">
@@ -296,6 +303,8 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           try {
             await reducers.sendDirectMessage(partnerIdentity, trimmed)
             setDraft('')
+            clearDmUnread(partnerIdentity)
+            reducers.markDmRead(partnerIdentity).catch(() => undefined)
             setScrollToBottomToken((current) => current + 1)
           } catch (e) {
             const message = e instanceof Error ? e.message : 'Could not send direct message.'

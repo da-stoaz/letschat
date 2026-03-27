@@ -5,6 +5,7 @@ import { InvitePage } from './pages/InvitePage'
 import { AppIndexPage } from './pages/AppIndexPage'
 import { ServerChannelPage } from './pages/ServerChannelPage'
 import { DMPage } from './pages/DMPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { useSelfStore } from './stores/selfStore'
 import { useConnectionStore } from './stores/connectionStore'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
@@ -45,6 +46,7 @@ function App() {
       <Route path="/app" element={user ? <AppLayout /> : <Navigate to="/auth" replace />}>
         <Route index element={<AppIndexPage />} />
         <Route path="dm/:identity" element={<DMPage />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path=":serverId" element={<ServerChannelPage />} />
         <Route path=":serverId/:channelId" element={<ServerChannelPage />} />
       </Route>

@@ -8,8 +8,10 @@ use crate::schema::{
     Friend,
     FriendStatus,
     PresenceState,
+    ReadState,
     TypingState,
     block__view,
+    read_state__view,
     dm_voice_participant__view,
     friend__view,
     presence_state__view,
@@ -178,4 +180,9 @@ pub fn my_typing_states(ctx: &ViewContext) -> Vec<TypingState> {
     }
 
     rows
+}
+
+#[spacetimedb::view(accessor = my_read_states, public)]
+pub fn my_read_states(ctx: &ViewContext) -> Vec<ReadState> {
+    ctx.db.read_state().by_user().filter(ctx.sender()).collect()
 }

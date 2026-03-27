@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Outlet, useNavigate, useParams } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PanelRightCloseIcon, PanelRightOpenIcon } from 'lucide-react'
 import { Track } from 'livekit-client'
 import { AWAY_AFTER_MS, type UserPresenceStatus } from '../hooks/useUserPresentation'
@@ -46,12 +46,12 @@ function clampChannelBarWidth(value: number): number {
 
 export function AppLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const params = useParams()
   const [showCreateServer, setShowCreateServer] = useState(false)
   const [showEditServer, setShowEditServer] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
   const [showComposeDm, setShowComposeDm] = useState(false)
   const [channelBarWidth, setChannelBarWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return CHANNEL_BAR_MIN_WIDTH
@@ -97,6 +97,7 @@ export function AppLayout() {
   const role = useServerRole(activeServerId)
   const isMobile = useIsMobile()
   const activeDmIdentity = params.identity && params.identity !== 'friends' ? params.identity : null
+  const isSettingsPage = location.pathname.startsWith('/app/settings')
   const normalizedSelfIdentity = selfIdentity ? normalizeIdentity(selfIdentity) : null
 
   useEffect(() => {
@@ -187,7 +188,15 @@ export function AppLayout() {
       return bTime - aTime
     })
 
-    return contacts.map(({ lastActivityAt: _lastActivityAt, ...contact }) => contact)
+    return contacts.map((contact) => ({
+      identity: contact.identity,
+      label: contact.label,
+      username: contact.username,
+      avatarUrl: contact.avatarUrl,
+      lastMessagePreview: contact.lastMessagePreview,
+      lastMessageAt: contact.lastMessageAt,
+      status: contact.status,
+    }))
   }, [conversations, friends, selfIdentity, usersByIdentity])
 
   const dmContacts = useMemo(
@@ -428,115 +437,129 @@ export function AppLayout() {
     window.addEventListener('pointerup', handlePointerUp, { once: true })
   }, [channelBarWidth, isMobile])
 
+  const mainPane = (
+    <div className={cn('grid min-h-0 min-w-0 gap-3 overflow-hidden', rightPanelOpen && activeServerId ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
+      <Card className="relative h-full min-h-0 border-border/60 bg-card/80 backdrop-blur">
+        {activeServerId ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="absolute right-3 top-3 z-20 h-8 gap-1.5"
+            onClick={toggleRightPanel}
+          >
+            {rightPanelOpen ? <PanelRightCloseIcon className="size-4" /> : <PanelRightOpenIcon className="size-4" />}
+            Members
+          </Button>
+          ) : null}
+          <CardContent className={cn('h-full min-h-0 overflow-hidden p-3', activeServerId ? 'pt-12' : '')}>
+            <Outlet />
+          </CardContent>
+        </Card>
+
+      {rightPanelOpen && activeServerId ? (
+        <MemberPanel members={activeServerMembers} selfIdentity={selfIdentity} />
+      ) : null}
+    </div>
+  )
+
   return (
     <>
       <main
         className="relative h-screen overflow-hidden bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-3 text-foreground"
         style={{ ['--channel-bar-width' as string]: `${channelBarWidth}px` }}
       >
-        <div className="grid h-full min-h-0 grid-cols-[48px_var(--channel-bar-width)_minmax(0,1fr)] grid-rows-1 gap-3 overflow-hidden max-md:grid-cols-[48px_minmax(0,1fr)]">
-          <div className="col-span-2 grid min-h-0 grid-cols-[48px_var(--channel-bar-width)] grid-rows-[minmax(0,1fr)_auto] gap-3 max-md:col-span-1 max-md:grid-cols-[48px]">
-            <AppRail
-              servers={servers}
-              activeServerId={activeServerId}
-              activeDmIdentity={activeDmIdentity}
-              quickDmContacts={quickDmContacts}
-              onOpenHome={() => navigate('/app')}
-              onOpenServer={openServer}
-              onOpenDmHome={() => navigate('/app/dm/friends')}
-              onOpenDmCompose={() => setShowComposeDm(true)}
-              onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
-              onOpenCreateServer={() => setShowCreateServer(true)}
-              onOpenSettings={() => setShowSettings(true)}
-              hasUnreadInServer={hasUnreadInServer}
-              countUnreadInServer={countUnreadInServer}
-              countUnreadInDm={countUnreadInDm}
-              dmUnreadByIdentity={unreadByDmPartner}
-              hasVoiceActivityInServer={hasVoiceActivityInServer}
-              dmCallActiveByIdentity={dmCallActiveByIdentity}
-            />
+        <div
+          className={cn(
+            'grid h-full min-h-0 grid-rows-1 gap-3 overflow-hidden',
+            isSettingsPage
+              ? 'grid-cols-[48px_minmax(0,1fr)]'
+              : 'grid-cols-[48px_var(--channel-bar-width)_minmax(0,1fr)] max-md:grid-cols-[48px_minmax(0,1fr)]',
+          )}
+        >
+          <AppRail
+            servers={servers}
+            activeServerId={activeServerId}
+            activeDmIdentity={activeDmIdentity}
+            quickDmContacts={quickDmContacts}
+            onOpenHome={() => navigate('/app')}
+            onOpenServer={openServer}
+            onOpenDmHome={() => navigate('/app/dm/friends')}
+            onOpenDmCompose={() => setShowComposeDm(true)}
+            onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
+            onOpenCreateServer={() => setShowCreateServer(true)}
+            onOpenSettings={() => navigate('/app/settings')}
+            isSettingsActive={isSettingsPage}
+            hasUnreadInServer={hasUnreadInServer}
+            countUnreadInServer={countUnreadInServer}
+            countUnreadInDm={countUnreadInDm}
+            dmUnreadByIdentity={unreadByDmPartner}
+            hasVoiceActivityInServer={hasVoiceActivityInServer}
+            dmCallActiveByIdentity={dmCallActiveByIdentity}
+          />
 
-            <div className="relative min-h-0">
-              <ChannelBar
-                channelBarWidth={channelBarWidth}
-                activeServerId={activeServerId}
-                activeServer={activeServer}
-                activeChannelId={activeChannelId}
-                role={role}
-                textChannels={textChannels}
-                voiceChannels={voiceChannels}
-                activeChannelsCount={activeChannels.length}
-                unreadByChannel={unreadByChannel}
-                participantsByChannel={participantsByChannel}
-                joinedVoiceChannelId={joinedVoiceChannelId}
-                activeSpeakerIdentityKeys={activeSpeakerIdentityKeys}
-                memberProfileByIdentity={memberProfileByIdentity}
-                onOpenRenameServer={() => setShowEditServer(true)}
-                onOpenInvite={() => setShowInvite(true)}
-                onOpenCreateChannel={() => setShowCreateChannel(true)}
-                isServerMuted={Boolean(activeServerId && mutedServers[activeServerId])}
-                isChannelMuted={(channelId) => Boolean(mutedChannels[channelId])}
-                onToggleServerMute={() => {
-                  if (!activeServerId) return
-                  toggleMutedServer(activeServerId)
-                }}
-                onToggleChannelMute={(channelId) => toggleMutedChannel(channelId)}
-                onSelectChannel={(channelId) => {
-                  if (activeServerId === null) return
-                  openChannel(activeServerId, channelId)
-                }}
-                onOpenFriends={() => navigate('/app/dm/friends')}
-                dmContacts={dmContactsWithPresence}
-                dmUnreadByIdentity={unreadByDmPartner}
-                isUserMuted={(identity) => Boolean(mutedUsers[normalizeIdentity(identity)])}
-                onToggleUserMute={(identity) => toggleMutedUser(normalizeIdentity(identity))}
-                activeDmIdentity={activeDmIdentity}
-                dmCallActiveByIdentity={dmCallActiveByIdentity}
-                onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
-              />
-              <div
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize channel bar"
-                className="group absolute right-0 top-3 z-20 h-[calc(100%-1.5rem)] w-[3px] cursor-col-resize max-md:hidden"
-                onPointerDown={onChannelBarResizeStart}
-                onDoubleClick={() => setChannelBarWidth(CHANNEL_BAR_MIN_WIDTH)}
-              >
-                <div className="h-full w-full rounded-full bg-border/60 shadow-[0_0_0_1px_hsl(var(--background)/0.95)] transition-colors group-hover:bg-primary/55" />
-              </div>
-            </div>
-
-            {activeCallDockVisible ? (
-              <ActiveCallCard
-                variant="sidebar"
-                className="col-span-2 max-md:hidden"
-              />
-            ) : null}
-          </div>
-
-          <div className={cn('grid min-h-0 min-w-0 gap-3 overflow-hidden', rightPanelOpen && activeServerId ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
-            <Card className="relative h-full min-h-0 border-border/60 bg-card/80 backdrop-blur">
-              {activeServerId ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="absolute right-3 top-3 z-20 h-8 gap-1.5"
-                  onClick={toggleRightPanel}
+          {isSettingsPage ? null : (
+            <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3">
+              <div className="relative min-h-0">
+                <ChannelBar
+                  channelBarWidth={channelBarWidth}
+                  activeServerId={activeServerId}
+                  activeServer={activeServer}
+                  activeChannelId={activeChannelId}
+                  role={role}
+                  textChannels={textChannels}
+                  voiceChannels={voiceChannels}
+                  activeChannelsCount={activeChannels.length}
+                  unreadByChannel={unreadByChannel}
+                  participantsByChannel={participantsByChannel}
+                  joinedVoiceChannelId={joinedVoiceChannelId}
+                  activeSpeakerIdentityKeys={activeSpeakerIdentityKeys}
+                  memberProfileByIdentity={memberProfileByIdentity}
+                  onOpenRenameServer={() => setShowEditServer(true)}
+                  onOpenInvite={() => setShowInvite(true)}
+                  onOpenCreateChannel={() => setShowCreateChannel(true)}
+                  isServerMuted={Boolean(activeServerId && mutedServers[activeServerId])}
+                  isChannelMuted={(channelId) => Boolean(mutedChannels[channelId])}
+                  onToggleServerMute={() => {
+                    if (!activeServerId) return
+                    toggleMutedServer(activeServerId)
+                  }}
+                  onToggleChannelMute={(channelId) => toggleMutedChannel(channelId)}
+                  onSelectChannel={(channelId) => {
+                    if (activeServerId === null) return
+                    openChannel(activeServerId, channelId)
+                  }}
+                  onOpenFriends={() => navigate('/app/dm/friends')}
+                  dmContacts={dmContactsWithPresence}
+                  dmUnreadByIdentity={unreadByDmPartner}
+                  isUserMuted={(identity) => Boolean(mutedUsers[normalizeIdentity(identity)])}
+                  onToggleUserMute={(identity) => toggleMutedUser(normalizeIdentity(identity))}
+                  activeDmIdentity={activeDmIdentity}
+                  dmCallActiveByIdentity={dmCallActiveByIdentity}
+                  onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
+                />
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize channel bar"
+                  className="group absolute right-0 top-3 z-20 h-[calc(100%-1.5rem)] w-[3px] cursor-col-resize max-md:hidden"
+                  onPointerDown={onChannelBarResizeStart}
+                  onDoubleClick={() => setChannelBarWidth(CHANNEL_BAR_MIN_WIDTH)}
                 >
-                  {rightPanelOpen ? <PanelRightCloseIcon className="size-4" /> : <PanelRightOpenIcon className="size-4" />}
-                  Members
-                </Button>
-                ) : null}
-                <CardContent className={cn('h-full min-h-0 overflow-hidden p-3', activeServerId ? 'pt-12' : '')}>
-                  <Outlet />
-                </CardContent>
-              </Card>
+                  <div className="h-full w-full rounded-full bg-border/60 shadow-[0_0_0_1px_hsl(var(--background)/0.95)] transition-colors group-hover:bg-primary/55" />
+                </div>
+              </div>
 
-            {rightPanelOpen && activeServerId ? (
-              <MemberPanel members={activeServerMembers} selfIdentity={selfIdentity} />
-            ) : null}
-          </div>
+              {activeCallDockVisible ? (
+                <ActiveCallCard
+                  variant="sidebar"
+                  className="max-md:hidden"
+                />
+              ) : null}
+            </div>
+          )}
+
+          {mainPane}
         </div>
       </main>
 
@@ -545,14 +568,12 @@ export function AppLayout() {
         showEditServer={showEditServer}
         showCreateChannel={showCreateChannel}
         showInvite={showInvite}
-        showSettings={showSettings}
         activeServerId={activeServerId}
         activeServer={activeServer}
         setShowCreateServer={setShowCreateServer}
         setShowEditServer={setShowEditServer}
         setShowCreateChannel={setShowCreateChannel}
         setShowInvite={setShowInvite}
-        setShowSettings={setShowSettings}
       />
 
       <ComposeDmDialog

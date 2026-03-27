@@ -123,3 +123,11 @@ export interface TypingState {
   userIdentity: Identity
   updatedAt: string
 }
+
+export interface ReadState {
+  readKey: string
+  scopeKey: string
+  userIdentity: Identity
+  lastReadAt: string
+  updatedAt: string
+}

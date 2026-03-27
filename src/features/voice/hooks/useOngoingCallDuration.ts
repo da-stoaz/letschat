@@ -12,11 +12,10 @@ function formatElapsed(totalSeconds: number): string {
 }
 
 export function useOngoingCallDuration(startedAt: string | null, running: boolean): string | null {
-  const [nowMs, setNowMs] = useState(Date.now())
+  const [nowMs, setNowMs] = useState(0)
 
   useEffect(() => {
     if (!running || !startedAt) return
-    setNowMs(Date.now())
     const interval = window.setInterval(() => setNowMs(Date.now()), 1000)
     return () => window.clearInterval(interval)
   }, [running, startedAt])

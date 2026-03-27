@@ -324,10 +324,6 @@ export function ActiveCallCard({
     setAudioOutputSwitchSupported(supportsAudioOutputSwitching())
   }, [activeRoom])
 
-  if (mode === null || !selfIdentity) {
-    return null
-  }
-
   const setCurrentError = (message: string | null) => {
     if (message && isUserAgentPermissionContextError(message)) {
       toast.error('Permission denied. Please allow media access and try again.')
@@ -492,6 +488,10 @@ export function ActiveCallCard({
   const outputLabel = shortLabel(selectedDeviceLabel(audioOutputId, audioOutputs, 'Output'))
   const canSwitchAudioOutput = audioOutputSwitchSupported
   const compact = variant === 'sidebar'
+
+  if (mode === null || !selfIdentity) {
+    return null
+  }
 
   if (compact) {
     return (

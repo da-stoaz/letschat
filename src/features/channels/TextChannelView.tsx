@@ -57,6 +57,12 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const unreadCount = channelId === null ? 0 : (unreadByChannel[channelId] ?? 0)
   const typingScopeKey = `channel:${channelId}`
 
+  useEffect(() => {
+    if (channelId === null) return
+    clearUnread(channelId)
+    reducers.markChannelRead(channelId).catch(() => undefined)
+  }, [channelId, clearUnread])
+
   if (channelId === null) {
     return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a text channel</div>
   }
@@ -132,6 +138,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
             setDraft('')
             setActiveChannelId(channelId)
             clearUnread(channelId)
+            reducers.markChannelRead(channelId).catch(() => undefined)
             setScrollToBottomToken((current) => current + 1)
           } catch (e) {
             const message = e instanceof Error ? e.message : 'Could not send message.'

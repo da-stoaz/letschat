@@ -1,6 +1,5 @@
 import {
   Identity as SpacetimeIdentityClass,
-  type DbConnectionImpl,
   type Identity as SpacetimeIdentity,
   type Timestamp as SpacetimeTimestamp,
 } from 'spacetimedb'
@@ -21,6 +20,7 @@ import { useUsersStore } from '../stores/usersStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { usePresenceStore } from '../stores/presenceStore'
+import { useReadStore } from '../stores/readStore'
 import { useTypingStore } from '../stores/typingStore'
 import { tauriCommands } from './tauri'
 import type { ServerMemberWithUser } from '../stores/membersStore'
@@ -35,6 +35,7 @@ import type {
   Identity,
   Message,
   PresenceState,
+  ReadState,
   Role,
   Server,
   ServerMember,
@@ -123,27 +124,39 @@ function truncateNotificationBody(content: string, maxLength = 80): string {
   return `${normalized.slice(0, maxLength - 1)}…`
 }
 
-function mapUser(row: any): User {
+type DbRow = Record<string, unknown>
+
+function rowString(row: DbRow, key: string): string {
+  const value = row[key]
+  return typeof value === 'string' ? value : String(value ?? '')
+}
+
+function rowNullableString(row: DbRow, key: string): string | null {
+  const value = row[key]
+  return typeof value === 'string' ? value : value == null ? null : String(value)
+}
+
+function mapUser(row: DbRow): User {
   return {
     identity: toIdentityString(row.identity),
-    username: row.username,
-    displayName: row.displayName,
-    avatarUrl: row.avatarUrl ?? null,
+    username: rowString(row, 'username'),
+    displayName: rowString(row, 'displayName'),
+    avatarUrl: rowNullableString(row, 'avatarUrl'),
     createdAt: toIsoString(row.createdAt),
   }
 }
 
-function mapServer(row: any): Server {
+function mapServer(row: DbRow): Server {
   return {
     id: toU64Number(row.id),
-    name: row.name,
+    name: rowString(row, 'name'),
     ownerIdentity: toIdentityString(row.ownerIdentity),
-    iconUrl: row.iconUrl ?? null,
+    iconUrl: rowNullableString(row, 'iconUrl'),
     createdAt: toIsoString(row.createdAt),
   }
 }
 
-function mapServerMember(row: any): ServerMember {
+function mapServerMember(row: DbRow): ServerMember {
   return {
     serverId: toU64Number(row.serverId),
     userIdentity: toIdentityString(row.userIdentity),
@@ -152,30 +165,30 @@ function mapServerMember(row: any): ServerMember {
   }
 }
 
-function mapChannel(row: any): Channel {
+function mapChannel(row: DbRow): Channel {
   return {
     id: toU64Number(row.id),
     serverId: toU64Number(row.serverId),
-    name: row.name,
+    name: rowString(row, 'name'),
     kind: enumTag(row.kind) as ChannelKind,
     position: Number(row.position),
     moderatorOnly: Boolean(row.moderatorOnly),
   }
 }
 
-function mapMessage(row: any): Message {
+function mapMessage(row: DbRow): Message {
   return {
     id: toU64Number(row.id),
     channelId: toU64Number(row.channelId),
     senderIdentity: toIdentityString(row.senderIdentity),
-    content: row.content,
+    content: rowString(row, 'content'),
     sentAt: toIsoString(row.sentAt),
     editedAt: row.editedAt ? toIsoString(row.editedAt) : null,
     deleted: Boolean(row.deleted),
   }
 }
 
-function mapVoiceParticipant(row: any): VoiceParticipant {
+function mapVoiceParticipant(row: DbRow): VoiceParticipant {
   return {
     channelId: toU64Number(row.channelId),
     userIdentity: toIdentityString(row.userIdentity),
@@ -187,7 +200,7 @@ function mapVoiceParticipant(row: any): VoiceParticipant {
   }
 }
 
-function mapFriend(row: any): Friend {
+function mapFriend(row: DbRow): Friend {
   return {
     userA: toIdentityString(row.userA),
     userB: toIdentityString(row.userB),
@@ -197,7 +210,7 @@ function mapFriend(row: any): Friend {
   }
 }
 
-function mapBlock(row: any): Block {
+function mapBlock(row: DbRow): Block {
   return {
     blocker: toIdentityString(row.blocker),
     blocked: toIdentityString(row.blocked),
@@ -205,21 +218,21 @@ function mapBlock(row: any): Block {
   }
 }
 
-function mapDirectMessage(row: any): DirectMessage {
+function mapDirectMessage(row: DbRow): DirectMessage {
   return {
     id: toU64Number(row.id),
     senderIdentity: toIdentityString(row.senderIdentity),
     recipientIdentity: toIdentityString(row.recipientIdentity),
-    content: row.content,
+    content: rowString(row, 'content'),
     sentAt: toIsoString(row.sentAt),
     deletedBySender: Boolean(row.deletedBySender),
     deletedByRecipient: Boolean(row.deletedByRecipient),
   }
 }
 
-function mapDmVoiceParticipant(row: any): DmVoiceParticipant {
+function mapDmVoiceParticipant(row: DbRow): DmVoiceParticipant {
   return {
-    roomKey: row.roomKey,
+    roomKey: rowString(row, 'roomKey'),
     userIdentity: toIdentityString(row.userIdentity),
     userA: toIdentityString(row.userA),
     userB: toIdentityString(row.userB),
@@ -231,7 +244,7 @@ function mapDmVoiceParticipant(row: any): DmVoiceParticipant {
   }
 }
 
-function mapPresenceState(row: any): PresenceState {
+function mapPresenceState(row: DbRow): PresenceState {
   return {
     identity: toIdentityString(row.identity),
     online: Boolean(row.online),
@@ -240,13 +253,74 @@ function mapPresenceState(row: any): PresenceState {
   }
 }
 
-function mapTypingState(row: any): TypingState {
+function mapTypingState(row: DbRow): TypingState {
   return {
-    typingKey: row.typingKey,
-    scopeKey: row.scopeKey,
+    typingKey: rowString(row, 'typingKey'),
+    scopeKey: rowString(row, 'scopeKey'),
     userIdentity: toIdentityString(row.userIdentity),
     updatedAt: toIsoString(row.updatedAt),
   }
+}
+
+function mapReadState(row: DbRow): ReadState {
+  return {
+    readKey: rowString(row, 'readKey'),
+    scopeKey: rowString(row, 'scopeKey'),
+    userIdentity: toIdentityString(row.userIdentity),
+    lastReadAt: toIsoString(row.lastReadAt),
+    updatedAt: toIsoString(row.updatedAt),
+  }
+}
+
+function dmReadScopeKey(selfIdentity: Identity, otherIdentity: Identity): string {
+  const a = normalizeIdentity(selfIdentity)
+  const b = normalizeIdentity(otherIdentity)
+  return a <= b ? `dm:${a}:${b}` : `dm:${b}:${a}`
+}
+
+function recomputeUnreadStateFromReadCursors(): void {
+  const selfIdentity = useConnectionStore.getState().identity
+  if (!selfIdentity) return
+
+  const normalizedSelf = normalizeIdentity(selfIdentity)
+  const readRowsByScope = useReadStore.getState().rowsByScope
+  const messagesByChannel = useMessagesStore.getState().messagesByChannel
+  const conversations = useDmStore.getState().conversations
+
+  const unreadByChannel: Record<number, number> = {}
+  for (const [channelIdKey, messages] of Object.entries(messagesByChannel)) {
+    const channelId = Number(channelIdKey)
+    if (!Number.isFinite(channelId)) continue
+    const scopeKey = `channel:${channelId}`
+    const lastReadAtMs = Date.parse(readRowsByScope[scopeKey]?.lastReadAt ?? '') || 0
+    let unread = 0
+    for (const message of messages) {
+      if (normalizeIdentity(message.senderIdentity) === normalizedSelf) continue
+      const sentAtMs = Date.parse(message.sentAt)
+      if (Number.isFinite(sentAtMs) && sentAtMs > lastReadAtMs) unread += 1
+    }
+    unreadByChannel[channelId] = unread
+  }
+
+  const unreadByDmPartner: Record<Identity, number> = {}
+  for (const [partnerIdentity, thread] of Object.entries(conversations)) {
+    const scopeKey = dmReadScopeKey(selfIdentity, partnerIdentity as Identity)
+    const lastReadAtMs = Date.parse(readRowsByScope[scopeKey]?.lastReadAt ?? '') || 0
+    let unread = 0
+    for (const message of thread) {
+      if (normalizeIdentity(message.senderIdentity) === normalizedSelf) continue
+      const sentAtMs = Date.parse(message.sentAt)
+      if (Number.isFinite(sentAtMs) && sentAtMs > lastReadAtMs) unread += 1
+    }
+    unreadByDmPartner[normalizeIdentity(partnerIdentity) as Identity] = unread
+  }
+
+  useUiStore.setState((state) => {
+    const sameChannel = JSON.stringify(state.unreadByChannel) === JSON.stringify(unreadByChannel)
+    const sameDm = JSON.stringify(state.unreadByDmPartner) === JSON.stringify(unreadByDmPartner)
+    if (sameChannel && sameDm) return state
+    return { ...state, unreadByChannel, unreadByDmPartner }
+  })
 }
 
 function syncUsers(conn: DbConnection): User[] {
@@ -421,6 +495,11 @@ function syncTypingStates(conn: DbConnection): void {
   useTypingStore.getState().setTypingRows(rows)
 }
 
+function syncReadStates(conn: DbConnection): void {
+  const rows = Array.from(conn.db.my_read_states.iter()).map(mapReadState)
+  useReadStore.getState().setReadRows(rows)
+}
+
 function syncAll(conn: DbConnection): void {
   syncUsers(conn)
   syncServers(conn)
@@ -433,6 +512,8 @@ function syncAll(conn: DbConnection): void {
   syncDmVoiceParticipants(conn)
   syncPresenceStates(conn)
   syncTypingStates(conn)
+  syncReadStates(conn)
+  recomputeUnreadStateFromReadCursors()
 }
 
 function resetClientState(): void {
@@ -455,6 +536,7 @@ function resetClientState(): void {
   useFriendsStore.setState({ friends: [], blocked: [] })
   useDmStore.setState({ conversations: {} })
   useDmVoiceStore.setState({ participantsByRoom: {} })
+  useReadStore.getState().reset()
   useTypingStore.getState().reset()
   useUiStore.setState({
     activeChannelId: null,
@@ -512,12 +594,19 @@ function watchLiveTables(conn: DbConnection): void {
   conn.db.my_blocks.onDelete(() => syncFriends(conn))
   conn.db.direct_message.onInsert((_ctx, row) => {
     syncDirectMessages(conn)
+    recomputeUnreadStateFromReadCursors()
     if (!liveEventsEnabled) return
     const message = mapDirectMessage(row)
     handleIncomingDirectMessage(message)
   })
-  conn.db.direct_message.onUpdate(() => syncDirectMessages(conn))
-  conn.db.direct_message.onDelete(() => syncDirectMessages(conn))
+  conn.db.direct_message.onUpdate(() => {
+    syncDirectMessages(conn)
+    recomputeUnreadStateFromReadCursors()
+  })
+  conn.db.direct_message.onDelete(() => {
+    syncDirectMessages(conn)
+    recomputeUnreadStateFromReadCursors()
+  })
   conn.db.my_dm_voice_participants.onInsert(() => syncDmVoiceParticipants(conn))
   conn.db.my_dm_voice_participants.onUpdate(() => syncDmVoiceParticipants(conn))
   conn.db.my_dm_voice_participants.onDelete(() => syncDmVoiceParticipants(conn))
@@ -527,15 +616,34 @@ function watchLiveTables(conn: DbConnection): void {
   conn.db.my_typing_states.onInsert(() => syncTypingStates(conn))
   conn.db.my_typing_states.onUpdate(() => syncTypingStates(conn))
   conn.db.my_typing_states.onDelete(() => syncTypingStates(conn))
+  conn.db.my_read_states.onInsert(() => {
+    syncReadStates(conn)
+    recomputeUnreadStateFromReadCursors()
+  })
+  conn.db.my_read_states.onUpdate(() => {
+    syncReadStates(conn)
+    recomputeUnreadStateFromReadCursors()
+  })
+  conn.db.my_read_states.onDelete(() => {
+    syncReadStates(conn)
+    recomputeUnreadStateFromReadCursors()
+  })
   conn.db.message.onInsert((_ctx, row) => {
     syncMessages(conn)
+    recomputeUnreadStateFromReadCursors()
     if (!liveEventsEnabled) return
 
     const message = mapMessage(row)
     handleIncomingMessage(message)
   })
-  conn.db.message.onUpdate(() => syncMessages(conn))
-  conn.db.message.onDelete(() => syncMessages(conn))
+  conn.db.message.onUpdate(() => {
+    syncMessages(conn)
+    recomputeUnreadStateFromReadCursors()
+  })
+  conn.db.message.onDelete(() => {
+    syncMessages(conn)
+    recomputeUnreadStateFromReadCursors()
+  })
 }
 
 function reducerEnum(tag: string): { tag: string } {
@@ -634,6 +742,7 @@ async function connect(): Promise<void> {
         rejectIfPending(new Error('Disconnected before initial data sync completed.'))
       })
       .onConnectError((_ctx, error) => {
+        void _ctx
         rejectIfPending(error instanceof Error ? error : new Error(String(error)))
         void onError(error)
       })
@@ -652,6 +761,7 @@ async function connect(): Promise<void> {
         resolveApplied?.()
       })
       .onError((_ctx) => {
+        void _ctx
         void onError(new Error('Subscription failed'))
         clearTimeout(connectTimeout)
         rejectIfPending(new Error('Subscription failed'))
@@ -669,6 +779,7 @@ async function connect(): Promise<void> {
         tables.my_dm_voice_participants,
         tables.my_presence_states,
         tables.my_typing_states,
+        tables.my_read_states,
       ])
 
     try {
@@ -687,7 +798,7 @@ async function connect(): Promise<void> {
 
 function disconnect(): void {
   if (connection) {
-    const offlineReducer = (connection as DbConnectionImpl<any>).reducers?.setPresenceOffline
+    const offlineReducer = connection.reducers?.setPresenceOffline
     if (typeof offlineReducer === 'function') {
       void offlineReducer({})
     }
@@ -707,7 +818,14 @@ async function call<TArgs extends Record<string, unknown>>(reducer: string, args
     await connect()
   }
 
-  const reducerFn = (connection as DbConnectionImpl<any>).reducers?.[reducer]
+  const currentConnection = connection
+  if (!currentConnection) {
+    throw new Error('SpacetimeDB connection is not available')
+  }
+
+  const reducersByName = currentConnection.reducers as unknown as
+    Record<string, ((args?: Record<string, unknown>) => Promise<void>) | undefined>
+  const reducerFn = reducersByName?.[reducer]
   if (typeof reducerFn !== 'function') {
     throw new Error(`Reducer not found: ${reducer}`)
   }
@@ -793,6 +911,10 @@ export const reducers = {
   setPresenceOffline: () => spacetimedbClient.call('setPresenceOffline'),
   setTypingState: (scopeKey: string, isTyping: boolean) =>
     spacetimedbClient.call('setTypingState', { scopeKey, isTyping }),
+  markChannelRead: (channelId: number) =>
+    spacetimedbClient.call('markChannelRead', { channelId: toU64(channelId, 'channelId') }),
+  markDmRead: (otherIdentity: Identity) =>
+    spacetimedbClient.call('markDmRead', { otherIdentity: toReducerIdentity(otherIdentity) }),
   joinVoiceChannel: (channelId: number) =>
     spacetimedbClient.call('joinVoiceChannel', { channelId: toU64(channelId, 'channelId') }),
   leaveVoiceChannel: (channelId: number) =>
@@ -872,10 +994,21 @@ export function getCurrentSessionToken(): string | null {
   return getStoredToken() ?? null
 }
 
-export function resetLocalAuthSession(): void {
+export async function signOut(): Promise<void> {
+  if (connection) {
+    const offlineReducer = connection.reducers?.setPresenceOffline
+    if (typeof offlineReducer === 'function') {
+      try {
+        await offlineReducer({})
+      } catch {
+        // best-effort: keep sign-out flow resilient even if reducer call fails.
+      }
+    }
+  }
   disconnect()
   clearStoredToken()
   clearStoredAuthSessionToken()
+  await tauriCommands.setBadgeCount(0).catch(() => undefined)
 }
 
 export async function rotateIdentityForRegistration(): Promise<void> {
@@ -1012,12 +1145,12 @@ export function handleIncomingMessage(message: Message): void {
   const me = useConnectionStore.getState().identity
   if (!me || sameIdentity(message.senderIdentity, me)) return
 
+  recomputeUnreadStateFromReadCursors()
+  updateUnreadBadgeCount()
+
   const ui = useUiStore.getState()
   const channelId = message.channelId
   if (ui.activeChannelId === channelId) return
-
-  ui.incrementUnread(channelId)
-  updateUnreadBadgeCount()
 
   const serverId = findServerIdByChannelId(channelId)
   const channelMuted = Boolean(ui.mutedChannels[channelId])
@@ -1037,14 +1170,13 @@ export function handleIncomingDirectMessage(message: DirectMessage): void {
   const senderIsSelf = sameIdentity(message.senderIdentity, me)
   if (senderIsSelf) return
 
+  recomputeUnreadStateFromReadCursors()
+  updateUnreadBadgeCount()
+
   const partnerIdentity = message.senderIdentity
   const ui = useUiStore.getState()
-  if (!ui.activeDmPartner || !sameIdentity(ui.activeDmPartner, partnerIdentity)) {
-    ui.incrementDmUnread(partnerIdentity)
-    updateUnreadBadgeCount()
-  }
 
-  if (Boolean(ui.mutedUsers[normalizeIdentity(partnerIdentity) as Identity])) return
+  if (ui.mutedUsers[normalizeIdentity(partnerIdentity) as Identity]) return
   const senderLabel = findDisplayNameByIdentity(partnerIdentity)
   const body = truncateNotificationBody(message.content)
   void tauriCommands.showNotification(senderLabel, body).catch(() => undefined)

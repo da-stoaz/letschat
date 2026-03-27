@@ -241,3 +241,18 @@ pub struct TypingState {
     #[index(btree)]
     pub updated_at: Timestamp,
 }
+
+#[spacetimedb::table(
+    accessor = read_state,
+    index(accessor = by_scope, btree(columns = [scope_key])),
+    index(accessor = by_user, btree(columns = [user_identity]))
+)]
+pub struct ReadState {
+    #[primary_key]
+    pub read_key: String,
+    pub scope_key: String,
+    pub user_identity: Identity,
+    pub last_read_at: Timestamp,
+    #[index(btree)]
+    pub updated_at: Timestamp,
+}

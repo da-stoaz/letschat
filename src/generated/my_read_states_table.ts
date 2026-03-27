@@ -10,7 +10,10 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  scopeKey: __t.string(),
-  isTyping: __t.bool(),
-};
+export default __t.row({
+  readKey: __t.string().name("read_key"),
+  scopeKey: __t.string().name("scope_key"),
+  userIdentity: __t.identity().name("user_identity"),
+  lastReadAt: __t.timestamp().name("last_read_at"),
+  updatedAt: __t.timestamp().name("updated_at"),
+});

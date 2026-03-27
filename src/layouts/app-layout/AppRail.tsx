@@ -27,6 +27,7 @@ export interface AppRailProps {
   onOpenDmContact: (identity: string) => void
   onOpenCreateServer: () => void
   onOpenSettings: () => void
+  isSettingsActive: boolean
   hasUnreadInServer: (serverId: number) => boolean
   countUnreadInServer: (serverId: number) => number
   countUnreadInDm: () => number
@@ -52,6 +53,7 @@ export function AppRail({
   onOpenDmContact,
   onOpenCreateServer,
   onOpenSettings,
+  isSettingsActive,
   hasUnreadInServer,
   countUnreadInServer,
   countUnreadInDm,
@@ -60,6 +62,7 @@ export function AppRail({
   dmCallActiveByIdentity,
 }: AppRailProps) {
   const dmUnreadTotal = countUnreadInDm()
+  const dmHomeActive = !isSettingsActive && !activeServerId && !activeDmIdentity
 
   return (
     <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur">
@@ -132,9 +135,9 @@ export function AppRail({
           <TooltipTrigger
             render={
               <Button
-                variant={!activeServerId && !activeDmIdentity ? 'secondary' : 'ghost'}
+                variant={dmHomeActive ? 'secondary' : 'ghost'}
                 size="icon"
-                className={`relative h-8 w-8 rounded-md ${!activeServerId && !activeDmIdentity ? 'ring-1 ring-primary/70' : ''}`}
+                className={`relative h-8 w-8 rounded-md ${dmHomeActive ? 'ring-1 ring-primary/70' : ''}`}
                 onClick={onOpenDmHome}
               />
             }
@@ -209,7 +212,12 @@ export function AppRail({
         <Tooltip>
           <TooltipTrigger
             render={
-              <Button variant="ghost" size="icon" className="mb-0.5 h-9 w-9 rounded-lg" onClick={onOpenSettings} />
+              <Button
+                variant={isSettingsActive ? 'secondary' : 'ghost'}
+                size="icon"
+                className={`mb-0.5 h-9 w-9 rounded-lg ${isSettingsActive ? 'ring-1 ring-primary/70' : ''}`}
+                onClick={onOpenSettings}
+              />
             }
           >
             <SettingsIcon className="size-4" />
