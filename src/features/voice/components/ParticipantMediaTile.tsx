@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { Track, type LocalParticipant, type RemoteParticipant, type TrackPublication } from 'livekit-client'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '../../../lib/utils'
+import { MonitorUpIcon, VideoOffIcon } from 'lucide-react'
 
 type MediaParticipant = LocalParticipant | RemoteParticipant
 
@@ -111,29 +111,38 @@ export function ParticipantMediaTile({
 
   const showVideo = Boolean(primaryVideoTrack && primaryVideoTrack.kind === Track.Kind.Video)
 
+  const subtitle =
+    tileType === 'screen'
+      ? 'Live screen stream'
+      : joinedAt
+        ? `Joined ${new Date(joinedAt).toLocaleTimeString()}`
+        : isLocal
+          ? 'You'
+          : 'Participant'
+
   return (
-    <Card className="border-border/70 bg-background/60 py-0">
-      <CardHeader>
-        <CardTitle className="text-sm">{tileType === 'screen' ? `${displayName} Screen` : displayName}</CardTitle>
-        <CardDescription>
-          {tileType === 'screen'
-            ? 'Live screen stream'
-            : joinedAt
-              ? `Joined ${new Date(joinedAt).toLocaleTimeString()}`
-              : isLocal
-                ? 'You'
-                : 'Participant'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <div
-          className={cn(
-            'relative overflow-hidden rounded-lg border border-border/70 bg-muted/30',
-            showVideo ? 'aspect-video' : 'h-[108px]',
-            isSpeaking ? 'ring-2 ring-emerald-400/80' : '',
-          )}
-        >
-          {showVideo ? (
+    <article
+      className={cn(
+        'overflow-hidden rounded-xl bg-gradient-to-br from-card/90 via-card/80 to-muted/25 p-2.5',
+        isSpeaking && 'ring-1 ring-emerald-400/70',
+      )}
+    >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold leading-none">
+            {tileType === 'screen' ? `${displayName} Screen` : displayName}
+          </p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+        <div className="flex items-center gap-1">
+          {isSpeaking ? <Badge className="h-5 px-1.5 text-[10px]">Speaking</Badge> : null}
+          {isLocal ? <Badge variant="outline" className="h-5 px-1.5 text-[10px]">You</Badge> : null}
+        </div>
+      </div>
+
+      {showVideo ? (
+        <div className="relative overflow-hidden rounded-lg bg-black/35">
+          <div className="aspect-video">
             <video
               ref={videoRef}
               autoPlay
@@ -141,25 +150,34 @@ export function ParticipantMediaTile({
               muted
               className="h-full w-full object-cover"
             />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <Avatar className="size-[60px]">
-                {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
-                <AvatarFallback>{initials(displayName)}</AvatarFallback>
-              </Avatar>
-            </div>
-          )}
+          </div>
           {!isLocal ? <audio ref={audioRef} autoPlay data-letschat-audio="remote" /> : null}
         </div>
-        <div className="flex flex-wrap gap-1">
-          {isSpeaking ? <Badge>Speaking</Badge> : null}
-          {isLocal ? <Badge variant="outline">You</Badge> : null}
-          {muted ? <Badge variant="secondary">Muted</Badge> : null}
-          {deafened ? <Badge variant="secondary">Deafened</Badge> : null}
-          {sharingScreen ? <Badge variant="secondary">Screen</Badge> : null}
-          {sharingCamera ? <Badge variant="secondary">Camera</Badge> : null}
+      ) : (
+        <div className="relative flex min-h-[72px] items-center gap-3 rounded-lg bg-black/20 px-3 py-2">
+          <Avatar className="size-[60px] shrink-0">
+            {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
+            <AvatarFallback>{initials(displayName)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{tileType === 'screen' ? 'No active stream' : 'Audio only'}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {tileType === 'screen' ? 'Start sharing to display content' : 'Camera is currently off'}
+            </p>
+          </div>
+          <div className="ml-auto shrink-0 text-muted-foreground/70">
+            {tileType === 'screen' ? <MonitorUpIcon className="size-4" /> : <VideoOffIcon className="size-4" />}
+          </div>
+          {!isLocal ? <audio ref={audioRef} autoPlay data-letschat-audio="remote" /> : null}
         </div>
-      </CardContent>
-    </Card>
+      )}
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {muted ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Muted</Badge> : null}
+        {deafened ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Deafened</Badge> : null}
+        {sharingScreen ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Screen</Badge> : null}
+        {sharingCamera ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Camera</Badge> : null}
+      </div>
+    </article>
   )
 }
