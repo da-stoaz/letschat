@@ -17,6 +17,7 @@ import { usePresenceStore } from '../stores/presenceStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { normalizeIdentity } from './app-layout/helpers'
+import { useIncomingDmRing } from '../features/dm/hooks/useIncomingDmRing'
 import { ComposeDmDialog } from './app-layout/ComposeDmDialog'
 import { LayoutModals } from './app-layout/LayoutModals'
 import { MemberPanel } from './app-layout/MemberPanel'
@@ -214,6 +215,16 @@ export function AppLayout() {
     () => dmVoiceJoining || Object.values(dmCallActiveByIdentity).some(Boolean),
     [dmCallActiveByIdentity, dmVoiceJoining],
   )
+
+  useIncomingDmRing({
+    participantsByRoom: dmVoiceParticipantsByRoom,
+    usersByIdentity,
+    selfIdentity,
+    activeDmIdentity,
+    joinedDmPartnerIdentity: dmJoinedPartnerIdentity,
+    dmJoining: dmVoiceJoining,
+    onOpenDm: (identity) => navigate(`/app/dm/${identity}`),
+  })
 
   const dmContactsWithPresence = useMemo(
     () =>

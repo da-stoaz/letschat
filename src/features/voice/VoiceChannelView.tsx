@@ -11,6 +11,7 @@ import {
 import { reducers } from '../../lib/spacetimedb'
 import { useVoiceStore } from '../../stores/voiceStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useMediaDeviceStore } from '../../stores/mediaDeviceStore'
 import { useMembersStore } from '../../stores/membersStore'
 import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
 import type { VoiceParticipant, u64 } from '../../types/domain'
@@ -19,6 +20,7 @@ import { warnOnce } from '../../lib/devWarnings'
 import { VoiceControlBar } from './components/VoiceControlBar'
 import { ParticipantMediaTile } from './components/ParticipantMediaTile'
 import { useLegacyCallControlsVisible } from './hooks/useLegacyCallControls'
+import { useVoiceControlActions } from './hooks/useVoiceControlActions'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
@@ -104,6 +106,8 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     () => participants.find((participant) => sameIdentity(participant.userIdentity, selfIdentity)) ?? null,
     [participants, selfIdentity],
   )
+  const audioInputId = useMediaDeviceStore((s) => s.audioInputId)
+  const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
   const connectedToRoom = roomForChannel !== null && connectionState === ConnectionState.Connected
   const connectingToRoom = joining || (roomForChannel !== null && connectionState === ConnectionState.Connecting)
   const joined = connectedToRoom
@@ -117,6 +121,43 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const sharingScreen = selfParticipant?.sharingScreen ?? false
   const hasMicCapture = supportsMicrophoneCapture()
   const hasScreenCapture = supportsScreenCapture()
+
+  const patchVoiceState = async (
+    patch: Partial<Pick<VoiceParticipant, 'muted' | 'deafened' | 'sharingScreen' | 'sharingCamera'>>,
+  ) => {
+    if (!selfParticipant || channelId === null) return
+    const next = {
+      muted: patch.muted ?? selfParticipant.muted,
+      deafened: patch.deafened ?? selfParticipant.deafened,
+      sharingScreen: patch.sharingScreen ?? selfParticipant.sharingScreen,
+      sharingCamera: patch.sharingCamera ?? selfParticipant.sharingCamera,
+    }
+    await reducers.updateVoiceState(channelId, next.muted, next.deafened, next.sharingScreen, next.sharingCamera)
+  }
+
+  const { onToggleMute, onToggleDeafen, onToggleCamera, onToggleScreenShare, onLeave } = useVoiceControlActions({
+    room: roomForChannel,
+    selfState: selfParticipant
+      ? {
+          muted: selfParticipant.muted,
+          deafened: selfParticipant.deafened,
+          sharingCamera: selfParticipant.sharingCamera,
+          sharingScreen: selfParticipant.sharingScreen,
+        }
+      : null,
+    audioInputId,
+    videoInputId,
+    hasScreenCapture,
+    setError,
+    patchVoiceState,
+    onLeaveRoom: async () => {
+      if (channelId === null) return
+      await leaveLiveKitVoice(channelId, roomForChannel)
+      setRoom(null)
+      setJoinedChannelId(null)
+    },
+    leaveErrorMessage: 'Could not leave voice channel.',
+  })
 
   useEffect(() => {
     // Only clean stale presence if we have no local room/session at all.
@@ -237,19 +278,19 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
               }
             }}
             onToggleMute={async () => {
-              return
+              await onToggleMute()
             }}
             onToggleDeafen={async () => {
-              return
+              await onToggleDeafen()
             }}
             onToggleCamera={async () => {
-              return
+              await onToggleCamera()
             }}
             onToggleScreenShare={async () => {
-              return
+              await onToggleScreenShare()
             }}
             onLeave={async () => {
-              return
+              await onLeave()
             }}
           />
         </div>
