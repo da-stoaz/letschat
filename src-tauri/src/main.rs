@@ -89,8 +89,13 @@ fn set_badge_count(app: AppHandle, count: u32) -> Result<(), String> {
         let window = app
             .get_webview_window(MAIN_WINDOW_LABEL)
             .ok_or_else(|| "main window not found".to_string())?;
+        let badge_value = if count == 0 {
+            None
+        } else {
+            Some(i64::from(count))
+        };
         window
-            .set_badge_count(Some(i64::from(count)))
+            .set_badge_count(badge_value)
             .map_err(|e| e.to_string())?;
     }
 

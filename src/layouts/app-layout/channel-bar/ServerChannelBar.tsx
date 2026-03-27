@@ -1,4 +1,4 @@
-import { ChevronsUpDownIcon, HashIcon, LockIcon, PlusIcon, ShieldIcon, Volume2Icon } from 'lucide-react'
+import { BellIcon, BellOffIcon, ChevronsUpDownIcon, HashIcon, LockIcon, PlusIcon, ShieldIcon, Volume2Icon } from 'lucide-react'
 import { canManageChannels, canRenameServer } from '../../../lib/permissions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,10 @@ export function ServerChannelBar({
   onOpenRenameServer,
   onOpenInvite,
   onOpenCreateChannel,
+  isServerMuted,
+  isChannelMuted,
+  onToggleServerMute,
+  onToggleChannelMute,
   onSelectChannel,
 }: ServerChannelBarProps) {
   return (
@@ -51,6 +55,19 @@ export function ServerChannelBar({
             <DropdownMenuItem onClick={onOpenCreateChannel} disabled={!role || !canManageChannels(role)}>
               Create Channel
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={onToggleServerMute}>
+              {isServerMuted ? (
+                <>
+                  <BellIcon className="size-3.5" />
+                  Unmute Server
+                </>
+              ) : (
+                <>
+                  <BellOffIcon className="size-3.5" />
+                  Mute Server
+                </>
+              )}
+            </DropdownMenuItem>
             <DropdownMenuItem disabled>
               Leave Server (coming soon)
             </DropdownMenuItem>
@@ -66,18 +83,33 @@ export function ServerChannelBar({
           </div>
           {textChannels.map((channel) => {
             const unread = unreadByChannel[channel.id] ?? 0
+            const muted = isChannelMuted(channel.id)
             return (
-              <Button
-                key={channel.id}
-                variant={activeChannelId === channel.id ? 'secondary' : 'ghost'}
-                className="w-full justify-start gap-2 rounded-lg"
-                onClick={() => onSelectChannel(channel.id)}
-              >
-                <HashIcon className="size-4 opacity-70" />
-                <span className="truncate">{channel.name}</span>
-                {channel.moderatorOnly ? <LockIcon className="ml-auto size-3.5 opacity-70" /> : null}
-                {unread > 0 ? <Badge className="ml-auto">{unread}</Badge> : null}
-              </Button>
+              <div key={channel.id} className="flex items-center gap-1">
+                <Button
+                  variant={activeChannelId === channel.id ? 'secondary' : 'ghost'}
+                  className="min-w-0 flex-1 justify-start gap-2 rounded-lg"
+                  onClick={() => onSelectChannel(channel.id)}
+                >
+                  <HashIcon className="size-4 opacity-70" />
+                  <span className="truncate">{channel.name}</span>
+                  {channel.moderatorOnly ? <LockIcon className="ml-auto size-3.5 opacity-70" /> : null}
+                  {unread > 0 ? <Badge className="ml-auto">{unread}</Badge> : null}
+                </Button>
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant={muted ? 'secondary' : 'ghost'}
+                  aria-label={muted ? 'Unmute channel' : 'Mute channel'}
+                  title={muted ? 'Unmute channel' : 'Mute channel'}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onToggleChannelMute(channel.id)
+                  }}
+                >
+                  {muted ? <BellOffIcon className="size-3.5" /> : <BellIcon className="size-3.5" />}
+                </Button>
+              </div>
             )
           })}
         </section>
@@ -97,7 +129,9 @@ export function ServerChannelBar({
               participants={participantsByChannel[channel.id] ?? []}
               selfJoined={joinedVoiceChannelId === channel.id}
               activeSpeakerIdentityKeys={joinedVoiceChannelId === channel.id ? activeSpeakerIdentityKeys : EMPTY_ACTIVE_SPEAKERS}
+              muted={isChannelMuted(channel.id)}
               memberProfileByIdentity={memberProfileByIdentity}
+              onToggleMute={() => onToggleChannelMute(channel.id)}
               onSelect={() => onSelectChannel(channel.id)}
             />
           ))}

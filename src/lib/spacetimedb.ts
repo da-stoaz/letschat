@@ -117,6 +117,12 @@ function sameIdentity(a: Identity, b: Identity): boolean {
   return normalizeIdentity(a) === normalizeIdentity(b)
 }
 
+function truncateNotificationBody(content: string, maxLength = 80): string {
+  const normalized = content.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength - 1)}…`
+}
+
 function mapUser(row: any): User {
   return {
     identity: toIdentityString(row.identity),
@@ -456,6 +462,10 @@ function resetClientState(): void {
     rightPanelOpen: false,
     modals: {},
     unreadByChannel: {},
+    unreadByDmPartner: {},
+    mutedChannels: {},
+    mutedServers: {},
+    mutedUsers: {},
   })
   usePresenceStore.getState().reset()
 }
@@ -500,7 +510,12 @@ function watchLiveTables(conn: DbConnection): void {
   conn.db.my_friends.onDelete(() => syncFriends(conn))
   conn.db.my_blocks.onInsert(() => syncFriends(conn))
   conn.db.my_blocks.onDelete(() => syncFriends(conn))
-  conn.db.direct_message.onInsert(() => syncDirectMessages(conn))
+  conn.db.direct_message.onInsert((_ctx, row) => {
+    syncDirectMessages(conn)
+    if (!liveEventsEnabled) return
+    const message = mapDirectMessage(row)
+    handleIncomingDirectMessage(message)
+  })
   conn.db.direct_message.onUpdate(() => syncDirectMessages(conn))
   conn.db.direct_message.onDelete(() => syncDirectMessages(conn))
   conn.db.my_dm_voice_participants.onInsert(() => syncDmVoiceParticipants(conn))
@@ -517,8 +532,7 @@ function watchLiveTables(conn: DbConnection): void {
     if (!liveEventsEnabled) return
 
     const message = mapMessage(row)
-    const senderIsSelf = useConnectionStore.getState().identity === message.senderIdentity
-    handleIncomingMessage(message.channelId, senderIsSelf)
+    handleIncomingMessage(message)
   })
   conn.db.message.onUpdate(() => syncMessages(conn))
   conn.db.message.onDelete(() => syncMessages(conn))
@@ -967,15 +981,73 @@ export async function resolveIdentityFromUsername(username: string): Promise<Ide
   return user ? toIdentityString(user.identity) : null
 }
 
-export function handleIncomingMessage(channelId: number, senderIsSelf: boolean): void {
+function updateUnreadBadgeCount(): void {
   const ui = useUiStore.getState()
-  if (senderIsSelf) return
-  if (ui.activeChannelId !== channelId) {
-    ui.incrementUnread(channelId)
-    const totalUnread = Object.values(useUiStore.getState().unreadByChannel).reduce((sum, value) => sum + value, 0)
-    void tauriCommands.setBadgeCount(totalUnread).catch(() => undefined)
-    void tauriCommands.showNotification('New Message', `Unread message in channel ${channelId}`).catch(() => undefined)
+  const channelUnread = Object.values(ui.unreadByChannel).reduce((sum, value) => sum + value, 0)
+  const dmUnread = Object.values(ui.unreadByDmPartner).reduce((sum, value) => sum + value, 0)
+  void tauriCommands.setBadgeCount(channelUnread + dmUnread).catch(() => undefined)
+}
+
+function findServerIdByChannelId(channelId: number): number | null {
+  const channelsByServer = useChannelsStore.getState().channelsByServer
+  for (const [serverId, channels] of Object.entries(channelsByServer)) {
+    if (channels.some((channel) => channel.id === channelId)) {
+      return Number(serverId)
+    }
   }
+  return null
+}
+
+function findDisplayNameByIdentity(identity: Identity): string {
+  const normalized = normalizeIdentity(identity)
+  for (const user of Object.values(useUsersStore.getState().byIdentity)) {
+    if (normalizeIdentity(user.identity) === normalized) {
+      return user.displayName || user.username || identity.slice(0, 12)
+    }
+  }
+  return identity.slice(0, 12)
+}
+
+export function handleIncomingMessage(message: Message): void {
+  const me = useConnectionStore.getState().identity
+  if (!me || sameIdentity(message.senderIdentity, me)) return
+
+  const ui = useUiStore.getState()
+  const channelId = message.channelId
+  if (ui.activeChannelId === channelId) return
+
+  ui.incrementUnread(channelId)
+  updateUnreadBadgeCount()
+
+  const serverId = findServerIdByChannelId(channelId)
+  const channelMuted = Boolean(ui.mutedChannels[channelId])
+  const serverMuted = serverId !== null ? Boolean(ui.mutedServers[serverId]) : false
+  const userMuted = Boolean(ui.mutedUsers[normalizeIdentity(message.senderIdentity) as Identity])
+  if (channelMuted || serverMuted || userMuted) return
+
+  const senderLabel = findDisplayNameByIdentity(message.senderIdentity)
+  const body = truncateNotificationBody(message.deleted ? '[message deleted]' : message.content)
+  void tauriCommands.showNotification(senderLabel, body).catch(() => undefined)
+}
+
+export function handleIncomingDirectMessage(message: DirectMessage): void {
+  const me = useConnectionStore.getState().identity
+  if (!me) return
+
+  const senderIsSelf = sameIdentity(message.senderIdentity, me)
+  if (senderIsSelf) return
+
+  const partnerIdentity = message.senderIdentity
+  const ui = useUiStore.getState()
+  if (!ui.activeDmPartner || !sameIdentity(ui.activeDmPartner, partnerIdentity)) {
+    ui.incrementDmUnread(partnerIdentity)
+    updateUnreadBadgeCount()
+  }
+
+  if (Boolean(ui.mutedUsers[normalizeIdentity(partnerIdentity) as Identity])) return
+  const senderLabel = findDisplayNameByIdentity(partnerIdentity)
+  const body = truncateNotificationBody(message.content)
+  void tauriCommands.showNotification(senderLabel, body).catch(() => undefined)
 }
 
 export function handleIncomingFriendRequest(username: string): void {

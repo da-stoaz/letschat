@@ -21,6 +21,7 @@ import { normalizeIdentity } from './app-layout/helpers'
 import { useIncomingDmRing } from '../features/dm/hooks/useIncomingDmRing'
 import { formatDmPreview } from '../features/dm/systemMessages'
 import { useLiveKitRoom } from '../lib/livekit'
+import { tauriCommands } from '../lib/tauri'
 import { ComposeDmDialog } from './app-layout/ComposeDmDialog'
 import { LayoutModals } from './app-layout/LayoutModals'
 import { MemberPanel } from './app-layout/MemberPanel'
@@ -64,6 +65,14 @@ export function AppLayout() {
   const channelsByServer = useChannelsStore((s) => s.channelsByServer)
   const membersByServer = useMembersStore((s) => s.membersByServer)
   const unreadByChannel = useUiStore((s) => s.unreadByChannel)
+  const unreadByDmPartner = useUiStore((s) => s.unreadByDmPartner)
+  const mutedChannels = useUiStore((s) => s.mutedChannels)
+  const mutedServers = useUiStore((s) => s.mutedServers)
+  const mutedUsers = useUiStore((s) => s.mutedUsers)
+  const clearDmUnread = useUiStore((s) => s.clearDmUnread)
+  const toggleMutedChannel = useUiStore((s) => s.toggleMutedChannel)
+  const toggleMutedServer = useUiStore((s) => s.toggleMutedServer)
+  const toggleMutedUser = useUiStore((s) => s.toggleMutedUser)
   const participantsByChannel = useVoiceStore((s) => s.participantsByChannel)
   const conversations = useDmStore((s) => s.conversations)
   const friends = useFriendsStore((s) => s.friends)
@@ -97,14 +106,21 @@ export function AppLayout() {
   }, [activeServerId, setActiveServerId])
 
   useEffect(() => {
-    if (activeChannelId !== null) {
-      setActiveChannelId(activeChannelId)
-    }
+    setActiveChannelId(activeChannelId)
   }, [activeChannelId, setActiveChannelId])
 
   useEffect(() => {
+    if (activeChannelId !== null) {
+      clearUnread(activeChannelId)
+    }
+  }, [activeChannelId, clearUnread])
+
+  useEffect(() => {
     setActiveDmPartner(activeDmIdentity)
-  }, [activeDmIdentity, setActiveDmPartner])
+    if (activeDmIdentity) {
+      clearDmUnread(activeDmIdentity)
+    }
+  }, [activeDmIdentity, clearDmUnread, setActiveDmPartner])
 
   const activeChannels = useMemo(
     () => (activeServerId ? channelsByServer[activeServerId] ?? EMPTY_CHANNELS : EMPTY_CHANNELS),
@@ -232,6 +248,7 @@ export function AppLayout() {
     participantsByRoom: dmVoiceParticipantsByRoom,
     usersByIdentity,
     selfIdentity,
+    mutedUsers,
     activeDmIdentity,
     joinedDmPartnerIdentity: dmJoinedPartnerIdentity,
     dmJoining: dmVoiceJoining,
@@ -267,8 +284,44 @@ export function AppLayout() {
     [dmContactsWithPresence, dmFriendsWithPresence],
   )
 
+  useEffect(() => {
+    const knownChannelIds = new Set<number>()
+    for (const channels of Object.values(channelsByServer)) {
+      for (const channel of channels) {
+        knownChannelIds.add(channel.id)
+      }
+    }
+    for (const [channelIdKey, unread] of Object.entries(unreadByChannel)) {
+      if (unread <= 0) continue
+      const channelId = Number(channelIdKey)
+      if (!Number.isFinite(channelId) || !knownChannelIds.has(channelId)) {
+        clearUnread(channelId)
+      }
+    }
+
+    const knownDmIdentities = new Set<string>()
+    for (const contact of dmFriends) {
+      knownDmIdentities.add(normalizeIdentity(contact.identity))
+    }
+    for (const dmIdentity of Object.keys(conversations)) {
+      knownDmIdentities.add(normalizeIdentity(dmIdentity))
+    }
+    for (const [dmIdentity, unread] of Object.entries(unreadByDmPartner)) {
+      if (unread <= 0) continue
+      if (!knownDmIdentities.has(normalizeIdentity(dmIdentity))) {
+        clearDmUnread(dmIdentity)
+      }
+    }
+  }, [channelsByServer, clearDmUnread, clearUnread, conversations, dmFriends, unreadByChannel, unreadByDmPartner])
+
   const hasUnreadInServer = (serverId: number) =>
     (channelsByServer[serverId] ?? []).some((channel) => (unreadByChannel[channel.id] ?? 0) > 0)
+
+  const countUnreadInServer = (serverId: number) =>
+    (channelsByServer[serverId] ?? []).reduce((total, channel) => total + (unreadByChannel[channel.id] ?? 0), 0)
+
+  const countUnreadInDm = () =>
+    Object.values(unreadByDmPartner).reduce((total, value) => total + value, 0)
 
   const hasVoiceActivityInServer = (serverId: number): boolean => {
     if (!selfIdentity) return false
@@ -342,6 +395,12 @@ export function AppLayout() {
   }, [activeCallDockVisible, setActiveCallDockVisible])
 
   useEffect(() => {
+    const channelUnread = Object.values(unreadByChannel).reduce((sum, value) => sum + value, 0)
+    const dmUnread = Object.values(unreadByDmPartner).reduce((sum, value) => sum + value, 0)
+    void tauriCommands.setBadgeCount(channelUnread + dmUnread).catch(() => undefined)
+  }, [unreadByChannel, unreadByDmPartner])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(CHANNEL_BAR_WIDTH_STORAGE_KEY, String(channelBarWidth))
   }, [channelBarWidth])
@@ -390,6 +449,9 @@ export function AppLayout() {
               onOpenCreateServer={() => setShowCreateServer(true)}
               onOpenSettings={() => setShowSettings(true)}
               hasUnreadInServer={hasUnreadInServer}
+              countUnreadInServer={countUnreadInServer}
+              countUnreadInDm={countUnreadInDm}
+              dmUnreadByIdentity={unreadByDmPartner}
               hasVoiceActivityInServer={hasVoiceActivityInServer}
               dmCallActiveByIdentity={dmCallActiveByIdentity}
             />
@@ -412,12 +474,22 @@ export function AppLayout() {
                 onOpenRenameServer={() => setShowEditServer(true)}
                 onOpenInvite={() => setShowInvite(true)}
                 onOpenCreateChannel={() => setShowCreateChannel(true)}
+                isServerMuted={Boolean(activeServerId && mutedServers[activeServerId])}
+                isChannelMuted={(channelId) => Boolean(mutedChannels[channelId])}
+                onToggleServerMute={() => {
+                  if (!activeServerId) return
+                  toggleMutedServer(activeServerId)
+                }}
+                onToggleChannelMute={(channelId) => toggleMutedChannel(channelId)}
                 onSelectChannel={(channelId) => {
                   if (activeServerId === null) return
                   openChannel(activeServerId, channelId)
                 }}
                 onOpenFriends={() => navigate('/app/dm/friends')}
                 dmContacts={dmContactsWithPresence}
+                dmUnreadByIdentity={unreadByDmPartner}
+                isUserMuted={(identity) => Boolean(mutedUsers[normalizeIdentity(identity)])}
+                onToggleUserMute={(identity) => toggleMutedUser(normalizeIdentity(identity))}
                 activeDmIdentity={activeDmIdentity}
                 dmCallActiveByIdentity={dmCallActiveByIdentity}
                 onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}

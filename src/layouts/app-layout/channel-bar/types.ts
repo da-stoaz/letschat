@@ -1,5 +1,5 @@
 import type { UserPresenceStatus } from '../../../hooks/useUserPresentation'
-import type { Channel, Role, Server, VoiceParticipant } from '../../../types/domain'
+import type { Channel, Identity, Role, Server, VoiceParticipant } from '../../../types/domain'
 
 export interface DmContact {
   identity: string
@@ -28,9 +28,16 @@ export interface ChannelBarProps {
   onOpenRenameServer: () => void
   onOpenInvite: () => void
   onOpenCreateChannel: () => void
+  isServerMuted: boolean
+  isChannelMuted: (channelId: number) => boolean
+  onToggleServerMute: () => void
+  onToggleChannelMute: (channelId: number) => void
   onSelectChannel: (channelId: number) => void
   onOpenFriends: () => void
   dmContacts: DmContact[]
+  dmUnreadByIdentity: Record<Identity, number>
+  isUserMuted: (identity: Identity) => boolean
+  onToggleUserMute: (identity: Identity) => void
   activeDmIdentity: string | null
   dmCallActiveByIdentity: Record<string, boolean>
   onOpenDmContact: (identity: string) => void
@@ -51,12 +58,19 @@ export interface ServerChannelBarProps {
   onOpenRenameServer: () => void
   onOpenInvite: () => void
   onOpenCreateChannel: () => void
+  isServerMuted: boolean
+  isChannelMuted: (channelId: number) => boolean
+  onToggleServerMute: () => void
+  onToggleChannelMute: (channelId: number) => void
   onSelectChannel: (channelId: number) => void
 }
 
 export interface DmChannelBarProps {
   channelBarWidth: number
   dmContacts: DmContact[]
+  dmUnreadByIdentity: Record<Identity, number>
+  isUserMuted: (identity: Identity) => boolean
+  onToggleUserMute: (identity: Identity) => void
   activeDmIdentity: string | null
   dmCallActiveByIdentity: Record<string, boolean>
   onOpenFriends: () => void

@@ -6,7 +6,7 @@ import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import stealthChatLogo from '../../../src-tauri/icons/stealthchat-nobg.png'
-import { serverInitials, userInitials } from './helpers'
+import { normalizeIdentity, serverInitials, userInitials } from './helpers'
 import type { Server } from '../../types/domain'
 
 interface QuickDmContact {
@@ -28,8 +28,16 @@ export interface AppRailProps {
   onOpenCreateServer: () => void
   onOpenSettings: () => void
   hasUnreadInServer: (serverId: number) => boolean
+  countUnreadInServer: (serverId: number) => number
+  countUnreadInDm: () => number
+  dmUnreadByIdentity: Record<string, number>
   hasVoiceActivityInServer: (serverId: number) => boolean
   dmCallActiveByIdentity: Record<string, boolean>
+}
+
+function formatUnreadCount(value: number): string {
+  if (value > 99) return '99+'
+  return String(Math.max(0, value))
 }
 
 export function AppRail({
@@ -45,9 +53,14 @@ export function AppRail({
   onOpenCreateServer,
   onOpenSettings,
   hasUnreadInServer,
+  countUnreadInServer,
+  countUnreadInDm,
+  dmUnreadByIdentity,
   hasVoiceActivityInServer,
   dmCallActiveByIdentity,
 }: AppRailProps) {
+  const dmUnreadTotal = countUnreadInDm()
+
   return (
     <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur">
       <CardContent className="flex min-h-0 flex-1 flex-col items-center gap-1 p-1">
@@ -67,31 +80,38 @@ export function AppRail({
 
         <ScrollArea className="w-full min-h-0 flex-1 px-0.5">
           <div className="flex flex-col items-center gap-2 py-1">
-            {servers.map((server) => (
-              <Tooltip key={server.id}>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant={activeServerId === server.id ? 'secondary' : 'ghost'}
-                      size="icon"
-                      className={`relative h-9 w-9 rounded-lg ${activeServerId === server.id ? 'ring-1 ring-primary/70' : ''}`}
-                      onClick={() => onOpenServer(server.id)}
-                    />
-                  }
-                >
-                  <Avatar className="h-7 w-7 rounded-md">
-                    <AvatarFallback className="rounded-xl bg-primary/10 text-xs">{serverInitials(server.name)}</AvatarFallback>
-                  </Avatar>
-                  {hasUnreadInServer(server.id) ? <span className="absolute right-1 top-1 size-2 rounded-full bg-cyan-400" /> : null}
-                  {hasVoiceActivityInServer(server.id) ? (
-                    <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
-                      <Volume2Icon className="size-2.5" />
-                    </span>
-                  ) : null}
-                </TooltipTrigger>
-                <TooltipContent side="right">{server.name}</TooltipContent>
-              </Tooltip>
-            ))}
+            {servers.map((server) => {
+              const serverUnread = countUnreadInServer(server.id)
+              return (
+                <Tooltip key={server.id}>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant={activeServerId === server.id ? 'secondary' : 'ghost'}
+                        size="icon"
+                        className={`relative h-9 w-9 rounded-lg ${activeServerId === server.id ? 'ring-1 ring-primary/70' : ''}`}
+                        onClick={() => onOpenServer(server.id)}
+                      />
+                    }
+                  >
+                    <Avatar className="h-7 w-7 rounded-md">
+                      <AvatarFallback className="rounded-xl bg-primary/10 text-xs">{serverInitials(server.name)}</AvatarFallback>
+                    </Avatar>
+                    {hasUnreadInServer(server.id) ? (
+                      <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
+                        {formatUnreadCount(serverUnread)}
+                      </span>
+                    ) : null}
+                    {hasVoiceActivityInServer(server.id) ? (
+                      <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
+                        <Volume2Icon className="size-2.5" />
+                      </span>
+                    ) : null}
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{server.name}</TooltipContent>
+                </Tooltip>
+              )
+            })}
 
             <Tooltip>
               <TooltipTrigger
@@ -120,6 +140,11 @@ export function AppRail({
             }
           >
             <MessageCircleIcon className="size-4" />
+            {dmUnreadTotal > 0 ? (
+              <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
+                {formatUnreadCount(dmUnreadTotal)}
+              </span>
+            ) : null}
           </TooltipTrigger>
           <TooltipContent side="right">DM Home</TooltipContent>
         </Tooltip>
@@ -143,31 +168,39 @@ export function AppRail({
 
         {quickDmContacts.length > 0 ? (
           <div className="flex flex-col items-center gap-1 py-1">
-            {quickDmContacts.map((contact) => (
-              <Tooltip key={contact.identity}>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={`relative h-8 w-8 rounded-md ${activeDmIdentity === contact.identity ? 'ring-1 ring-primary/70' : ''}`}
-                      onClick={() => onOpenDmContact(contact.identity)}
-                    />
-                  }
-                >
-                  <Avatar size="sm" className="rounded-lg">
-                    {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
-                    <AvatarFallback className="rounded-lg bg-primary/10 text-[10px]">{userInitials(contact.label)}</AvatarFallback>
-                  </Avatar>
-                  {dmCallActiveByIdentity[contact.identity] ? (
-                    <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
-                      <Volume2Icon className="size-2.5" />
-                    </span>
-                  ) : null}
-                </TooltipTrigger>
-                <TooltipContent side="right">{contact.label}</TooltipContent>
-              </Tooltip>
-            ))}
+            {quickDmContacts.map((contact) => {
+              const unread = dmUnreadByIdentity[normalizeIdentity(contact.identity)] ?? 0
+              return (
+                <Tooltip key={contact.identity}>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`relative h-8 w-8 rounded-md ${activeDmIdentity === contact.identity ? 'ring-1 ring-primary/70' : ''}`}
+                        onClick={() => onOpenDmContact(contact.identity)}
+                      />
+                    }
+                  >
+                    <Avatar size="sm" className="rounded-lg">
+                      {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
+                      <AvatarFallback className="rounded-lg bg-primary/10 text-[10px]">{userInitials(contact.label)}</AvatarFallback>
+                    </Avatar>
+                    {unread > 0 ? (
+                      <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
+                        {formatUnreadCount(unread)}
+                      </span>
+                    ) : null}
+                    {dmCallActiveByIdentity[contact.identity] ? (
+                      <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
+                        <Volume2Icon className="size-2.5" />
+                      </span>
+                    ) : null}
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{contact.label}</TooltipContent>
+                </Tooltip>
+              )
+            })}
           </div>
         ) : null}
 
