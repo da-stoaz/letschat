@@ -35,7 +35,13 @@ function sameIdentity(left: string, right: string | null | undefined): boolean {
   return normalizeIdentityKey(left) === normalizeIdentityKey(right)
 }
 
-export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity }) {
+export function DmVoicePanel({
+  partnerIdentity,
+  showHeader = true,
+}: {
+  partnerIdentity: Identity
+  showHeader?: boolean
+}) {
   const selfIdentity = useConnectionStore((s) => s.identity)
   const usersByIdentity = useUsersStore((s) => s.byIdentity)
   const participantsByRoom = useDmVoiceStore((s) => s.participantsByRoom)
@@ -198,10 +204,12 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
 
   return (
     <Card className="border-border/70 bg-background/40 py-0">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-sm">DM Voice Call</CardTitle>
-        <Badge variant={statusVariant}>{statusBadge}</Badge>
-      </CardHeader>
+      {showHeader ? (
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-sm">DM Voice Call</CardTitle>
+          <Badge variant={statusVariant}>{statusBadge}</Badge>
+        </CardHeader>
+      ) : null}
       <CardContent className="space-y-2">
         <div className="flex flex-wrap gap-2">
           {participants.length === 0 ? <Badge variant="outline">No one in call</Badge> : null}

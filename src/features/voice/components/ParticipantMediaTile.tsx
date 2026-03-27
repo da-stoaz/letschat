@@ -3,6 +3,7 @@ import { Track, type LocalParticipant, type RemoteParticipant, type TrackPublica
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { cn } from '../../../lib/utils'
 
 type MediaParticipant = LocalParticipant | RemoteParticipant
 
@@ -126,9 +127,11 @@ export function ParticipantMediaTile({
       </CardHeader>
       <CardContent className="space-y-2">
         <div
-          className={`relative aspect-video overflow-hidden rounded-lg border border-border/70 bg-muted/30 ${
-            isSpeaking ? 'ring-2 ring-emerald-400/80' : ''
-          }`}
+          className={cn(
+            'relative overflow-hidden rounded-lg border border-border/70 bg-muted/30',
+            showVideo ? 'aspect-video' : 'h-[108px]',
+            isSpeaking ? 'ring-2 ring-emerald-400/80' : '',
+          )}
         >
           {showVideo ? (
             <video
@@ -140,7 +143,7 @@ export function ParticipantMediaTile({
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
-              <Avatar size="lg">
+              <Avatar className="size-[60px]">
                 {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
                 <AvatarFallback>{initials(displayName)}</AvatarFallback>
               </Avatar>

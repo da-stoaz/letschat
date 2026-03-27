@@ -9,6 +9,7 @@ import {
   useLiveKitRoom,
 } from '../../lib/livekit'
 import { reducers } from '../../lib/spacetimedb'
+import { useChannelsStore } from '../../stores/channelsStore'
 import { useVoiceStore } from '../../stores/voiceStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useMediaDeviceStore } from '../../stores/mediaDeviceStore'
@@ -16,12 +17,15 @@ import { useMembersStore } from '../../stores/membersStore'
 import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
 import type { VoiceParticipant, u64 } from '../../types/domain'
 import { ConnectionState } from 'livekit-client'
+import { PhoneCallIcon, PhoneOffIcon } from 'lucide-react'
 import { warnOnce } from '../../lib/devWarnings'
+import { useOngoingCallDuration } from './hooks/useOngoingCallDuration'
 import { VoiceControlBar } from './components/VoiceControlBar'
 import { ParticipantMediaTile } from './components/ParticipantMediaTile'
 import { useLegacyCallControlsVisible } from './hooks/useLegacyCallControls'
 import { useVoiceControlActions } from './hooks/useVoiceControlActions'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 const EMPTY_PARTICIPANTS: VoiceParticipant[] = []
@@ -37,6 +41,7 @@ function sameIdentity(left: string, right: string | null | undefined): boolean {
 
 export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const participantsByChannel = useVoiceStore((s) => s.participantsByChannel)
+  const channelsByServer = useChannelsStore((s) => s.channelsByServer)
   const membersByServer = useMembersStore((s) => s.membersByServer)
   const participants = channelId === null ? EMPTY_PARTICIPANTS : (participantsByChannel[channelId] ?? EMPTY_PARTICIPANTS)
 
@@ -183,6 +188,37 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
 
   const statusBadge = connectingToRoom ? 'Joining...' : joined ? 'Joined' : selfParticipant ? 'Syncing...' : 'Not joined'
   const statusVariant = connectingToRoom ? 'outline' : joined ? 'default' : selfParticipant ? 'outline' : 'secondary'
+  const channelName = useMemo(() => {
+    if (channelId === null) return null
+    for (const channels of Object.values(channelsByServer)) {
+      const match = channels.find((channel) => channel.id === channelId)
+      if (match) return match.name
+    }
+    return null
+  }, [channelId, channelsByServer])
+  const ongoingCallDuration = useOngoingCallDuration(selfParticipant?.joinedAt ?? null, joined)
+
+  const onJoin = async () => {
+    if (channelId === null) return
+    setError(null)
+    setJoining(true)
+    try {
+      if (room && joinedChannelId !== null && joinedChannelId !== channelId) {
+        await leaveLiveKitVoice(joinedChannelId, room)
+        setRoom(null)
+        setJoinedChannelId(null)
+      }
+      const nextRoom = await joinLiveKitVoice(channelId)
+      setRoom(nextRoom)
+      setJoinedChannelId(channelId)
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not join voice channel.'
+      setError(message)
+    } finally {
+      setJoining(false)
+    }
+  }
+
   if (channelId === null) {
     return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a voice channel</div>
   }
@@ -191,10 +227,30 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 rounded-xl border border-border/70 bg-card/60 p-3">
       <header className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Voice Channel {channelId}</h2>
-          <p className="text-sm text-muted-foreground">{participants.length}/15 participants</p>
+          <h2 className="text-lg font-semibold">{channelName ? `Voice • ${channelName}` : `Voice Channel ${channelId}`}</h2>
+          <p className="text-sm text-muted-foreground">
+            {participants.length}/15 participants
+            {ongoingCallDuration ? ` • Ongoing call since ${ongoingCallDuration}` : ''}
+          </p>
         </div>
-        <Badge variant={statusVariant}>{statusBadge}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={statusVariant}>{statusBadge}</Badge>
+          <Button
+            size="sm"
+            variant={joined ? 'destructive' : 'secondary'}
+            disabled={connectingToRoom}
+            onClick={() => {
+              if (joined) {
+                void onLeave()
+                return
+              }
+              void onJoin()
+            }}
+          >
+            {joined ? <PhoneOffIcon className="size-4" /> : <PhoneCallIcon className="size-4" />}
+            {connectingToRoom ? 'Joining...' : joined ? 'Leave' : 'Join Voice'}
+          </Button>
+        </div>
       </header>
       {joined && !hasMicCapture ? (
         <p className="text-xs text-muted-foreground">{getMicrophoneUnavailableReason()}</p>
@@ -258,25 +314,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
             sharingScreen={sharingScreen}
             hasScreenCapture={hasScreenCapture}
             error={error}
-            onJoin={async () => {
-              setError(null)
-              setJoining(true)
-              try {
-                if (room && joinedChannelId !== null && joinedChannelId !== channelId) {
-                  await leaveLiveKitVoice(joinedChannelId, room)
-                  setRoom(null)
-                  setJoinedChannelId(null)
-                }
-                const nextRoom = await joinLiveKitVoice(channelId)
-                setRoom(nextRoom)
-                setJoinedChannelId(channelId)
-              } catch (e) {
-                const message = e instanceof Error ? e.message : 'Could not join voice channel.'
-                setError(message)
-              } finally {
-                setJoining(false)
-              }
-            }}
+            onJoin={onJoin}
             onToggleMute={async () => {
               await onToggleMute()
             }}
