@@ -134,9 +134,11 @@ export function ParticipantMediaTile({
   return (
     <article
       className={cn(
-        'overflow-hidden rounded-xl bg-gradient-to-br from-card/90 via-card/80 to-muted/25 p-2.5',
+        'overflow-hidden rounded-xl border border-border/60 bg-gradient-to-br from-card/90 via-card/80 to-muted/25 p-2.5',
         showActivity &&
-          (tileType === 'screen' ? 'ring-1 ring-sky-400/70' : 'ring-1 ring-emerald-400/70'),
+          (tileType === 'screen'
+            ? 'border-sky-400/80 shadow-[0_0_0_1px_rgba(56,189,248,0.35)]'
+            : 'border-emerald-400/80 shadow-[0_0_0_1px_rgba(52,211,153,0.35)]'),
       )}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
