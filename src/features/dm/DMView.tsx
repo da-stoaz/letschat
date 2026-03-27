@@ -11,7 +11,6 @@ import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { useIsMobile } from '../../hooks/use-mobile'
 import { ChatComposer } from '../chat/ChatComposer'
 import { ChatMessageFeed } from '../chat/ChatMessageFeed'
-import { TypingIndicator } from '../chat/TypingIndicator'
 import { DmVoicePanel } from './DmVoicePanel'
 import {
   encodeDmSystemMessage,
@@ -304,9 +303,6 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           }
         }}
       />
-      <div className="px-3 pb-2">
-        <TypingIndicator scopeKey={typingScopeKey} selfIdentity={selfIdentity} />
-      </div>
     </section>
   )
 }
