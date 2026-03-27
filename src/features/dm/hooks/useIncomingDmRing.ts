@@ -130,6 +130,7 @@ export function useIncomingDmRing({
   )
 
   const ringingRef = useRef<RingingState | null>(null)
+  const dismissedRoomKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     const shouldSilenceForActiveConversation =
@@ -147,6 +148,14 @@ export function useIncomingDmRing({
         }
       }
       ringingRef.current = null
+      // Reset dismissal once there is no incoming call state.
+      if (incoming === null) {
+        dismissedRoomKeyRef.current = null
+      }
+      return
+    }
+
+    if (dismissedRoomKeyRef.current === incoming.roomKey) {
       return
     }
 
@@ -185,6 +194,10 @@ export function useIncomingDmRing({
           if (state?.timeoutId !== null && state?.timeoutId !== undefined) {
             window.clearTimeout(state.timeoutId)
           }
+          if (state?.toastId !== null && state?.toastId !== undefined) {
+            toast.dismiss(state.toastId)
+          }
+          dismissedRoomKeyRef.current = incoming.roomKey
           ringingRef.current = null
         },
       },

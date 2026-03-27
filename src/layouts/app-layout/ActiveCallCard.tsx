@@ -13,14 +13,10 @@ import {
 } from 'lucide-react'
 import {
   dmVoiceRoomKey,
-  getCameraErrorMessage,
-  getMicrophoneUnavailableReason,
   leaveLiveKitDmVoice,
   leaveLiveKitVoice,
   listLivekitDevices,
-  requestMicrophonePermission,
   setLocalCameraEnabled,
-  supportsMicrophoneCapture,
   supportsScreenCapture,
   switchRoomDevice,
   useLiveKitRoom,
@@ -37,6 +33,7 @@ import { useUsersStore } from '../../stores/usersStore'
 import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
 import { useVoiceStore } from '../../stores/voiceStore'
 import { normalizeIdentity } from './helpers'
+import { useVoiceControlActions } from '../../features/voice/hooks/useVoiceControlActions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -371,29 +368,49 @@ export function ActiveCallCard({
     )
   }
 
+  const setSelectedDeviceId = (
+    kind: 'audioinput' | 'audiooutput' | 'videoinput',
+    value: string | null,
+  ) => {
+    if (kind === 'audioinput') setAudioInputId(value)
+    if (kind === 'audiooutput') setAudioOutputId(value)
+    if (kind === 'videoinput') setVideoInputId(value)
+  }
+
   const applyDeviceSelection = async (
     kind: 'audioinput' | 'audiooutput' | 'videoinput',
     deviceId: string | null,
   ) => {
     if (!deviceId) return
+    const previousDeviceId = kind === 'audioinput'
+      ? audioInputId
+      : kind === 'audiooutput'
+        ? audioOutputId
+        : videoInputId
+
+    // Keep UI responsive and reflect the chosen device immediately.
+    setSelectedDeviceId(kind, deviceId)
 
     if (kind === 'audiooutput' && !audioOutputSwitchSupported) {
-      setAudioOutputId(deviceId)
       return
     }
 
     if (!activeRoom) {
-      if (kind === 'audioinput') setAudioInputId(deviceId)
-      if (kind === 'audiooutput') setAudioOutputId(deviceId)
-      if (kind === 'videoinput') setVideoInputId(deviceId)
       return
     }
 
     try {
-      const appliedDeviceId = await switchRoomDevice(activeRoom, kind, deviceId)
-      if (kind === 'audioinput') setAudioInputId(appliedDeviceId)
-      if (kind === 'audiooutput') setAudioOutputId(appliedDeviceId)
-      if (kind === 'videoinput') setVideoInputId(appliedDeviceId)
+      await switchRoomDevice(activeRoom, kind, deviceId)
+
+      // Re-bind active local tracks so server calls apply source changes instantly.
+      if (kind === 'audioinput' && !muted) {
+        await activeRoom.localParticipant.setMicrophoneEnabled(false)
+        await activeRoom.localParticipant.setMicrophoneEnabled(true)
+      }
+      if (kind === 'videoinput' && sharingCamera) {
+        await setLocalCameraEnabled(activeRoom, true, deviceId)
+      }
+
       setCurrentError(null)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not switch media device.'
@@ -402,98 +419,47 @@ export function ActiveCallCard({
         setCurrentError(null)
         return
       }
+      setSelectedDeviceId(kind, previousDeviceId)
       setCurrentError(message)
     }
   }
 
-  const leaveCall = async () => {
-    setCurrentError(null)
-    try {
-      if (mode === 'server' && joinedVoiceChannelId !== null) {
-        await leaveLiveKitVoice(joinedVoiceChannelId, voiceRoom)
-        setVoiceRoom(null)
-        setJoinedVoiceChannelId(null)
-        return
-      }
-      if (mode === 'dm' && joinedDmPartnerIdentity) {
-        await leaveLiveKitDmVoice(joinedDmPartnerIdentity, dmRoom)
-        setDmRoom(null)
-        setJoinedDmPartnerIdentity(null)
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not leave voice call.'
-      setCurrentError(message)
-    } finally {
-      setVoiceJoining(false)
-      setDmJoining(false)
-    }
-  }
-
-  const toggleMute = async () => {
-    if (!activeRoom) return
-    setCurrentError(null)
-    try {
-      const nextMuted = !muted
-      if (!nextMuted) {
-        if (!supportsMicrophoneCapture()) {
-          throw new Error(getMicrophoneUnavailableReason())
+  const { onToggleMute, onToggleDeafen, onToggleCamera, onToggleScreenShare, onLeave } = useVoiceControlActions({
+    room: activeRoom,
+    remoteParticipants,
+    selfState: selfParticipant
+      ? {
+          muted: selfParticipant.muted,
+          deafened: selfParticipant.deafened,
+          sharingCamera: selfParticipant.sharingCamera,
+          sharingScreen: selfParticipant.sharingScreen,
         }
-        await requestMicrophonePermission()
-        if (audioInputId) {
-          await switchRoomDevice(activeRoom, 'audioinput', audioInputId)
+      : null,
+    audioInputId,
+    videoInputId,
+    hasScreenCapture,
+    setError: setCurrentError,
+    patchVoiceState,
+    onLeaveRoom: async () => {
+      try {
+        if (mode === 'server' && joinedVoiceChannelId !== null) {
+          await leaveLiveKitVoice(joinedVoiceChannelId, voiceRoom)
+          setVoiceRoom(null)
+          setJoinedVoiceChannelId(null)
+          return
         }
+        if (mode === 'dm' && joinedDmPartnerIdentity) {
+          await leaveLiveKitDmVoice(joinedDmPartnerIdentity, dmRoom)
+          setDmRoom(null)
+          setJoinedDmPartnerIdentity(null)
+        }
+      } finally {
+        setVoiceJoining(false)
+        setDmJoining(false)
       }
-      await activeRoom.localParticipant.setMicrophoneEnabled(!nextMuted)
-      await patchVoiceState({ muted: nextMuted })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not toggle microphone.'
-      setCurrentError(message)
-    }
-  }
-
-  const toggleDeafen = async () => {
-    if (!activeRoom) return
-    setCurrentError(null)
-    try {
-      const nextDeafened = !deafened
-      for (const participant of remoteParticipants) {
-        participant.setVolume(nextDeafened ? 0 : 1)
-      }
-      await patchVoiceState({ deafened: nextDeafened })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not toggle deafen.'
-      setCurrentError(message)
-    }
-  }
-
-  const toggleCamera = async () => {
-    if (!activeRoom) return
-    setCurrentError(null)
-    try {
-      const nextCamera = !sharingCamera
-      await setLocalCameraEnabled(activeRoom, nextCamera, videoInputId ?? undefined)
-      await patchVoiceState({ sharingCamera: nextCamera })
-    } catch (error) {
-      setCurrentError(getCameraErrorMessage(error))
-    }
-  }
-
-  const toggleScreenShare = async () => {
-    if (!activeRoom) return
-    setCurrentError(null)
-    if (!hasScreenCapture) {
-      setCurrentError('Screen sharing APIs are unavailable in this runtime.')
-      return
-    }
-    try {
-      const nextScreen = !sharingScreen
-      await activeRoom.localParticipant.setScreenShareEnabled(nextScreen)
-      await patchVoiceState({ sharingScreen: nextScreen })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not toggle screen share.'
-      setCurrentError(message)
-    }
-  }
+    },
+    leaveErrorMessage: 'Could not leave voice call.',
+  })
 
   const hasSpeakingActivity = activeSpeakerIds.size > 0
   const statusLabel = getStatusLabel(connected, connecting)
@@ -530,7 +496,7 @@ export function ActiveCallCard({
 
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1.5">
             <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={muted ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={toggleMute}>
+              <Button size="icon-xs" variant={muted ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={onToggleMute}>
                 {muted ? <MicOffIcon className="size-4" /> : <MicIcon className="size-4" />}
               </Button>
               <DropdownMenu>
@@ -557,7 +523,7 @@ export function ActiveCallCard({
             </div>
 
             <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={deafened ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={toggleDeafen}>
+              <Button size="icon-xs" variant={deafened ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={onToggleDeafen}>
                 {deafened ? <VolumeXIcon className="size-4" /> : <Volume2Icon className="size-4" />}
               </Button>
               {canSwitchAudioOutput ? (
@@ -592,7 +558,7 @@ export function ActiveCallCard({
 
           <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1.5">
             <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={sharingCamera ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={toggleCamera}>
+              <Button size="icon-xs" variant={sharingCamera ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={onToggleCamera}>
                 <VideoIcon className="size-4" />
               </Button>
               <DropdownMenu>
@@ -622,13 +588,13 @@ export function ActiveCallCard({
               size="icon-xs"
               variant={sharingScreen ? 'secondary' : 'outline'}
               className="h-8 w-8"
-              onClick={toggleScreenShare}
+              onClick={onToggleScreenShare}
               disabled={!hasScreenCapture}
             >
               <MonitorUpIcon className="size-4" />
             </Button>
 
-            <Button size="icon-xs" variant="destructive" className="h-8 w-8" onClick={leaveCall}>
+            <Button size="icon-xs" variant="destructive" className="h-8 w-8" onClick={onLeave}>
               <LogOutIcon className="size-4" />
             </Button>
           </div>
@@ -669,7 +635,7 @@ export function ActiveCallCard({
               size="icon"
               variant={muted ? 'secondary' : 'ghost'}
               className="h-9 w-10 rounded-none border-0"
-              onClick={toggleMute}
+              onClick={onToggleMute}
             >
               {muted ? <MicOffIcon className="size-5" /> : <MicIcon className="size-5" />}
             </Button>
@@ -701,7 +667,7 @@ export function ActiveCallCard({
               size="icon"
               variant={deafened ? 'secondary' : 'ghost'}
               className="h-9 w-10 rounded-none border-0"
-              onClick={toggleDeafen}
+              onClick={onToggleDeafen}
             >
               {deafened ? <VolumeXIcon className="size-5" /> : <Volume2Icon className="size-5" />}
             </Button>
@@ -739,7 +705,7 @@ export function ActiveCallCard({
               size="icon"
               variant={sharingCamera ? 'secondary' : 'ghost'}
               className="h-9 w-10 rounded-none border-0"
-              onClick={toggleCamera}
+              onClick={onToggleCamera}
             >
               <VideoIcon className="size-5" />
             </Button>
@@ -769,12 +735,12 @@ export function ActiveCallCard({
           <Button
             size="icon-sm"
             variant={sharingScreen ? 'secondary' : 'outline'}
-            onClick={toggleScreenShare}
+            onClick={onToggleScreenShare}
             disabled={!hasScreenCapture}
           >
             <MonitorUpIcon className="size-5" />
           </Button>
-          <Button size="icon-sm" variant="destructive" onClick={leaveCall}>
+          <Button size="icon-sm" variant="destructive" onClick={onLeave}>
             <LogOutIcon className="size-5" />
           </Button>
         </div>

@@ -300,7 +300,9 @@ export async function switchRoomDevice(
 ): Promise<string> {
   await room.switchActiveDevice(kind, deviceId, false)
   if (kind !== 'audiooutput') {
-    return room.getActiveDevice(kind) ?? deviceId
+    // For input devices, some runtimes keep reporting "default" even after a
+    // successful switch. Return the explicit selection so UI state stays in sync.
+    return deviceId
   }
 
   const sinkId = room.getActiveDevice('audiooutput') ?? deviceId

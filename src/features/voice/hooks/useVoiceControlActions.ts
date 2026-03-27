@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import type { Room } from 'livekit-client'
+import type { RemoteParticipant, Room } from 'livekit-client'
 import {
   getCameraErrorMessage,
   getMicrophoneUnavailableReason,
@@ -20,6 +20,7 @@ type VoicePatch = Partial<VoiceStateSnapshot>
 
 type UseVoiceControlActionsArgs = {
   room: Room | null
+  remoteParticipants?: RemoteParticipant[]
   selfState: VoiceStateSnapshot | null
   audioInputId: string | null
   videoInputId: string | null
@@ -32,6 +33,7 @@ type UseVoiceControlActionsArgs = {
 
 export function useVoiceControlActions({
   room,
+  remoteParticipants = [],
   selfState,
   audioInputId,
   videoInputId,
@@ -42,11 +44,10 @@ export function useVoiceControlActions({
   leaveErrorMessage,
 }: UseVoiceControlActionsArgs) {
   const ensureMicrophoneCapture = useCallback(async () => {
-    if (supportsMicrophoneCapture()) return
-    await requestMicrophonePermission()
     if (!supportsMicrophoneCapture()) {
       throw new Error(getMicrophoneUnavailableReason())
     }
+    await requestMicrophonePermission()
   }, [])
 
   const onToggleMute = useCallback(async () => {
@@ -72,12 +73,16 @@ export function useVoiceControlActions({
     setError(null)
     if (!selfState) return
     try {
-      await patchVoiceState({ deafened: !selfState.deafened })
+      const nextDeafened = !selfState.deafened
+      for (const participant of remoteParticipants) {
+        participant.setVolume(nextDeafened ? 0 : 1)
+      }
+      await patchVoiceState({ deafened: nextDeafened })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not toggle deafen.'
       setError(message)
     }
-  }, [patchVoiceState, selfState, setError])
+  }, [patchVoiceState, remoteParticipants, selfState, setError])
 
   const onToggleCamera = useCallback(async () => {
     setError(null)
