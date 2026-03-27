@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from '@/components/ui/avatar'
 import { normalizeIdentity, userInitials } from './helpers'
+import { cn } from '../../lib/utils'
 import type { Channel, VoiceParticipant } from '../../types/domain'
 
 interface VoiceChannelButtonProps {
@@ -10,7 +11,7 @@ interface VoiceChannelButtonProps {
   active: boolean
   participants: VoiceParticipant[]
   selfJoined: boolean
-  normalizedSelfIdentity: string | null
+  activeSpeakerIdentityKeys: Set<string>
   memberProfileByIdentity: Map<string, { label: string; avatarUrl: string | null }>
   onSelect: () => void
 }
@@ -20,7 +21,7 @@ export function VoiceChannelButton({
   active,
   participants,
   selfJoined,
-  normalizedSelfIdentity,
+  activeSpeakerIdentityKeys,
   memberProfileByIdentity,
   onSelect,
 }: VoiceChannelButtonProps) {
@@ -50,14 +51,17 @@ export function VoiceChannelButton({
                 {previewParticipants.map((participant) => {
                   const profile = memberProfileByIdentity.get(normalizeIdentity(participant.userIdentity))
                   const fallbackLabel = profile?.label ?? participant.userIdentity.slice(0, 10)
-                  const isSelf =
-                    normalizedSelfIdentity !== null &&
-                    normalizeIdentity(participant.userIdentity) === normalizedSelfIdentity
+                  const normalizedParticipantIdentity = normalizeIdentity(participant.userIdentity)
+                  const isSpeaking = activeSpeakerIdentityKeys.has(normalizedParticipantIdentity)
                   return (
                     <Avatar
                       key={`${channel.id}-${participant.userIdentity}`}
                       size="sm"
-                      className={isSelf && selfJoined ? 'ring-2 ring-emerald-400' : undefined}
+                      className={cn(
+                        isSpeaking
+                          ? 'after:border-2 after:border-emerald-400 shadow-[0_0_0_2px_rgba(52,211,153,0.35)]'
+                          : undefined,
+                      )}
                     >
                       {profile?.avatarUrl ? <AvatarImage src={profile.avatarUrl} alt={fallbackLabel} /> : null}
                       <AvatarFallback>{userInitials(fallbackLabel)}</AvatarFallback>

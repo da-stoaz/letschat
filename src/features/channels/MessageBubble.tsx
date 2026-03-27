@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { PencilIcon, Trash2Icon } from 'lucide-react'
+import { PhoneCallIcon, PhoneMissedIcon, PhoneOffIcon, PencilIcon, Trash2Icon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -15,6 +15,9 @@ export interface RenderableMessage {
   sentAt: string
   editedAt: string | null
   deleted: boolean
+  systemKind?: 'call_started' | 'call_ended' | null
+  systemMeta?: string | null
+  systemMissed?: boolean
 }
 
 export interface MessageGroup {
@@ -51,6 +54,9 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const sender = useUserPresentation(group.senderIdentity)
   const firstMessage = group.messages[0]
+  const isSystemGroup =
+    group.messages.length > 0 &&
+    group.messages.every((message) => Boolean(message.systemKind))
 
   const canDeleteGroupMessage = useMemo(
     () =>
@@ -60,6 +66,31 @@ export function MessageBubble({
       }, {}),
     [canModerate, group.messages, selfIdentity],
   )
+
+  if (isSystemGroup) {
+    const systemIcon =
+      firstMessage.systemKind === 'call_started' ? (
+        <PhoneCallIcon className="size-3.5 text-emerald-400" />
+      ) : firstMessage.systemMissed ? (
+        <PhoneMissedIcon className="size-3.5 text-red-400" />
+      ) : (
+        <PhoneOffIcon className="size-3.5 text-muted-foreground" />
+      )
+
+    return (
+      <article className="px-2 py-2">
+        <div className="flex justify-center">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
+            {systemIcon}
+            {firstMessage.content}
+          </span>
+        </div>
+        {firstMessage.systemMeta ? (
+          <p className="mt-1 text-center text-[11px] text-muted-foreground/80">{firstMessage.systemMeta}</p>
+        ) : null}
+      </article>
+    )
+  }
 
   return (
     <article className="group/bubble rounded-lg px-2 py-1 transition-colors hover:bg-muted/35">

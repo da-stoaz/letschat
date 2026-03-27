@@ -9,7 +9,6 @@ import { useUiStore } from '../../stores/uiStore'
 import { useServerRole } from '../../hooks/useServerRole'
 import { warnOnce } from '../../lib/devWarnings'
 import { ChatMessageFeed } from '../chat/ChatMessageFeed'
-import { TypingIndicator } from '../chat/TypingIndicator'
 import { ChatComposer } from '../chat/ChatComposer'
 import type { Message, u64 } from '../../types/domain'
 import { Badge } from '@/components/ui/badge'
@@ -140,9 +139,6 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
           }
         }}
       />
-      <div className="px-3 pb-2">
-        <TypingIndicator scopeKey={typingScopeKey} selfIdentity={selfIdentity} />
-      </div>
     </section>
   )
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { SendHorizonalIcon } from 'lucide-react'
 import { reducers } from '../../lib/spacetimedb'
 import type { Identity } from '../../types/domain'
+import { TypingIndicator } from './TypingIndicator'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 
@@ -120,12 +121,21 @@ export function ChatComposer({
         className="min-h-12 resize-none overflow-y-auto"
       />
       {disabled ? <p className="text-xs text-muted-foreground">{disabledHint}</p> : (helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null)}
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">{value.length >= 3500 ? `${value.length}/${maxLength}` : 'Shift+Enter for newline'}</p>
-        <Button type="submit" disabled={disabled}>
-          <SendHorizonalIcon className="size-4" />
-          {sendLabel}
-        </Button>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {typingScopeKey ? (
+            <TypingIndicator scopeKey={typingScopeKey} selfIdentity={typingIdentity} className="max-w-full" />
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <p className="text-xs text-muted-foreground">
+            {value.length >= 3500 ? `${value.length}/${maxLength}` : 'Shift+Enter for newline'}
+          </p>
+          <Button type="submit" disabled={disabled}>
+            <SendHorizonalIcon className="size-4" />
+            {sendLabel}
+          </Button>
+        </div>
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </form>

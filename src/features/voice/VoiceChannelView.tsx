@@ -9,17 +9,23 @@ import {
   useLiveKitRoom,
 } from '../../lib/livekit'
 import { reducers } from '../../lib/spacetimedb'
+import { useChannelsStore } from '../../stores/channelsStore'
 import { useVoiceStore } from '../../stores/voiceStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useMediaDeviceStore } from '../../stores/mediaDeviceStore'
 import { useMembersStore } from '../../stores/membersStore'
 import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
 import type { VoiceParticipant, u64 } from '../../types/domain'
-import { ConnectionState } from 'livekit-client'
+import { ConnectionState, Track } from 'livekit-client'
+import { PhoneCallIcon, PhoneOffIcon } from 'lucide-react'
 import { warnOnce } from '../../lib/devWarnings'
+import { useOngoingCallDuration } from './hooks/useOngoingCallDuration'
 import { VoiceControlBar } from './components/VoiceControlBar'
 import { ParticipantMediaTile } from './components/ParticipantMediaTile'
 import { useLegacyCallControlsVisible } from './hooks/useLegacyCallControls'
+import { useVoiceControlActions } from './hooks/useVoiceControlActions'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 const EMPTY_PARTICIPANTS: VoiceParticipant[] = []
@@ -35,6 +41,7 @@ function sameIdentity(left: string, right: string | null | undefined): boolean {
 
 export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const participantsByChannel = useVoiceStore((s) => s.participantsByChannel)
+  const channelsByServer = useChannelsStore((s) => s.channelsByServer)
   const membersByServer = useMembersStore((s) => s.membersByServer)
   const participants = channelId === null ? EMPTY_PARTICIPANTS : (participantsByChannel[channelId] ?? EMPTY_PARTICIPANTS)
 
@@ -104,6 +111,8 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     () => participants.find((participant) => sameIdentity(participant.userIdentity, selfIdentity)) ?? null,
     [participants, selfIdentity],
   )
+  const audioInputId = useMediaDeviceStore((s) => s.audioInputId)
+  const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
   const connectedToRoom = roomForChannel !== null && connectionState === ConnectionState.Connected
   const connectingToRoom = joining || (roomForChannel !== null && connectionState === ConnectionState.Connecting)
   const joined = connectedToRoom
@@ -117,6 +126,43 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const sharingScreen = selfParticipant?.sharingScreen ?? false
   const hasMicCapture = supportsMicrophoneCapture()
   const hasScreenCapture = supportsScreenCapture()
+
+  const patchVoiceState = async (
+    patch: Partial<Pick<VoiceParticipant, 'muted' | 'deafened' | 'sharingScreen' | 'sharingCamera'>>,
+  ) => {
+    if (!selfParticipant || channelId === null) return
+    const next = {
+      muted: patch.muted ?? selfParticipant.muted,
+      deafened: patch.deafened ?? selfParticipant.deafened,
+      sharingScreen: patch.sharingScreen ?? selfParticipant.sharingScreen,
+      sharingCamera: patch.sharingCamera ?? selfParticipant.sharingCamera,
+    }
+    await reducers.updateVoiceState(channelId, next.muted, next.deafened, next.sharingScreen, next.sharingCamera)
+  }
+
+  const { onToggleMute, onToggleDeafen, onToggleCamera, onToggleScreenShare, onLeave } = useVoiceControlActions({
+    room: roomForChannel,
+    selfState: selfParticipant
+      ? {
+          muted: selfParticipant.muted,
+          deafened: selfParticipant.deafened,
+          sharingCamera: selfParticipant.sharingCamera,
+          sharingScreen: selfParticipant.sharingScreen,
+        }
+      : null,
+    audioInputId,
+    videoInputId,
+    hasScreenCapture,
+    setError,
+    patchVoiceState,
+    onLeaveRoom: async () => {
+      if (channelId === null) return
+      await leaveLiveKitVoice(channelId, roomForChannel)
+      setRoom(null)
+      setJoinedChannelId(null)
+    },
+    leaveErrorMessage: 'Could not leave voice channel.',
+  })
 
   useEffect(() => {
     // Only clean stale presence if we have no local room/session at all.
@@ -142,6 +188,37 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
 
   const statusBadge = connectingToRoom ? 'Joining...' : joined ? 'Joined' : selfParticipant ? 'Syncing...' : 'Not joined'
   const statusVariant = connectingToRoom ? 'outline' : joined ? 'default' : selfParticipant ? 'outline' : 'secondary'
+  const channelName = useMemo(() => {
+    if (channelId === null) return null
+    for (const channels of Object.values(channelsByServer)) {
+      const match = channels.find((channel) => channel.id === channelId)
+      if (match) return match.name
+    }
+    return null
+  }, [channelId, channelsByServer])
+  const ongoingCallDuration = useOngoingCallDuration(selfParticipant?.joinedAt ?? null, joined)
+
+  const onJoin = async () => {
+    if (channelId === null) return
+    setError(null)
+    setJoining(true)
+    try {
+      if (room && joinedChannelId !== null && joinedChannelId !== channelId) {
+        await leaveLiveKitVoice(joinedChannelId, room)
+        setRoom(null)
+        setJoinedChannelId(null)
+      }
+      const nextRoom = await joinLiveKitVoice(channelId)
+      setRoom(nextRoom)
+      setJoinedChannelId(channelId)
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not join voice channel.'
+      setError(message)
+    } finally {
+      setJoining(false)
+    }
+  }
+
   if (channelId === null) {
     return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a voice channel</div>
   }
@@ -150,10 +227,30 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 rounded-xl border border-border/70 bg-card/60 p-3">
       <header className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Voice Channel {channelId}</h2>
-          <p className="text-sm text-muted-foreground">{participants.length}/15 participants</p>
+          <h2 className="text-lg font-semibold">{channelName ? `Voice • ${channelName}` : `Voice Channel ${channelId}`}</h2>
+          <p className="text-sm text-muted-foreground">
+            {participants.length}/15 participants
+            {ongoingCallDuration ? ` • Ongoing call since ${ongoingCallDuration}` : ''}
+          </p>
         </div>
-        <Badge variant={statusVariant}>{statusBadge}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={statusVariant}>{statusBadge}</Badge>
+          <Button
+            size="sm"
+            variant={joined ? 'destructive' : 'secondary'}
+            disabled={connectingToRoom}
+            onClick={() => {
+              if (joined) {
+                void onLeave()
+                return
+              }
+              void onJoin()
+            }}
+          >
+            {joined ? <PhoneOffIcon className="size-4" /> : <PhoneCallIcon className="size-4" />}
+            {connectingToRoom ? 'Joining...' : joined ? 'Leave' : 'Join Voice'}
+          </Button>
+        </div>
       </header>
       {joined && !hasMicCapture ? (
         <p className="text-xs text-muted-foreground">{getMicrophoneUnavailableReason()}</p>
@@ -170,6 +267,15 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
             const local = sameIdentity(p.userIdentity, selfIdentity)
             const participantIdentityKey = normalizeIdentityKey(p.userIdentity)
             const mediaParticipant = local ? localParticipant : livekitParticipantByIdentity.get(participantIdentityKey) ?? null
+            const participantIsActiveSpeaker = normalizedActiveSpeakers.has(participantIdentityKey)
+            const hasMicrophoneTrack = Boolean(
+              mediaParticipant?.getTrackPublication(Track.Source.Microphone)?.audioTrack,
+            )
+            const hasScreenAudioTrack = Boolean(
+              mediaParticipant?.getTrackPublication(Track.Source.ScreenShareAudio)?.audioTrack,
+            )
+            const micSpeaking = participantIsActiveSpeaker && hasMicrophoneTrack
+            const screenAudioActive = participantIsActiveSpeaker && hasScreenAudioTrack
             return (
               <Fragment key={p.userIdentity}>
                 <ParticipantMediaTile
@@ -179,7 +285,8 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
                   participant={mediaParticipant}
                   tileType="profile"
                   isLocal={local}
-                  isSpeaking={normalizedActiveSpeakers.has(participantIdentityKey)}
+                  isSpeaking={micSpeaking}
+                  isScreenAudioActive={false}
                   muted={p.muted}
                   deafened={p.deafened}
                   sharingScreen={p.sharingScreen}
@@ -193,7 +300,8 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
                     participant={mediaParticipant}
                     tileType="screen"
                     isLocal={local}
-                    isSpeaking={normalizedActiveSpeakers.has(participantIdentityKey)}
+                    isSpeaking={false}
+                    isScreenAudioActive={screenAudioActive}
                     muted={p.muted}
                     deafened={p.deafened}
                     sharingScreen={p.sharingScreen}
@@ -217,39 +325,21 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
             sharingScreen={sharingScreen}
             hasScreenCapture={hasScreenCapture}
             error={error}
-            onJoin={async () => {
-              setError(null)
-              setJoining(true)
-              try {
-                if (room && joinedChannelId !== null && joinedChannelId !== channelId) {
-                  await leaveLiveKitVoice(joinedChannelId, room)
-                  setRoom(null)
-                  setJoinedChannelId(null)
-                }
-                const nextRoom = await joinLiveKitVoice(channelId)
-                setRoom(nextRoom)
-                setJoinedChannelId(channelId)
-              } catch (e) {
-                const message = e instanceof Error ? e.message : 'Could not join voice channel.'
-                setError(message)
-              } finally {
-                setJoining(false)
-              }
-            }}
+            onJoin={onJoin}
             onToggleMute={async () => {
-              return
+              await onToggleMute()
             }}
             onToggleDeafen={async () => {
-              return
+              await onToggleDeafen()
             }}
             onToggleCamera={async () => {
-              return
+              await onToggleCamera()
             }}
             onToggleScreenShare={async () => {
-              return
+              await onToggleScreenShare()
             }}
             onLeave={async () => {
-              return
+              await onLeave()
             }}
           />
         </div>

@@ -32,6 +32,7 @@ function formatDayLabel(iso: string): string {
 }
 
 function isSameGroup(previous: RenderableMessage, next: RenderableMessage): boolean {
+  if (previous.systemKind || next.systemKind) return false
   if (!sameIdentity(previous.senderIdentity, next.senderIdentity)) return false
   if (dayKey(previous.sentAt) !== dayKey(next.sentAt)) return false
   const previousMs = Date.parse(previous.sentAt)
