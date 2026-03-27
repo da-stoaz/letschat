@@ -7,6 +7,8 @@
     "dev": "vite",
     "tauri": "tauri",
     "build": "tsc -b && vite build",
+    "build:local": "VITE_AUTH_SERVICE_URL=http://127.0.0.1:8787 VITE_SPACETIMEDB_URI=ws://localhost:4300 VITE_SPACETIMEDB_DATABASE=letschat VITE_LIVEKIT_URL=ws://127.0.0.1:7880 npm run build",
+    "tauri:build:local": "VITE_AUTH_SERVICE_URL=http://127.0.0.1:8787 VITE_SPACETIMEDB_URI=ws://localhost:4300 VITE_SPACETIMEDB_DATABASE=letschat VITE_LIVEKIT_URL=ws://127.0.0.1:7880 tauri build",
     "preview": "vite preview",
     "lint": "eslint .",
 

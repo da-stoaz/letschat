@@ -4,6 +4,30 @@ const AUTH_SERVICE_URL = (import.meta.env.VITE_AUTH_SERVICE_URL as string | unde
 const AUTH_SESSION_KEY = 'letschat.auth_session_token'
 const AUTH_REQUEST_TIMEOUT_MS = 12000
 
+function isPlaceholderEndpoint(url: string): boolean {
+  return /yourdomain\.com/i.test(url)
+}
+
+function getNetworkErrorDetails(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message.trim()
+  }
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error.trim()
+  }
+  if (error && typeof error === 'object') {
+    const maybeEvent = error as { type?: unknown; message?: unknown }
+    if (typeof maybeEvent.message === 'string' && maybeEvent.message.trim().length > 0) {
+      return maybeEvent.message.trim()
+    }
+    if (typeof maybeEvent.type === 'string' && maybeEvent.type.trim().length > 0) {
+      return `${maybeEvent.type.trim()} event`
+    }
+  }
+  const fallback = String(error)
+  return fallback === '[object Event]' ? 'network event' : fallback
+}
+
 export interface AuthFrameworkToken {
   token_id: string
   user_id: string
@@ -62,6 +86,12 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
   path: string,
   payload: TPayload,
 ): Promise<TResponse> {
+  if (isPlaceholderEndpoint(AUTH_SERVICE_URL)) {
+    throw new Error(
+      `Auth service URL is still a placeholder (${AUTH_SERVICE_URL}). Rebuild with a real VITE_AUTH_SERVICE_URL before signing in.`,
+    )
+  }
+
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS)
   let response: Response
@@ -80,7 +110,10 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
         `Auth service request timed out after ${AUTH_REQUEST_TIMEOUT_MS / 1000}s. Ensure auth-service is running at ${AUTH_SERVICE_URL}.`,
       )
     }
-    throw error
+    const details = getNetworkErrorDetails(error)
+    throw new Error(
+      `Could not reach auth-service at ${AUTH_SERVICE_URL} (${details}). Check auth-service status and VITE_AUTH_SERVICE_URL.`,
+    )
   } finally {
     clearTimeout(timeout)
   }

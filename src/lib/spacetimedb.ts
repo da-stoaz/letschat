@@ -60,6 +60,30 @@ let subscriptionHandle: { unsubscribe: () => void } | null = null
 let connectPromise: Promise<void> | null = null
 let liveEventsEnabled = false
 
+function isPlaceholderEndpoint(url: string): boolean {
+  return /yourdomain\.com/i.test(url)
+}
+
+function getConnectionErrorDetails(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message.trim()
+  }
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error.trim()
+  }
+  if (error && typeof error === 'object') {
+    const maybeEvent = error as { type?: unknown; message?: unknown }
+    if (typeof maybeEvent.message === 'string' && maybeEvent.message.trim().length > 0) {
+      return maybeEvent.message.trim()
+    }
+    if (typeof maybeEvent.type === 'string' && maybeEvent.type.trim().length > 0) {
+      return `${maybeEvent.type.trim()} event`
+    }
+  }
+  const fallback = String(error)
+  return fallback === '[object Event]' ? 'network event' : fallback
+}
+
 function joinedServerIds(conn: DbConnection): Set<number> {
   const me = useConnectionStore.getState().identity
   if (!me) return new Set<number>()
@@ -696,6 +720,12 @@ async function connect(): Promise<void> {
   if (connection?.isActive) return
   if (connectPromise) return connectPromise
 
+  if (isPlaceholderEndpoint(SPACETIMEDB_URI)) {
+    throw new Error(
+      `SpacetimeDB URI is still a placeholder (${SPACETIMEDB_URI}). Rebuild with a real VITE_SPACETIMEDB_URI.`,
+    )
+  }
+
   connectPromise = (async () => {
     useConnectionStore.getState().setStatus('connecting')
 
@@ -715,7 +745,7 @@ async function connect(): Promise<void> {
     const connectTimeout = setTimeout(() => {
       rejectIfPending(
         new Error(
-          'Timed out connecting to SpacetimeDB. Ensure `spacetime start` is running and the module is published.',
+          `Timed out connecting to SpacetimeDB at ${SPACETIMEDB_URI}. Ensure \`spacetime start\` is running and the module is published.`,
         ),
       )
     }, connectTimeoutMs)
@@ -738,8 +768,10 @@ async function connect(): Promise<void> {
       })
       .onConnectError((_ctx, error) => {
         void _ctx
-        rejectIfPending(error instanceof Error ? error : new Error(String(error)))
-        void onError(error)
+        const details = getConnectionErrorDetails(error)
+        const wrapped = new Error(`SpacetimeDB connection failed at ${SPACETIMEDB_URI} (${details}).`)
+        rejectIfPending(wrapped)
+        void onError(wrapped)
       })
 
     connection = builder.build()
