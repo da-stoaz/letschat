@@ -7,11 +7,17 @@ import { ChatComposer } from '../chat/ChatComposer'
 import { ChatMessageFeed } from '../chat/ChatMessageFeed'
 import { TypingIndicator } from '../chat/TypingIndicator'
 import { DmVoicePanel } from './DmVoicePanel'
+import {
+  formatDmSystemMetadata,
+  formatDmSystemPrimaryText,
+  parseDmSystemMessage,
+} from './systemMessages'
 import { PresenceDot } from '@/components/user/PresenceDot'
 import type { DirectMessage, Identity } from '../../types/domain'
 import { warnOnce } from '../../lib/devWarnings'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
+import { useUsersStore } from '../../stores/usersStore'
 
 const EMPTY_DM_MESSAGES: DirectMessage[] = []
 
@@ -45,20 +51,42 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   const [scrollToBottomToken, setScrollToBottomToken] = useState(0)
   const selfIdentity = useConnectionStore((s) => s.identity)
   const conversations = useDmStore((s) => s.conversations)
+  const usersByIdentity = useUsersStore((s) => s.byIdentity)
   const messages = conversations[partnerIdentity] ?? EMPTY_DM_MESSAGES
   const partner = useUserPresentation(partnerIdentity)
   const typingScopeKey = dmTypingScope(selfIdentity, partnerIdentity)
+  const selfLabel = useMemo(() => {
+    if (!selfIdentity) return 'You'
+    const key = normalizeIdentity(selfIdentity)
+    const knownUser = Object.values(usersByIdentity).find((user) => normalizeIdentity(user.identity) === key)
+    return knownUser?.displayName || knownUser?.username || 'You'
+  }, [selfIdentity, usersByIdentity])
+
   const renderMessages = useMemo(
     () =>
-      messages.map((message) => ({
-        id: message.id,
-        senderIdentity: message.senderIdentity,
-        content: message.content,
-        sentAt: message.sentAt,
-        editedAt: null,
-        deleted: isDeletedForViewer(message, selfIdentity),
-      })),
-    [messages, selfIdentity],
+      messages.map((message) => {
+        const systemMessage = parseDmSystemMessage(message.content)
+        const senderIsSelf = normalizeIdentity(message.senderIdentity) === normalizeIdentity(selfIdentity)
+        const senderLabel = senderIsSelf ? selfLabel : partner.displayName
+        const systemLabel = formatDmSystemPrimaryText({
+          content: message.content,
+          sentAt: message.sentAt,
+          senderLabel,
+          partnerLabel: partner.displayName,
+          viewerIsSender: senderIsSelf,
+        })
+        return {
+          id: message.id,
+          senderIdentity: message.senderIdentity,
+          content: systemLabel ?? message.content,
+          sentAt: message.sentAt,
+          editedAt: null,
+          deleted: isDeletedForViewer(message, selfIdentity),
+          systemKind: systemMessage?.kind ?? null,
+          systemMeta: systemMessage ? formatDmSystemMetadata(message.sentAt) : null,
+        }
+      }),
+    [messages, partner.displayName, selfIdentity, selfLabel],
   )
 
   useEffect(() => {

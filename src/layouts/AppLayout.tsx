@@ -18,6 +18,7 @@ import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { normalizeIdentity } from './app-layout/helpers'
 import { useIncomingDmRing } from '../features/dm/hooks/useIncomingDmRing'
+import { formatDmPreview } from '../features/dm/systemMessages'
 import { ComposeDmDialog } from './app-layout/ComposeDmDialog'
 import { LayoutModals } from './app-layout/LayoutModals'
 import { MemberPanel } from './app-layout/MemberPanel'
@@ -155,7 +156,7 @@ export function AppLayout() {
         label: knownUser?.displayName || knownUser?.username || other.slice(0, 14),
         username: knownUser?.username || other.slice(0, 12),
         avatarUrl: knownUser?.avatarUrl ?? null,
-        lastMessagePreview: lastMessage?.content || 'No messages yet',
+        lastMessagePreview: lastMessage ? formatDmPreview(lastMessage.content) : 'No messages yet',
         lastMessageAt: lastMessage?.sentAt ?? null,
         lastActivityAt: lastMessage?.sentAt ?? friend.updatedAt,
         status: 'offline',
@@ -224,11 +225,6 @@ export function AppLayout() {
     const effectiveLastActiveAt = lastActiveAt > 0 ? lastActiveAt : nowMs
     return nowMs - effectiveLastActiveAt > AWAY_AFTER_MS ? 'away' : 'online'
   }
-
-  const hasActiveDmCall = useMemo(
-    () => dmVoiceJoining || Object.values(dmCallActiveByIdentity).some(Boolean),
-    [dmCallActiveByIdentity, dmVoiceJoining],
-  )
 
   useIncomingDmRing({
     participantsByRoom: dmVoiceParticipantsByRoom,
@@ -364,7 +360,7 @@ export function AppLayout() {
               onOpenSettings={() => setShowSettings(true)}
               hasUnreadInServer={hasUnreadInServer}
               hasVoiceActivityInServer={hasVoiceActivityInServer}
-              hasActiveDmCall={hasActiveDmCall}
+              dmCallActiveByIdentity={dmCallActiveByIdentity}
             />
 
             <div className="relative min-h-0">

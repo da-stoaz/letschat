@@ -29,7 +29,7 @@ export interface AppRailProps {
   onOpenSettings: () => void
   hasUnreadInServer: (serverId: number) => boolean
   hasVoiceActivityInServer: (serverId: number) => boolean
-  hasActiveDmCall: boolean
+  dmCallActiveByIdentity: Record<string, boolean>
 }
 
 export function AppRail({
@@ -46,7 +46,7 @@ export function AppRail({
   onOpenSettings,
   hasUnreadInServer,
   hasVoiceActivityInServer,
-  hasActiveDmCall,
+  dmCallActiveByIdentity,
 }: AppRailProps) {
   return (
     <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur">
@@ -120,11 +120,6 @@ export function AppRail({
             }
           >
             <MessageCircleIcon className="size-4" />
-            {hasActiveDmCall ? (
-              <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
-                <Volume2Icon className="size-2.5" />
-              </span>
-            ) : null}
           </TooltipTrigger>
           <TooltipContent side="right">DM Home</TooltipContent>
         </Tooltip>
@@ -155,7 +150,7 @@ export function AppRail({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className={`h-8 w-8 rounded-md ${activeDmIdentity === contact.identity ? 'ring-1 ring-primary/70' : ''}`}
+                      className={`relative h-8 w-8 rounded-md ${activeDmIdentity === contact.identity ? 'ring-1 ring-primary/70' : ''}`}
                       onClick={() => onOpenDmContact(contact.identity)}
                     />
                   }
@@ -164,6 +159,11 @@ export function AppRail({
                     {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
                     <AvatarFallback className="rounded-lg bg-primary/10 text-[10px]">{userInitials(contact.label)}</AvatarFallback>
                   </Avatar>
+                  {dmCallActiveByIdentity[contact.identity] ? (
+                    <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
+                      <Volume2Icon className="size-2.5" />
+                    </span>
+                  ) : null}
                 </TooltipTrigger>
                 <TooltipContent side="right">{contact.label}</TooltipContent>
               </Tooltip>

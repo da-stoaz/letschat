@@ -10,6 +10,7 @@ import {
   useLiveKitRoom,
 } from '../../lib/livekit'
 import { reducers } from '../../lib/spacetimedb'
+import { encodeDmSystemMessage, getCallDurationSeconds } from './systemMessages'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useDmVoiceSessionStore } from '../../stores/dmVoiceSessionStore'
 import { useDmVoiceStore } from '../../stores/dmVoiceStore'
@@ -44,7 +45,9 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
   const error = useDmVoiceSessionStore((s) => s.error)
   const setRoom = useDmVoiceSessionStore((s) => s.setRoom)
   const setJoinedPartnerIdentity = useDmVoiceSessionStore((s) => s.setJoinedPartnerIdentity)
+  const answered = useDmVoiceSessionStore((s) => s.answered)
   const setJoining = useDmVoiceSessionStore((s) => s.setJoining)
+  const setAnswered = useDmVoiceSessionStore((s) => s.setAnswered)
   const setError = useDmVoiceSessionStore((s) => s.setError)
   const audioInputId = useMediaDeviceStore((s) => s.audioInputId)
   const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
@@ -129,6 +132,12 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
     }
   }, [deafened, joined, remoteParticipants])
 
+  useEffect(() => {
+    if (!joined) return
+    if (remoteParticipants.length === 0) return
+    setAnswered(true)
+  }, [joined, remoteParticipants.length, setAnswered])
+
   const patchVoiceState = async (
     patch: Partial<Pick<DmVoiceParticipant, 'muted' | 'deafened' | 'sharingScreen' | 'sharingCamera'>>,
   ) => {
@@ -164,9 +173,22 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
     setError,
     patchVoiceState,
     onLeaveRoom: async () => {
+      const callDurationSeconds = getCallDurationSeconds(selfParticipant?.joinedAt)
       await leaveLiveKitDmVoice(partnerIdentity, roomForPartner)
       setRoom(null)
       setJoinedPartnerIdentity(null)
+      setAnswered(false)
+      if (callDurationSeconds !== null) {
+        await reducers
+          .sendDirectMessage(
+            partnerIdentity,
+            encodeDmSystemMessage('call_ended', {
+              durationSeconds: callDurationSeconds,
+              missed: !answered,
+            }),
+          )
+          .catch(() => undefined)
+      }
     },
     leaveErrorMessage: 'Could not leave DM voice call.',
   })
@@ -248,6 +270,7 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
                 setError(null)
                 setJoining(true)
                 try {
+                  const shouldEmitCallStarted = participants.length === 0
                   const existingRoom = useDmVoiceSessionStore.getState().room
                   const existingPartner = useDmVoiceSessionStore.getState().joinedPartnerIdentity
                   if (existingRoom && existingPartner && !sameIdentity(existingPartner, partnerIdentity)) {
@@ -259,6 +282,12 @@ export function DmVoicePanel({ partnerIdentity }: { partnerIdentity: Identity })
                   const nextRoom = await joinLiveKitDmVoice(partnerIdentity)
                   setRoom(nextRoom)
                   setJoinedPartnerIdentity(partnerIdentity)
+                  setAnswered(false)
+                  if (shouldEmitCallStarted) {
+                    await reducers
+                      .sendDirectMessage(partnerIdentity, encodeDmSystemMessage('call_started'))
+                      .catch(() => undefined)
+                  }
                 } catch (e) {
                   const message = e instanceof Error ? e.message : 'Could not join DM voice call.'
                   setError(message)

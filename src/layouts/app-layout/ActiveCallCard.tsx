@@ -33,6 +33,7 @@ import { useUsersStore } from '../../stores/usersStore'
 import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
 import { useVoiceStore } from '../../stores/voiceStore'
 import { normalizeIdentity } from './helpers'
+import { encodeDmSystemMessage, getCallDurationSeconds } from '../../features/dm/systemMessages'
 import { useVoiceControlActions } from '../../features/voice/hooks/useVoiceControlActions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -51,6 +52,7 @@ import {
 
 const EMPTY_VOICE_PARTICIPANTS: Array<{
   userIdentity: string
+  joinedAt?: string
   muted: boolean
   deafened: boolean
   sharingCamera: boolean
@@ -142,9 +144,11 @@ export function ActiveCallCard({
 
   const dmRoom = useDmVoiceSessionStore((s) => s.room)
   const joinedDmPartnerIdentity = useDmVoiceSessionStore((s) => s.joinedPartnerIdentity)
+  const dmAnswered = useDmVoiceSessionStore((s) => s.answered)
   const dmJoining = useDmVoiceSessionStore((s) => s.joining)
   const setDmRoom = useDmVoiceSessionStore((s) => s.setRoom)
   const setJoinedDmPartnerIdentity = useDmVoiceSessionStore((s) => s.setJoinedPartnerIdentity)
+  const setDmAnswered = useDmVoiceSessionStore((s) => s.setAnswered)
   const setDmJoining = useDmVoiceSessionStore((s) => s.setJoining)
   const setDmError = useDmVoiceSessionStore((s) => s.setError)
 
@@ -205,6 +209,13 @@ export function ActiveCallCard({
     const normalizedSelf = normalizeIdentity(selfIdentity)
     return participants.find((participant) => normalizeIdentity(participant.userIdentity) === normalizedSelf) ?? null
   }, [participants, selfIdentity])
+
+  useEffect(() => {
+    if (mode !== 'dm') return
+    if (connectionState !== ConnectionState.Connected) return
+    if (remoteParticipants.length === 0) return
+    setDmAnswered(true)
+  }, [connectionState, mode, remoteParticipants.length, setDmAnswered])
 
   const callTitle = useMemo(() => {
     if (mode === 'server' && joinedVoiceChannelId !== null) {
@@ -449,9 +460,22 @@ export function ActiveCallCard({
           return
         }
         if (mode === 'dm' && joinedDmPartnerIdentity) {
+          const callDurationSeconds = getCallDurationSeconds(selfParticipant?.joinedAt)
           await leaveLiveKitDmVoice(joinedDmPartnerIdentity, dmRoom)
           setDmRoom(null)
           setJoinedDmPartnerIdentity(null)
+          setDmAnswered(false)
+          if (callDurationSeconds !== null) {
+            await reducers
+              .sendDirectMessage(
+                joinedDmPartnerIdentity,
+                encodeDmSystemMessage('call_ended', {
+                  durationSeconds: callDurationSeconds,
+                  missed: !dmAnswered,
+                }),
+              )
+              .catch(() => undefined)
+          }
         }
       } finally {
         setVoiceJoining(false)
