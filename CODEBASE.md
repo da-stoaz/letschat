@@ -162,3 +162,30 @@ LIVEKIT_API_SECRET  default: devsecret0123456789devsecret0123456789
 ## Overall Assessment
 
 The app is a solid ~65% complete MVP. The real-time architecture (SpacetimeDB + LiveKit + Zustand) is well-structured and DMs are essentially feature-complete. The most critical gap is server voice controls — the UI renders but every button is a no-op.
+
+---
+
+## Push Architecture Status (2026-03-27)
+
+### Implemented
+- Unified push infrastructure in `auth-service/src/push.rs`:
+  - device registry (`push_devices`)
+  - outbox queue (`push_outbox`)
+  - background worker with retry/backoff
+  - provider abstraction at dispatcher boundary
+- APNs Sandbox provider (`apns_sandbox`) implemented.
+- HTTP routes:
+  - `POST /push/devices/register`
+  - `POST /push/devices/unregister`
+  - `POST /push/events/enqueue`
+  - `POST /push/events/test`
+
+### Intentionally not implemented yet
+- `windows_wns` provider adapter:
+  - pending Windows packaging identity (MSIX) + WNS credentials/channel URI lifecycle.
+- `web_push` provider adapter:
+  - pending Service Worker + VAPID subscription flow.
+
+### Cross-platform best-practice enforced
+- Notification domain logic remains provider-neutral.
+- Platform-specific behavior is isolated to provider adapters only.

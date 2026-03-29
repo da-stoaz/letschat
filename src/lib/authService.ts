@@ -82,6 +82,8 @@ type LivekitTokenPayload = {
   sessionToken: AuthFrameworkToken
 }
 
+export type PushPlatform = 'apns_sandbox' | 'windows_wns' | 'web_push'
+
 async function postJson<TResponse, TPayload extends Record<string, unknown>>(
   path: string,
   payload: TPayload,
@@ -165,6 +167,87 @@ export async function authServiceVerify(): Promise<boolean> {
     sessionToken: token,
   })
   return Boolean(result.valid)
+}
+
+export async function authServiceRegisterPushDevice(payload: {
+  platform: PushPlatform
+  deviceToken: string
+  appBundleId?: string
+}): Promise<void> {
+  const sessionToken = getStoredAuthSessionToken()
+  if (!sessionToken) throw new Error('No auth session token available for push registration.')
+
+  await postJson<Record<string, never>, {
+    sessionToken: AuthFrameworkToken
+    platform: PushPlatform
+    deviceToken: string
+    appBundleId?: string
+  }>('/push/devices/register', {
+    sessionToken,
+    platform: payload.platform,
+    deviceToken: payload.deviceToken,
+    appBundleId: payload.appBundleId,
+  })
+}
+
+export async function authServiceUnregisterPushDevice(payload: {
+  platform: PushPlatform
+  deviceToken: string
+}): Promise<void> {
+  const sessionToken = getStoredAuthSessionToken()
+  if (!sessionToken) throw new Error('No auth session token available for push unregistration.')
+
+  await postJson<Record<string, never>, {
+    sessionToken: AuthFrameworkToken
+    platform: PushPlatform
+    deviceToken: string
+  }>('/push/devices/unregister', {
+    sessionToken,
+    platform: payload.platform,
+    deviceToken: payload.deviceToken,
+  })
+}
+
+export async function authServiceEnqueuePushEvent(payload: {
+  recipientIdentity: Identity
+  eventType: string
+  title: string
+  body: string
+  payload?: Record<string, unknown>
+}): Promise<{ queued: boolean; queueId?: string | null }> {
+  const sessionToken = getStoredAuthSessionToken()
+  if (!sessionToken) throw new Error('No auth session token available for push enqueue.')
+
+  return await postJson<{ queued: boolean; queueId?: string | null }, {
+    sessionToken: AuthFrameworkToken
+    recipientIdentity: Identity
+    eventType: string
+    title: string
+    body: string
+    payload?: Record<string, unknown>
+  }>('/push/events/enqueue', {
+    sessionToken,
+    recipientIdentity: payload.recipientIdentity,
+    eventType: payload.eventType,
+    title: payload.title,
+    body: payload.body,
+    payload: payload.payload,
+  })
+}
+
+export async function authServiceEnqueuePushTest(title: string, body: string): Promise<{ queued: boolean; queueId?: string | null }> {
+  const sessionToken = getStoredAuthSessionToken()
+  if (!sessionToken) throw new Error('No auth session token available for push test.')
+
+  return await postJson<{ queued: boolean; queueId?: string | null }, {
+    sessionToken: AuthFrameworkToken
+    title: string
+    body: string
+  }>('/push/events/test', {
+    sessionToken,
+    title,
+    body,
+  })
 }
 
 export function getStoredAuthSessionToken(): AuthFrameworkToken | null {

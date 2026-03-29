@@ -1,4 +1,5 @@
 mod uploads;
+mod push;
 
 use std::{net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
 
@@ -31,14 +32,15 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::Level;
 
 #[derive(Clone)]
-struct AppState {
+pub(crate) struct AppState {
     db: SqlitePool,
     auth: Arc<Mutex<AuthFramework>>,
     uploads: uploads::UploadConfig,
+    push: Arc<push::PushService>,
 }
 
 #[derive(Debug, Error)]
-enum ApiError {
+pub(crate) enum ApiError {
     #[error("{0}")]
     BadRequest(String),
     #[error("{0}")]
@@ -269,6 +271,10 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("failed to clean up expired pending uploads")?;
 
+    push::prepare_schema(&db)
+        .await
+        .context("failed to prepare push notification schema")?;
+
     let config = AuthConfig::new()
         .secret(jwt_secret.clone())
         .token_lifetime(Duration::from_secs(60 * 60))
@@ -301,7 +307,10 @@ async fn main() -> anyhow::Result<()> {
         db,
         auth: Arc::new(Mutex::new(auth)),
         uploads: upload_config,
+        push: Arc::new(push::PushService::from_env().context("failed to configure push service")?),
     };
+
+    push::spawn_worker(state.clone());
 
     let app = Router::new()
         .route("/health", get(health))
@@ -315,6 +324,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/uploads/request", post(uploads::upload_request))
         .route("/uploads/confirm", post(uploads::upload_confirm))
         .route("/uploads/download-url", post(uploads::download_url))
+        .nest("/push", push::router())
         .with_state(state)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
