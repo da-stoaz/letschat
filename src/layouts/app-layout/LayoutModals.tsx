@@ -80,7 +80,7 @@ export function LayoutModals({
       </Dialog>
 
       <Dialog open={showInvite && !!activeServerId} onOpenChange={setShowInvite}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col overflow-hidden">
           {activeServerId ? <InviteModal serverId={activeServerId} onClose={() => setShowInvite(false)} /> : null}
         </DialogContent>
       </Dialog>

@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   CopyIcon,
   CheckIcon,
@@ -105,14 +104,14 @@ function InviteCard({ invite, serverId, nonMemberFriends, onDelete }: InviteCard
   }
 
   return (
-    <div className={`rounded-lg border p-3 space-y-2 ${expired ? 'opacity-60' : 'border-border/70'}`}>
-      <div className="flex items-center justify-between gap-2">
+    <div className={`rounded-lg border p-3 space-y-2 overflow-hidden ${expired ? 'opacity-60' : 'border-border/70'}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <LinkIcon className="size-3.5 shrink-0 text-muted-foreground" />
           <code className="text-xs text-primary font-mono truncate">{invite.token}</code>
           {expired && <Badge variant="destructive" className="text-[10px] py-0">Expired</Badge>}
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="ml-auto flex items-center gap-1 shrink-0">
           <Button
             type="button"
             variant="ghost"
@@ -159,9 +158,9 @@ function InviteCard({ invite, serverId, nonMemberFriends, onDelete }: InviteCard
       )}
 
       {!expired && nonMemberFriends.length > 0 && (
-        <div className="flex items-center gap-2 pt-1 border-t border-border/50">
+        <div className="flex flex-col gap-2 border-t border-border/50 pt-1 sm:flex-row sm:items-center">
           <select
-            className="flex-1 text-xs bg-background border border-border/60 rounded px-2 py-1"
+            className="w-full flex-1 rounded border border-border/60 bg-background px-2 py-1 text-xs"
             value={sendTarget}
             onChange={(e) => setSendTarget(e.target.value)}
           >
@@ -174,7 +173,7 @@ function InviteCard({ invite, serverId, nonMemberFriends, onDelete }: InviteCard
             type="button"
             size="sm"
             variant="secondary"
-            className="shrink-0"
+            className="w-full shrink-0 sm:w-auto"
             disabled={!sendTarget || sending}
             onClick={handleSendDm}
           >
@@ -244,7 +243,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
   const activeInviteCount = invites.filter((i) => new Date(i.expiresAt).getTime() > Date.now()).length
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <LinkIcon className="size-4 text-primary" />
@@ -253,7 +252,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
         <DialogDescription>Create invite links or send in-app invites to friends.</DialogDescription>
       </DialogHeader>
 
-      <Tabs defaultValue="create">
+      <Tabs defaultValue="create" className="min-h-0 flex-1 overflow-hidden">
         <TabsList className="w-full">
           <TabsTrigger value="create" className="flex-1">Create Invite</TabsTrigger>
           <TabsTrigger value="links" className="flex-1">
@@ -309,6 +308,10 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
               className="h-8 text-xs"
               value={allowedUsernamesRaw}
               onChange={(e) => setAllowedUsernamesRaw(e.target.value)}
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="none"
+              autoComplete="off"
             />
           </div>
 
@@ -325,12 +328,12 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
           </div>
         </TabsContent>
 
-        <TabsContent value="links" className="mt-4">
+        <TabsContent value="links" className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
           {invites.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-6">No invite links yet. Create one first.</p>
           ) : (
-            <ScrollArea className="max-h-80">
-              <div className="space-y-2 pr-1">
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+              <div className="space-y-2">
                 {invites.map((inv) => (
                   <InviteCard
                     key={inv.token}
@@ -341,7 +344,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                   />
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           )}
           {error ? <p className="text-sm text-destructive mt-2">{error}</p> : null}
           <div className="flex justify-end gap-2 mt-3">

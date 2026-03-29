@@ -309,6 +309,10 @@ export function TransferOwnershipModal({
           placeholder={username}
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="none"
+          autoComplete="off"
         />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
