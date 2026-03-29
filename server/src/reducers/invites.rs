@@ -300,7 +300,17 @@ pub fn respond_dm_server_invite(
         ctx.db.dm_server_invite().id().update(dm_invite);
 
         // Try to use the underlying invite token
-        use_invite(ctx, invite_token)?;
+        if let Err(err) = use_invite(ctx, invite_token) {
+            // Roll back to pending so stale-cleanup can remove/repair this row correctly.
+            if let Some(mut rollback_row) = ctx.db.dm_server_invite().id().find(invite_id) {
+                if matches!(rollback_row.status, DmInviteStatus::Accepted) {
+                    rollback_row.status = DmInviteStatus::Pending;
+                    ctx.db.dm_server_invite().id().update(rollback_row);
+                }
+            }
+            cleanup_stale_invites_internal(ctx);
+            return Err(err);
+        }
     } else {
         // Declining should invalidate the one-off invite link immediately.
         ctx.db.invite().token().delete(dm_invite.invite_token.clone());

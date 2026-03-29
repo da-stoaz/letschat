@@ -95,7 +95,7 @@ function joinedServerIds(conn: DbConnection): Set<number> {
 
   const joined = new Set<number>()
   for (const member of conn.db.server_member.iter()) {
-    if (toIdentityString(member.userIdentity) === me) {
+    if (sameIdentity(toIdentityString(member.userIdentity), me)) {
       joined.add(toU64Number(member.serverId))
     }
   }
@@ -398,8 +398,7 @@ function syncServers(conn: DbConnection): void {
   useServersStore.getState().setServers(servers)
 }
 
-function syncMembers(conn: DbConnection): void {
-  const users = syncUsers(conn)
+function syncMembers(conn: DbConnection, users: User[] = syncUsers(conn)): void {
   const allowedServerIds = joinedServerIds(conn)
   const usersByIdentity = new Map(users.map((user) => [user.identity, user]))
   const members = Array.from(conn.db.server_member.iter())
@@ -414,6 +413,13 @@ function syncMembers(conn: DbConnection): void {
   }
 
   const store = useMembersStore.getState()
+  const existingServerIds = Object.keys(store.membersByServer).map(Number)
+  for (const serverId of existingServerIds) {
+    if (!grouped.has(serverId)) {
+      store.setServerMembers(serverId, [])
+    }
+  }
+
   for (const [serverId, rows] of grouped.entries()) {
     store.setServerMembers(serverId, rows)
   }
@@ -449,7 +455,7 @@ function syncMessages(conn: DbConnection): void {
   const messages = Array.from(conn.db.message.iter()).map(mapMessage)
   const grouped = new Map<number, Message[]>()
   for (const message of messages) {
-  const byChannel = grouped.get(message.channelId) ?? []
+    const byChannel = grouped.get(message.channelId) ?? []
     byChannel.push(message)
     grouped.set(message.channelId, byChannel)
   }
@@ -595,11 +601,16 @@ function syncDmServerInvites(conn: DbConnection): void {
   useDmServerInvitesStore.getState().setInvites(rows)
 }
 
-function syncAll(conn: DbConnection): void {
-  syncUsers(conn)
+function syncServerScopedState(conn: DbConnection, users: User[] = syncUsers(conn)): void {
   syncServers(conn)
+  syncMembers(conn, users)
   syncChannels(conn)
-  syncMembers(conn)
+  syncInvites(conn)
+}
+
+function syncAll(conn: DbConnection): void {
+  const users = syncUsers(conn)
+  syncServerScopedState(conn, users)
   syncMessages(conn)
   syncVoiceParticipants(conn)
   syncFriends(conn)
@@ -608,7 +619,6 @@ function syncAll(conn: DbConnection): void {
   syncPresenceStates(conn)
   syncTypingStates(conn)
   syncReadStates(conn)
-  syncInvites(conn)
   syncDmServerInvites(conn)
   recomputeUnreadStateFromReadCursors()
 }
@@ -654,12 +664,12 @@ function resetClientState(): void {
 function watchLiveTables(conn: DbConnection): void {
   conn.db.user.onInsert(() => syncUsers(conn))
   conn.db.user.onUpdate(() => syncUsers(conn))
-  conn.db.server.onInsert(() => syncServers(conn))
-  conn.db.server.onUpdate(() => syncServers(conn))
-  conn.db.server.onDelete(() => syncServers(conn))
-  conn.db.server_member.onInsert(() => syncMembers(conn))
-  conn.db.server_member.onUpdate(() => syncMembers(conn))
-  conn.db.server_member.onDelete(() => syncMembers(conn))
+  conn.db.server.onInsert(() => syncServerScopedState(conn))
+  conn.db.server.onUpdate(() => syncServerScopedState(conn))
+  conn.db.server.onDelete(() => syncServerScopedState(conn))
+  conn.db.server_member.onInsert(() => syncServerScopedState(conn))
+  conn.db.server_member.onUpdate(() => syncServerScopedState(conn))
+  conn.db.server_member.onDelete(() => syncServerScopedState(conn))
   conn.db.channel.onInsert(() => syncChannels(conn))
   conn.db.channel.onUpdate(() => syncChannels(conn))
   conn.db.channel.onDelete(() => syncChannels(conn))
@@ -748,7 +758,7 @@ function watchLiveTables(conn: DbConnection): void {
       const inv = mapDmServerInvite(row)
       if (inv.recipientIdentity && inv.recipientIdentity.toLowerCase() === me.toLowerCase()) {
         const senderName = findDisplayNameByIdentity(inv.senderIdentity)
-        void notify('dm', {
+        void notify('system', {
           title: 'Server Invite',
           body: `${senderName} invited you to join a server`,
           dedupeKey: `dm_invite:${inv.id}`,
