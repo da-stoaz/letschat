@@ -25,10 +25,10 @@ export function DmChannelBar({
 
   return (
     <ChannelBarShell header={<CardTitle className="text-base">Direct Messages</CardTitle>}>
-      <ScrollArea className="h-full pr-2">
+      <ScrollArea className="h-full min-w-0 pr-2">
         <div className="space-y-3">
           <Button
-            className="h-auto w-full justify-start gap-2 rounded-lg py-2"
+            className="h-auto w-full min-w-0 justify-start gap-2 overflow-hidden rounded-lg py-2"
             variant={activeDmIdentity === null ? 'secondary' : 'ghost'}
             onClick={onOpenFriends}
           >
@@ -49,9 +49,9 @@ export function DmChannelBar({
                 const shouldShowTime = contact.lastMessageAt && (!inCall || showCallTime)
 
                 return (
-                  <div key={contact.identity} className="flex items-center gap-1">
+                  <div key={contact.identity} className="flex min-w-0 items-center gap-1">
                     <Button
-                      className="h-auto min-w-0 flex-1 justify-start gap-2 rounded-lg py-2 pr-2"
+                      className="h-auto min-w-0 flex-1 justify-start gap-2 overflow-hidden rounded-lg py-2 pr-2"
                       variant={activeDmIdentity === contact.identity ? 'secondary' : 'ghost'}
                       onClick={() => onOpenDmContact(contact.identity)}
                     >

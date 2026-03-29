@@ -11,9 +11,7 @@
     "tauri:build:local": "VITE_AUTH_SERVICE_URL=http://127.0.0.1:8787 VITE_SPACETIMEDB_URI=ws://localhost:4300 VITE_SPACETIMEDB_DATABASE=letschat VITE_LIVEKIT_URL=ws://127.0.0.1:7880 tauri build",
     "preview": "vite preview",
     "lint": "eslint .",
-
     "auth:dev": "APP_ENV=dev cargo run --manifest-path auth-service/Cargo.toml",
-
     "services:up": "docker compose -f docker-compose.dev.yml up -d",
     "services:down": "docker compose -f docker-compose.dev.yml down",
     "services:logs": "docker compose -f docker-compose.dev.yml logs -f",
@@ -29,6 +27,7 @@
     "clsx": "^2.1.1",
     "livekit-client": "^2.15.9",
     "lucide-react": "^1.7.0",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",

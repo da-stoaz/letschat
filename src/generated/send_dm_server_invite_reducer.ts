@@ -11,8 +11,6 @@ import {
 } from "spacetimedb";
 
 export default {
+  recipientIdentity: __t.identity(),
   serverId: __t.u64(),
-  expiresInSeconds: __t.option(__t.u64()),
-  maxUses: __t.option(__t.u32()),
-  allowedUsernames: __t.array(__t.string()),
 };

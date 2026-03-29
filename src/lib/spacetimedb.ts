@@ -22,6 +22,8 @@ import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useReadStore } from '../stores/readStore'
 import { useTypingStore } from '../stores/typingStore'
+import { useInvitesStore } from '../stores/invitesStore'
+import { useDmServerInvitesStore } from '../stores/dmServerInvitesStore'
 import { clearBadgeCount, notify, syncUnreadBadgeCount } from './notifications'
 import type { ServerMemberWithUser } from '../stores/membersStore'
 import type {
@@ -29,10 +31,13 @@ import type {
   Channel,
   ChannelKind,
   DirectMessage,
+  DmInviteStatus,
+  DmServerInvite,
   DmVoiceParticipant,
   Friend,
   FriendStatus,
   Identity,
+  Invite,
   Message,
   PresenceState,
   ReadState,
@@ -180,6 +185,32 @@ function mapServerMember(row: DbRow): ServerMember {
     userIdentity: toIdentityString(row.userIdentity),
     role: enumTag(row.role) as Role,
     joinedAt: toIsoString(row.joinedAt),
+    timeoutUntil: row.timeoutUntil ? toIsoString(row.timeoutUntil) : null,
+  }
+}
+
+function mapInvite(row: DbRow): Invite {
+  const rawAllowed = row.allowedUsernames
+  return {
+    token: rowString(row, 'token'),
+    serverId: toU64Number(row.serverId),
+    createdBy: toIdentityString(row.createdBy),
+    expiresAt: toIsoString(row.expiresAt),
+    maxUses: row.maxUses != null ? Number(row.maxUses) : null,
+    useCount: Number(row.useCount ?? 0),
+    allowedUsernames: Array.isArray(rawAllowed) ? (rawAllowed as string[]) : [],
+  }
+}
+
+function mapDmServerInvite(row: DbRow): DmServerInvite {
+  return {
+    id: toU64Number(row.id),
+    serverId: toU64Number(row.serverId),
+    inviteToken: rowString(row, 'inviteToken'),
+    senderIdentity: toIdentityString(row.senderIdentity),
+    recipientIdentity: toIdentityString(row.recipientIdentity),
+    status: enumTag(row.status) as DmInviteStatus,
+    createdAt: toIsoString(row.createdAt),
   }
 }
 
@@ -518,6 +549,35 @@ function syncReadStates(conn: DbConnection): void {
   useReadStore.getState().setReadRows(rows)
 }
 
+function syncInvites(conn: DbConnection): void {
+  const allowedServerIds = joinedServerIds(conn)
+  const invites = Array.from((conn.db as unknown as Record<string, { iter(): Iterable<DbRow> }>).dm_server_invite
+    ? [] // dm_server_invite is handled separately
+    : [])
+  const inviteRows: Invite[] = Array.from(
+    (conn.db as unknown as Record<string, { iter(): Iterable<DbRow> }>).invite?.iter() ?? []
+  ).map(mapInvite).filter((inv) => allowedServerIds.has(inv.serverId))
+
+  const store = useInvitesStore.getState()
+  const grouped = new Map<number, Invite[]>()
+  for (const inv of inviteRows) {
+    const byServer = grouped.get(inv.serverId) ?? []
+    byServer.push(inv)
+    grouped.set(inv.serverId, byServer)
+  }
+  for (const [serverId, rows] of grouped.entries()) {
+    store.setServerInvites(serverId, rows)
+  }
+  void invites
+}
+
+function syncDmServerInvites(conn: DbConnection): void {
+  const rows: DmServerInvite[] = Array.from(
+    (conn.db as unknown as Record<string, { iter(): Iterable<DbRow> }>).dm_server_invite?.iter() ?? []
+  ).map(mapDmServerInvite)
+  useDmServerInvitesStore.getState().setInvites(rows)
+}
+
 function syncAll(conn: DbConnection): void {
   syncUsers(conn)
   syncServers(conn)
@@ -531,6 +591,8 @@ function syncAll(conn: DbConnection): void {
   syncPresenceStates(conn)
   syncTypingStates(conn)
   syncReadStates(conn)
+  syncInvites(conn)
+  syncDmServerInvites(conn)
   recomputeUnreadStateFromReadCursors()
 }
 
@@ -556,6 +618,8 @@ function resetClientState(): void {
   useDmVoiceStore.setState({ participantsByRoom: {} })
   useReadStore.getState().reset()
   useTypingStore.getState().reset()
+  useInvitesStore.setState({ invitesByServer: {} })
+  useDmServerInvitesStore.setState({ invites: [] })
   useUiStore.setState({
     activeChannelId: null,
     activeDmPartner: null,
@@ -647,6 +711,37 @@ function watchLiveTables(conn: DbConnection): void {
     syncReadStates(conn)
     recomputeUnreadStateFromReadCursors()
   })
+
+  // Invite table live sync
+  const inviteTable = (conn.db as unknown as Record<string, { onInsert: (cb: () => void) => void; onUpdate: (cb: () => void) => void; onDelete: (cb: () => void) => void } | undefined>).invite
+  if (inviteTable) {
+    inviteTable.onInsert(() => syncInvites(conn))
+    inviteTable.onUpdate(() => syncInvites(conn))
+    inviteTable.onDelete(() => syncInvites(conn))
+  }
+
+  // DmServerInvite table live sync
+  const dmInviteTable = (conn.db as unknown as Record<string, { onInsert: (cb: (ctx: unknown, row: DbRow) => void) => void; onUpdate: (cb: (ctx: unknown, oldRow: DbRow, row: DbRow) => void) => void; onDelete: (cb: () => void) => void } | undefined>).dm_server_invite
+  if (dmInviteTable) {
+    dmInviteTable.onInsert((_ctx, row) => {
+      syncDmServerInvites(conn)
+      if (!liveEventsEnabled) return
+      const me = useConnectionStore.getState().identity
+      if (!me) return
+      const inv = mapDmServerInvite(row)
+      if (inv.recipientIdentity && inv.recipientIdentity.toLowerCase() === me.toLowerCase()) {
+        const senderName = findDisplayNameByIdentity(inv.senderIdentity)
+        void notify('dm', {
+          title: 'Server Invite',
+          body: `${senderName} invited you to join a server`,
+          dedupeKey: `dm_invite:${inv.id}`,
+        })
+      }
+    })
+    dmInviteTable.onUpdate(() => syncDmServerInvites(conn))
+    dmInviteTable.onDelete(() => syncDmServerInvites(conn))
+  }
+
   conn.db.message.onInsert((_ctx, row) => {
     syncMessages(conn)
     recomputeUnreadStateFromReadCursors()
@@ -807,6 +902,8 @@ async function connect(): Promise<void> {
         tables.my_presence_states,
         tables.my_typing_states,
         tables.my_read_states,
+        tables.invite,
+        tables.dm_server_invite,
       ])
 
     try {
@@ -878,13 +975,37 @@ export const reducers = {
   renameServer: (serverId: number, newName: string) =>
     spacetimedbClient.call('renameServer', { serverId: toU64(serverId, 'serverId'), newName }),
   deleteServer: (serverId: number) => spacetimedbClient.call('deleteServer', { serverId: toU64(serverId, 'serverId') }),
-  createInvite: (serverId: number, expiresInSeconds?: number, maxUses?: number) =>
+  createInvite: (serverId: number, expiresInSeconds?: number, maxUses?: number, allowedUsernames?: string[]) =>
     spacetimedbClient.call('createInvite', {
       serverId: toU64(serverId, 'serverId'),
       expiresInSeconds: toOptionalU64(expiresInSeconds, 'expiresInSeconds'),
       maxUses: maxUses ?? null,
+      allowedUsernames: allowedUsernames ?? [],
     }),
+  deleteInvite: (token: string) => spacetimedbClient.call('deleteInvite', { token }),
   useInvite: (token: string) => spacetimedbClient.call('useInvite', { token }),
+  cleanupExpiredInvites: () => spacetimedbClient.call('cleanupExpiredInvites'),
+  sendDmServerInvite: (recipientIdentity: Identity, serverId: number) =>
+    spacetimedbClient.call('sendDmServerInvite', {
+      recipientIdentity: toReducerIdentity(recipientIdentity),
+      serverId: toU64(serverId, 'serverId'),
+    }),
+  respondDmServerInvite: (inviteId: number, accept: boolean) =>
+    spacetimedbClient.call('respondDmServerInvite', {
+      inviteId: toU64(inviteId, 'inviteId'),
+      accept,
+    }),
+  timeoutMember: (serverId: number, targetIdentity: Identity, durationSeconds: number) =>
+    spacetimedbClient.call('timeoutMember', {
+      serverId: toU64(serverId, 'serverId'),
+      targetIdentity: toReducerIdentity(targetIdentity),
+      durationSeconds: toU64(durationSeconds, 'durationSeconds'),
+    }),
+  removeTimeout: (serverId: number, targetIdentity: Identity) =>
+    spacetimedbClient.call('removeTimeout', {
+      serverId: toU64(serverId, 'serverId'),
+      targetIdentity: toReducerIdentity(targetIdentity),
+    }),
   kickMember: (serverId: number, targetIdentity: Identity) =>
     spacetimedbClient.call('kickMember', {
       serverId: toU64(serverId, 'serverId'),

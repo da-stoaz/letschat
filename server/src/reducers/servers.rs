@@ -23,6 +23,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
         user_identity: ctx.sender(),
         role: Role::Owner,
         joined_at: ctx.timestamp,
+        timeout_until: None,
     });
 
     ctx.db.channel().insert(Channel {

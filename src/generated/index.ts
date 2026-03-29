@@ -71,6 +71,12 @@ import UpdateDmVoiceStateReducer from "./update_dm_voice_state_reducer";
 import UpdateProfileReducer from "./update_profile_reducer";
 import UpdateVoiceStateReducer from "./update_voice_state_reducer";
 import UseInviteReducer from "./use_invite_reducer";
+import TimeoutMemberReducer from "./timeout_member_reducer";
+import RemoveTimeoutReducer from "./remove_timeout_reducer";
+import CleanupExpiredInvitesReducer from "./cleanup_expired_invites_reducer";
+import DeleteInviteReducer from "./delete_invite_reducer";
+import SendDmServerInviteReducer from "./send_dm_server_invite_reducer";
+import RespondDmServerInviteReducer from "./respond_dm_server_invite_reducer";
 
 // Import all procedure arg schemas
 
@@ -78,6 +84,7 @@ import UseInviteReducer from "./use_invite_reducer";
 import BanRow from "./ban_table";
 import ChannelRow from "./channel_table";
 import DirectMessageRow from "./direct_message_table";
+import DmServerInviteRow from "./dm_server_invite_table";
 import InviteRow from "./invite_table";
 import MessageRow from "./message_table";
 import MyBlocksRow from "./my_blocks_table";
@@ -150,6 +157,23 @@ const tablesSchema = __schema({
       { name: 'direct_message_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, DirectMessageRow),
+  dm_server_invite: __table({
+    name: 'dm_server_invite',
+    indexes: [
+      { accessor: 'id', name: 'dm_server_invite_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'by_recipient', name: 'dm_server_invite_recipient_identity_idx_btree', algorithm: 'btree', columns: [
+        'recipientIdentity',
+      ] },
+      { accessor: 'by_sender', name: 'dm_server_invite_sender_identity_idx_btree', algorithm: 'btree', columns: [
+        'senderIdentity',
+      ] },
+    ],
+    constraints: [
+      { name: 'dm_server_invite_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, DmServerInviteRow),
   invite: __table({
     name: 'invite',
     indexes: [
@@ -336,6 +360,12 @@ const reducersSchema = __reducers(
   __reducerSchema("update_profile", UpdateProfileReducer),
   __reducerSchema("update_voice_state", UpdateVoiceStateReducer),
   __reducerSchema("use_invite", UseInviteReducer),
+  __reducerSchema("timeout_member", TimeoutMemberReducer),
+  __reducerSchema("remove_timeout", RemoveTimeoutReducer),
+  __reducerSchema("cleanup_expired_invites", CleanupExpiredInvitesReducer),
+  __reducerSchema("delete_invite", DeleteInviteReducer),
+  __reducerSchema("send_dm_server_invite", SendDmServerInviteReducer),
+  __reducerSchema("respond_dm_server_invite", RespondDmServerInviteReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

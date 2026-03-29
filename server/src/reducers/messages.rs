@@ -1,6 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, find_channel, require_member_role, require_mod_or_owner};
+use crate::helpers::{assert_or_err, find_channel, member_key, require_member_role, require_mod_or_owner};
 use crate::schema::*;
 
 #[spacetimedb::reducer]
@@ -10,6 +10,13 @@ pub fn send_message(ctx: &ReducerContext, channel_id: u64, content: String) -> R
 
     if channel_row.moderator_only {
         assert_or_err(role != Role::Member, "channel is moderator-only")?;
+    }
+
+    // Check if member is timed out
+    if let Some(member_row) = ctx.db.server_member().member_key().find(member_key(channel_row.server_id, ctx.sender())) {
+        if let Some(timeout_until) = member_row.timeout_until {
+            assert_or_err(ctx.timestamp > timeout_until, "you are timed out")?;
+        }
     }
 
     assert_or_err((1..=4000).contains(&content.len()), "message must be 1-4000 chars")?;

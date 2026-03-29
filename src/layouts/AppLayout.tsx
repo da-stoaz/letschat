@@ -23,7 +23,7 @@ import { formatDmPreview } from '../features/dm/systemMessages'
 import { useLiveKitRoom } from '../lib/livekit'
 import { syncUnreadBadgeCount } from '../lib/notifications'
 import { ComposeDmDialog } from './app-layout/ComposeDmDialog'
-import { LayoutModals } from './app-layout/LayoutModals'
+import { LayoutModals, type MemberActionModal } from './app-layout/LayoutModals'
 import { MemberPanel } from './app-layout/MemberPanel'
 import { ActiveCallCard } from './app-layout/ActiveCallCard'
 import { AppRail } from './app-layout/AppRail'
@@ -53,6 +53,7 @@ export function AppLayout() {
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [showComposeDm, setShowComposeDm] = useState(false)
+  const [memberAction, setMemberAction] = useState<MemberActionModal | null>(null)
   const [channelBarWidth, setChannelBarWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return CHANNEL_BAR_MIN_WIDTH
     const stored = window.localStorage.getItem(CHANNEL_BAR_WIDTH_STORAGE_KEY)
@@ -456,7 +457,21 @@ export function AppLayout() {
         </Card>
 
       {rightPanelOpen && activeServerId ? (
-        <MemberPanel members={activeServerMembers} selfIdentity={selfIdentity} />
+        <MemberPanel
+          members={activeServerMembers}
+          selfIdentity={selfIdentity}
+          selfRole={role}
+          serverId={activeServerId}
+          onKick={(member) => setMemberAction({ kind: 'kick', member })}
+          onBan={(member) => setMemberAction({ kind: 'ban', member })}
+          onTimeout={(member) => setMemberAction({ kind: 'timeout', member })}
+          onRemoveTimeout={async (member) => {
+            const { reducers } = await import('../lib/spacetimedb')
+            await reducers.removeTimeout(activeServerId, member.userIdentity)
+          }}
+          onSetRole={(member, newRole) => setMemberAction({ kind: 'setRole', member, newRole })}
+          onTransferOwnership={(member) => setMemberAction({ kind: 'transferOwnership', member })}
+        />
       ) : null}
     </div>
   )
@@ -497,8 +512,8 @@ export function AppLayout() {
           />
 
           {isSettingsPage ? null : (
-            <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3">
-              <div className="relative min-h-0">
+            <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto] gap-3">
+              <div className="relative min-h-0 min-w-0">
                 <ChannelBar
                   channelBarWidth={channelBarWidth}
                   activeServerId={activeServerId}
@@ -540,7 +555,7 @@ export function AppLayout() {
                   role="separator"
                   aria-orientation="vertical"
                   aria-label="Resize channel bar"
-                  className="group absolute right-0 top-3 z-20 h-[calc(100%-1.5rem)] w-[3px] cursor-col-resize max-md:hidden"
+                  className="group absolute right-0 top-3 z-20 h-[calc(100%-1.5rem)] w-0.75 cursor-col-resize max-md:hidden"
                   onPointerDown={onChannelBarResizeStart}
                   onDoubleClick={() => setChannelBarWidth(CHANNEL_BAR_MIN_WIDTH)}
                 >
@@ -566,12 +581,14 @@ export function AppLayout() {
         showEditServer={showEditServer}
         showCreateChannel={showCreateChannel}
         showInvite={showInvite}
+        memberAction={memberAction}
         activeServerId={activeServerId}
         activeServer={activeServer}
         setShowCreateServer={setShowCreateServer}
         setShowEditServer={setShowEditServer}
         setShowCreateChannel={setShowCreateChannel}
         setShowInvite={setShowInvite}
+        setMemberAction={setMemberAction}
       />
 
       <ComposeDmDialog

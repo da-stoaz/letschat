@@ -110,8 +110,30 @@ export const Invite = __t.object("Invite", {
   expiresAt: __t.timestamp(),
   maxUses: __t.option(__t.u32()),
   useCount: __t.u32(),
+  allowedUsernames: __t.array(__t.string()),
 });
 export type Invite = __Infer<typeof Invite>;
+
+// The tagged union or sum type for the algebraic type `DmInviteStatus`.
+export const DmInviteStatus = __t.enum("DmInviteStatus", {
+  Pending: __t.unit(),
+  Accepted: __t.unit(),
+  Declined: __t.unit(),
+});
+export type DmInviteStatus = __Infer<typeof DmInviteStatus>;
+
+export const DmServerInvite = __t.object("DmServerInvite", {
+  id: __t.u64(),
+  serverId: __t.u64(),
+  inviteToken: __t.string(),
+  senderIdentity: __t.identity(),
+  recipientIdentity: __t.identity(),
+  get status() {
+    return DmInviteStatus;
+  },
+  createdAt: __t.timestamp(),
+});
+export type DmServerInvite = __Infer<typeof DmServerInvite>;
 
 export const Message = __t.object("Message", {
   id: __t.u64(),
@@ -166,6 +188,7 @@ export const ServerMember = __t.object("ServerMember", {
     return Role;
   },
   joinedAt: __t.timestamp(),
+  timeoutUntil: __t.option(__t.timestamp()),
 });
 export type ServerMember = __Infer<typeof ServerMember>;
 

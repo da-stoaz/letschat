@@ -10,17 +10,17 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 import {
-  Role,
+  DmInviteStatus,
 } from "./types";
 
-
 export default __t.row({
-  memberKey: __t.string().primaryKey().name("member_key"),
+  id: __t.u64().primaryKey(),
   serverId: __t.u64().name("server_id"),
-  userIdentity: __t.identity().name("user_identity"),
-  get role() {
-    return Role;
+  inviteToken: __t.string().name("invite_token"),
+  senderIdentity: __t.identity().name("sender_identity"),
+  recipientIdentity: __t.identity().name("recipient_identity"),
+  get status() {
+    return DmInviteStatus;
   },
-  joinedAt: __t.timestamp().name("joined_at"),
-  timeoutUntil: __t.option(__t.timestamp()).name("timeout_until"),
+  createdAt: __t.timestamp().name("created_at"),
 });
