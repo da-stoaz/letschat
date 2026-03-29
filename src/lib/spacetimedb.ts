@@ -563,9 +563,7 @@ function syncReadStates(conn: DbConnection): void {
 
 function syncInvites(conn: DbConnection): void {
   const allowedServerIds = joinedServerIds(conn)
-  const inviteRows: Invite[] = Array.from(
-    (conn.db as unknown as Record<string, { iter(): Iterable<DbRow> }>).invite?.iter() ?? []
-  )
+  const inviteRows: Invite[] = Array.from(conn.db.invite.iter())
     .map(mapInvite)
     .filter((inv) => allowedServerIds.has(inv.serverId))
     .filter(isInviteActive)
@@ -595,9 +593,7 @@ function syncInvites(conn: DbConnection): void {
 }
 
 function syncDmServerInvites(conn: DbConnection): void {
-  const rows: DmServerInvite[] = Array.from(
-    (conn.db as unknown as Record<string, { iter(): Iterable<DbRow> }>).dm_server_invite?.iter() ?? []
-  ).map(mapDmServerInvite)
+  const rows: DmServerInvite[] = Array.from(conn.db.dm_server_invite.iter()).map(mapDmServerInvite)
   useDmServerInvitesStore.getState().setInvites(rows)
 }
 
@@ -740,34 +736,28 @@ function watchLiveTables(conn: DbConnection): void {
   })
 
   // Invite table live sync
-  const inviteTable = (conn.db as unknown as Record<string, { onInsert: (cb: () => void) => void; onUpdate: (cb: () => void) => void; onDelete: (cb: () => void) => void } | undefined>).invite
-  if (inviteTable) {
-    inviteTable.onInsert(() => syncInvites(conn))
-    inviteTable.onUpdate(() => syncInvites(conn))
-    inviteTable.onDelete(() => syncInvites(conn))
-  }
+  conn.db.invite.onInsert(() => syncInvites(conn))
+  conn.db.invite.onUpdate(() => syncInvites(conn))
+  conn.db.invite.onDelete(() => syncInvites(conn))
 
   // DmServerInvite table live sync
-  const dmInviteTable = (conn.db as unknown as Record<string, { onInsert: (cb: (ctx: unknown, row: DbRow) => void) => void; onUpdate: (cb: (ctx: unknown, oldRow: DbRow, row: DbRow) => void) => void; onDelete: (cb: () => void) => void } | undefined>).dm_server_invite
-  if (dmInviteTable) {
-    dmInviteTable.onInsert((_ctx, row) => {
-      syncDmServerInvites(conn)
-      if (!liveEventsEnabled) return
-      const me = useConnectionStore.getState().identity
-      if (!me) return
-      const inv = mapDmServerInvite(row)
-      if (inv.recipientIdentity && inv.recipientIdentity.toLowerCase() === me.toLowerCase()) {
-        const senderName = findDisplayNameByIdentity(inv.senderIdentity)
-        void notify('system', {
-          title: 'Server Invite',
-          body: `${senderName} invited you to join a server`,
-          dedupeKey: `dm_invite:${inv.id}`,
-        })
-      }
-    })
-    dmInviteTable.onUpdate(() => syncDmServerInvites(conn))
-    dmInviteTable.onDelete(() => syncDmServerInvites(conn))
-  }
+  conn.db.dm_server_invite.onInsert((_ctx, row) => {
+    syncDmServerInvites(conn)
+    if (!liveEventsEnabled) return
+    const me = useConnectionStore.getState().identity
+    if (!me) return
+    const inv = mapDmServerInvite(row)
+    if (inv.recipientIdentity && inv.recipientIdentity.toLowerCase() === me.toLowerCase()) {
+      const senderName = findDisplayNameByIdentity(inv.senderIdentity)
+      void notify('system', {
+        title: 'Server Invite',
+        body: `${senderName} invited you to join a server`,
+        dedupeKey: `dm_invite:${inv.id}`,
+      })
+    }
+  })
+  conn.db.dm_server_invite.onUpdate(() => syncDmServerInvites(conn))
+  conn.db.dm_server_invite.onDelete(() => syncDmServerInvites(conn))
 
   conn.db.message.onInsert((_ctx, row) => {
     syncMessages(conn)
