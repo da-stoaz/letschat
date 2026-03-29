@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { reducers } from '../lib/spacetimedb'
 import { useInvitesStore } from '../stores/invitesStore'
@@ -262,11 +262,15 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
     }
   }
 
-  const activeInviteCount = invites.filter((i) => new Date(i.expiresAt).getTime() > Date.now()).length
+  const activeInviteCount = invites.length
   const expirySelectValue = expirySeconds == null ? 'never' : String(expirySeconds)
   const selectedExpiryLabel =
     EXPIRY_OPTIONS.find((opt) => (opt.value == null ? 'never' : String(opt.value)) === expirySelectValue)?.label
     ?? '7 days'
+
+  useEffect(() => {
+    void reducers.cleanupExpiredInvites()
+  }, [serverId])
 
   useLayoutEffect(() => {
     const activePanel = activeTab === 'create' ? createPanelRef.current : linksPanelRef.current

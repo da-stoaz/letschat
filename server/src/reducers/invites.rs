@@ -4,6 +4,53 @@ use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
 use crate::helpers::{assert_or_err, has_member_role, is_banned, member_key, require_mod_or_owner};
 use crate::schema::*;
 
+fn invite_is_active(ctx: &ReducerContext, invite: &Invite) -> bool {
+    if ctx.timestamp > invite.expires_at {
+        return false;
+    }
+
+    if let Some(max_uses) = invite.max_uses {
+        return invite.use_count < max_uses;
+    }
+
+    true
+}
+
+fn cleanup_stale_invites_internal(ctx: &ReducerContext) {
+    // Delete expired or exhausted invite tokens.
+    let stale_tokens: Vec<String> = ctx
+        .db
+        .invite()
+        .iter()
+        .filter(|inv| !invite_is_active(ctx, inv))
+        .map(|inv| inv.token.clone())
+        .collect();
+
+    for token in stale_tokens {
+        ctx.db.invite().token().delete(token);
+    }
+
+    // Remove pending DM invite rows whose underlying token is gone/inactive.
+    let stale_dm_invite_ids: Vec<u64> = ctx
+        .db
+        .dm_server_invite()
+        .iter()
+        .filter(|dm| matches!(dm.status, DmInviteStatus::Pending))
+        .filter(|dm| {
+            let invite_opt = ctx.db.invite().token().find(&dm.invite_token);
+            match invite_opt {
+                Some(invite) => !invite_is_active(ctx, &invite),
+                None => true,
+            }
+        })
+        .map(|dm| dm.id)
+        .collect();
+
+    for id in stale_dm_invite_ids {
+        ctx.db.dm_server_invite().id().delete(id);
+    }
+}
+
 #[spacetimedb::reducer]
 pub fn create_invite(
     ctx: &ReducerContext,
@@ -13,6 +60,7 @@ pub fn create_invite(
     allowed_usernames: Vec<String>,
 ) -> Result<(), String> {
     require_mod_or_owner(ctx, server_id, ctx.sender())?;
+    cleanup_stale_invites_internal(ctx);
     assert_or_err(
         ctx.db.server().id().find(server_id).is_some(),
         "server not found",
@@ -55,6 +103,8 @@ pub fn create_invite(
 
 #[spacetimedb::reducer]
 pub fn use_invite(ctx: &ReducerContext, token: String) -> Result<(), String> {
+    cleanup_stale_invites_internal(ctx);
+
     let mut invite_row = ctx
         .db
         .invite()
@@ -94,7 +144,32 @@ pub fn use_invite(ctx: &ReducerContext, token: String) -> Result<(), String> {
     });
 
     invite_row.use_count += 1;
-    ctx.db.invite().token().update(invite_row);
+    let exhausted = invite_row
+        .max_uses
+        .map(|max_uses| invite_row.use_count >= max_uses)
+        .unwrap_or(false);
+
+    if exhausted {
+        let consumed_token = invite_row.token.clone();
+        ctx.db.invite().token().delete(consumed_token.clone());
+
+        // Remove any still-pending DM invite rows tied to this now-consumed token.
+        let pending_ids: Vec<u64> = ctx
+            .db
+            .dm_server_invite()
+            .iter()
+            .filter(|dm| {
+                matches!(dm.status, DmInviteStatus::Pending) && dm.invite_token == consumed_token
+            })
+            .map(|dm| dm.id)
+            .collect();
+        for id in pending_ids {
+            ctx.db.dm_server_invite().id().delete(id);
+        }
+    } else {
+        ctx.db.invite().token().update(invite_row);
+    }
+
     Ok(())
 }
 
@@ -116,18 +191,7 @@ pub fn delete_invite(ctx: &ReducerContext, token: String) -> Result<(), String> 
 /// Can be called by any moderator/owner of a server, or by anyone to clean up globally.
 #[spacetimedb::reducer]
 pub fn cleanup_expired_invites(ctx: &ReducerContext) -> Result<(), String> {
-    let expired: Vec<String> = ctx.db.invite().iter()
-        .filter(|inv| {
-            let expired = ctx.timestamp > inv.expires_at;
-            let exhausted = inv.max_uses.map(|max| inv.use_count >= max).unwrap_or(false);
-            expired || exhausted
-        })
-        .map(|inv| inv.token.clone())
-        .collect();
-
-    for token in expired {
-        ctx.db.invite().token().delete(token);
-    }
+    cleanup_stale_invites_internal(ctx);
     Ok(())
 }
 
@@ -140,6 +204,7 @@ pub fn send_dm_server_invite(
     server_id: u64,
 ) -> Result<(), String> {
     require_mod_or_owner(ctx, server_id, ctx.sender())?;
+    cleanup_stale_invites_internal(ctx);
     assert_or_err(
         ctx.db.server().id().find(server_id).is_some(),
         "server not found",
@@ -154,6 +219,20 @@ pub fn send_dm_server_invite(
         "user is already a member",
     )?;
     assert_or_err(!is_banned(ctx, server_id, recipient_identity), "user is banned from this server")?;
+
+    let has_pending_targeted_invite = ctx
+        .db
+        .dm_server_invite()
+        .iter()
+        .any(|inv| {
+            inv.server_id == server_id
+                && inv.recipient_identity == recipient_identity
+                && matches!(inv.status, DmInviteStatus::Pending)
+        });
+    assert_or_err(
+        !has_pending_targeted_invite,
+        "recipient already has an active invite for this server",
+    )?;
 
     // Create a single-use invite token for this DM invite (expires in 7 days)
     let token: String = ctx
@@ -195,6 +274,8 @@ pub fn respond_dm_server_invite(
     invite_id: u64,
     accept: bool,
 ) -> Result<(), String> {
+    cleanup_stale_invites_internal(ctx);
+
     let mut dm_invite = ctx
         .db
         .dm_server_invite()
@@ -212,13 +293,19 @@ pub fn respond_dm_server_invite(
     )?;
 
     if accept {
-        // Try to use the underlying invite token
-        use_invite(ctx, dm_invite.invite_token.clone())?;
+        // Mark accepted before token consumption so pending-cleanup in `use_invite`
+        // does not remove this row.
+        let invite_token = dm_invite.invite_token.clone();
         dm_invite.status = DmInviteStatus::Accepted;
-    } else {
-        dm_invite.status = DmInviteStatus::Declined;
-    }
+        ctx.db.dm_server_invite().id().update(dm_invite);
 
-    ctx.db.dm_server_invite().id().update(dm_invite);
+        // Try to use the underlying invite token
+        use_invite(ctx, invite_token)?;
+    } else {
+        // Declining should invalidate the one-off invite link immediately.
+        ctx.db.invite().token().delete(dm_invite.invite_token.clone());
+        dm_invite.status = DmInviteStatus::Declined;
+        ctx.db.dm_server_invite().id().update(dm_invite);
+    }
     Ok(())
 }

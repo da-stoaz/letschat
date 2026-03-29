@@ -202,6 +202,12 @@ function mapInvite(row: DbRow): Invite {
   }
 }
 
+function isInviteActive(invite: Invite): boolean {
+  const expired = Date.parse(invite.expiresAt) < Date.now()
+  const exhausted = invite.maxUses != null && invite.useCount >= invite.maxUses
+  return !expired && !exhausted
+}
+
 function mapDmServerInvite(row: DbRow): DmServerInvite {
   return {
     id: toU64Number(row.id),
@@ -551,12 +557,12 @@ function syncReadStates(conn: DbConnection): void {
 
 function syncInvites(conn: DbConnection): void {
   const allowedServerIds = joinedServerIds(conn)
-  const invites = Array.from((conn.db as unknown as Record<string, { iter(): Iterable<DbRow> }>).dm_server_invite
-    ? [] // dm_server_invite is handled separately
-    : [])
   const inviteRows: Invite[] = Array.from(
     (conn.db as unknown as Record<string, { iter(): Iterable<DbRow> }>).invite?.iter() ?? []
-  ).map(mapInvite).filter((inv) => allowedServerIds.has(inv.serverId))
+  )
+    .map(mapInvite)
+    .filter((inv) => allowedServerIds.has(inv.serverId))
+    .filter(isInviteActive)
 
   const store = useInvitesStore.getState()
   const grouped = new Map<number, Invite[]>()
@@ -568,7 +574,18 @@ function syncInvites(conn: DbConnection): void {
   for (const [serverId, rows] of grouped.entries()) {
     store.setServerInvites(serverId, rows)
   }
-  void invites
+
+  // Ensure deletions and filters are reflected for servers that now have zero invites.
+  const knownServerIds = new Set<number>([
+    ...Object.keys(store.invitesByServer).map((key) => Number(key)),
+    ...Array.from(allowedServerIds),
+  ])
+
+  for (const serverId of knownServerIds) {
+    if (!grouped.has(serverId)) {
+      store.setServerInvites(serverId, [])
+    }
+  }
 }
 
 function syncDmServerInvites(conn: DbConnection): void {
