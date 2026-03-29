@@ -42,7 +42,7 @@ function DmServerInviteCard({ invite }: { invite: DmServerInvite }) {
   const isRecipient = selfIdentity && invite.recipientIdentity.toLowerCase() === selfIdentity.toLowerCase()
   const isSender = selfIdentity && invite.senderIdentity.toLowerCase() === selfIdentity.toLowerCase()
   const server = servers.find((s) => s.id === invite.serverId)
-  const serverName = server?.name ?? `Server #${invite.serverId}`
+  const serverName = server?.name ?? 'this server'
   const isPending = invite.status === 'Pending'
 
   const handleRespond = async (accept: boolean) => {

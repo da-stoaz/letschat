@@ -10,7 +10,7 @@ import {
   SetRoleModal,
   TransferOwnershipModal,
   BanListModal,
-} from '../../modals/MemberActionModals'
+} from '../../modals/member-actions'
 import type { Server } from '../../types/domain'
 import type { ServerMemberWithUser } from '../../stores/membersStore'
 

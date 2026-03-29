@@ -39,7 +39,7 @@ const EXPIRY_OPTIONS = [
   { label: '7 days', value: 7 * 24 * 60 * 60 },
   { label: '30 days', value: 30 * 24 * 60 * 60 },
   { label: 'Never', value: undefined as number | undefined },
-]
+] as const
 const LINKS_LIST_MAX_HEIGHT_PX = 480
 const LINKS_LIST_MAX_VIEWPORT_RATIO = 0.52
 
@@ -86,10 +86,12 @@ function InviteCard({ invite, serverId, nonMemberFriends, onDelete }: InviteCard
   const url = inviteUrl(invite.token)
   const expired = new Date(invite.expiresAt).getTime() <= Date.now()
 
-  const [sendTarget, setSendTarget] = useState<string>('')
+  const [sendTarget, setSendTarget] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [sendSuccess, setSendSuccess] = useState(false)
+  const selectedFriendLabel =
+    nonMemberFriends.find((friend) => friend.identity === sendTarget)?.label ?? null
 
   const handleSendDm = async () => {
     if (!sendTarget) return
@@ -162,16 +164,26 @@ function InviteCard({ invite, serverId, nonMemberFriends, onDelete }: InviteCard
 
       {!expired && nonMemberFriends.length > 0 && (
         <div className="flex flex-col gap-2 border-t border-border/50 pt-1 sm:flex-row sm:items-center">
-          <select
-            className="w-full flex-1 rounded border border-border/60 bg-background px-2 py-1 text-xs"
-            value={sendTarget}
-            onChange={(e) => setSendTarget(e.target.value)}
+          <Select
+            value={sendTarget ?? undefined}
+            onValueChange={(value) => setSendTarget(value)}
           >
-            <option value="">Send as in-app invite to…</option>
-            {nonMemberFriends.map((f) => (
-              <option key={f.identity} value={f.identity}>{f.label}</option>
-            ))}
-          </select>
+            <SelectTrigger className="h-8 w-full flex-1 text-xs">
+              {selectedFriendLabel ? (
+                <span className="truncate font-medium">{selectedFriendLabel}</span>
+              ) : (
+                <span className="truncate text-muted-foreground">Send as in-app invite to...</span>
+              )}
+              <SelectValue className="sr-only" placeholder="Send as in-app invite to..." />
+            </SelectTrigger>
+            <SelectContent className="max-h-64">
+              {nonMemberFriends.map((f) => (
+                <SelectItem key={f.identity} value={f.identity} className="text-xs">
+                  {f.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             type="button"
             size="sm"
@@ -217,7 +229,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
       const other = selfIdentity && f.userA.toLowerCase() === selfIdentity.toLowerCase() ? f.userB : f.userA
       if (!other || memberIdentities.has(other.toLowerCase())) return []
       const user = Object.values(usersByIdentity).find((u) => u.identity.toLowerCase() === other.toLowerCase())
-      return [{ identity: other, label: user?.displayName ?? user?.username ?? other.slice(0, 12) }]
+      return [{ identity: other, label: user?.displayName ?? user?.username ?? 'Unknown user' }]
     })
 
   const handleCreate = async () => {
@@ -251,6 +263,10 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
   }
 
   const activeInviteCount = invites.filter((i) => new Date(i.expiresAt).getTime() > Date.now()).length
+  const expirySelectValue = expirySeconds == null ? 'never' : String(expirySeconds)
+  const selectedExpiryLabel =
+    EXPIRY_OPTIONS.find((opt) => (opt.value == null ? 'never' : String(opt.value)) === expirySelectValue)?.label
+    ?? '7 days'
 
   useLayoutEffect(() => {
     const activePanel = activeTab === 'create' ? createPanelRef.current : linksPanelRef.current
@@ -335,15 +351,25 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                 <div className="space-y-1.5">
                   <Label className="text-xs">Expires after</Label>
                   <Select
-                    value={expirySeconds == null ? 'never' : String(expirySeconds)}
-                    onValueChange={(v) => setExpirySeconds(v === 'never' ? undefined : Number(v))}
+                    value={expirySelectValue}
+                    onValueChange={(v) => {
+                      const selected = EXPIRY_OPTIONS.find(
+                        (opt) => (opt.value == null ? 'never' : String(opt.value)) === v,
+                      )
+                      setExpirySeconds(selected?.value)
+                    }}
                   >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
+                    <SelectTrigger className="h-8 w-full text-xs">
+                      <span className="truncate font-medium">{selectedExpiryLabel}</span>
+                      <SelectValue className="sr-only" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-h-72">
                       {EXPIRY_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.label} value={opt.value == null ? 'never' : String(opt.value)} className="text-xs">
+                        <SelectItem
+                          key={opt.label}
+                          value={opt.value == null ? 'never' : String(opt.value)}
+                          className="py-1.5 text-xs"
+                        >
                           {opt.label}
                         </SelectItem>
                       ))}
