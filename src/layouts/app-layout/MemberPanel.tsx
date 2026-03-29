@@ -6,7 +6,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuSub,
@@ -115,7 +114,7 @@ function MemberRow({
             <MoreHorizontalIcon className="size-3.5 text-muted-foreground" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel className="text-xs">{displayName}</DropdownMenuLabel>
+            <p className="px-1.5 py-1 text-xs font-medium text-muted-foreground">{displayName}</p>
             <DropdownMenuSeparator />
 
             {/* Timeout actions */}
