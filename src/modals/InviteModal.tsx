@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { reducers } from '../lib/spacetimedb'
 import { useInvitesStore } from '../stores/invitesStore'
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   CopyIcon,
   CheckIcon,
@@ -39,6 +40,8 @@ const EXPIRY_OPTIONS = [
   { label: '30 days', value: 30 * 24 * 60 * 60 },
   { label: 'Never', value: undefined as number | undefined },
 ]
+const LINKS_LIST_MAX_HEIGHT_PX = 480
+const LINKS_LIST_MAX_VIEWPORT_RATIO = 0.52
 
 function inviteUrl(token: string): string {
   return `${APP_BASE_URL}/invite/${token}`
@@ -188,11 +191,18 @@ function InviteCard({ invite, serverId, nonMemberFriends, onDelete }: InviteCard
 }
 
 export function InviteModal({ serverId, onClose }: { serverId: number; onClose: () => void }) {
+  type InviteTab = 'create' | 'links'
   const [expirySeconds, setExpirySeconds] = useState<number | undefined>(7 * 24 * 60 * 60)
   const [maxUses, setMaxUses] = useState<number | ''>('')
   const [allowedUsernamesRaw, setAllowedUsernamesRaw] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [activeTab, setActiveTab] = useState<InviteTab>('create')
+  const [panelHeight, setPanelHeight] = useState<number | null>(null)
+  const [linksListHeight, setLinksListHeight] = useState<number>(0)
+  const createPanelRef = useRef<HTMLDivElement | null>(null)
+  const linksPanelRef = useRef<HTMLDivElement | null>(null)
+  const linksListContentRef = useRef<HTMLDivElement | null>(null)
   const invites = useInvitesStore((s) => s.invitesByServer[serverId] ?? EMPTY)
   const server = useServersStore((s) => s.servers.find((sv) => sv.id === serverId) ?? null)
   const selfIdentity = useConnectionStore((s) => s.identity)
@@ -242,8 +252,56 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
 
   const activeInviteCount = invites.filter((i) => new Date(i.expiresAt).getTime() > Date.now()).length
 
+  useLayoutEffect(() => {
+    const activePanel = activeTab === 'create' ? createPanelRef.current : linksPanelRef.current
+    if (!activePanel) return
+
+    const updateHeight = () => {
+      const next = Math.ceil(activePanel.scrollHeight) + 1
+      setPanelHeight((prev) => (prev === next ? prev : next))
+    }
+
+    updateHeight()
+    const rafId = window.requestAnimationFrame(updateHeight)
+
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => updateHeight())
+    observer.observe(activePanel)
+    return () => {
+      observer.disconnect()
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [activeTab])
+
+  useLayoutEffect(() => {
+    const content = linksListContentRef.current
+    if (!content) return
+
+    const viewportCap = () =>
+      Math.min(
+        Math.floor(window.innerHeight * LINKS_LIST_MAX_VIEWPORT_RATIO),
+        LINKS_LIST_MAX_HEIGHT_PX,
+      )
+
+    const updateHeight = () => {
+      const contentHeight = Math.ceil(content.scrollHeight)
+      setLinksListHeight(Math.min(contentHeight, viewportCap()))
+    }
+
+    updateHeight()
+
+    const observer = new ResizeObserver(() => updateHeight())
+    observer.observe(content)
+    window.addEventListener('resize', updateHeight)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', updateHeight)
+    }
+  }, [activeTab, invites.length])
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+    <div className="flex min-h-0 flex-col gap-4 overflow-hidden">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <LinkIcon className="size-4 text-primary" />
@@ -252,7 +310,11 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
         <DialogDescription>Create invite links or send in-app invites to friends.</DialogDescription>
       </DialogHeader>
 
-      <Tabs defaultValue="create" className="min-h-0 flex-1 overflow-hidden">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as InviteTab)}
+        className="min-h-0 gap-0 overflow-hidden"
+      >
         <TabsList className="w-full">
           <TabsTrigger value="create" className="flex-1">Create Invite</TabsTrigger>
           <TabsTrigger value="links" className="flex-1">
@@ -263,106 +325,118 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="create" className="space-y-3 mt-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Expires after</Label>
-              <Select
-                value={expirySeconds == null ? 'never' : String(expirySeconds)}
-                onValueChange={(v) => setExpirySeconds(v === 'never' ? undefined : Number(v))}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {EXPIRY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.label} value={opt.value == null ? 'never' : String(opt.value)} className="text-xs">
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <div
+          className="overflow-hidden transition-[height] duration-200 ease-out"
+          style={panelHeight === null ? undefined : { height: `${panelHeight}px` }}
+        >
+          <TabsContent value="create" className="flex-none">
+            <div ref={createPanelRef} className="space-y-3 pt-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Expires after</Label>
+                  <Select
+                    value={expirySeconds == null ? 'never' : String(expirySeconds)}
+                    onValueChange={(v) => setExpirySeconds(v === 'never' ? undefined : Number(v))}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EXPIRY_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.label} value={opt.value == null ? 'never' : String(opt.value)} className="text-xs">
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs">Max uses</Label>
-              <Input
-                type="number"
-                min={1}
-                placeholder="Unlimited"
-                className="h-8 text-xs"
-                value={maxUses}
-                onChange={(e) => setMaxUses(e.target.value === '' ? '' : Number(e.target.value))}
-                disabled={allowedUsernamesRaw.trim().length > 0}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs">
-              Username whitelist
-              <span className="ml-1 text-muted-foreground">(comma-separated — disables max uses)</span>
-            </Label>
-            <Input
-              placeholder="alice, bob, charlie"
-              className="h-8 text-xs"
-              value={allowedUsernamesRaw}
-              onChange={(e) => setAllowedUsernamesRaw(e.target.value)}
-              spellCheck={false}
-              autoCorrect="off"
-              autoCapitalize="none"
-              autoComplete="off"
-            />
-          </div>
-
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="button" disabled={creating} onClick={handleCreate}>
-              <LinkIcon className="size-3.5" />
-              {creating ? 'Creating…' : 'Create Link'}
-            </Button>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="links" className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
-          {invites.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">No invite links yet. Create one first.</p>
-          ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-              <div className="space-y-2">
-                {invites.map((inv) => (
-                  <InviteCard
-                    key={inv.token}
-                    invite={inv}
-                    serverId={serverId}
-                    nonMemberFriends={nonMemberFriends}
-                    onDelete={handleDelete}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Max uses</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="Unlimited"
+                    className="h-8 text-xs"
+                    value={maxUses}
+                    onChange={(e) => setMaxUses(e.target.value === '' ? '' : Number(e.target.value))}
+                    disabled={allowedUsernamesRaw.trim().length > 0}
                   />
-                ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Username whitelist
+                  <span className="ml-1 text-muted-foreground">(comma-separated — disables max uses)</span>
+                </Label>
+                <Input
+                  placeholder="alice, bob, charlie"
+                  className="h-8 text-xs"
+                  value={allowedUsernamesRaw}
+                  onChange={(e) => setAllowedUsernamesRaw(e.target.value)}
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  autoComplete="off"
+                />
+              </div>
+
+              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button type="button" disabled={creating} onClick={handleCreate}>
+                  <LinkIcon className="size-3.5" />
+                  {creating ? 'Creating…' : 'Create Link'}
+                </Button>
               </div>
             </div>
-          )}
-          {error ? <p className="text-sm text-destructive mt-2">{error}</p> : null}
-          <div className="flex justify-end gap-2 mt-3">
-            {invites.some((i) => new Date(i.expiresAt).getTime() <= Date.now()) && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void reducers.cleanupExpiredInvites()}
-              >
-                Clean up expired
-              </Button>
-            )}
-            <Button type="button" variant="outline" onClick={onClose}>
-              Close
-            </Button>
-          </div>
-        </TabsContent>
+          </TabsContent>
+
+          <TabsContent value="links" className="flex-none">
+            <div ref={linksPanelRef} className="flex flex-col gap-3 pt-4">
+              {invites.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No invite links yet. Create one first.</p>
+              ) : (
+                <ScrollArea
+                  className="pr-2"
+                  style={linksListHeight > 0 ? { height: `${linksListHeight}px` } : undefined}
+                >
+                  <div ref={linksListContentRef} className="space-y-2">
+                    {invites.map((inv) => (
+                      <InviteCard
+                        key={inv.token}
+                        invite={inv}
+                        serverId={serverId}
+                        nonMemberFriends={nonMemberFriends}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              <div className="mt-1 flex justify-end gap-2">
+                {invites.some((i) => new Date(i.expiresAt).getTime() <= Date.now()) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void reducers.cleanupExpiredInvites()}
+                  >
+                    Clean up expired
+                  </Button>
+                )}
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+        </div>
       </Tabs>
     </div>
   )
