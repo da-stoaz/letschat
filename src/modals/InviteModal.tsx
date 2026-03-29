@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { toast } from '@/components/ui/sonner'
 import {
   CopyIcon,
   CheckIcon,
@@ -235,6 +236,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
   const handleCreate = async () => {
     setError(null)
     setCreating(true)
+    const toastId = toast.loading('Creating invite link...')
     try {
       const usernames = allowedUsernamesRaw
         .split(',')
@@ -246,8 +248,17 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
         maxUses === '' ? undefined : maxUses,
         usernames,
       )
+      toast.success('Invite link created', {
+        id: toastId,
+        description: `Ready for ${server?.name ?? 'this server'}.`,
+      })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not create invite.')
+      const message = e instanceof Error ? e.message : 'Could not create invite.'
+      setError(message)
+      toast.error('Failed to create invite link', {
+        id: toastId,
+        description: message,
+      })
     } finally {
       setCreating(false)
     }
