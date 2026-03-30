@@ -1,6 +1,5 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { CreateServerModal } from '../../modals/CreateServerModal'
-import { EditServerModal } from '../../modals/EditServerModal'
 import { CreateChannelModal } from '../../modals/CreateChannelModal'
 import { InviteModal } from '../../modals/InviteModal'
 import {
@@ -11,7 +10,6 @@ import {
   TransferOwnershipModal,
   BanListModal,
 } from '../../modals/member-actions'
-import type { Server } from '../../types/domain'
 import type { ServerMemberWithUser } from '../../stores/membersStore'
 
 export type MemberActionModal =
@@ -24,14 +22,11 @@ export type MemberActionModal =
 
 interface LayoutModalsProps {
   showCreateServer: boolean
-  showEditServer: boolean
   showCreateChannel: boolean
   showInvite: boolean
   memberAction: MemberActionModal | null
   activeServerId: number | null
-  activeServer: Server | null
   setShowCreateServer: (open: boolean) => void
-  setShowEditServer: (open: boolean) => void
   setShowCreateChannel: (open: boolean) => void
   setShowInvite: (open: boolean) => void
   setMemberAction: (action: MemberActionModal | null) => void
@@ -39,14 +34,11 @@ interface LayoutModalsProps {
 
 export function LayoutModals({
   showCreateServer,
-  showEditServer,
   showCreateChannel,
   showInvite,
   memberAction,
   activeServerId,
-  activeServer,
   setShowCreateServer,
-  setShowEditServer,
   setShowCreateChannel,
   setShowInvite,
   setMemberAction,
@@ -58,18 +50,6 @@ export function LayoutModals({
       <Dialog open={showCreateServer} onOpenChange={setShowCreateServer}>
         <DialogContent className="max-w-md">
           <CreateServerModal onClose={() => setShowCreateServer(false)} />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showEditServer && !!activeServer} onOpenChange={setShowEditServer}>
-        <DialogContent className="max-w-md">
-          {activeServer ? (
-            <EditServerModal
-              serverId={activeServer.id}
-              currentName={activeServer.name}
-              onClose={() => setShowEditServer(false)}
-            />
-          ) : null}
         </DialogContent>
       </Dialog>
 

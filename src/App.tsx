@@ -5,6 +5,7 @@ import { AuthPage } from './pages/AuthPage'
 import { InvitePage } from './pages/InvitePage'
 import { AppIndexPage } from './pages/AppIndexPage'
 import { ServerChannelPage } from './pages/ServerChannelPage'
+import { ServerManagePage } from './pages/ServerManagePage'
 import { DMPage } from './pages/DMPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { useSelfStore } from './stores/selfStore'
@@ -56,6 +57,7 @@ function App() {
         <Route index element={<AppIndexPage />} />
         <Route path="dm/:identity" element={<DMPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path=":serverId/manage" element={<ServerManagePage />} />
         <Route path=":serverId" element={<ServerChannelPage />} />
         <Route path=":serverId/:channelId" element={<ServerChannelPage />} />
       </Route>

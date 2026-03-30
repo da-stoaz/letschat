@@ -2,20 +2,16 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { reducers } from '../lib/spacetimedb'
 import { useServersStore } from '../stores/serversStore'
-import { useMembersStore } from '../stores/membersStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { ServerIcon, UsersIcon, CheckIcon, XIcon, LoaderCircleIcon } from 'lucide-react'
+import { ServerIcon, CheckIcon, XIcon, LoaderCircleIcon } from 'lucide-react'
 
 export function InvitePage() {
   const { token = '' } = useParams()
   const navigate = useNavigate()
   const [status, setStatus] = useState<'idle' | 'joining' | 'joined' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const servers = useServersStore((s) => s.servers)
-  const membersByServer = useMembersStore((s) => s.membersByServer)
   const selfIdentity = useConnectionStore((s) => s.identity)
   const isAuthenticated = Boolean(selfIdentity)
 
@@ -42,8 +38,6 @@ export function InvitePage() {
       setErrorMsg(e instanceof Error ? e.message : 'Failed to join server.')
     }
   }
-
-  const memberCount = servers.reduce((total, sv) => total + (membersByServer[sv.id]?.length ?? 0), 0)
 
   return (
     <section className="grid min-h-screen place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,--theme(--color-blue-500/25),transparent),radial-gradient(900px_700px_at_100%_0%,--theme(--color-cyan-500/20),transparent)] p-4">

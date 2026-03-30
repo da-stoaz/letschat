@@ -992,6 +992,7 @@ export const reducers = {
   renameServer: (serverId: number, newName: string) =>
     spacetimedbClient.call('renameServer', { serverId: toU64(serverId, 'serverId'), newName }),
   deleteServer: (serverId: number) => spacetimedbClient.call('deleteServer', { serverId: toU64(serverId, 'serverId') }),
+  leaveServer: (serverId: number) => spacetimedbClient.call('leaveServer', { serverId: toU64(serverId, 'serverId') }),
   createInvite: (serverId: number, expiresInSeconds?: number, maxUses?: number, allowedUsernames?: string[]) =>
     spacetimedbClient.call('createInvite', {
       serverId: toU64(serverId, 'serverId'),

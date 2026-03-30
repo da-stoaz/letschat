@@ -25,8 +25,8 @@ export function EditServerModal({ serverId, currentName, onClose }: { serverId: 
       }}
     >
       <DialogHeader>
-        <DialogTitle>Edit Server</DialogTitle>
-        <DialogDescription>Rename this server or permanently delete it.</DialogDescription>
+        <DialogTitle>Rename Server</DialogTitle>
+        <DialogDescription>Update the server name.</DialogDescription>
       </DialogHeader>
 
       <div className="space-y-2">
@@ -38,23 +38,7 @@ export function EditServerModal({ serverId, currentName, onClose }: { serverId: 
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit">Save</Button>
-        <Button
-          variant="destructive"
-          type="button"
-          onClick={async () => {
-            setError(null)
-            try {
-              await reducers.deleteServer(serverId)
-              onClose()
-            } catch (e) {
-              const message = e instanceof Error ? e.message : 'Could not delete server.'
-              setError(message)
-            }
-          }}
-        >
-          Delete Server
-        </Button>
+        <Button type="submit">Rename Server</Button>
       </div>
     </form>
   )

@@ -21,6 +21,7 @@ import { normalizeIdentity } from './app-layout/helpers'
 import { useIncomingDmRing } from '../features/dm/hooks/useIncomingDmRing'
 import { formatDmPreview } from '../features/dm/systemMessages'
 import { useLiveKitRoom } from '../lib/livekit'
+import { reducers } from '../lib/spacetimedb'
 import { syncUnreadBadgeCount } from '../lib/notifications'
 import { ComposeDmDialog } from './app-layout/ComposeDmDialog'
 import { LayoutModals, type MemberActionModal } from './app-layout/LayoutModals'
@@ -32,6 +33,7 @@ import { cn } from '../lib/utils'
 import { useIsMobile } from '../hooks/use-mobile'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { toast } from '@/components/ui/sonner'
 import type { Channel } from '../types/domain'
 
 const EMPTY_CHANNELS: Channel[] = []
@@ -49,7 +51,6 @@ export function AppLayout() {
   const location = useLocation()
   const params = useParams()
   const [showCreateServer, setShowCreateServer] = useState(false)
-  const [showEditServer, setShowEditServer] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [showComposeDm, setShowComposeDm] = useState(false)
@@ -68,11 +69,9 @@ export function AppLayout() {
   const unreadByChannel = useUiStore((s) => s.unreadByChannel)
   const unreadByDmPartner = useUiStore((s) => s.unreadByDmPartner)
   const mutedChannels = useUiStore((s) => s.mutedChannels)
-  const mutedServers = useUiStore((s) => s.mutedServers)
   const mutedUsers = useUiStore((s) => s.mutedUsers)
   const clearDmUnread = useUiStore((s) => s.clearDmUnread)
   const toggleMutedChannel = useUiStore((s) => s.toggleMutedChannel)
-  const toggleMutedServer = useUiStore((s) => s.toggleMutedServer)
   const toggleMutedUser = useUiStore((s) => s.toggleMutedUser)
   const participantsByChannel = useVoiceStore((s) => s.participantsByChannel)
   const conversations = useDmStore((s) => s.conversations)
@@ -99,6 +98,7 @@ export function AppLayout() {
   const isMobile = useIsMobile()
   const activeDmIdentity = params.identity && params.identity !== 'friends' ? params.identity : null
   const isSettingsPage = location.pathname.startsWith('/app/settings')
+  const isServerManagePage = /^\/app\/[^/]+\/manage\/?$/.test(location.pathname)
   const normalizedSelfIdentity = selfIdentity ? normalizeIdentity(selfIdentity) : null
 
   useEffect(() => {
@@ -362,6 +362,24 @@ export function AppLayout() {
     openChannel(serverId, preferred.id)
   }
 
+  const openServerPanel = useCallback(() => {
+    if (!activeServerId) return
+    navigate(`/app/${activeServerId}/manage`)
+  }, [activeServerId, navigate])
+
+  const leaveActiveServer = useCallback(async () => {
+    if (!activeServerId) return
+    try {
+      await reducers.leaveServer(activeServerId)
+      toast.success('Left server')
+      setActiveServerId(null)
+      navigate('/app')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not leave server.'
+      toast.error('Failed to leave server', { description: message })
+    }
+  }, [activeServerId, navigate, setActiveServerId])
+
   const hasActiveCallDock =
     joinedVoiceChannelId !== null ||
     dmJoinedPartnerIdentity !== null ||
@@ -437,9 +455,9 @@ export function AppLayout() {
   }, [channelBarWidth, isMobile])
 
   const mainPane = (
-    <div className={cn('grid min-h-0 min-w-0 gap-3 overflow-hidden', rightPanelOpen && activeServerId ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
+    <div className={cn('grid min-h-0 min-w-0 gap-3 overflow-hidden', rightPanelOpen && activeServerId && !isServerManagePage ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
       <Card className="relative h-full min-h-0 border-border/60 bg-card/80 backdrop-blur">
-        {activeServerId ? (
+        {activeServerId && !isServerManagePage ? (
           <Button
             type="button"
             variant="secondary"
@@ -456,7 +474,7 @@ export function AppLayout() {
           </CardContent>
         </Card>
 
-      {rightPanelOpen && activeServerId ? (
+      {rightPanelOpen && activeServerId && !isServerManagePage ? (
         <MemberPanel
           members={activeServerMembers}
           selfIdentity={selfIdentity}
@@ -528,15 +546,11 @@ export function AppLayout() {
                   joinedVoiceChannelId={joinedVoiceChannelId}
                   activeSpeakerIdentityKeys={activeSpeakerIdentityKeys}
                   memberProfileByIdentity={memberProfileByIdentity}
-                  onOpenRenameServer={() => setShowEditServer(true)}
                   onOpenInvite={() => setShowInvite(true)}
                   onOpenCreateChannel={() => setShowCreateChannel(true)}
-                  isServerMuted={Boolean(activeServerId && mutedServers[activeServerId])}
+                  onOpenServerPanel={openServerPanel}
+                  onLeaveServer={() => void leaveActiveServer()}
                   isChannelMuted={(channelId) => Boolean(mutedChannels[channelId])}
-                  onToggleServerMute={() => {
-                    if (!activeServerId) return
-                    toggleMutedServer(activeServerId)
-                  }}
                   onToggleChannelMute={(channelId) => toggleMutedChannel(channelId)}
                   onSelectChannel={(channelId) => {
                     if (activeServerId === null) return
@@ -578,14 +592,11 @@ export function AppLayout() {
 
       <LayoutModals
         showCreateServer={showCreateServer}
-        showEditServer={showEditServer}
         showCreateChannel={showCreateChannel}
         showInvite={showInvite}
         memberAction={memberAction}
         activeServerId={activeServerId}
-        activeServer={activeServer}
         setShowCreateServer={setShowCreateServer}
-        setShowEditServer={setShowEditServer}
         setShowCreateChannel={setShowCreateChannel}
         setShowInvite={setShowInvite}
         setMemberAction={setMemberAction}

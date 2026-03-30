@@ -1,6 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, member_key, require_owner};
+use crate::helpers::{assert_or_err, member_key, require_member_role, require_owner, voice_key};
 use crate::schema::*;
 
 #[spacetimedb::reducer]
@@ -127,5 +127,36 @@ pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String>
     }
 
     ctx.db.server().id().delete(server_id);
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn leave_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
+    let role = require_member_role(ctx, server_id, ctx.sender())?;
+    assert_or_err(
+        role != Role::Owner,
+        "owner must transfer ownership before leaving",
+    )?;
+
+    ctx.db
+        .server_member()
+        .member_key()
+        .delete(member_key(server_id, ctx.sender()));
+
+    let channel_ids: Vec<u64> = ctx
+        .db
+        .channel()
+        .iter()
+        .filter(|c| c.server_id == server_id)
+        .map(|c| c.id)
+        .collect();
+
+    for channel_id in channel_ids {
+        ctx.db
+            .voice_participant()
+            .voice_key()
+            .delete(voice_key(channel_id, ctx.sender()));
+    }
+
     Ok(())
 }

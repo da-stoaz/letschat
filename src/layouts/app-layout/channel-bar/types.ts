@@ -25,12 +25,11 @@ export interface ChannelBarProps {
   joinedVoiceChannelId: number | null
   activeSpeakerIdentityKeys: Set<string>
   memberProfileByIdentity: Map<string, { label: string; avatarUrl: string | null }>
-  onOpenRenameServer: () => void
   onOpenInvite: () => void
   onOpenCreateChannel: () => void
-  isServerMuted: boolean
+  onOpenServerPanel: () => void
+  onLeaveServer: () => void
   isChannelMuted: (channelId: number) => boolean
-  onToggleServerMute: () => void
   onToggleChannelMute: (channelId: number) => void
   onSelectChannel: (channelId: number) => void
   onOpenFriends: () => void
@@ -55,12 +54,11 @@ export interface ServerChannelBarProps {
   joinedVoiceChannelId: number | null
   activeSpeakerIdentityKeys: Set<string>
   memberProfileByIdentity: Map<string, { label: string; avatarUrl: string | null }>
-  onOpenRenameServer: () => void
   onOpenInvite: () => void
   onOpenCreateChannel: () => void
-  isServerMuted: boolean
+  onOpenServerPanel: () => void
+  onLeaveServer: () => void
   isChannelMuted: (channelId: number) => boolean
-  onToggleServerMute: () => void
   onToggleChannelMute: (channelId: number) => void
   onSelectChannel: (channelId: number) => void
 }

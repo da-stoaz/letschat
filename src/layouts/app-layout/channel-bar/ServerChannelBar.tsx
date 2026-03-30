@@ -1,5 +1,5 @@
-import { BellIcon, BellOffIcon, ChevronsUpDownIcon, HashIcon, LockIcon, PlusIcon, ShieldIcon, Volume2Icon } from 'lucide-react'
-import { canManageChannels, canRenameServer } from '../../../lib/permissions'
+import { BellIcon, BellOffIcon, ChevronsUpDownIcon, HashIcon, LockIcon, LogOutIcon, PlusIcon, Settings2Icon, ShieldIcon, UserPlusIcon, Volume2Icon } from 'lucide-react'
+import { canManageChannels } from '../../../lib/permissions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,51 +28,55 @@ export function ServerChannelBar({
   joinedVoiceChannelId,
   activeSpeakerIdentityKeys,
   memberProfileByIdentity,
-  onOpenRenameServer,
   onOpenInvite,
   onOpenCreateChannel,
-  isServerMuted,
+  onOpenServerPanel,
+  onLeaveServer,
   isChannelMuted,
-  onToggleServerMute,
   onToggleChannelMute,
   onSelectChannel,
 }: ServerChannelBarProps) {
+  const ownerCannotLeave = role === 'Owner'
+  const canAccessServerPanel = role === 'Owner' || role === 'Moderator'
+
   return (
     <ChannelBarShell
       header={(
-        <DropdownMenu>
-          <DropdownMenuTrigger className="inline-flex w-full items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-left text-sm font-medium hover:bg-muted/60">
-            <span className="truncate">{activeServer?.name ?? 'Server'}</span>
-            <ChevronsUpDownIcon className="size-4 text-muted-foreground" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuItem onClick={onOpenRenameServer} disabled={!role || !canRenameServer(role)}>
-              Rename Server
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenInvite}>
-              Invite People
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenCreateChannel} disabled={!role || !canManageChannels(role)}>
-              Create Channel
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onToggleServerMute}>
-              {isServerMuted ? (
-                <>
-                  <BellIcon className="size-3.5" />
-                  Unmute Server
-                </>
-              ) : (
-                <>
-                  <BellOffIcon className="size-3.5" />
-                  Mute Server
-                </>
-              )}
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled>
-              Leave Server (coming soon)
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            className="shrink-0"
+            onClick={onOpenInvite}
+            title="Invite users"
+            aria-label="Invite users"
+          >
+            <UserPlusIcon className="size-4" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="inline-flex w-full items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-left text-sm font-medium hover:bg-muted/60">
+              <span className="truncate">{activeServer?.name ?? 'Server'}</span>
+              <ChevronsUpDownIcon className="size-4 text-muted-foreground" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              {canAccessServerPanel ? (
+                <DropdownMenuItem onClick={onOpenServerPanel}>
+                  <Settings2Icon className="size-3.5" />
+                  Server Panel
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                onClick={onLeaveServer}
+                disabled={ownerCannotLeave}
+                className="text-destructive focus:text-destructive"
+              >
+                <LogOutIcon className="size-3.5" />
+                {ownerCannotLeave ? 'Transfer ownership to leave' : 'Leave Server'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       )}
     >
       <ScrollArea className="h-full pr-2">
