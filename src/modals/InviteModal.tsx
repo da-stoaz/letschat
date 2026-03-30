@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { reducers } from '../lib/spacetimedb'
 import { useInvitesStore } from '../stores/invitesStore'
 import { useServersStore } from '../stores/serversStore'
 import { useMembersStore } from '../stores/membersStore'
-import { useFriendsStore } from '../stores/friendsStore'
+import { useDmServerInvitesStore } from '../stores/dmServerInvitesStore'
 import { useUsersStore } from '../stores/usersStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -22,7 +22,8 @@ import {
   QrCodeIcon,
   LinkIcon,
   Trash2Icon,
-  SendIcon,
+  UserPlusIcon,
+  XIcon,
 } from 'lucide-react'
 import type { Invite } from '../types/domain'
 
@@ -77,37 +78,13 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
 
 interface InviteCardProps {
   invite: Invite
-  serverId: number
-  nonMemberFriends: Array<{ identity: string; label: string }>
   onDelete: (token: string) => void
 }
 
-function InviteCard({ invite, serverId, nonMemberFriends, onDelete }: InviteCardProps) {
+function InviteCard({ invite, onDelete }: InviteCardProps) {
   const [showQr, setShowQr] = useState(false)
   const url = inviteUrl(invite.token)
   const expired = new Date(invite.expiresAt).getTime() <= Date.now()
-
-  const [sendTarget, setSendTarget] = useState<string | null>(null)
-  const [sending, setSending] = useState(false)
-  const [sendError, setSendError] = useState<string | null>(null)
-  const [sendSuccess, setSendSuccess] = useState(false)
-  const selectedFriendLabel =
-    nonMemberFriends.find((friend) => friend.identity === sendTarget)?.label ?? null
-
-  const handleSendDm = async () => {
-    if (!sendTarget) return
-    setSending(true)
-    setSendError(null)
-    try {
-      await reducers.sendDmServerInvite(sendTarget, serverId)
-      setSendSuccess(true)
-      setTimeout(() => setSendSuccess(false), 2000)
-    } catch (e) {
-      setSendError(e instanceof Error ? e.message : 'Failed to send invite')
-    } finally {
-      setSending(false)
-    }
-  }
 
   return (
     <div className={`rounded-lg border p-3 space-y-2 overflow-hidden ${expired ? 'opacity-60' : 'border-border/70'}`}>
@@ -149,7 +126,7 @@ function InviteCard({ invite, serverId, nonMemberFriends, onDelete }: InviteCard
         {invite.allowedUsernames.length > 0 && (
           <>
             <span>·</span>
-            <span>Whitelist: {invite.allowedUsernames.map((u) => `@${u}`).join(', ')}</span>
+            <span>Allowed users: {invite.allowedUsernames.map((u) => `@${u}`).join(', ')}</span>
           </>
         )}
       </div>
@@ -162,91 +139,188 @@ function InviteCard({ invite, serverId, nonMemberFriends, onDelete }: InviteCard
           <p className="text-[10px] text-muted-foreground break-all max-w-xs text-center">{url}</p>
         </div>
       )}
-
-      {!expired && nonMemberFriends.length > 0 && (
-        <div className="flex flex-col gap-2 border-t border-border/50 pt-1 sm:flex-row sm:items-center">
-          <Select
-            value={sendTarget ?? undefined}
-            onValueChange={(value) => setSendTarget(value)}
-          >
-            <SelectTrigger className="h-8 w-full flex-1 text-xs">
-              {selectedFriendLabel ? (
-                <span className="truncate font-medium">{selectedFriendLabel}</span>
-              ) : (
-                <span className="truncate text-muted-foreground">Send as in-app invite to...</span>
-              )}
-              <SelectValue className="sr-only" placeholder="Send as in-app invite to..." />
-            </SelectTrigger>
-            <SelectContent className="max-h-64">
-              {nonMemberFriends.map((f) => (
-                <SelectItem key={f.identity} value={f.identity} className="text-xs">
-                  {f.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="w-full shrink-0 sm:w-auto"
-            disabled={!sendTarget || sending}
-            onClick={handleSendDm}
-          >
-            {sendSuccess ? <CheckIcon className="size-3.5" /> : <SendIcon className="size-3.5" />}
-            {sendSuccess ? 'Sent!' : 'Send'}
-          </Button>
-        </div>
-      )}
-      {sendError && <p className="text-xs text-destructive">{sendError}</p>}
     </div>
   )
 }
 
 export function InviteModal({ serverId, onClose }: { serverId: number; onClose: () => void }) {
-  type InviteTab = 'create' | 'links'
+  type InviteTab = 'people' | 'create-link' | 'links'
   const [expirySeconds, setExpirySeconds] = useState<number | undefined>(7 * 24 * 60 * 60)
   const [maxUses, setMaxUses] = useState<number | ''>('')
-  const [allowedUsernamesRaw, setAllowedUsernamesRaw] = useState('')
+  const [selectedRecipientIdentities, setSelectedRecipientIdentities] = useState<string[]>([])
+  const [recipientQuery, setRecipientQuery] = useState('')
+  const [sendingDirectInvite, setSendingDirectInvite] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
-  const [activeTab, setActiveTab] = useState<InviteTab>('create')
+  const [activeTab, setActiveTab] = useState<InviteTab>('people')
   const [panelHeight, setPanelHeight] = useState<number | null>(null)
   const [linksListHeight, setLinksListHeight] = useState<number>(0)
-  const createPanelRef = useRef<HTMLDivElement | null>(null)
+  const peoplePanelRef = useRef<HTMLDivElement | null>(null)
+  const createLinkPanelRef = useRef<HTMLDivElement | null>(null)
   const linksPanelRef = useRef<HTMLDivElement | null>(null)
   const linksListContentRef = useRef<HTMLDivElement | null>(null)
   const invites = useInvitesStore((s) => s.invitesByServer[serverId] ?? EMPTY)
   const server = useServersStore((s) => s.servers.find((sv) => sv.id === serverId) ?? null)
   const selfIdentity = useConnectionStore((s) => s.identity)
-  const friends = useFriendsStore((s) => s.friends)
+  const dmInvites = useDmServerInvitesStore((s) => s.invites)
   const members = useMembersStore((s) => s.membersByServer[serverId] ?? EMPTY)
   const usersByIdentity = useUsersStore((s) => s.byIdentity)
+  const usersByNormalizedIdentity = useMemo(() => {
+    const map = new Map<string, { identity: string; username: string; displayName: string }>()
+    for (const user of Object.values(usersByIdentity)) {
+      map.set(user.identity.toLowerCase(), {
+        identity: user.identity,
+        username: user.username,
+        displayName: user.displayName,
+      })
+    }
+    return map
+  }, [usersByIdentity])
 
-  const memberIdentities = new Set(members.map((m) => m.userIdentity.toLowerCase()))
-  const nonMemberFriends = friends
-    .filter((f) => f.status === 'Accepted')
-    .flatMap((f) => {
-      const other = selfIdentity && f.userA.toLowerCase() === selfIdentity.toLowerCase() ? f.userB : f.userA
-      if (!other || memberIdentities.has(other.toLowerCase())) return []
-      const user = Object.values(usersByIdentity).find((u) => u.identity.toLowerCase() === other.toLowerCase())
-      return [{ identity: other, label: user?.displayName ?? user?.username ?? 'Unknown user' }]
-    })
+  const memberIdentities = useMemo(
+    () => new Set(members.map((m) => m.userIdentity.toLowerCase())),
+    [members],
+  )
+  const pendingRecipientIdentities = useMemo(() => {
+    return new Set(
+      dmInvites
+        .filter((inv) => inv.serverId === serverId && inv.status === 'Pending')
+        .map((inv) => inv.recipientIdentity.toLowerCase()),
+    )
+  }, [dmInvites, serverId])
+  const inviteCandidates = useMemo(() => {
+    const normalizedSelf = selfIdentity?.toLowerCase() ?? null
+    return Object.values(usersByIdentity)
+      .filter((user) => {
+        const normalizedIdentity = user.identity.toLowerCase()
+        if (normalizedSelf && normalizedIdentity === normalizedSelf) return false
+        return !memberIdentities.has(normalizedIdentity)
+      })
+      .map((user) => ({
+        identity: user.identity,
+        username: user.username,
+        label: user.displayName || user.username,
+        pending: pendingRecipientIdentities.has(user.identity.toLowerCase()),
+      }))
+      .sort((a, b) => {
+        const labelCmp = a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+        if (labelCmp !== 0) return labelCmp
+        return a.username.localeCompare(b.username, undefined, { sensitivity: 'base' })
+      })
+  }, [memberIdentities, pendingRecipientIdentities, selfIdentity, usersByIdentity])
+  const selectedRecipientSet = useMemo(
+    () => new Set(selectedRecipientIdentities.map((identity) => identity.toLowerCase())),
+    [selectedRecipientIdentities],
+  )
+  const selectedRecipients = useMemo(
+    () =>
+      selectedRecipientIdentities
+        .map((identity) => inviteCandidates.find((candidate) => candidate.identity === identity) ?? null)
+        .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null),
+    [inviteCandidates, selectedRecipientIdentities],
+  )
+  const filteredInviteCandidates = useMemo(() => {
+    const query = recipientQuery.trim().toLowerCase()
+    const selectable = inviteCandidates.filter(
+      (candidate) => !candidate.pending && !selectedRecipientSet.has(candidate.identity.toLowerCase()),
+    )
+    if (!query) return selectable.slice(0, 8)
+    return selectable.filter((candidate) => (
+      candidate.label.toLowerCase().includes(query)
+      || candidate.username.toLowerCase().includes(query)
+    ))
+  }, [inviteCandidates, recipientQuery, selectedRecipientSet])
+  const pendingDirectInvites = useMemo(() => {
+    return dmInvites
+      .filter((invite) => invite.serverId === serverId && invite.status === 'Pending')
+      .map((invite) => {
+        const user = usersByNormalizedIdentity.get(invite.recipientIdentity.toLowerCase())
+        const label = user?.displayName || user?.username || invite.recipientIdentity.slice(0, 12)
+        return {
+          id: invite.id,
+          recipientIdentity: invite.recipientIdentity,
+          label,
+          username: user?.username ?? null,
+          createdAt: invite.createdAt,
+        }
+      })
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+  }, [dmInvites, serverId, usersByNormalizedIdentity])
+
+  const handleSendDirectInvite = async () => {
+    if (selectedRecipients.length === 0) return
+    setError(null)
+    setSendingDirectInvite(true)
+    const toastId = toast.loading(
+      selectedRecipients.length === 1
+        ? `Sending invite to ${selectedRecipients[0].label}...`
+        : `Sending ${selectedRecipients.length} invites...`,
+    )
+    try {
+      const results = await Promise.allSettled(
+        selectedRecipients.map((recipient) => reducers.sendDmServerInvite(recipient.identity, serverId)),
+      )
+      const failedIdentities: string[] = []
+      const failedMessages: string[] = []
+      let successCount = 0
+      for (let idx = 0; idx < results.length; idx += 1) {
+        const result = results[idx]
+        if (result.status === 'fulfilled') {
+          successCount += 1
+        } else {
+          failedIdentities.push(selectedRecipients[idx].identity)
+          const message = result.reason instanceof Error ? result.reason.message : 'Failed to send invite.'
+          failedMessages.push(message)
+        }
+      }
+
+      if (failedIdentities.length === 0) {
+        toast.success(successCount === 1 ? 'Invite sent' : 'Invites sent', {
+          id: toastId,
+          description:
+            successCount === 1
+              ? `${selectedRecipients[0].label} can now accept it in DMs.`
+              : `${successCount} users can now accept your invite in DMs.`,
+        })
+        setSelectedRecipientIdentities([])
+        setRecipientQuery('')
+      } else if (successCount === 0) {
+        const message = failedMessages[0] ?? 'Failed to send invites.'
+        setError(message)
+        toast.error('Could not send invites', {
+          id: toastId,
+          description: message,
+        })
+      } else {
+        toast.error('Some invites failed', {
+          id: toastId,
+          description: `${successCount} sent, ${failedIdentities.length} failed.`,
+        })
+        setSelectedRecipientIdentities((prev) => prev.filter((id) => failedIdentities.includes(id)))
+        setRecipientQuery('')
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Failed to send invite.'
+      setError(message)
+      toast.error('Could not send invite', {
+        id: toastId,
+        description: message,
+      })
+    } finally {
+      setSendingDirectInvite(false)
+    }
+  }
 
   const handleCreate = async () => {
     setError(null)
     setCreating(true)
     const toastId = toast.loading('Creating invite link...')
     try {
-      const usernames = allowedUsernamesRaw
-        .split(',')
-        .map((u) => u.trim())
-        .filter(Boolean)
       await reducers.createInvite(
         serverId,
         expirySeconds,
         maxUses === '' ? undefined : maxUses,
-        usernames,
+        [],
       )
       toast.success('Invite link created', {
         id: toastId,
@@ -284,7 +358,12 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
   }, [serverId])
 
   useLayoutEffect(() => {
-    const activePanel = activeTab === 'create' ? createPanelRef.current : linksPanelRef.current
+    const activePanel =
+      activeTab === 'people'
+        ? peoplePanelRef.current
+        : activeTab === 'create-link'
+          ? createLinkPanelRef.current
+          : linksPanelRef.current
     if (!activePanel) return
 
     const updateHeight = () => {
@@ -338,7 +417,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
           <LinkIcon className="size-4 text-primary" />
           Invite to {server?.name ?? 'Server'}
         </DialogTitle>
-        <DialogDescription>Create invite links or send in-app invites to friends.</DialogDescription>
+        <DialogDescription>Invite people directly or create shareable server links.</DialogDescription>
       </DialogHeader>
 
       <Tabs
@@ -347,7 +426,8 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
         className="min-h-0 gap-0 overflow-hidden"
       >
         <TabsList className="w-full">
-          <TabsTrigger value="create" className="flex-1">Create Invite</TabsTrigger>
+          <TabsTrigger value="people" className="flex-1">Invite People</TabsTrigger>
+          <TabsTrigger value="create-link" className="flex-1">Create Link</TabsTrigger>
           <TabsTrigger value="links" className="flex-1">
             Active Links
             {activeInviteCount > 0 && (
@@ -360,67 +440,181 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
           className="overflow-hidden transition-[height] duration-200 ease-out"
           style={panelHeight === null ? undefined : { height: `${panelHeight}px` }}
         >
-          <TabsContent value="create" className="flex-none">
-            <div ref={createPanelRef} className="space-y-3 pt-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Expires after</Label>
-                  <Select
-                    value={expirySelectValue}
-                    onValueChange={(v) => {
-                      const selected = EXPIRY_OPTIONS.find(
-                        (opt) => (opt.value == null ? 'never' : String(opt.value)) === v,
-                      )
-                      setExpirySeconds(selected?.value)
-                    }}
-                  >
-                    <SelectTrigger className="h-8 w-full text-xs">
-                      <span className="truncate font-medium">{selectedExpiryLabel}</span>
-                      <SelectValue className="sr-only" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-72">
-                      {EXPIRY_OPTIONS.map((opt) => (
-                        <SelectItem
-                          key={opt.label}
-                          value={opt.value == null ? 'never' : String(opt.value)}
-                          className="py-1.5 text-xs"
-                        >
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+          <TabsContent value="people" className="flex-none">
+            <div ref={peoplePanelRef} className="space-y-3 pt-4">
+              <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-medium">Invite Existing User</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Search by username or display name and send an in-app invite directly.
+                  </p>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Max uses</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder="Unlimited"
-                    className="h-8 text-xs"
-                    value={maxUses}
-                    onChange={(e) => setMaxUses(e.target.value === '' ? '' : Number(e.target.value))}
-                    disabled={allowedUsernamesRaw.trim().length > 0}
-                  />
+                <div className="space-y-2">
+                  <div className="rounded-md border border-border/70 bg-background/60 p-2">
+                    {selectedRecipients.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {selectedRecipients.map((recipient) => (
+                          <Badge key={recipient.identity} variant="secondary" className="gap-1">
+                            <span className="truncate max-w-[160px]">{recipient.label}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedRecipientIdentities((prev) => prev.filter((id) => id !== recipient.identity))
+                              }}
+                              className="rounded-sm p-0.5 hover:bg-muted-foreground/20"
+                              aria-label={`Remove ${recipient.label}`}
+                            >
+                              <XIcon className="size-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+
+                    <Input
+                      value={recipientQuery}
+                      onChange={(event) => setRecipientQuery(event.target.value)}
+                      placeholder={selectedRecipients.length > 0 ? 'Add another username...' : 'Type username or display name...'}
+                      className="h-9 w-full text-sm"
+                      spellCheck={false}
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  <ScrollArea className="h-44 rounded-md border border-border/60 bg-background/40 px-1 py-1">
+                    <div className="space-y-1 px-1">
+                      {filteredInviteCandidates.length === 0 ? (
+                        <p className="px-2 py-3 text-xs text-muted-foreground">No matching users found.</p>
+                      ) : (
+                        filteredInviteCandidates.map((candidate) => (
+                          <button
+                            key={candidate.identity}
+                            type="button"
+                            onClick={() => {
+                              setSelectedRecipientIdentities((prev) => (
+                                prev.includes(candidate.identity) ? prev : [...prev, candidate.identity]
+                              ))
+                              setRecipientQuery('')
+                            }}
+                            className="w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-medium">{candidate.label}</p>
+                                <p className="truncate text-[11px] text-muted-foreground">@{candidate.username}</p>
+                              </div>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {selectedRecipients.length > 0
+                      ? `${selectedRecipients.length} user${selectedRecipients.length === 1 ? '' : 's'} selected.`
+                      : 'Choose one or more users to enable sending.'}
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="shrink-0"
+                    disabled={selectedRecipients.length === 0 || sendingDirectInvite}
+                    onClick={handleSendDirectInvite}
+                  >
+                    <UserPlusIcon className="size-3.5" />
+                    {sendingDirectInvite ? 'Sending…' : selectedRecipients.length > 1 ? 'Send Invites' : 'Send Invite'}
+                  </Button>
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs">
-                  Username whitelist
-                  <span className="ml-1 text-muted-foreground">(comma-separated — disables max uses)</span>
-                </Label>
-                <Input
-                  placeholder="alice, bob, charlie"
-                  className="h-8 text-xs"
-                  value={allowedUsernamesRaw}
-                  onChange={(e) => setAllowedUsernamesRaw(e.target.value)}
-                  spellCheck={false}
-                  autoCorrect="off"
-                  autoCapitalize="none"
-                  autoComplete="off"
-                />
+              {pendingDirectInvites.length > 0 && (
+                <div className="rounded-lg border border-border/70 p-3 space-y-2">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Pending Invites</p>
+                  <div className="space-y-1">
+                    {pendingDirectInvites.slice(0, 5).map((invite) => (
+                      <div key={invite.id} className="flex items-center justify-between gap-2 rounded-md bg-muted/30 px-2 py-1.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium">{invite.label}</p>
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            {invite.username ? `@${invite.username}` : invite.recipientIdentity}
+                          </p>
+                        </div>
+                        <Badge variant="secondary" className="text-[10px]">Pending</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+              <div className="flex items-center justify-end pt-1">
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="create-link" className="flex-none">
+            <div ref={createLinkPanelRef} className="space-y-3 pt-4">
+              <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-medium">Create Shareable Link</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Generate a reusable invite link with configurable lifetime and usage limits.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Expires after</Label>
+                    <Select
+                      value={expirySelectValue}
+                      onValueChange={(v) => {
+                        const selected = EXPIRY_OPTIONS.find(
+                          (opt) => (opt.value == null ? 'never' : String(opt.value)) === v,
+                        )
+                        setExpirySeconds(selected?.value)
+                      }}
+                    >
+                      <SelectTrigger className="h-8 w-full text-xs">
+                        <span className="truncate font-medium">{selectedExpiryLabel}</span>
+                        <SelectValue className="sr-only" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {EXPIRY_OPTIONS.map((opt) => (
+                          <SelectItem
+                            key={opt.label}
+                            value={opt.value == null ? 'never' : String(opt.value)}
+                            className="py-1.5 text-xs"
+                          >
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Max uses</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="Unlimited"
+                      className="h-8 text-xs"
+                      value={maxUses}
+                      onChange={(e) => setMaxUses(e.target.value === '' ? '' : Number(e.target.value))}
+                    />
+                  </div>
+                </div>
               </div>
 
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -439,6 +633,17 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
 
           <TabsContent value="links" className="flex-none">
             <div ref={linksPanelRef} className="flex flex-col gap-3 pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">Manage shareable links for this server.</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveTab('create-link')}
+                >
+                  New Link
+                </Button>
+              </div>
               {invites.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">No invite links yet. Create one first.</p>
               ) : (
@@ -451,8 +656,6 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                       <InviteCard
                         key={inv.token}
                         invite={inv}
-                        serverId={serverId}
-                        nonMemberFriends={nonMemberFriends}
                         onDelete={handleDelete}
                       />
                     ))}
