@@ -9,18 +9,11 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
-import {
-  InvitePolicy,
-} from "./types";
-
 
 export default __t.row({
   id: __t.u64().primaryKey(),
   name: __t.string(),
   ownerIdentity: __t.identity().name("owner_identity"),
-  get invitePolicy() {
-    return InvitePolicy.name("invite_policy");
-  },
   iconUrl: __t.option(__t.string()).name("icon_url"),
   createdAt: __t.timestamp().name("created_at"),
 });
