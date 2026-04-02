@@ -988,8 +988,20 @@ export const spacetimedbClient: SpacetimeDBClient = {
 export const reducers = {
   registerUser: (username: string, displayName: string) =>
     spacetimedbClient.call('registerUser', { username, displayName }),
-  updateProfile: (displayName?: string, avatarUrl?: string) =>
-    spacetimedbClient.call('updateProfile', { displayName: displayName ?? null, avatarUrl: avatarUrl ?? null }),
+  updateProfile: (displayName?: string | null, avatarUrl?: string | null) => {
+    const normalizedDisplayName = typeof displayName === 'string' ? displayName.trim() : null
+    let normalizedAvatarUrl: string | null = null
+    if (avatarUrl === null) {
+      // Server reducer uses Option<String>; an empty string is the explicit clear signal.
+      normalizedAvatarUrl = ''
+    } else if (typeof avatarUrl === 'string') {
+      normalizedAvatarUrl = avatarUrl.trim()
+    }
+    return spacetimedbClient.call('updateProfile', {
+      displayName: normalizedDisplayName && normalizedDisplayName.length > 0 ? normalizedDisplayName : null,
+      avatarUrl: normalizedAvatarUrl,
+    })
+  },
   createServer: (name: string) => spacetimedbClient.call('createServer', { name }),
   renameServer: (serverId: number, newName: string) =>
     spacetimedbClient.call('renameServer', { serverId: toU64(serverId, 'serverId'), newName }),
