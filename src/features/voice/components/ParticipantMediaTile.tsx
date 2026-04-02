@@ -3,7 +3,7 @@ import { Track, type LocalParticipant, type RemoteParticipant, type TrackPublica
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '../../../lib/utils'
-import { MonitorUpIcon, VideoOffIcon } from 'lucide-react'
+import { MonitorUpIcon } from 'lucide-react'
 
 type MediaParticipant = LocalParticipant | RemoteParticipant
 
@@ -126,9 +126,6 @@ export function ParticipantMediaTile({
     <article
       className={cn(
         'group overflow-hidden rounded-xl border border-border/60',
-        showVideo
-          ? 'bg-black'
-          : 'bg-gradient-to-br from-card/90 via-card/80 to-muted/25 p-2.5',
         showActivity &&
           (tileType === 'screen'
             ? 'border-sky-400/80 shadow-[0_0_0_1px_rgba(56,189,248,0.35)]'
@@ -136,32 +133,54 @@ export function ParticipantMediaTile({
       )}
     >
       {showVideo ? (
-        <div className="relative overflow-hidden bg-black">
-          <div className="aspect-video">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="h-full w-full object-cover"
-            />
-          </div>
+        <div className="relative aspect-video overflow-hidden bg-black">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={cn(
+              'h-full w-full',
+              tileType === 'screen' ? 'object-contain bg-black' : 'object-cover',
+            )}
+          />
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/65 via-black/5 to-black/30 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between gap-2 p-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-            <p className="min-w-0 truncate text-sm font-semibold text-white">
-              {tileType === 'screen' ? `${displayName} Screen` : displayName}
-            </p>
-            {isLocal ? (
-              <Badge variant="outline" className="h-5 border-white/40 bg-black/35 px-1.5 text-[10px] text-white">
-                You
-              </Badge>
-            ) : null}
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white">
+                {tileType === 'screen' ? `${displayName} Screen` : displayName}
+              </p>
+              <p className="truncate text-[11px] text-white/80">
+                {joinedAt ? `Joined ${new Date(joinedAt).toLocaleTimeString()}` : 'Live'}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              {tileType === 'screen' && isScreenAudioActive ? (
+                <Badge className="h-5 border-white/30 bg-black/35 px-1.5 text-[10px] text-white">Audio</Badge>
+              ) : null}
+              {tileType !== 'screen' && isSpeaking ? (
+                <Badge className="h-5 border-white/30 bg-black/35 px-1.5 text-[10px] text-white">Speaking</Badge>
+              ) : null}
+              {muted ? <Badge className="h-5 border-white/30 bg-black/35 px-1.5 text-[10px] text-white">Muted</Badge> : null}
+              {deafened ? <Badge className="h-5 border-white/30 bg-black/35 px-1.5 text-[10px] text-white">Deaf</Badge> : null}
+              {sharingCamera ? <Badge className="h-5 border-white/30 bg-black/35 px-1.5 text-[10px] text-white">Camera</Badge> : null}
+              {isLocal ? (
+                <Badge variant="outline" className="h-5 border-white/40 bg-black/35 px-1.5 text-[10px] text-white">
+                  You
+                </Badge>
+              ) : null}
+            </div>
           </div>
           {!isLocal ? <audio ref={audioRef} autoPlay data-letschat-audio="remote" /> : null}
         </div>
       ) : (
-        <>
-          <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="relative aspect-video bg-muted/10">
+          <div
+            className={cn(
+              'absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3 transition-opacity duration-150',
+              tileType === 'profile' ? 'pointer-events-none opacity-0 group-hover:opacity-100' : 'opacity-100',
+            )}
+          >
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold leading-none">
                 {tileType === 'screen' ? `${displayName} Screen` : displayName}
@@ -176,40 +195,35 @@ export function ParticipantMediaTile({
             </div>
             <div className="flex items-center gap-1">
               {tileType === 'screen' && isScreenAudioActive ? (
-                <Badge className="h-5 px-1.5 text-[10px]">Screen audio</Badge>
+                <Badge className="h-5 px-1.5 text-[10px]">Audio</Badge>
               ) : null}
               {tileType !== 'screen' && isSpeaking ? (
                 <Badge className="h-5 px-1.5 text-[10px]">Speaking</Badge>
               ) : null}
+              {muted ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Muted</Badge> : null}
+              {deafened ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Deaf</Badge> : null}
+              {sharingCamera ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Camera</Badge> : null}
               {isLocal ? <Badge variant="outline" className="h-5 px-1.5 text-[10px]">You</Badge> : null}
             </div>
           </div>
-
-          <div className="relative flex min-h-[72px] items-center gap-3 rounded-lg bg-black/20 px-3 py-2">
-            <Avatar className="size-[60px] shrink-0">
-              {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
-              <AvatarFallback>{initials(displayName)}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{tileType === 'screen' ? 'No active stream' : 'Audio only'}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                {tileType === 'screen'
-                  ? (sharingScreen ? 'Screen stream is loading' : 'Start sharing to display content')
-                  : 'Camera is currently off'}
-              </p>
-            </div>
-            <div className="ml-auto shrink-0 text-muted-foreground/70">
-              {tileType === 'screen' ? <MonitorUpIcon className="size-4" /> : <VideoOffIcon className="size-4" />}
-            </div>
-            {!isLocal ? <audio ref={audioRef} autoPlay data-letschat-audio="remote" /> : null}
+          <div className={cn('grid h-full place-items-center', tileType === 'screen' ? 'pt-10' : undefined)}>
+            {tileType === 'profile' ? (
+              <Avatar className="size-36 shrink-0 ring-1 ring-border/70">
+                {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
+                <AvatarFallback className="text-3xl font-semibold">{initials(displayName)}</AvatarFallback>
+              </Avatar>
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-center text-muted-foreground">
+                <MonitorUpIcon className="size-5" />
+                <p className="text-sm font-medium text-foreground">No active stream</p>
+                <p className="text-xs">
+                  {sharingScreen ? 'Screen stream is loading' : 'Start sharing to display content'}
+                </p>
+              </div>
+            )}
           </div>
-
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {muted ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Muted</Badge> : null}
-            {deafened ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Deafened</Badge> : null}
-            {sharingCamera ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Camera</Badge> : null}
-          </div>
-        </>
+          {!isLocal ? <audio ref={audioRef} autoPlay data-letschat-audio="remote" /> : null}
+        </div>
       )}
     </article>
   )
