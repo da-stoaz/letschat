@@ -1,10 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 import { authServiceGenerateLivekitToken, clearStoredAuthSessionToken, getStoredAuthSessionToken } from './authService'
 import { clearSignedDownloadUrlCache } from './uploads'
+import { useServerConfigStore } from '../stores/serverConfigStore'
 import type { Identity } from '../types/domain'
-
-const DEFAULT_WEB_LIVEKIT_URL = 'http://127.0.0.1:7880'
-const WEB_LIVEKIT_URL = (import.meta.env.VITE_LIVEKIT_URL as string | undefined) ?? DEFAULT_WEB_LIVEKIT_URL
 export type NotificationPermissionState = NotificationPermission | 'unsupported'
 
 function isTauriRuntime(): boolean {
@@ -53,7 +51,9 @@ async function generateWebLivekitToken(room: string, identity: Identity): Promis
 
 export const tauriCommands = {
   getLivekitUrl: async () =>
-    isTauriRuntime() ? invoke<string>('get_livekit_url') : WEB_LIVEKIT_URL,
+    isTauriRuntime()
+      ? invoke<string>('get_livekit_url')
+      : (useServerConfigStore.getState().config?.livekitUrl ?? 'http://127.0.0.1:7880'),
   generateLivekitToken: async (room: string, identity: string) =>
     isTauriRuntime()
       ? invoke<string>('generate_livekit_token', { room, identity })

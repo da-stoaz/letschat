@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BellIcon, CameraIcon, Loader2Icon, LogOutIcon, ShieldCheckIcon, Trash2Icon, UserRoundIcon } from 'lucide-react'
+import { BellIcon, CameraIcon, Loader2Icon, LogOutIcon, PlugZapIcon, ShieldCheckIcon, Trash2Icon, UserRoundIcon } from 'lucide-react'
+import { ConnectionTab } from './ConnectionTab'
 import { getCurrentSessionToken, reducers, signOut } from '../../lib/spacetimedb'
 import { authServiceLink } from '../../lib/authService'
 import { uploadSingleFile } from '../../lib/uploads'
@@ -205,6 +206,10 @@ export function SettingsPanel() {
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="connection">
+            <PlugZapIcon className="size-3.5 mr-1.5" />
+            Connection
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -592,6 +597,10 @@ export function SettingsPanel() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="connection">
+          <ConnectionTab />
         </TabsContent>
       </Tabs>
     </section>

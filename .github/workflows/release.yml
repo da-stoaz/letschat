@@ -63,10 +63,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VITE_AUTH_SERVICE_URL: ${{ secrets.VITE_AUTH_SERVICE_URL }}
-          VITE_SPACETIMEDB_URI: ${{ secrets.VITE_SPACETIMEDB_URI }}
-          VITE_SPACETIMEDB_DATABASE: ${{ secrets.VITE_SPACETIMEDB_DATABASE }}
-          VITE_LIVEKIT_URL: ${{ secrets.VITE_LIVEKIT_URL }}
         with:
           tagName: v__VERSION__
           releaseName: LetsChat v__VERSION__

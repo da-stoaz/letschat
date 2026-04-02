@@ -8,9 +8,13 @@ import { initializeSpacetime } from './lib/spacetimedb'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
+import { useServerConfigStore } from './stores/serverConfigStore'
 
 const queryClient = new QueryClient()
-void initializeSpacetime()
+
+if (useServerConfigStore.getState().config !== null) {
+  void initializeSpacetime()
+}
 document.documentElement.classList.add('dark')
 
 createRoot(document.getElementById('root')!).render(

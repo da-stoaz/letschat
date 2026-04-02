@@ -1,12 +1,9 @@
 import type { Identity } from '../types/domain'
+import { useServerConfigStore } from '../stores/serverConfigStore'
 
-const AUTH_SERVICE_URL = (import.meta.env.VITE_AUTH_SERVICE_URL as string | undefined) ?? 'http://127.0.0.1:8787'
 const AUTH_SESSION_KEY = 'letschat.auth_session_token'
 const AUTH_REQUEST_TIMEOUT_MS = 12000
 
-function isPlaceholderEndpoint(url: string): boolean {
-  return /yourdomain\.com/i.test(url)
-}
 
 function getNetworkErrorDetails(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -141,10 +138,9 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
   path: string,
   payload: TPayload,
 ): Promise<TResponse> {
-  if (isPlaceholderEndpoint(AUTH_SERVICE_URL)) {
-    throw new Error(
-      `Auth service URL is still a placeholder (${AUTH_SERVICE_URL}). Rebuild with a real VITE_AUTH_SERVICE_URL before signing in.`,
-    )
+  const AUTH_SERVICE_URL = useServerConfigStore.getState().config?.authServiceUrl
+  if (!AUTH_SERVICE_URL) {
+    throw new Error('Server not configured. Please complete setup first.')
   }
 
   const controller = new AbortController()
@@ -167,7 +163,7 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
     }
     const details = getNetworkErrorDetails(error)
     throw new Error(
-      `Could not reach auth-service at ${AUTH_SERVICE_URL} (${details}). Check auth-service status and VITE_AUTH_SERVICE_URL.`,
+      `Could not reach auth-service at ${AUTH_SERVICE_URL} (${details}). Check auth-service status.`,
     )
   } finally {
     clearTimeout(timeout)
