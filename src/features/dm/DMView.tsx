@@ -23,6 +23,7 @@ import {
   parseDmSystemMessage,
 } from './systemMessages'
 import { useOngoingCallDuration } from '../voice/hooks/useOngoingCallDuration'
+import { composeMessageWithAttachments } from '../chat/attachmentPayload'
 import { PresenceDot } from '@/components/user/PresenceDot'
 import type { DirectMessage, DmServerInvite, Identity } from '../../types/domain'
 import { warnOnce } from '../../lib/devWarnings'
@@ -395,10 +396,11 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         typingScopeKey={typingScopeKey}
         typingIdentity={selfIdentity}
         error={error}
-        onSubmit={async (trimmed) => {
+        onSubmit={async ({ text, attachments }) => {
           setError(null)
           try {
-            await reducers.sendDirectMessage(partnerIdentity, trimmed)
+            const payload = composeMessageWithAttachments(text, attachments)
+            await reducers.sendDirectMessage(partnerIdentity, payload)
             setDraft('')
             clearDmUnread(partnerIdentity)
             reducers.markDmRead(partnerIdentity).catch(() => undefined)
@@ -406,6 +408,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           } catch (e) {
             const message = e instanceof Error ? e.message : 'Could not send direct message.'
             setError(message)
+            throw e
           }
         }}
       />

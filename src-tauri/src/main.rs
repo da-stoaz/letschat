@@ -1,14 +1,21 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use futures_util::StreamExt;
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde::Serialize;
+use std::collections::HashSet;
+use std::io::Write;
+use std::path::Path;
+use std::sync::{LazyLock, Mutex};
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 
 const MAIN_WINDOW_LABEL: &str = "main";
+static CANCELLED_ATTACHMENT_DOWNLOADS: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,6 +33,46 @@ struct LivekitClaims {
     nbf: usize,
     exp: usize,
     video: LivekitVideoGrant,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AttachmentDownloadProgressPayload {
+    operation_id: String,
+    bytes_downloaded: u64,
+    total_bytes: Option<u64>,
+    completed: bool,
+}
+
+struct DownloadCancellationGuard {
+    operation_id: String,
+}
+
+impl Drop for DownloadCancellationGuard {
+    fn drop(&mut self) {
+        clear_attachment_download_cancelled(&self.operation_id);
+    }
+}
+
+fn mark_attachment_download_cancelled(operation_id: String) -> Result<(), String> {
+    let mut cancelled = CANCELLED_ATTACHMENT_DOWNLOADS
+        .lock()
+        .map_err(|_| "Could not access download cancellation state.".to_string())?;
+    cancelled.insert(operation_id);
+    Ok(())
+}
+
+fn clear_attachment_download_cancelled(operation_id: &str) {
+    if let Ok(mut cancelled) = CANCELLED_ATTACHMENT_DOWNLOADS.lock() {
+        cancelled.remove(operation_id);
+    }
+}
+
+fn is_attachment_download_cancelled(operation_id: &str) -> bool {
+    if let Ok(cancelled) = CANCELLED_ATTACHMENT_DOWNLOADS.lock() {
+        return cancelled.contains(operation_id);
+    }
+    false
 }
 
 #[tauri::command]
@@ -118,6 +165,90 @@ fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+#[tauri::command]
+fn cancel_attachment_download(operation_id: String) -> Result<(), String> {
+    mark_attachment_download_cancelled(operation_id)
+}
+
+#[tauri::command]
+async fn save_attachment_file(
+    app: AppHandle,
+    url: String,
+    file_name: String,
+    operation_id: String,
+) -> Result<bool, String> {
+    let operation_id_for_cleanup = operation_id.clone();
+    clear_attachment_download_cancelled(&operation_id_for_cleanup);
+    let _cancellation_guard = DownloadCancellationGuard {
+        operation_id: operation_id_for_cleanup.clone(),
+    };
+
+    let suggested_file_name = Path::new(file_name.as_str())
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or("download");
+
+    let Some(path) = rfd::FileDialog::new()
+        .set_file_name(suggested_file_name)
+        .save_file()
+    else {
+        return Ok(false);
+    };
+
+    let response = reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .map_err(|error| format!("Download request failed: {error}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("Download failed ({status})."));
+    }
+    let total_bytes = response.content_length();
+    let mut file =
+        std::fs::File::create(&path).map_err(|error| format!("Saving file failed: {error}"))?;
+    let mut stream = response.bytes_stream();
+    let mut bytes_downloaded: u64 = 0;
+
+    while let Some(chunk) = stream.next().await {
+        if is_attachment_download_cancelled(&operation_id) {
+            drop(file);
+            let _ = std::fs::remove_file(&path);
+            return Ok(false);
+        }
+
+        let bytes = chunk.map_err(|error| format!("Reading download response failed: {error}"))?;
+        file.write_all(&bytes)
+            .map_err(|error| format!("Saving file failed: {error}"))?;
+        bytes_downloaded += bytes.len() as u64;
+
+        let _ = app.emit(
+            "attachment-download-progress",
+            AttachmentDownloadProgressPayload {
+                operation_id: operation_id.clone(),
+                bytes_downloaded,
+                total_bytes,
+                completed: false,
+            },
+        );
+    }
+
+    file.flush()
+        .map_err(|error| format!("Saving file failed: {error}"))?;
+
+    let _ = app.emit(
+        "attachment-download-progress",
+        AttachmentDownloadProgressPayload {
+            operation_id: operation_id.clone(),
+            bytes_downloaded,
+            total_bytes,
+            completed: true,
+        },
+    );
+    Ok(true)
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.show();
@@ -137,7 +268,9 @@ fn main() {
             show_notification,
             set_badge_count,
             minimize_to_tray,
-            get_app_version
+            get_app_version,
+            cancel_attachment_download,
+            save_attachment_file
         ])
         .setup(|app| {
             let open_item = MenuItem::with_id(app, "tray_open", "Open", true, None::<&str>)?;

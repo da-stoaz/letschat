@@ -82,6 +82,61 @@ type LivekitTokenPayload = {
   sessionToken: AuthFrameworkToken
 }
 
+type UploadRequestPayload = {
+  sessionToken: AuthFrameworkToken
+  fileName: string
+  fileSize: number
+  mimeType: string
+}
+
+type UploadConfirmPayload = {
+  sessionToken: AuthFrameworkToken
+  uploadId: string
+}
+
+type DownloadUrlPayload = {
+  sessionToken: AuthFrameworkToken
+  storageKey: string
+}
+
+type DownloadUrlsPayload = {
+  sessionToken: AuthFrameworkToken
+  storageKeys: string[]
+}
+
+type RenewSessionPayload = {
+  spacetimeToken: string
+  spacetimeIdentity: Identity
+}
+
+export interface UploadRequestResponse {
+  uploadId: string
+  uploadUrl: string
+  expiresIn: number
+}
+
+export interface UploadConfirmResponse {
+  storageKey: string
+  fileName: string
+  fileSize: number
+  mimeType: string
+}
+
+export interface DownloadUrlResponse {
+  url: string
+  expiresIn: number
+}
+
+export interface DownloadUrlBatchItem {
+  storageKey: string
+  url: string
+  expiresIn: number
+}
+
+export interface DownloadUrlsResponse {
+  items: DownloadUrlBatchItem[]
+}
+
 async function postJson<TResponse, TPayload extends Record<string, unknown>>(
   path: string,
   payload: TPayload,
@@ -155,6 +210,28 @@ export async function authServiceRefreshSpacetimeToken(payload: {
 export async function authServiceGenerateLivekitToken(payload: LivekitTokenPayload): Promise<string> {
   const result = await postJson<{ token: string }, LivekitTokenPayload>('/livekit/token', payload)
   return result.token
+}
+
+export async function authServiceUploadRequest(payload: UploadRequestPayload): Promise<UploadRequestResponse> {
+  return postJson<UploadRequestResponse, UploadRequestPayload>('/uploads/request', payload)
+}
+
+export async function authServiceUploadConfirm(payload: UploadConfirmPayload): Promise<UploadConfirmResponse> {
+  return postJson<UploadConfirmResponse, UploadConfirmPayload>('/uploads/confirm', payload)
+}
+
+export async function authServiceDownloadUrl(payload: DownloadUrlPayload): Promise<DownloadUrlResponse> {
+  return postJson<DownloadUrlResponse, DownloadUrlPayload>('/uploads/download-url', payload)
+}
+
+export async function authServiceDownloadUrls(payload: DownloadUrlsPayload): Promise<DownloadUrlsResponse> {
+  return postJson<DownloadUrlsResponse, DownloadUrlsPayload>('/uploads/download-urls', payload)
+}
+
+export async function authServiceRenewSession(payload: RenewSessionPayload): Promise<AuthFrameworkToken> {
+  const result = await postJson<{ sessionToken: AuthFrameworkToken }, RenewSessionPayload>('/auth/renew-session', payload)
+  setStoredAuthSessionToken(result.sessionToken)
+  return result.sessionToken
 }
 
 export async function authServiceVerify(): Promise<boolean> {

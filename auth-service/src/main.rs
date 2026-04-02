@@ -26,14 +26,14 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::Level;
 
 #[derive(Clone)]
 struct AppState {
     db: SqlitePool,
-    auth: Arc<Mutex<AuthFramework>>,
+    auth: Arc<RwLock<AuthFramework>>,
     uploads: uploads::UploadConfig,
 }
 
@@ -104,6 +104,13 @@ struct VerifyRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct RenewSessionRequest {
+    spacetime_token: String,
+    spacetime_identity: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct LivekitTokenRequest {
     room: String,
     identity: String,
@@ -129,6 +136,12 @@ struct HealthResponse {
 #[serde(rename_all = "camelCase")]
 struct VerifyResponse {
     valid: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RenewSessionResponse {
+    session_token: AuthToken,
 }
 
 #[derive(Debug, Serialize)]
@@ -299,7 +312,7 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState {
         db,
-        auth: Arc::new(Mutex::new(auth)),
+        auth: Arc::new(RwLock::new(auth)),
         uploads: upload_config,
     };
 
@@ -309,12 +322,14 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/link", post(link))
         .route("/auth/login", post(login))
         .route("/auth/verify", post(verify))
+        .route("/auth/renew-session", post(renew_session))
         .route("/livekit/token", post(livekit_token))
         // File uploads
         .route("/auth/refresh-spacetime-token", post(refresh_spacetime_token))
         .route("/uploads/request", post(uploads::upload_request))
         .route("/uploads/confirm", post(uploads::upload_confirm))
         .route("/uploads/download-url", post(uploads::download_url))
+        .route("/uploads/download-urls", post(uploads::download_urls))
         .with_state(state)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
@@ -515,12 +530,48 @@ async fn verify(
     State(state): State<AppState>,
     Json(request): Json<VerifyRequest>,
 ) -> Result<Json<VerifyResponse>, ApiError> {
-    let auth = state.auth.lock().await;
+    let auth = state.auth.read().await;
     let valid = auth
         .validate_token(&request.session_token)
         .await
         .map_err(internal)?;
     Ok(Json(VerifyResponse { valid }))
+}
+
+async fn renew_session(
+    State(state): State<AppState>,
+    Json(request): Json<RenewSessionRequest>,
+) -> Result<Json<RenewSessionResponse>, ApiError> {
+    if request.spacetime_token.trim().is_empty() {
+        return Err(ApiError::BadRequest("Spacetime token is required.".to_string()));
+    }
+    if request.spacetime_identity.trim().is_empty() {
+        return Err(ApiError::BadRequest("Spacetime identity is required.".to_string()));
+    }
+
+    let account = sqlx::query_as::<_, AccountRow>(
+        "SELECT username, display_name, password_hash, spacetime_token, spacetime_identity
+         FROM accounts
+         WHERE spacetime_token = ?",
+    )
+    .bind(request.spacetime_token.trim())
+    .fetch_optional(&state.db)
+    .await
+    .map_err(internal)?
+    .ok_or_else(|| ApiError::Unauthorized("Could not renew session for this account.".to_string()))?;
+
+    if !account
+        .spacetime_identity
+        .trim()
+        .eq_ignore_ascii_case(request.spacetime_identity.trim())
+    {
+        return Err(ApiError::Unauthorized(
+            "Could not renew session for this account.".to_string(),
+        ));
+    }
+
+    let session_token = issue_session_token(&state, &account.username).await?;
+    Ok(Json(RenewSessionResponse { session_token }))
 }
 
 async fn livekit_token(
@@ -534,7 +585,7 @@ async fn livekit_token(
         return Err(ApiError::BadRequest("Identity is required.".to_string()));
     }
 
-    let auth = state.auth.lock().await;
+    let auth = state.auth.read().await;
     let valid = auth
         .validate_token(&request.session_token)
         .await
@@ -596,7 +647,7 @@ async fn livekit_token(
 }
 
 async fn issue_session_token(state: &AppState, username: &str) -> Result<AuthToken, ApiError> {
-    let auth = state.auth.lock().await;
+    let auth = state.auth.write().await;
     auth.create_auth_token(
         username,
         vec!["chat:use".to_string(), "chat:voice".to_string()],
@@ -686,7 +737,7 @@ pub(crate) async fn require_valid_session(
     state: &AppState,
     token: &auth_framework::tokens::AuthToken,
 ) -> Result<String, ApiError> {
-    let auth = state.auth.lock().await;
+    let auth = state.auth.read().await;
     let valid = auth.validate_token(token).await.map_err(internal)?;
     if !valid {
         return Err(ApiError::Unauthorized(

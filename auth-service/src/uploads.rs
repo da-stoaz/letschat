@@ -3,6 +3,7 @@ use chrono::Utc;
 use s3::{Bucket, Region, creds::Credentials as S3Credentials};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 use crate::{AppState, ApiError, internal, require_valid_session};
@@ -129,12 +130,33 @@ pub struct DownloadUrlPayload {
     pub storage_key: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadUrlsPayload {
+    pub session_token: AuthToken,
+    pub storage_keys: Vec<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadUrlResponse {
     /// Short-lived presigned GET URL — use as `<img src>`, `<video src>`, or `<a href>`.
     pub url: String,
     pub expires_in: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadUrlItem {
+    pub storage_key: String,
+    pub url: String,
+    pub expires_in: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadUrlsResponse {
+    pub items: Vec<DownloadUrlItem>,
 }
 
 // ─── Internal DB row ──────────────────────────────────────────────────────────
@@ -364,6 +386,56 @@ pub async fn download_url(
         url,
         expires_in: PRESIGN_DOWNLOAD_SECS,
     }))
+}
+
+/// Returns short-lived presigned GET URLs for multiple storage keys in one call.
+///
+/// This endpoint exists to reduce auth/session validation overhead and network
+/// request fan-out on the frontend when many attachments or avatars are visible.
+pub async fn download_urls(
+    State(state): State<AppState>,
+    Json(payload): Json<DownloadUrlsPayload>,
+) -> Result<Json<DownloadUrlsResponse>, ApiError> {
+    require_valid_session(&state, &payload.session_token).await?;
+
+    if payload.storage_keys.is_empty() {
+        return Err(ApiError::BadRequest("storageKeys must not be empty.".to_string()));
+    }
+    if payload.storage_keys.len() > 128 {
+        return Err(ApiError::BadRequest(
+            "Too many storage keys requested at once.".to_string(),
+        ));
+    }
+
+    let mut unique_keys = Vec::with_capacity(payload.storage_keys.len());
+    let mut seen = HashSet::with_capacity(payload.storage_keys.len());
+    for key in payload.storage_keys {
+        if !key.starts_with("uploads/") {
+            return Err(ApiError::BadRequest("Invalid storage key.".to_string()));
+        }
+        if seen.insert(key.clone()) {
+            unique_keys.push(key);
+        }
+    }
+
+    let mut items = Vec::with_capacity(unique_keys.len());
+    for storage_key in unique_keys {
+        let s3_path = format!("/{storage_key}");
+        let url = state
+            .uploads
+            .bucket_presign
+            .presign_get(&s3_path, PRESIGN_DOWNLOAD_SECS, None)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Failed to generate download URL: {e}")))?;
+
+        items.push(DownloadUrlItem {
+            storage_key,
+            url,
+            expires_in: PRESIGN_DOWNLOAD_SECS,
+        });
+    }
+
+    Ok(Json(DownloadUrlsResponse { items }))
 }
 
 // ─── Private helpers ──────────────────────────────────────────────────────────

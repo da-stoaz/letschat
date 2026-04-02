@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
-import { BellIcon, LogOutIcon, ShieldCheckIcon, UserRoundIcon } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { BellIcon, CameraIcon, Loader2Icon, LogOutIcon, ShieldCheckIcon, Trash2Icon, UserRoundIcon } from 'lucide-react'
 import { getCurrentSessionToken, reducers, signOut } from '../../lib/spacetimedb'
 import { authServiceLink } from '../../lib/authService'
+import { uploadSingleFile } from '../../lib/uploads'
 import {
   ensureNotificationPermission,
   getNotificationPermission,
@@ -20,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
 type NotificationToggleRow = {
   event: NotificationEventType
@@ -80,6 +82,8 @@ const NOTIFICATION_TOGGLE_ROWS: NotificationToggleRow[] = [
   },
 ]
 
+const MAX_AVATAR_SIZE_BYTES = 10 * 1024 * 1024
+
 function normalizeTimeInput(value: string): string {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim())
   if (!match) return value
@@ -100,23 +104,79 @@ export function SettingsPanel() {
 
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? '')
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [quietHoursStart, setQuietHoursStart] = useState(notificationSettings.quietHoursStart)
   const [quietHoursEnd, setQuietHoursEnd] = useState(notificationSettings.quietHoursEnd)
   const [permissionState, setPermissionState] = useState<'granted' | 'denied' | 'default' | 'unsupported'>('default')
   const [isSavingProfile, setIsSavingProfile] = useState(false)
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [isSavingPassword, setIsSavingPassword] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [isRequestingPermission, setIsRequestingPermission] = useState(false)
   const [isSendingTest, setIsSendingTest] = useState(false)
   const [accountMessage, setAccountMessage] = useState<string | null>(null)
   const isTauri = isDesktopTauriRuntime()
+  const avatarInputRef = useRef<HTMLInputElement | null>(null)
+
+  const clearAvatarPreview = useCallback(() => {
+    setAvatarPreviewUrl((current) => {
+      if (current?.startsWith('blob:')) URL.revokeObjectURL(current)
+      return null
+    })
+  }, [])
+
+  const setAvatarPreviewFromFile = useCallback((file: File) => {
+    setAvatarPreviewUrl((current) => {
+      if (current?.startsWith('blob:')) URL.revokeObjectURL(current)
+      return URL.createObjectURL(file)
+    })
+  }, [])
+
+  const handleAvatarFilePicked = useCallback(
+    (file: File | null) => {
+      if (!file) return
+
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select an image file.')
+        return
+      }
+      if (file.size > MAX_AVATAR_SIZE_BYTES) {
+        toast.error('Profile picture is too large. Max size is 10 MB.')
+        return
+      }
+
+      setIsUploadingAvatar(true)
+      void uploadSingleFile(file)
+        .then((uploaded) => {
+          setAvatarUrl(uploaded.storageKey)
+          setAvatarPreviewFromFile(file)
+          toast.success('Profile picture uploaded')
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : 'Could not upload profile picture.'
+          toast.error(message)
+        })
+        .finally(() => {
+          setIsUploadingAvatar(false)
+        })
+    },
+    [setAvatarPreviewFromFile],
+  )
 
   useEffect(() => {
     setDisplayName(user?.displayName ?? '')
+    clearAvatarPreview()
     setAvatarUrl(user?.avatarUrl ?? '')
-  }, [user?.avatarUrl, user?.displayName])
+  }, [clearAvatarPreview, user?.avatarUrl, user?.displayName])
+
+  useEffect(
+    () => () => {
+      if (avatarPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(avatarPreviewUrl)
+    },
+    [avatarPreviewUrl],
+  )
 
   useEffect(() => {
     setQuietHoursStart(notificationSettings.quietHoursStart)
@@ -162,7 +222,8 @@ export function SettingsPanel() {
                   event.preventDefault()
                   setIsSavingProfile(true)
                   try {
-                    await reducers.updateProfile(displayName || undefined, avatarUrl || undefined)
+                    const normalizedAvatar = avatarUrl.trim()
+                    await reducers.updateProfile(displayName || null, normalizedAvatar)
                     toast.success('Profile updated')
                   } catch (error) {
                     const message = error instanceof Error ? error.message : 'Could not save profile.'
@@ -181,17 +242,65 @@ export function SettingsPanel() {
                     placeholder="Display name"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="settings-avatar">Avatar URL</Label>
-                  <Input
-                    id="settings-avatar"
-                    value={avatarUrl}
-                    onChange={(e) => setAvatarUrl(e.target.value)}
-                    placeholder="https://..."
+                <div className="space-y-3 rounded-lg border border-border/70 bg-card/70 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label className="text-sm">Profile picture</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Upload an image to use as your avatar across chats and calls.
+                      </p>
+                    </div>
+                    <Avatar className="size-16 rounded-2xl">
+                      {avatarPreviewUrl || avatarUrl ? (
+                        <AvatarImage src={avatarPreviewUrl ?? avatarUrl} alt={displayName || user?.username || 'Avatar'} />
+                      ) : null}
+                      <AvatarFallback className="rounded-2xl bg-primary/10 text-lg">
+                        {(displayName || user?.username || '?').slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
+
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null
+                      event.currentTarget.value = ''
+                      handleAvatarFilePicked(file)
+                    }}
                   />
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isUploadingAvatar}
+                      onClick={() => avatarInputRef.current?.click()}
+                    >
+                      {isUploadingAvatar ? <Loader2Icon className="size-4 animate-spin" /> : <CameraIcon className="size-4" />}
+                      {isUploadingAvatar ? 'Uploading…' : 'Change Photo'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={isUploadingAvatar || (!avatarPreviewUrl && !avatarUrl)}
+                      onClick={() => {
+                        clearAvatarPreview()
+                        setAvatarUrl('')
+                        toast.message('Profile picture will be removed after saving.')
+                      }}
+                    >
+                      <Trash2Icon className="size-4" />
+                      Remove
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex justify-end">
-                  <Button type="submit" disabled={isSavingProfile}>
+                  <Button type="submit" disabled={isSavingProfile || isUploadingAvatar}>
                     {isSavingProfile ? 'Saving…' : 'Save Profile'}
                   </Button>
                 </div>
