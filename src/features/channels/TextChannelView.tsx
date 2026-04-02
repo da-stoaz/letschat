@@ -69,8 +69,8 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col rounded-xl border border-border/70 bg-card/60">
-      <header className="flex items-center justify-between border-b border-border/70 px-4 py-3">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden bg-card/40">
+      <header className="flex items-center justify-between border-b border-border/70 px-3 py-2.5 sm:px-4">
         <div className="flex items-center gap-2">
           <HashIcon className="size-4 text-muted-foreground" />
           <strong className="font-medium">{channel?.name ?? `channel-${channelId}`}</strong>
@@ -84,7 +84,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
           <Button variant="ghost" size="icon-xs" disabled>
             <PinIcon className="size-3.5" />
           </Button>
-          <Button variant="outline" size="sm" onClick={toggleRightPanel}>
+          <Button variant="outline" size="sm" className="h-8" onClick={toggleRightPanel}>
             <SidebarIcon className="size-4" />
             Members
           </Button>
