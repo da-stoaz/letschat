@@ -9,6 +9,7 @@ type AttachmentListItemProps = {
   resolution: AttachmentResolution
   onRetry: (storageKey: string) => void
   onOpenImage: (image: { url: string; fileName: string }) => void
+  onOpenPdf: (pdf: { url: string; fileName: string }) => void
 }
 
 function openUrl(url: string): void {
@@ -25,9 +26,17 @@ function downloadFile(url: string, fileName: string): void {
   anchor.remove()
 }
 
-export function AttachmentListItem({ attachment, resolution, onRetry, onOpenImage }: AttachmentListItemProps) {
+function isPdfAttachment(attachment: ChatMessageAttachment): boolean {
+  return (
+    attachment.mimeType.toLowerCase() === 'application/pdf' ||
+    attachment.fileName.toLowerCase().endsWith('.pdf')
+  )
+}
+
+export function AttachmentListItem({ attachment, resolution, onRetry, onOpenImage, onOpenPdf }: AttachmentListItemProps) {
   const kind = getAttachmentKind(attachment.mimeType)
   const canOpen = Boolean(resolution.url)
+  const isPdf = isPdfAttachment(attachment)
 
   const renderKindIcon = () => {
     if (kind === 'image') return <ImageIcon className="size-4 text-muted-foreground" />
@@ -86,11 +95,15 @@ export function AttachmentListItem({ attachment, resolution, onRetry, onOpenImag
                 onOpenImage({ url: resolution.url, fileName: attachment.fileName })
                 return
               }
+              if (isPdf) {
+                onOpenPdf({ url: resolution.url, fileName: attachment.fileName })
+                return
+              }
               openUrl(resolution.url)
             }}
           >
             <ExternalLinkIcon className="size-4" />
-            {kind === 'image' ? 'Preview' : 'Open'}
+            {kind === 'image' || isPdf ? 'Preview' : 'Open'}
           </Button>
 
           <Button
