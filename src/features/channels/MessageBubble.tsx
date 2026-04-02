@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { PresenceDot } from '@/components/user/PresenceDot'
 import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { userInitials } from '../../layouts/app-layout/helpers'
+import { MessageAttachmentList } from '../chat/MessageAttachmentList'
+import { parseMessageAttachments } from '../chat/attachmentPayload'
 
 export interface RenderableMessage {
   id: number
@@ -112,21 +114,28 @@ export function MessageBubble({
               const isOwn = sameIdentity(message.senderIdentity, selfIdentity)
               const canEdit = allowEditOwn && isOwn && !message.deleted
               const canDelete = canDeleteGroupMessage[message.id]
+              const parsed = parseMessageAttachments(message.content)
+              const hasText = parsed.text.trim().length > 0
 
               return (
                 <div key={message.id} className="group/message relative rounded-md pr-16">
                   {message.deleted ? (
                     <p className="text-sm italic text-muted-foreground">[message deleted]</p>
                   ) : (
-                    <div className="prose prose-invert max-w-none break-words text-sm text-foreground prose-p:my-0 prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-pre:rounded prose-pre:border prose-pre:border-border/70 prose-pre:bg-muted/70 prose-a:text-sky-400 hover:prose-a:text-sky-300">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer noopener" />,
-                        }}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
+                    <div className="space-y-2">
+                      <MessageAttachmentList attachments={parsed.attachments} />
+                      {hasText ? (
+                        <div className="prose prose-invert max-w-none break-words text-sm text-foreground prose-p:my-0 prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-pre:rounded prose-pre:border prose-pre:border-border/70 prose-pre:bg-muted/70 prose-a:text-sky-400 hover:prose-a:text-sky-300">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              a: ({ ...props }) => <a {...props} target="_blank" rel="noreferrer noopener" />,
+                            }}
+                          >
+                            {parsed.text}
+                          </ReactMarkdown>
+                        </div>
+                      ) : null}
                     </div>
                   )}
                   {message.editedAt ? <span className="ml-1 text-xs text-muted-foreground">[edited]</span> : null}

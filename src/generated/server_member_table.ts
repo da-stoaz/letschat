@@ -22,4 +22,5 @@ export default __t.row({
     return Role;
   },
   joinedAt: __t.timestamp().name("joined_at"),
+  timeoutUntil: __t.option(__t.timestamp()).name("timeout_until"),
 });

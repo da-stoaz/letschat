@@ -18,12 +18,18 @@ export function ChannelBar({
   joinedVoiceChannelId,
   activeSpeakerIdentityKeys,
   memberProfileByIdentity,
-  onOpenRenameServer,
   onOpenInvite,
   onOpenCreateChannel,
+  onOpenServerPanel,
+  onLeaveServer,
+  isChannelMuted,
+  onToggleChannelMute,
   onSelectChannel,
   onOpenFriends,
   dmContacts,
+  dmUnreadByIdentity,
+  isUserMuted,
+  onToggleUserMute,
   activeDmIdentity,
   dmCallActiveByIdentity,
   onOpenDmContact,
@@ -42,9 +48,12 @@ export function ChannelBar({
         joinedVoiceChannelId={joinedVoiceChannelId}
         activeSpeakerIdentityKeys={activeSpeakerIdentityKeys}
         memberProfileByIdentity={memberProfileByIdentity}
-        onOpenRenameServer={onOpenRenameServer}
         onOpenInvite={onOpenInvite}
         onOpenCreateChannel={onOpenCreateChannel}
+        onOpenServerPanel={onOpenServerPanel}
+        onLeaveServer={onLeaveServer}
+        isChannelMuted={isChannelMuted}
+        onToggleChannelMute={onToggleChannelMute}
         onSelectChannel={onSelectChannel}
       />
     )
@@ -54,6 +63,9 @@ export function ChannelBar({
       <DmChannelBar
       channelBarWidth={channelBarWidth}
       dmContacts={dmContacts}
+      dmUnreadByIdentity={dmUnreadByIdentity}
+      isUserMuted={isUserMuted}
+      onToggleUserMute={onToggleUserMute}
       activeDmIdentity={activeDmIdentity}
       dmCallActiveByIdentity={dmCallActiveByIdentity}
       onOpenFriends={onOpenFriends}

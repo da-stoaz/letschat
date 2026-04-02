@@ -10,6 +10,7 @@ import { useServerRole } from '../../hooks/useServerRole'
 import { warnOnce } from '../../lib/devWarnings'
 import { ChatMessageFeed } from '../chat/ChatMessageFeed'
 import { ChatComposer } from '../chat/ChatComposer'
+import { composeMessageWithAttachments, parseMessageAttachments } from '../chat/attachmentPayload'
 import type { Message, u64 } from '../../types/domain'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -57,6 +58,12 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const unreadCount = channelId === null ? 0 : (unreadByChannel[channelId] ?? 0)
   const typingScopeKey = `channel:${channelId}`
 
+  useEffect(() => {
+    if (channelId === null) return
+    clearUnread(channelId)
+    reducers.markChannelRead(channelId).catch(() => undefined)
+  }, [channelId, clearUnread])
+
   if (channelId === null) {
     return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a text channel</div>
   }
@@ -91,16 +98,19 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         unreadCount={unreadCount}
         canDeleteAny={canModerate}
         onEditMessage={async (message) => {
-          const next = window.prompt('Edit message', message.content)
+          const parsed = parseMessageAttachments(message.content)
+          const next = window.prompt('Edit message', parsed.text)
           if (next === null) return
           const trimmed = next.trim()
-          if (!trimmed) return
+          if (!trimmed && parsed.attachments.length === 0) return
           setError(null)
           try {
-            await reducers.editMessage(message.id, trimmed)
+            const nextContent = composeMessageWithAttachments(trimmed, parsed.attachments)
+            await reducers.editMessage(message.id, nextContent)
           } catch (e) {
             const messageText = e instanceof Error ? e.message : 'Could not edit message.'
             setError(messageText)
+            throw e
           }
         }}
         onDeleteMessage={async (message) => {
@@ -125,17 +135,20 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         typingScopeKey={typingScopeKey}
         typingIdentity={selfIdentity}
         error={error}
-        onSubmit={async (trimmed) => {
+        onSubmit={async ({ text, attachments }) => {
           setError(null)
           try {
-            await reducers.sendMessage(channelId, trimmed)
+            const payload = composeMessageWithAttachments(text, attachments)
+            await reducers.sendMessage(channelId, payload)
             setDraft('')
             setActiveChannelId(channelId)
             clearUnread(channelId)
+            reducers.markChannelRead(channelId).catch(() => undefined)
             setScrollToBottomToken((current) => current + 1)
           } catch (e) {
             const message = e instanceof Error ? e.message : 'Could not send message.'
             setError(message)
+            throw e
           }
         }}
       />

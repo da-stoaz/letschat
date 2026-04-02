@@ -4,6 +4,30 @@ const AUTH_SERVICE_URL = (import.meta.env.VITE_AUTH_SERVICE_URL as string | unde
 const AUTH_SESSION_KEY = 'letschat.auth_session_token'
 const AUTH_REQUEST_TIMEOUT_MS = 12000
 
+function isPlaceholderEndpoint(url: string): boolean {
+  return /yourdomain\.com/i.test(url)
+}
+
+function getNetworkErrorDetails(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message.trim()
+  }
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error.trim()
+  }
+  if (error && typeof error === 'object') {
+    const maybeEvent = error as { type?: unknown; message?: unknown }
+    if (typeof maybeEvent.message === 'string' && maybeEvent.message.trim().length > 0) {
+      return maybeEvent.message.trim()
+    }
+    if (typeof maybeEvent.type === 'string' && maybeEvent.type.trim().length > 0) {
+      return `${maybeEvent.type.trim()} event`
+    }
+  }
+  const fallback = String(error)
+  return fallback === '[object Event]' ? 'network event' : fallback
+}
+
 export interface AuthFrameworkToken {
   token_id: string
   user_id: string
@@ -58,10 +82,71 @@ type LivekitTokenPayload = {
   sessionToken: AuthFrameworkToken
 }
 
+type UploadRequestPayload = {
+  sessionToken: AuthFrameworkToken
+  fileName: string
+  fileSize: number
+  mimeType: string
+}
+
+type UploadConfirmPayload = {
+  sessionToken: AuthFrameworkToken
+  uploadId: string
+}
+
+type DownloadUrlPayload = {
+  sessionToken: AuthFrameworkToken
+  storageKey: string
+}
+
+type DownloadUrlsPayload = {
+  sessionToken: AuthFrameworkToken
+  storageKeys: string[]
+}
+
+type RenewSessionPayload = {
+  spacetimeToken: string
+  spacetimeIdentity: Identity
+}
+
+export interface UploadRequestResponse {
+  uploadId: string
+  uploadUrl: string
+  expiresIn: number
+}
+
+export interface UploadConfirmResponse {
+  storageKey: string
+  fileName: string
+  fileSize: number
+  mimeType: string
+}
+
+export interface DownloadUrlResponse {
+  url: string
+  expiresIn: number
+}
+
+export interface DownloadUrlBatchItem {
+  storageKey: string
+  url: string
+  expiresIn: number
+}
+
+export interface DownloadUrlsResponse {
+  items: DownloadUrlBatchItem[]
+}
+
 async function postJson<TResponse, TPayload extends Record<string, unknown>>(
   path: string,
   payload: TPayload,
 ): Promise<TResponse> {
+  if (isPlaceholderEndpoint(AUTH_SERVICE_URL)) {
+    throw new Error(
+      `Auth service URL is still a placeholder (${AUTH_SERVICE_URL}). Rebuild with a real VITE_AUTH_SERVICE_URL before signing in.`,
+    )
+  }
+
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS)
   let response: Response
@@ -80,7 +165,10 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
         `Auth service request timed out after ${AUTH_REQUEST_TIMEOUT_MS / 1000}s. Ensure auth-service is running at ${AUTH_SERVICE_URL}.`,
       )
     }
-    throw error
+    const details = getNetworkErrorDetails(error)
+    throw new Error(
+      `Could not reach auth-service at ${AUTH_SERVICE_URL} (${details}). Check auth-service status and VITE_AUTH_SERVICE_URL.`,
+    )
   } finally {
     clearTimeout(timeout)
   }
@@ -122,6 +210,28 @@ export async function authServiceRefreshSpacetimeToken(payload: {
 export async function authServiceGenerateLivekitToken(payload: LivekitTokenPayload): Promise<string> {
   const result = await postJson<{ token: string }, LivekitTokenPayload>('/livekit/token', payload)
   return result.token
+}
+
+export async function authServiceUploadRequest(payload: UploadRequestPayload): Promise<UploadRequestResponse> {
+  return postJson<UploadRequestResponse, UploadRequestPayload>('/uploads/request', payload)
+}
+
+export async function authServiceUploadConfirm(payload: UploadConfirmPayload): Promise<UploadConfirmResponse> {
+  return postJson<UploadConfirmResponse, UploadConfirmPayload>('/uploads/confirm', payload)
+}
+
+export async function authServiceDownloadUrl(payload: DownloadUrlPayload): Promise<DownloadUrlResponse> {
+  return postJson<DownloadUrlResponse, DownloadUrlPayload>('/uploads/download-url', payload)
+}
+
+export async function authServiceDownloadUrls(payload: DownloadUrlsPayload): Promise<DownloadUrlsResponse> {
+  return postJson<DownloadUrlsResponse, DownloadUrlsPayload>('/uploads/download-urls', payload)
+}
+
+export async function authServiceRenewSession(payload: RenewSessionPayload): Promise<AuthFrameworkToken> {
+  const result = await postJson<{ sessionToken: AuthFrameworkToken }, RenewSessionPayload>('/auth/renew-session', payload)
+  setStoredAuthSessionToken(result.sessionToken)
+  return result.sessionToken
 }
 
 export async function authServiceVerify(): Promise<boolean> {

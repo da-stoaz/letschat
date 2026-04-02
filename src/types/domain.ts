@@ -4,6 +4,7 @@ export type Identity = string
 export type Role = 'Member' | 'Moderator' | 'Owner'
 export type ChannelKind = 'Text' | 'Voice'
 export type FriendStatus = 'Pending' | 'Accepted'
+export type ServerInvitePolicy = 'ModeratorsOnly' | 'Everyone'
 
 export interface User {
   identity: Identity
@@ -17,6 +18,7 @@ export interface Server {
   id: u64
   name: string
   ownerIdentity: Identity
+  invitePolicy: ServerInvitePolicy
   iconUrl: string | null
   createdAt: string
 }
@@ -26,6 +28,7 @@ export interface ServerMember {
   userIdentity: Identity
   role: Role
   joinedAt: string
+  timeoutUntil: string | null
 }
 
 export interface Ban {
@@ -43,6 +46,19 @@ export interface Invite {
   expiresAt: string
   maxUses: number | null
   useCount: number
+  allowedUsernames: string[]
+}
+
+export type DmInviteStatus = 'Pending' | 'Accepted' | 'Declined'
+
+export interface DmServerInvite {
+  id: u64
+  serverId: u64
+  inviteToken: string
+  senderIdentity: Identity
+  recipientIdentity: Identity
+  status: DmInviteStatus
+  createdAt: string
 }
 
 export interface Channel {
@@ -121,5 +137,13 @@ export interface TypingState {
   typingKey: string
   scopeKey: string
   userIdentity: Identity
+  updatedAt: string
+}
+
+export interface ReadState {
+  readKey: string
+  scopeKey: string
+  userIdentity: Identity
+  lastReadAt: string
   updatedAt: string
 }

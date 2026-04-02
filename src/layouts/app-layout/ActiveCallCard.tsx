@@ -251,6 +251,12 @@ export function ActiveCallCard({
   const sharingCamera = selfParticipant?.sharingCamera ?? false
   const sharingScreen = selfParticipant?.sharingScreen ?? false
   const hasScreenCapture = supportsScreenCapture()
+  const screenShareButtonClass = cn(
+    'transition-all duration-150',
+    sharingScreen
+      ? 'border-emerald-400/70 bg-emerald-500/20 text-emerald-100 shadow-[0_0_0_1px_rgba(52,211,153,0.45)] hover:border-emerald-300 hover:bg-emerald-500/30 hover:text-emerald-50'
+      : 'border-border/70 bg-background/35 text-muted-foreground hover:bg-muted/70 hover:text-foreground',
+  )
 
   useEffect(() => {
     if (!activeRoom) return
@@ -323,10 +329,6 @@ export function ActiveCallCard({
   useEffect(() => {
     setAudioOutputSwitchSupported(supportsAudioOutputSwitching())
   }, [activeRoom])
-
-  if (mode === null || !selfIdentity) {
-    return null
-  }
 
   const setCurrentError = (message: string | null) => {
     if (message && isUserAgentPermissionContextError(message)) {
@@ -493,6 +495,10 @@ export function ActiveCallCard({
   const canSwitchAudioOutput = audioOutputSwitchSupported
   const compact = variant === 'sidebar'
 
+  if (mode === null || !selfIdentity) {
+    return null
+  }
+
   if (compact) {
     return (
       <Card
@@ -610,8 +616,8 @@ export function ActiveCallCard({
 
             <Button
               size="icon-xs"
-              variant={sharingScreen ? 'secondary' : 'outline'}
-              className="h-8 w-8"
+              variant="outline"
+              className={cn('h-8 w-8', screenShareButtonClass)}
               onClick={onToggleScreenShare}
               disabled={!hasScreenCapture}
             >
@@ -758,7 +764,8 @@ export function ActiveCallCard({
 
           <Button
             size="icon-sm"
-            variant={sharingScreen ? 'secondary' : 'outline'}
+            variant="outline"
+            className={screenShareButtonClass}
             onClick={onToggleScreenShare}
             disabled={!hasScreenCapture}
           >

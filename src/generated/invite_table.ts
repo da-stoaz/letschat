@@ -17,4 +17,5 @@ export default __t.row({
   expiresAt: __t.timestamp().name("expires_at"),
   maxUses: __t.option(__t.u32()).name("max_uses"),
   useCount: __t.u32().name("use_count"),
+  allowedUsernames: __t.array(__t.string()).name("allowed_usernames"),
 });

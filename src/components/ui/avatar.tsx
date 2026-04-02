@@ -4,6 +4,7 @@ import * as React from "react"
 import { Avatar as AvatarPrimitive } from "@base-ui/react/avatar"
 
 import { cn } from "@/lib/utils"
+import { getSignedDownloadUrl } from "@/lib/uploads"
 
 function Avatar({
   className,
@@ -25,7 +26,44 @@ function Avatar({
   )
 }
 
-function AvatarImage({ className, ...props }: AvatarPrimitive.Image.Props) {
+function AvatarImage({ className, src, ...props }: AvatarPrimitive.Image.Props) {
+  const [resolvedSrc, setResolvedSrc] = React.useState<string | undefined>(
+    typeof src === "string" && src.length > 0 ? src : undefined,
+  )
+
+  React.useEffect(() => {
+    let cancelled = false
+
+    if (typeof src !== "string" || src.length === 0) {
+      setResolvedSrc(undefined)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    if (!src.startsWith("uploads/")) {
+      setResolvedSrc(src)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setResolvedSrc(undefined)
+    void getSignedDownloadUrl(src)
+      .then((url) => {
+        if (cancelled) return
+        setResolvedSrc(url)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setResolvedSrc(undefined)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [src])
+
   return (
     <AvatarPrimitive.Image
       data-slot="avatar-image"
@@ -33,6 +71,7 @@ function AvatarImage({ className, ...props }: AvatarPrimitive.Image.Props) {
         "aspect-square size-full rounded-full object-cover",
         className
       )}
+      src={resolvedSrc}
       {...props}
     />
   )

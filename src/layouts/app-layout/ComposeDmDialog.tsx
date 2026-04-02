@@ -48,6 +48,10 @@ export function ComposeDmDialog({ open, onOpenChange, friends, onSelectFriend }:
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search by display name or username"
             className="pl-8"
+            spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="none"
+            autoComplete="off"
           />
         </div>
 
@@ -84,4 +88,3 @@ export function ComposeDmDialog({ open, onOpenChange, friends, onSelectFriend }:
     </Dialog>
   )
 }
-

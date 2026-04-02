@@ -1,5 +1,5 @@
-import { ChevronsUpDownIcon, HashIcon, LockIcon, PlusIcon, ShieldIcon, Volume2Icon } from 'lucide-react'
-import { canManageChannels, canRenameServer } from '../../../lib/permissions'
+import { BellIcon, BellOffIcon, ChevronsUpDownIcon, HashIcon, LockIcon, LogOutIcon, PlusIcon, Settings2Icon, ShieldIcon, UserPlusIcon, Volume2Icon } from 'lucide-react'
+import { canInviteUsers, canManageChannels } from '../../../lib/permissions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,34 +28,59 @@ export function ServerChannelBar({
   joinedVoiceChannelId,
   activeSpeakerIdentityKeys,
   memberProfileByIdentity,
-  onOpenRenameServer,
   onOpenInvite,
   onOpenCreateChannel,
+  onOpenServerPanel,
+  onLeaveServer,
+  isChannelMuted,
+  onToggleChannelMute,
   onSelectChannel,
 }: ServerChannelBarProps) {
+  const ownerCannotLeave = role === 'Owner'
+  const canAccessServerPanel = role === 'Owner' || role === 'Moderator'
+  const canInvite =
+    Boolean(role && activeServer && canInviteUsers(role, activeServer.invitePolicy))
+
   return (
     <ChannelBarShell
       header={(
-        <DropdownMenu>
-          <DropdownMenuTrigger className="inline-flex w-full items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-left text-sm font-medium hover:bg-muted/60">
-            <span className="truncate">{activeServer?.name ?? 'Server'}</span>
-            <ChevronsUpDownIcon className="size-4 text-muted-foreground" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuItem onClick={onOpenRenameServer} disabled={!role || !canRenameServer(role)}>
-              Rename Server
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenInvite}>
-              Invite People
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenCreateChannel} disabled={!role || !canManageChannels(role)}>
-              Create Channel
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled>
-              Leave Server (coming soon)
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+          {canInvite ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="shrink-0"
+              onClick={onOpenInvite}
+              title="Invite users"
+              aria-label="Invite users"
+            >
+              <UserPlusIcon className="size-4" />
+            </Button>
+          ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger className="inline-flex w-full items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-left text-sm font-medium hover:bg-muted/60">
+              <span className="truncate">{activeServer?.name ?? 'Server'}</span>
+              <ChevronsUpDownIcon className="size-4 text-muted-foreground" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              {canAccessServerPanel ? (
+                <DropdownMenuItem onClick={onOpenServerPanel}>
+                  <Settings2Icon className="size-3.5" />
+                  Server Panel
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                onClick={onLeaveServer}
+                disabled={ownerCannotLeave}
+                className="text-destructive focus:text-destructive"
+              >
+                <LogOutIcon className="size-3.5" />
+                {ownerCannotLeave ? 'Transfer ownership to leave' : 'Leave Server'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       )}
     >
       <ScrollArea className="h-full pr-2">
@@ -66,18 +91,33 @@ export function ServerChannelBar({
           </div>
           {textChannels.map((channel) => {
             const unread = unreadByChannel[channel.id] ?? 0
+            const muted = isChannelMuted(channel.id)
             return (
-              <Button
-                key={channel.id}
-                variant={activeChannelId === channel.id ? 'secondary' : 'ghost'}
-                className="w-full justify-start gap-2 rounded-lg"
-                onClick={() => onSelectChannel(channel.id)}
-              >
-                <HashIcon className="size-4 opacity-70" />
-                <span className="truncate">{channel.name}</span>
-                {channel.moderatorOnly ? <LockIcon className="ml-auto size-3.5 opacity-70" /> : null}
-                {unread > 0 ? <Badge className="ml-auto">{unread}</Badge> : null}
-              </Button>
+              <div key={channel.id} className="flex items-center gap-1">
+                <Button
+                  variant={activeChannelId === channel.id ? 'secondary' : 'ghost'}
+                  className="min-w-0 flex-1 justify-start gap-2 rounded-lg"
+                  onClick={() => onSelectChannel(channel.id)}
+                >
+                  <HashIcon className="size-4 opacity-70" />
+                  <span className="truncate">{channel.name}</span>
+                  {channel.moderatorOnly ? <LockIcon className="ml-auto size-3.5 opacity-70" /> : null}
+                  {unread > 0 ? <Badge className="ml-auto">{unread}</Badge> : null}
+                </Button>
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant={muted ? 'secondary' : 'ghost'}
+                  aria-label={muted ? 'Unmute channel' : 'Mute channel'}
+                  title={muted ? 'Unmute channel' : 'Mute channel'}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onToggleChannelMute(channel.id)
+                  }}
+                >
+                  {muted ? <BellOffIcon className="size-3.5" /> : <BellIcon className="size-3.5" />}
+                </Button>
+              </div>
             )
           })}
         </section>
@@ -97,7 +137,9 @@ export function ServerChannelBar({
               participants={participantsByChannel[channel.id] ?? []}
               selfJoined={joinedVoiceChannelId === channel.id}
               activeSpeakerIdentityKeys={joinedVoiceChannelId === channel.id ? activeSpeakerIdentityKeys : EMPTY_ACTIVE_SPEAKERS}
+              muted={isChannelMuted(channel.id)}
               memberProfileByIdentity={memberProfileByIdentity}
+              onToggleMute={() => onToggleChannelMute(channel.id)}
               onSelect={() => onSelectChannel(channel.id)}
             />
           ))}

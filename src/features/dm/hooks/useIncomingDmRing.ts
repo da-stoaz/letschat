@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { toast } from '@/components/ui/sonner'
-import { tauriCommands } from '../../../lib/tauri'
+import { notify } from '../../../lib/notifications'
 import type { DmVoiceParticipant, Identity, User } from '../../../types/domain'
 
 function normalizeIdentity(value: string | null | undefined): string {
@@ -111,6 +111,7 @@ export function useIncomingDmRing({
   participantsByRoom,
   usersByIdentity,
   selfIdentity,
+  mutedUsers,
   activeDmIdentity,
   joinedDmPartnerIdentity,
   dmJoining,
@@ -119,6 +120,7 @@ export function useIncomingDmRing({
   participantsByRoom: Record<string, DmVoiceParticipant[]>
   usersByIdentity: Record<Identity, User>
   selfIdentity: Identity | null
+  mutedUsers: Record<Identity, boolean>
   activeDmIdentity: Identity | null
   joinedDmPartnerIdentity: Identity | null
   dmJoining: boolean
@@ -133,10 +135,16 @@ export function useIncomingDmRing({
   const dismissedRoomKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
+    const incomingMuted =
+      incoming !== null &&
+      Object.entries(mutedUsers).some(
+        ([identity, muted]) => muted && sameIdentity(identity, incoming.callerIdentity),
+      )
+
     const shouldSilenceForActiveConversation =
       incoming !== null && (sameIdentity(activeDmIdentity, incoming.partnerIdentity) || sameIdentity(joinedDmPartnerIdentity, incoming.partnerIdentity) || dmJoining)
 
-    if (incoming === null || shouldSilenceForActiveConversation) {
+    if (incoming === null || shouldSilenceForActiveConversation || incomingMuted) {
       const previous = ringingRef.current
       if (previous) {
         previous.stopTone?.()
@@ -175,9 +183,10 @@ export function useIncomingDmRing({
     }
 
     const stopTone = startRingtoneLoop()
-    void tauriCommands
-      .showNotification('Incoming DM call', `${incoming.callerLabel} is calling you`)
-      .catch(() => undefined)
+    void notify('incoming_call', {
+      callerLabel: incoming.callerLabel,
+      dedupeKey: incoming.roomKey,
+    })
 
     const toastId = toast('Incoming DM call', {
       description: `${incoming.callerLabel} is calling you`,
@@ -217,5 +226,5 @@ export function useIncomingDmRing({
       toastId,
       timeoutId,
     }
-  }, [activeDmIdentity, dmJoining, incoming, joinedDmPartnerIdentity, onOpenDm])
+  }, [activeDmIdentity, dmJoining, incoming, joinedDmPartnerIdentity, mutedUsers, onOpenDm])
 }

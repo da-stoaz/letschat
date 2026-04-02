@@ -113,7 +113,15 @@ export function FriendsView() {
             }
           }}
         >
-          <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Add friend by username" />
+          <Input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Add friend by username"
+            spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="none"
+            autoComplete="off"
+          />
           <Button type="submit">
             <UserPlusIcon className="size-4" />
             Add

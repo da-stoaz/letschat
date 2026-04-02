@@ -139,6 +139,10 @@ export function AuthPage() {
                 maxLength={32}
                 required
                 placeholder="username"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="none"
+                autoComplete="username"
               />
             </div>
             {mode === 'register' ? (

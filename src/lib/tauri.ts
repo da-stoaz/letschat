@@ -1,13 +1,19 @@
 import { invoke } from '@tauri-apps/api/core'
 import { authServiceGenerateLivekitToken, clearStoredAuthSessionToken, getStoredAuthSessionToken } from './authService'
+import { clearSignedDownloadUrlCache } from './uploads'
 import type { Identity } from '../types/domain'
 
 const DEFAULT_WEB_LIVEKIT_URL = 'http://127.0.0.1:7880'
 const WEB_LIVEKIT_URL = (import.meta.env.VITE_LIVEKIT_URL as string | undefined) ?? DEFAULT_WEB_LIVEKIT_URL
+export type NotificationPermissionState = NotificationPermission | 'unsupported'
 
 function isTauriRuntime(): boolean {
   if (typeof window === 'undefined') return false
   return typeof (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== 'undefined'
+}
+
+export function isDesktopTauriRuntime(): boolean {
+  return isTauriRuntime()
 }
 
 function isInvalidAuthSessionError(error: unknown): boolean {
@@ -18,6 +24,7 @@ function isInvalidAuthSessionError(error: unknown): boolean {
 function forceWebSignOutForExpiredSession(): void {
   if (typeof window === 'undefined') return
   clearStoredAuthSessionToken()
+  clearSignedDownloadUrlCache()
   localStorage.removeItem('spacetimedb.auth_token')
   setTimeout(() => {
     window.location.assign('/auth')
@@ -58,16 +65,18 @@ export const tauriCommands = {
   showNotification: async (title: string, body: string) => {
     if (isTauriRuntime()) return invoke<void>('show_notification', { title, body })
     if (typeof window === 'undefined' || typeof Notification === 'undefined') return
-    if (Notification.permission === 'granted') {
-      new Notification(title, { body })
-      return
-    }
-    if (Notification.permission !== 'denied') {
-      const permission = await Notification.requestPermission()
-      if (permission === 'granted') {
-        new Notification(title, { body })
-      }
-    }
+    if (Notification.permission !== 'granted') return
+    new Notification(title, { body })
+  },
+  getNotificationPermission: async (): Promise<NotificationPermissionState> => {
+    if (isTauriRuntime()) return 'granted'
+    if (typeof window === 'undefined' || typeof Notification === 'undefined') return 'unsupported'
+    return Notification.permission
+  },
+  requestNotificationPermission: async (): Promise<NotificationPermissionState> => {
+    if (isTauriRuntime()) return 'granted'
+    if (typeof window === 'undefined' || typeof Notification === 'undefined') return 'unsupported'
+    return Notification.requestPermission()
   },
   setBadgeCount: async (count: number) => {
     if (isTauriRuntime()) return invoke<void>('set_badge_count', { count })
@@ -78,4 +87,8 @@ export const tauriCommands = {
   },
   getAppVersion: async () =>
     isTauriRuntime() ? invoke<string>('get_app_version') : 'web',
+  saveAttachmentFile: async (url: string, fileName: string): Promise<boolean> => {
+    if (!isTauriRuntime()) return false
+    return invoke<boolean>('save_attachment_file', { url, fileName })
+  },
 }

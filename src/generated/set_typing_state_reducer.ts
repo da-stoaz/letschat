@@ -11,6 +11,6 @@ import {
 } from "spacetimedb";
 
 export default {
-  scopeKey: __t.string().name("scope_key"),
-  isTyping: __t.bool().name("is_typing"),
+  scopeKey: __t.string(),
+  isTyping: __t.bool(),
 };

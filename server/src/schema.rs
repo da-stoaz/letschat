@@ -19,6 +19,12 @@ pub enum FriendStatus {
     Accepted,
 }
 
+#[derive(SpacetimeType, Clone, PartialEq, Eq)]
+pub enum InvitePolicy {
+    ModeratorsOnly,
+    Everyone,
+}
+
 #[spacetimedb::table(accessor = user, public)]
 pub struct User {
     #[primary_key]
@@ -53,6 +59,7 @@ pub struct Server {
     pub name: String,
     #[index(btree)]
     pub owner_identity: Identity,
+    pub invite_policy: InvitePolicy,
     pub icon_url: Option<String>,
     pub created_at: Timestamp,
 }
@@ -71,6 +78,7 @@ pub struct ServerMember {
     pub user_identity: Identity,
     pub role: Role,
     pub joined_at: Timestamp,
+    pub timeout_until: Option<Timestamp>,
 }
 
 #[spacetimedb::table(
@@ -100,6 +108,32 @@ pub struct Invite {
     pub expires_at: Timestamp,
     pub max_uses: Option<u32>,
     pub use_count: u32,
+    pub allowed_usernames: Vec<String>,
+}
+
+#[derive(SpacetimeType, Clone, PartialEq, Eq)]
+pub enum DmInviteStatus {
+    Pending,
+    Accepted,
+    Declined,
+}
+
+#[spacetimedb::table(
+    accessor = dm_server_invite,
+    public,
+    index(accessor = by_recipient, btree(columns = [recipient_identity])),
+    index(accessor = by_sender, btree(columns = [sender_identity]))
+)]
+pub struct DmServerInvite {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub server_id: u64,
+    pub invite_token: String,
+    pub sender_identity: Identity,
+    pub recipient_identity: Identity,
+    pub status: DmInviteStatus,
+    pub created_at: Timestamp,
 }
 
 #[spacetimedb::table(
@@ -238,6 +272,21 @@ pub struct TypingState {
     pub typing_key: String,
     pub scope_key: String,
     pub user_identity: Identity,
+    #[index(btree)]
+    pub updated_at: Timestamp,
+}
+
+#[spacetimedb::table(
+    accessor = read_state,
+    index(accessor = by_scope, btree(columns = [scope_key])),
+    index(accessor = by_user, btree(columns = [user_identity]))
+)]
+pub struct ReadState {
+    #[primary_key]
+    pub read_key: String,
+    pub scope_key: String,
+    pub user_identity: Identity,
+    pub last_read_at: Timestamp,
     #[index(btree)]
     pub updated_at: Timestamp,
 }

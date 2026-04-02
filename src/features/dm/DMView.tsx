@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ConnectionState } from 'livekit-client'
-import { PhoneCallIcon, PhoneOffIcon, PanelBottomCloseIcon, PanelBottomOpenIcon } from 'lucide-react'
+import { PhoneCallIcon, PhoneOffIcon, PanelBottomCloseIcon, PanelBottomOpenIcon, ServerIcon, CheckIcon, XIcon } from 'lucide-react'
 import { dmVoiceRoomKey, joinLiveKitDmVoice, leaveLiveKitDmVoice, useLiveKitRoom } from '../../lib/livekit'
 import { reducers } from '../../lib/spacetimedb'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useDmStore } from '../../stores/dmStore'
 import { useDmVoiceSessionStore } from '../../stores/dmVoiceSessionStore'
 import { useDmVoiceStore } from '../../stores/dmVoiceStore'
+import { useUiStore } from '../../stores/uiStore'
+import { useDmServerInvitesStore } from '../../stores/dmServerInvitesStore'
+import { useServersStore } from '../../stores/serversStore'
 import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { useIsMobile } from '../../hooks/use-mobile'
 import { ChatComposer } from '../chat/ChatComposer'
@@ -20,8 +23,9 @@ import {
   parseDmSystemMessage,
 } from './systemMessages'
 import { useOngoingCallDuration } from '../voice/hooks/useOngoingCallDuration'
+import { composeMessageWithAttachments } from '../chat/attachmentPayload'
 import { PresenceDot } from '@/components/user/PresenceDot'
-import type { DirectMessage, Identity } from '../../types/domain'
+import type { DirectMessage, DmServerInvite, Identity } from '../../types/domain'
 import { warnOnce } from '../../lib/devWarnings'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -31,6 +35,83 @@ import { toast } from '@/components/ui/sonner'
 import { useUsersStore } from '../../stores/usersStore'
 
 const EMPTY_DM_MESSAGES: DirectMessage[] = []
+
+function DmServerInviteCard({ invite }: { invite: DmServerInvite }) {
+  const [responding, setResponding] = useState<'accept' | 'decline' | null>(null)
+  const servers = useServersStore((s) => s.servers)
+  const selfIdentity = useConnectionStore((s) => s.identity)
+  const isRecipient = selfIdentity && invite.recipientIdentity.toLowerCase() === selfIdentity.toLowerCase()
+  const isSender = selfIdentity && invite.senderIdentity.toLowerCase() === selfIdentity.toLowerCase()
+  const server = servers.find((s) => s.id === invite.serverId)
+  const serverName = server?.name ?? 'this server'
+  const isPending = invite.status === 'Pending'
+
+  const handleRespond = async (accept: boolean) => {
+    setResponding(accept ? 'accept' : 'decline')
+    try {
+      await reducers.respondDmServerInvite(invite.id, accept)
+    } catch {
+      setResponding(null)
+    }
+  }
+
+  return (
+    <div className="mx-2 my-1 rounded-lg border border-border/60 bg-muted/30 p-3">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+          <ServerIcon className="size-4 text-primary" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium truncate">
+            {isSender ? 'Server Invite Sent' : 'Server Invite'}
+          </p>
+          <p className="text-xs text-muted-foreground truncate">
+            {isSender
+              ? `You invited to join ${serverName}`
+              : `You've been invited to join ${serverName}`}
+          </p>
+        </div>
+        {!isPending && (
+          <Badge
+            variant={invite.status === 'Accepted' ? 'default' : 'secondary'}
+            className="ml-auto text-[10px]"
+          >
+            {invite.status}
+          </Badge>
+        )}
+      </div>
+
+      {isPending && isRecipient && (
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="default"
+            disabled={responding !== null}
+            className="flex-1"
+            onClick={() => handleRespond(true)}
+          >
+            <CheckIcon className="size-3.5" />
+            {responding === 'accept' ? 'Joining…' : 'Accept'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={responding !== null}
+            className="flex-1"
+            onClick={() => handleRespond(false)}
+          >
+            <XIcon className="size-3.5" />
+            {responding === 'decline' ? 'Declining…' : 'Decline'}
+          </Button>
+        </div>
+      )}
+
+      {isPending && isSender && (
+        <p className="text-xs text-muted-foreground">Waiting for response…</p>
+      )}
+    </div>
+  )
+}
 
 function toInitials(identity: string): string {
   return identity.replace(/^0x/, '').slice(0, 2).toUpperCase()
@@ -64,7 +145,18 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   const [callPanelMinimized, setCallPanelMinimized] = useState(!isMobile)
   const selfIdentity = useConnectionStore((s) => s.identity)
   const conversations = useDmStore((s) => s.conversations)
+  const clearDmUnread = useUiStore((s) => s.clearDmUnread)
   const usersByIdentity = useUsersStore((s) => s.byIdentity)
+  const allDmInvites = useDmServerInvitesStore((s) => s.invites)
+  const dmInvites = useMemo(
+    () =>
+      allDmInvites.filter((inv) => {
+        const senderMatch = inv.senderIdentity.toLowerCase() === partnerIdentity.toLowerCase()
+        const recipientMatch = inv.recipientIdentity.toLowerCase() === partnerIdentity.toLowerCase()
+        return senderMatch || recipientMatch
+      }),
+    [allDmInvites, partnerIdentity],
+  )
   const participantsByRoom = useDmVoiceStore((s) => s.participantsByRoom)
   const dmRoom = useDmVoiceSessionStore((s) => s.room)
   const joinedPartnerIdentity = useDmVoiceSessionStore((s) => s.joinedPartnerIdentity)
@@ -214,6 +306,11 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
     )
   }, [messages, partnerIdentity])
 
+  useEffect(() => {
+    clearDmUnread(partnerIdentity)
+    reducers.markDmRead(partnerIdentity).catch(() => undefined)
+  }, [clearDmUnread, partnerIdentity])
+
   return (
     <section className="flex h-full min-h-0 flex-col rounded-xl border border-border/70 bg-card/60">
       <header className="flex items-center gap-2 border-b border-border/70 px-4 py-3">
@@ -282,6 +379,14 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         scrollToBottomToken={scrollToBottomToken}
       />
 
+      {dmInvites.length > 0 && (
+        <div className="space-y-1 border-t border-border/60 pt-1">
+          {dmInvites.map((inv) => (
+            <DmServerInviteCard key={inv.id} invite={inv} />
+          ))}
+        </div>
+      )}
+
       <Separator />
 
       <ChatComposer
@@ -291,15 +396,19 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         typingScopeKey={typingScopeKey}
         typingIdentity={selfIdentity}
         error={error}
-        onSubmit={async (trimmed) => {
+        onSubmit={async ({ text, attachments }) => {
           setError(null)
           try {
-            await reducers.sendDirectMessage(partnerIdentity, trimmed)
+            const payload = composeMessageWithAttachments(text, attachments)
+            await reducers.sendDirectMessage(partnerIdentity, payload)
             setDraft('')
+            clearDmUnread(partnerIdentity)
+            reducers.markDmRead(partnerIdentity).catch(() => undefined)
             setScrollToBottomToken((current) => current + 1)
           } catch (e) {
             const message = e instanceof Error ? e.message : 'Could not send direct message.'
             setError(message)
+            throw e
           }
         }}
       />

@@ -1,4 +1,4 @@
-use spacetimedb::{Identity, ReducerContext, Table};
+use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
 
 use crate::helpers::{assert_or_err, ban_key, member_key, require_member_role, require_mod_or_owner, require_owner, voice_key};
 use crate::schema::*;
@@ -73,6 +73,55 @@ pub fn ban_member(
 pub fn unban_member(ctx: &ReducerContext, server_id: u64, target_identity: Identity) -> Result<(), String> {
     require_mod_or_owner(ctx, server_id, ctx.sender())?;
     ctx.db.ban().ban_key().delete(ban_key(server_id, target_identity));
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn timeout_member(
+    ctx: &ReducerContext,
+    server_id: u64,
+    target_identity: Identity,
+    duration_seconds: u64,
+) -> Result<(), String> {
+    let caller_role = require_mod_or_owner(ctx, server_id, ctx.sender())?;
+    let target_role = require_member_role(ctx, server_id, target_identity)?;
+
+    if matches!(target_role, Role::Moderator | Role::Owner) {
+        assert_or_err(caller_role == Role::Owner, "only owner can timeout moderators/owner")?;
+    }
+
+    assert_or_err(duration_seconds > 0 && duration_seconds <= 60 * 60 * 24 * 28, "timeout must be 1s–28d")?;
+
+    let mut member_row = ctx
+        .db
+        .server_member()
+        .member_key()
+        .find(member_key(server_id, target_identity))
+        .ok_or_else(|| "target is not a member".to_string())?;
+
+    member_row.timeout_until = Some(ctx.timestamp + TimeDuration::from_micros((duration_seconds as i64) * 1_000_000));
+    ctx.db.server_member().member_key().update(member_row);
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn remove_timeout(
+    ctx: &ReducerContext,
+    server_id: u64,
+    target_identity: Identity,
+) -> Result<(), String> {
+    require_mod_or_owner(ctx, server_id, ctx.sender())?;
+    require_member_role(ctx, server_id, target_identity)?;
+
+    let mut member_row = ctx
+        .db
+        .server_member()
+        .member_key()
+        .find(member_key(server_id, target_identity))
+        .ok_or_else(|| "target is not a member".to_string())?;
+
+    member_row.timeout_until = None;
+    ctx.db.server_member().member_key().update(member_row);
     Ok(())
 }
 

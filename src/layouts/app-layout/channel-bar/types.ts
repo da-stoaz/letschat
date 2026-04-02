@@ -1,5 +1,5 @@
 import type { UserPresenceStatus } from '../../../hooks/useUserPresentation'
-import type { Channel, Role, Server, VoiceParticipant } from '../../../types/domain'
+import type { Channel, Identity, Role, Server, VoiceParticipant } from '../../../types/domain'
 
 export interface DmContact {
   identity: string
@@ -25,12 +25,18 @@ export interface ChannelBarProps {
   joinedVoiceChannelId: number | null
   activeSpeakerIdentityKeys: Set<string>
   memberProfileByIdentity: Map<string, { label: string; avatarUrl: string | null }>
-  onOpenRenameServer: () => void
   onOpenInvite: () => void
   onOpenCreateChannel: () => void
+  onOpenServerPanel: () => void
+  onLeaveServer: () => void
+  isChannelMuted: (channelId: number) => boolean
+  onToggleChannelMute: (channelId: number) => void
   onSelectChannel: (channelId: number) => void
   onOpenFriends: () => void
   dmContacts: DmContact[]
+  dmUnreadByIdentity: Record<Identity, number>
+  isUserMuted: (identity: Identity) => boolean
+  onToggleUserMute: (identity: Identity) => void
   activeDmIdentity: string | null
   dmCallActiveByIdentity: Record<string, boolean>
   onOpenDmContact: (identity: string) => void
@@ -48,15 +54,21 @@ export interface ServerChannelBarProps {
   joinedVoiceChannelId: number | null
   activeSpeakerIdentityKeys: Set<string>
   memberProfileByIdentity: Map<string, { label: string; avatarUrl: string | null }>
-  onOpenRenameServer: () => void
   onOpenInvite: () => void
   onOpenCreateChannel: () => void
+  onOpenServerPanel: () => void
+  onLeaveServer: () => void
+  isChannelMuted: (channelId: number) => boolean
+  onToggleChannelMute: (channelId: number) => void
   onSelectChannel: (channelId: number) => void
 }
 
 export interface DmChannelBarProps {
   channelBarWidth: number
   dmContacts: DmContact[]
+  dmUnreadByIdentity: Record<Identity, number>
+  isUserMuted: (identity: Identity) => boolean
+  onToggleUserMute: (identity: Identity) => void
   activeDmIdentity: string | null
   dmCallActiveByIdentity: Record<string, boolean>
   onOpenFriends: () => void

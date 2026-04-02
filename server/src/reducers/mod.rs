@@ -5,6 +5,7 @@ mod invites;
 mod member_management;
 mod messages;
 mod presence;
+mod read_state;
 mod servers;
 mod social;
 mod users;

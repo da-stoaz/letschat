@@ -10,9 +10,7 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  identity: __t.identity().primaryKey(),
-  online: __t.bool(),
-  lastInteractionAt: __t.timestamp().name("last_interaction_at"),
-  updatedAt: __t.timestamp().name("updated_at"),
-});
+export default {
+  serverId: __t.u64(),
+  targetIdentity: __t.identity(),
+};

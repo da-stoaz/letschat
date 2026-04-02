@@ -1,6 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, member_key, require_owner};
+use crate::helpers::{assert_or_err, member_key, require_member_role, require_owner, voice_key};
 use crate::schema::*;
 
 #[spacetimedb::reducer]
@@ -11,6 +11,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
         id: 0,
         name,
         owner_identity: ctx.sender(),
+        invite_policy: InvitePolicy::ModeratorsOnly,
         icon_url: None,
         created_at: ctx.timestamp,
     });
@@ -23,6 +24,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
         user_identity: ctx.sender(),
         role: Role::Owner,
         joined_at: ctx.timestamp,
+        timeout_until: None,
     });
 
     ctx.db.channel().insert(Channel {
@@ -58,6 +60,25 @@ pub fn rename_server(ctx: &ReducerContext, server_id: u64, new_name: String) -> 
         .find(server_id)
         .ok_or_else(|| "server not found".to_string())?;
     server_row.name = new_name;
+    ctx.db.server().id().update(server_row);
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn set_server_invite_policy(
+    ctx: &ReducerContext,
+    server_id: u64,
+    invite_policy: InvitePolicy,
+) -> Result<(), String> {
+    require_owner(ctx, server_id, ctx.sender())?;
+
+    let mut server_row = ctx
+        .db
+        .server()
+        .id()
+        .find(server_id)
+        .ok_or_else(|| "server not found".to_string())?;
+    server_row.invite_policy = invite_policy;
     ctx.db.server().id().update(server_row);
     Ok(())
 }
@@ -126,5 +147,36 @@ pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String>
     }
 
     ctx.db.server().id().delete(server_id);
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn leave_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
+    let role = require_member_role(ctx, server_id, ctx.sender())?;
+    assert_or_err(
+        role != Role::Owner,
+        "owner must transfer ownership before leaving",
+    )?;
+
+    ctx.db
+        .server_member()
+        .member_key()
+        .delete(member_key(server_id, ctx.sender()));
+
+    let channel_ids: Vec<u64> = ctx
+        .db
+        .channel()
+        .iter()
+        .filter(|c| c.server_id == server_id)
+        .map(|c| c.id)
+        .collect();
+
+    for channel_id in channel_ids {
+        ctx.db
+            .voice_participant()
+            .voice_key()
+            .delete(voice_key(channel_id, ctx.sender()));
+    }
+
     Ok(())
 }
