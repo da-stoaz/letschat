@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { getSignedDownloadUrl } from '@/lib/uploads'
+import { getSignedDownloadUrls } from '@/lib/uploads'
 import type { ChatMessageAttachment } from '@/types/attachments'
 
 export type AttachmentResolution = {
@@ -38,12 +38,12 @@ export function useAttachmentResolver(attachments: ChatMessageAttachment[]) {
 
   const attachmentKeys = useMemo(() => attachments.map((attachment) => attachment.storageKey), [attachments])
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
       mountedRef.current = false
-    },
-    [],
-  )
+    }
+  }, [])
 
   useEffect(() => {
     if (attachmentKeys.length === 0) {
@@ -69,8 +69,7 @@ export function useAttachmentResolver(attachments: ChatMessageAttachment[]) {
   useEffect(() => {
     if (attachments.length === 0) return
 
-    const keysToResolve = attachments
-      .map((attachment) => attachment.storageKey)
+    const keysToResolve = [...new Set(attachments.map((attachment) => attachment.storageKey))]
       .filter((storageKey) => {
         if (inFlightRef.current.has(storageKey)) return false
         const state = resolutions[storageKey]
@@ -95,39 +94,57 @@ export function useAttachmentResolver(attachments: ChatMessageAttachment[]) {
 
     for (const storageKey of keysToResolve) {
       inFlightRef.current.add(storageKey)
-      void (async () => {
-        try {
-          const url = await withTimeout(
-            getSignedDownloadUrl(storageKey),
-            URL_RESOLVE_TIMEOUT_MS,
-            'Timed out loading secure file URL.',
-          )
+    }
 
-          if (!mountedRef.current) return
-          setResolutions((previous) => ({
-            ...previous,
-            [storageKey]: {
+    void (async () => {
+      try {
+        const urlsByKey = await withTimeout(
+          getSignedDownloadUrls(keysToResolve),
+          URL_RESOLVE_TIMEOUT_MS,
+          'Timed out loading secure file URL.',
+        )
+
+        if (!mountedRef.current) return
+        setResolutions((previous) => {
+          const next = { ...previous }
+          for (const storageKey of keysToResolve) {
+            const url = urlsByKey.get(storageKey)
+            if (!url) {
+              next[storageKey] = {
+                loading: false,
+                url: null,
+                error: 'Could not load attachment URL.',
+              }
+              continue
+            }
+            next[storageKey] = {
               loading: false,
               url,
               error: null,
-            },
-          }))
-        } catch (error) {
-          if (!mountedRef.current) return
-          const errorMessage = error instanceof Error ? error.message : 'Could not load attachment URL.'
-          setResolutions((previous) => ({
-            ...previous,
-            [storageKey]: {
+            }
+          }
+          return next
+        })
+      } catch (error) {
+        if (!mountedRef.current) return
+        const errorMessage = error instanceof Error ? error.message : 'Could not load attachment URL.'
+        setResolutions((previous) => {
+          const next = { ...previous }
+          for (const storageKey of keysToResolve) {
+            next[storageKey] = {
               loading: false,
               url: null,
               error: errorMessage,
-            },
-          }))
-        } finally {
+            }
+          }
+          return next
+        })
+      } finally {
+        for (const storageKey of keysToResolve) {
           inFlightRef.current.delete(storageKey)
         }
-      })()
-    }
+      }
+    })()
   }, [attachments, resolutions])
 
   const retry = useCallback((storageKey: string) => {

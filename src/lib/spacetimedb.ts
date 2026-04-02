@@ -5,6 +5,7 @@ import {
 } from 'spacetimedb'
 import { DbConnection, tables } from '../generated'
 import { authServiceLogin, authServiceRefreshSpacetimeToken, clearStoredAuthSessionToken } from './authService'
+import { clearSignedDownloadUrlCache } from './uploads'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useDmStore } from '../stores/dmStore'
@@ -1197,6 +1198,7 @@ export async function signOut(): Promise<void> {
   disconnect()
   clearStoredToken()
   clearStoredAuthSessionToken()
+  clearSignedDownloadUrlCache()
   await clearBadgeCount()
 }
 

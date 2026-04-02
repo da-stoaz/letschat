@@ -1,18 +1,11 @@
-import {
-  authServiceDownloadUrl,
-  authServiceRenewSession,
-  authServiceUploadConfirm,
-  authServiceUploadRequest,
-  type AuthFrameworkToken,
-  getStoredAuthSessionToken,
-} from './authService'
-import { getCurrentSessionToken } from './spacetimedb'
+import { authServiceUploadConfirm, authServiceUploadRequest } from './authService'
+import { withSessionTokenRetry } from './uploadSession'
 import type { ChatMessageAttachment } from '../types/attachments'
-import { useConnectionStore } from '../stores/connectionStore'
+
+export { clearSignedDownloadUrlCache, getSignedDownloadUrl, getSignedDownloadUrls } from './downloadUrls'
 
 export const MAX_UPLOAD_FILE_SIZE_BYTES = 500 * 1024 * 1024 // 500 MB
 const DEFAULT_MIME_TYPE = 'application/octet-stream'
-const DOWNLOAD_CACHE_EARLY_REFRESH_MS = 30_000
 
 const BLOCKED_MIME_PREFIXES = [
   'application/x-msdownload',
@@ -25,15 +18,6 @@ const BLOCKED_MIME_PREFIXES = [
 
 type UploadStage = 'requesting' | 'uploading' | 'confirming' | 'done'
 type UploadStageCallback = (file: File, stage: UploadStage) => void
-
-type DownloadCacheEntry = {
-  url: string
-  expiresAtMs: number
-}
-
-const downloadUrlCache = new Map<string, DownloadCacheEntry>()
-const inflightDownloadRequests = new Map<string, Promise<DownloadCacheEntry>>()
-let renewSessionPromise: Promise<AuthFrameworkToken> | null = null
 
 function safeMimeType(file: File): string {
   const mimeType = file.type?.trim().toLowerCase()
@@ -50,60 +34,6 @@ function buildUploadErrorMessage(fileName: string, error: unknown): string {
 export function isBlockedMimeType(mimeType: string): boolean {
   const normalized = mimeType.trim().toLowerCase()
   return BLOCKED_MIME_PREFIXES.some((prefix) => normalized.startsWith(prefix))
-}
-
-function isSessionError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-  const message = error.message.toLowerCase()
-  return message.includes('invalid or expired session token') || message.includes('invalid auth session')
-}
-
-function isTokenExpiredSoon(token: AuthFrameworkToken, bufferMs = 30_000): boolean {
-  const expiresAtMs = Date.parse(token.expires_at)
-  if (!Number.isFinite(expiresAtMs)) return true
-  return Date.now() >= expiresAtMs - bufferMs
-}
-
-async function renewAuthSession(): Promise<AuthFrameworkToken> {
-  if (renewSessionPromise) return renewSessionPromise
-
-  renewSessionPromise = (async () => {
-    const spacetimeToken = getCurrentSessionToken()
-    const spacetimeIdentity = useConnectionStore.getState().identity
-    if (!spacetimeToken || !spacetimeIdentity) {
-      throw new Error('Your auth session expired. Please sign in again.')
-    }
-    return authServiceRenewSession({
-      spacetimeToken,
-      spacetimeIdentity,
-    })
-  })()
-
-  try {
-    return await renewSessionPromise
-  } finally {
-    renewSessionPromise = null
-  }
-}
-
-async function ensureActiveSessionToken(): Promise<AuthFrameworkToken> {
-  const currentToken = getStoredAuthSessionToken()
-  if (currentToken && !isTokenExpiredSoon(currentToken)) {
-    return currentToken
-  }
-  return renewAuthSession()
-}
-
-async function withSessionTokenRetry<T>(fn: (sessionToken: AuthFrameworkToken) => Promise<T>): Promise<T> {
-  const initialToken = await ensureActiveSessionToken()
-  try {
-    return await fn(initialToken)
-  } catch (error) {
-    if (!isSessionError(error)) throw error
-  }
-
-  const refreshedToken = await renewAuthSession()
-  return fn(refreshedToken)
 }
 
 export async function uploadSingleFile(
@@ -179,42 +109,4 @@ export async function uploadFiles(
   }
 
   return uploaded
-}
-
-export async function getSignedDownloadUrl(storageKey: string): Promise<string> {
-  const now = Date.now()
-  const cached = downloadUrlCache.get(storageKey)
-  if (cached && cached.expiresAtMs - DOWNLOAD_CACHE_EARLY_REFRESH_MS > now) {
-    return cached.url
-  }
-
-  const existingRequest = inflightDownloadRequests.get(storageKey)
-  if (existingRequest) {
-    const entry = await existingRequest
-    return entry.url
-  }
-
-  const request = (async () => {
-    const response = await withSessionTokenRetry((sessionToken) => authServiceDownloadUrl({ sessionToken, storageKey }))
-    const entry: DownloadCacheEntry = {
-      url: response.url,
-      expiresAtMs: Date.now() + response.expiresIn * 1000,
-    }
-    downloadUrlCache.set(storageKey, entry)
-    return entry
-  })()
-
-  inflightDownloadRequests.set(storageKey, request)
-
-  try {
-    const entry = await request
-    return entry.url
-  } finally {
-    inflightDownloadRequests.delete(storageKey)
-  }
-}
-
-export function clearSignedDownloadUrlCache(): void {
-  downloadUrlCache.clear()
-  inflightDownloadRequests.clear()
 }

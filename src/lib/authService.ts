@@ -99,6 +99,11 @@ type DownloadUrlPayload = {
   storageKey: string
 }
 
+type DownloadUrlsPayload = {
+  sessionToken: AuthFrameworkToken
+  storageKeys: string[]
+}
+
 type RenewSessionPayload = {
   spacetimeToken: string
   spacetimeIdentity: Identity
@@ -120,6 +125,16 @@ export interface UploadConfirmResponse {
 export interface DownloadUrlResponse {
   url: string
   expiresIn: number
+}
+
+export interface DownloadUrlBatchItem {
+  storageKey: string
+  url: string
+  expiresIn: number
+}
+
+export interface DownloadUrlsResponse {
+  items: DownloadUrlBatchItem[]
 }
 
 async function postJson<TResponse, TPayload extends Record<string, unknown>>(
@@ -207,6 +222,10 @@ export async function authServiceUploadConfirm(payload: UploadConfirmPayload): P
 
 export async function authServiceDownloadUrl(payload: DownloadUrlPayload): Promise<DownloadUrlResponse> {
   return postJson<DownloadUrlResponse, DownloadUrlPayload>('/uploads/download-url', payload)
+}
+
+export async function authServiceDownloadUrls(payload: DownloadUrlsPayload): Promise<DownloadUrlsResponse> {
+  return postJson<DownloadUrlsResponse, DownloadUrlsPayload>('/uploads/download-urls', payload)
 }
 
 export async function authServiceRenewSession(payload: RenewSessionPayload): Promise<AuthFrameworkToken> {

@@ -26,14 +26,14 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::Level;
 
 #[derive(Clone)]
 struct AppState {
     db: SqlitePool,
-    auth: Arc<Mutex<AuthFramework>>,
+    auth: Arc<RwLock<AuthFramework>>,
     uploads: uploads::UploadConfig,
 }
 
@@ -312,7 +312,7 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState {
         db,
-        auth: Arc::new(Mutex::new(auth)),
+        auth: Arc::new(RwLock::new(auth)),
         uploads: upload_config,
     };
 
@@ -329,6 +329,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/uploads/request", post(uploads::upload_request))
         .route("/uploads/confirm", post(uploads::upload_confirm))
         .route("/uploads/download-url", post(uploads::download_url))
+        .route("/uploads/download-urls", post(uploads::download_urls))
         .with_state(state)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
@@ -529,7 +530,7 @@ async fn verify(
     State(state): State<AppState>,
     Json(request): Json<VerifyRequest>,
 ) -> Result<Json<VerifyResponse>, ApiError> {
-    let auth = state.auth.lock().await;
+    let auth = state.auth.read().await;
     let valid = auth
         .validate_token(&request.session_token)
         .await
@@ -584,7 +585,7 @@ async fn livekit_token(
         return Err(ApiError::BadRequest("Identity is required.".to_string()));
     }
 
-    let auth = state.auth.lock().await;
+    let auth = state.auth.read().await;
     let valid = auth
         .validate_token(&request.session_token)
         .await
@@ -646,7 +647,7 @@ async fn livekit_token(
 }
 
 async fn issue_session_token(state: &AppState, username: &str) -> Result<AuthToken, ApiError> {
-    let auth = state.auth.lock().await;
+    let auth = state.auth.write().await;
     auth.create_auth_token(
         username,
         vec!["chat:use".to_string(), "chat:voice".to_string()],
@@ -736,7 +737,7 @@ pub(crate) async fn require_valid_session(
     state: &AppState,
     token: &auth_framework::tokens::AuthToken,
 ) -> Result<String, ApiError> {
-    let auth = state.auth.lock().await;
+    let auth = state.auth.read().await;
     let valid = auth.validate_token(token).await.map_err(internal)?;
     if !valid {
         return Err(ApiError::Unauthorized(

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { authServiceGenerateLivekitToken, clearStoredAuthSessionToken, getStoredAuthSessionToken } from './authService'
+import { clearSignedDownloadUrlCache } from './uploads'
 import type { Identity } from '../types/domain'
 
 const DEFAULT_WEB_LIVEKIT_URL = 'http://127.0.0.1:7880'
@@ -23,6 +24,7 @@ function isInvalidAuthSessionError(error: unknown): boolean {
 function forceWebSignOutForExpiredSession(): void {
   if (typeof window === 'undefined') return
   clearStoredAuthSessionToken()
+  clearSignedDownloadUrlCache()
   localStorage.removeItem('spacetimedb.auth_token')
   setTimeout(() => {
     window.location.assign('/auth')
