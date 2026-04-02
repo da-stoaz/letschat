@@ -13,6 +13,9 @@ interface ParticipantMediaTileProps {
   joinedAt?: string
   participant: MediaParticipant | null
   tileType?: 'profile' | 'screen'
+  className?: string
+  stageClassName?: string
+  avatarClassName?: string
   isLocal: boolean
   isSpeaking: boolean
   isScreenAudioActive?: boolean
@@ -54,6 +57,9 @@ export function ParticipantMediaTile({
   joinedAt,
   participant,
   tileType = 'profile',
+  className,
+  stageClassName,
+  avatarClassName,
   isLocal,
   isSpeaking,
   isScreenAudioActive = false,
@@ -130,10 +136,11 @@ export function ParticipantMediaTile({
           (tileType === 'screen'
             ? 'border-sky-400/80 shadow-[0_0_0_1px_rgba(56,189,248,0.35)]'
             : 'border-emerald-400/80 shadow-[0_0_0_1px_rgba(52,211,153,0.35)]'),
+        className,
       )}
     >
       {showVideo ? (
-        <div className="relative aspect-video overflow-hidden bg-black">
+        <div className={cn('relative aspect-video overflow-hidden bg-black', stageClassName)}>
           <video
             ref={videoRef}
             autoPlay
@@ -174,7 +181,7 @@ export function ParticipantMediaTile({
           {!isLocal ? <audio ref={audioRef} autoPlay data-letschat-audio="remote" /> : null}
         </div>
       ) : (
-        <div className="relative aspect-video bg-muted/10">
+        <div className={cn('relative aspect-video bg-muted/10', stageClassName)}>
           <div
             className={cn(
               'absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3 transition-opacity duration-150',
@@ -208,7 +215,7 @@ export function ParticipantMediaTile({
           </div>
           <div className={cn('grid h-full place-items-center', tileType === 'screen' ? 'pt-10' : undefined)}>
             {tileType === 'profile' ? (
-              <Avatar className="size-36 shrink-0 ring-1 ring-border/70">
+              <Avatar className={cn('size-36 shrink-0 ring-1 ring-border/70', avatarClassName)}>
                 {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
                 <AvatarFallback className="text-3xl font-semibold">{initials(displayName)}</AvatarFallback>
               </Avatar>

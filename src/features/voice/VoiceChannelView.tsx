@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { LocalParticipant, RemoteParticipant } from 'livekit-client'
 import {
   getMicrophoneUnavailableReason,
@@ -16,17 +16,17 @@ import { useMediaDeviceStore } from '../../stores/mediaDeviceStore'
 import { useMembersStore } from '../../stores/membersStore'
 import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
 import type { VoiceParticipant, u64 } from '../../types/domain'
-import { ConnectionState, Track } from 'livekit-client'
+import { ConnectionState } from 'livekit-client'
 import { PhoneCallIcon, PhoneOffIcon } from 'lucide-react'
 import { warnOnce } from '../../lib/devWarnings'
 import { useOngoingCallDuration } from './hooks/useOngoingCallDuration'
 import { VoiceControlBar } from './components/VoiceControlBar'
-import { ParticipantMediaTile } from './components/ParticipantMediaTile'
 import { useLegacyCallControlsVisible } from './hooks/useLegacyCallControls'
 import { useVoiceControlActions } from './hooks/useVoiceControlActions'
+import { VoiceMediaStage, type VoiceMediaTile } from './components/VoiceMediaStage'
+import { buildVoiceMediaTiles } from './mediaTiles'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
 
 const EMPTY_PARTICIPANTS: VoiceParticipant[] = []
 
@@ -63,6 +63,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const setError = useVoiceSessionStore((s) => s.setError)
   const staleCleanupMarker = useRef<string | null>(null)
   const selfIdentity = useConnectionStore((s) => s.identity)
+
   useEffect(() => {
     setError(null)
   }, [channelId, setError])
@@ -198,6 +199,27 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   }, [channelId, channelsByServer])
   const ongoingCallDuration = useOngoingCallDuration(selfParticipant?.joinedAt ?? null, joined)
 
+  const mediaTiles = useMemo<VoiceMediaTile[]>(() => {
+    return buildVoiceMediaTiles({
+      participants: displayParticipants,
+      selfIdentity,
+      localParticipant,
+      livekitParticipantByIdentity,
+      normalizedActiveSpeakers,
+      displayNameByIdentity,
+      avatarByIdentity,
+      identityFallbackLength: 12,
+    })
+  }, [
+    avatarByIdentity,
+    displayNameByIdentity,
+    displayParticipants,
+    livekitParticipantByIdentity,
+    localParticipant,
+    normalizedActiveSpeakers,
+    selfIdentity,
+  ])
+
   const onJoin = async () => {
     if (channelId === null) return
     setError(null)
@@ -261,58 +283,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
         </p>
       ) : null}
 
-      <ScrollArea className="min-h-0">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {displayParticipants.map((p) => {
-            const local = sameIdentity(p.userIdentity, selfIdentity)
-            const participantIdentityKey = normalizeIdentityKey(p.userIdentity)
-            const mediaParticipant = local ? localParticipant : livekitParticipantByIdentity.get(participantIdentityKey) ?? null
-            const participantIsActiveSpeaker = normalizedActiveSpeakers.has(participantIdentityKey)
-            const hasMicrophoneTrack = Boolean(
-              mediaParticipant?.getTrackPublication(Track.Source.Microphone)?.audioTrack,
-            )
-            const hasScreenAudioTrack = Boolean(
-              mediaParticipant?.getTrackPublication(Track.Source.ScreenShareAudio)?.audioTrack,
-            )
-            const micSpeaking = participantIsActiveSpeaker && hasMicrophoneTrack
-            const screenAudioActive = participantIsActiveSpeaker && hasScreenAudioTrack
-            return (
-              <Fragment key={p.userIdentity}>
-                <ParticipantMediaTile
-                  displayName={displayNameByIdentity.get(participantIdentityKey) ?? p.userIdentity.slice(0, 12)}
-                  avatarUrl={avatarByIdentity.get(participantIdentityKey) ?? null}
-                  joinedAt={p.joinedAt}
-                  participant={mediaParticipant}
-                  tileType="profile"
-                  isLocal={local}
-                  isSpeaking={micSpeaking}
-                  isScreenAudioActive={false}
-                  muted={p.muted}
-                  deafened={p.deafened}
-                  sharingScreen={p.sharingScreen}
-                  sharingCamera={p.sharingCamera}
-                />
-                {p.sharingScreen ? (
-                  <ParticipantMediaTile
-                    displayName={displayNameByIdentity.get(participantIdentityKey) ?? p.userIdentity.slice(0, 12)}
-                    avatarUrl={avatarByIdentity.get(participantIdentityKey) ?? null}
-                    joinedAt={p.joinedAt}
-                    participant={mediaParticipant}
-                    tileType="screen"
-                    isLocal={local}
-                    isSpeaking={false}
-                    isScreenAudioActive={screenAudioActive}
-                    muted={p.muted}
-                    deafened={p.deafened}
-                    sharingScreen={p.sharingScreen}
-                    sharingCamera={p.sharingCamera}
-                  />
-                ) : null}
-              </Fragment>
-            )
-          })}
-        </div>
-      </ScrollArea>
+      <VoiceMediaStage tiles={mediaTiles} className="min-h-0" />
 
       {showLegacyControls ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">

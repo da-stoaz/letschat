@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useRef } from 'react'
-import { ConnectionState, Track, type LocalParticipant, type RemoteParticipant } from 'livekit-client'
+import { useEffect, useMemo, useRef } from 'react'
+import { ConnectionState, type LocalParticipant, type RemoteParticipant } from 'livekit-client'
 import {
   dmVoiceRoomKey,
   getMicrophoneUnavailableReason,
@@ -18,9 +18,10 @@ import { useMediaDeviceStore } from '../../stores/mediaDeviceStore'
 import { useUsersStore } from '../../stores/usersStore'
 import type { DmVoiceParticipant, Identity } from '../../types/domain'
 import { VoiceControlBar } from '../voice/components/VoiceControlBar'
-import { ParticipantMediaTile } from '../voice/components/ParticipantMediaTile'
+import { VoiceMediaStage, type VoiceMediaTile } from '../voice/components/VoiceMediaStage'
 import { useLegacyCallControlsVisible } from '../voice/hooks/useLegacyCallControls'
 import { useVoiceControlActions } from '../voice/hooks/useVoiceControlActions'
+import { buildVoiceMediaTiles } from '../voice/mediaTiles'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -201,6 +202,26 @@ export function DmVoicePanel({
 
   const statusBadge = connecting ? 'Joining...' : joined ? 'Joined' : selfParticipant ? 'Syncing...' : 'Not joined'
   const statusVariant = connecting ? 'outline' : joined ? 'default' : selfParticipant ? 'outline' : 'secondary'
+  const mediaTiles = useMemo<VoiceMediaTile[]>(() => {
+    return buildVoiceMediaTiles({
+      participants,
+      selfIdentity,
+      localParticipant,
+      livekitParticipantByIdentity,
+      normalizedActiveSpeakers,
+      displayNameByIdentity,
+      avatarByIdentity,
+      identityFallbackLength: 10,
+    })
+  }, [
+    avatarByIdentity,
+    displayNameByIdentity,
+    livekitParticipantByIdentity,
+    localParticipant,
+    normalizedActiveSpeakers,
+    participants,
+    selfIdentity,
+  ])
 
   return (
     <Card className="border-border/70 bg-background/40 py-0">
@@ -211,64 +232,11 @@ export function DmVoicePanel({
         </CardHeader>
       ) : null}
       <CardContent className="space-y-2">
-        <div className="grid gap-3 sm:grid-cols-2">
-          {participants.map((participant) => {
-            const participantIdentityKey = normalizeIdentityKey(participant.userIdentity)
-            const local = sameIdentity(participant.userIdentity, selfIdentity)
-            const mediaParticipant = local
-              ? localParticipant
-              : livekitParticipantByIdentity.get(participantIdentityKey) ?? null
-            const participantIsActiveSpeaker = normalizedActiveSpeakers.has(participantIdentityKey)
-            const hasMicrophoneTrack = Boolean(
-              mediaParticipant?.getTrackPublication(Track.Source.Microphone)?.audioTrack,
-            )
-            const hasScreenAudioTrack = Boolean(
-              mediaParticipant?.getTrackPublication(Track.Source.ScreenShareAudio)?.audioTrack,
-            )
-            const micSpeaking = participantIsActiveSpeaker && hasMicrophoneTrack
-            const screenAudioActive = participantIsActiveSpeaker && hasScreenAudioTrack
-            return (
-              <Fragment key={`${participant.roomKey}:${participant.userIdentity}`}>
-                <ParticipantMediaTile
-                  displayName={
-                    displayNameByIdentity.get(participantIdentityKey) ??
-                    participant.userIdentity.slice(0, 10)
-                  }
-                  avatarUrl={avatarByIdentity.get(participantIdentityKey) ?? null}
-                  joinedAt={participant.joinedAt}
-                  participant={mediaParticipant}
-                  tileType="profile"
-                  isLocal={local}
-                  isSpeaking={micSpeaking}
-                  isScreenAudioActive={false}
-                  muted={participant.muted}
-                  deafened={participant.deafened}
-                  sharingScreen={participant.sharingScreen}
-                  sharingCamera={participant.sharingCamera}
-                />
-                {participant.sharingScreen ? (
-                  <ParticipantMediaTile
-                    displayName={
-                      displayNameByIdentity.get(participantIdentityKey) ??
-                      participant.userIdentity.slice(0, 10)
-                    }
-                    avatarUrl={avatarByIdentity.get(participantIdentityKey) ?? null}
-                    joinedAt={participant.joinedAt}
-                    participant={mediaParticipant}
-                    tileType="screen"
-                    isLocal={local}
-                    isSpeaking={false}
-                    isScreenAudioActive={screenAudioActive}
-                    muted={participant.muted}
-                    deafened={participant.deafened}
-                    sharingScreen={participant.sharingScreen}
-                    sharingCamera={participant.sharingCamera}
-                  />
-                ) : null}
-              </Fragment>
-            )
-          })}
-        </div>
+        <VoiceMediaStage
+          tiles={mediaTiles}
+          className="min-h-[260px]"
+          emptyStateText="No participants are sharing media in this call."
+        />
 
         {showLegacyControls && joined ? (
           <div className="flex flex-wrap items-center gap-2">
