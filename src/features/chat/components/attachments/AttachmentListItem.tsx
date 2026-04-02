@@ -1,5 +1,7 @@
-import { DownloadIcon, ExternalLinkIcon, FileIcon, ImageIcon, MusicIcon, VideoIcon } from 'lucide-react'
+import { useState } from 'react'
+import { DownloadIcon, ExternalLinkIcon, FileIcon, ImageIcon, Loader2Icon, MusicIcon, VideoIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { isDesktopTauriRuntime, tauriCommands } from '@/lib/tauri'
 import type { ChatMessageAttachment } from '@/types/attachments'
 import { formatFileSize, getAttachmentKind } from './attachmentUtils'
 import type { AttachmentResolution } from './useAttachmentResolver'
@@ -16,7 +18,7 @@ function openUrl(url: string): void {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
-function downloadFile(url: string, fileName: string): void {
+function triggerDownload(url: string, fileName: string): void {
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = fileName
@@ -24,6 +26,24 @@ function downloadFile(url: string, fileName: string): void {
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
+}
+
+async function downloadFile(url: string, fileName: string): Promise<void> {
+  const response = await fetch(url, {
+    method: 'GET',
+    mode: 'cors',
+  })
+  if (!response.ok) {
+    throw new Error(`Download failed (${response.status}).`)
+  }
+
+  const blob = await response.blob()
+  const blobUrl = URL.createObjectURL(blob)
+  try {
+    triggerDownload(blobUrl, fileName)
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0)
+  }
 }
 
 function isPdfAttachment(attachment: ChatMessageAttachment): boolean {
@@ -34,6 +54,7 @@ function isPdfAttachment(attachment: ChatMessageAttachment): boolean {
 }
 
 export function AttachmentListItem({ attachment, resolution, onRetry, onOpenImage, onOpenPdf }: AttachmentListItemProps) {
+  const [isSaving, setIsSaving] = useState(false)
   const kind = getAttachmentKind(attachment.mimeType)
   const canOpen = Boolean(resolution.url)
   const isPdf = isPdfAttachment(attachment)
@@ -109,14 +130,29 @@ export function AttachmentListItem({ attachment, resolution, onRetry, onOpenImag
           <Button
             size="sm"
             variant="ghost"
-            disabled={!canOpen}
-            onClick={() => {
+            disabled={!canOpen || isSaving}
+            onClick={async () => {
               if (!resolution.url) return
-              downloadFile(resolution.url, attachment.fileName)
+              setIsSaving(true)
+              const isDesktopTauri = isDesktopTauriRuntime()
+              try {
+                if (isDesktopTauri) {
+                  await tauriCommands.saveAttachmentFile(resolution.url, attachment.fileName)
+                  return
+                }
+                await downloadFile(resolution.url, attachment.fileName)
+              } catch {
+                if (!isDesktopTauri) {
+                  // Fallback: keep old browser flow if blob download is blocked by platform/CORS.
+                  triggerDownload(resolution.url, attachment.fileName)
+                }
+              } finally {
+                setIsSaving(false)
+              }
             }}
           >
-            <DownloadIcon className="size-4" />
-            Save
+            {isSaving ? <Loader2Icon className="size-4 animate-spin" /> : <DownloadIcon className="size-4" />}
+            {isSaving ? 'Saving…' : 'Save'}
           </Button>
         </div>
       </div>

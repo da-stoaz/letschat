@@ -1,7 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde::Serialize;
+use std::path::Path;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
@@ -118,6 +119,37 @@ fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+#[tauri::command]
+async fn save_attachment_file(url: String, file_name: String) -> Result<bool, String> {
+    let suggested_file_name = Path::new(file_name.as_str())
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or("download");
+
+    let Some(path) = rfd::FileDialog::new()
+        .set_file_name(suggested_file_name)
+        .save_file()
+    else {
+        return Ok(false);
+    };
+
+    let response = reqwest::get(url)
+        .await
+        .map_err(|error| format!("Download request failed: {error}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("Download failed ({status})."));
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Reading download response failed: {error}"))?;
+
+    std::fs::write(path, &bytes).map_err(|error| format!("Saving file failed: {error}"))?;
+    Ok(true)
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.show();
@@ -137,7 +169,8 @@ fn main() {
             show_notification,
             set_badge_count,
             minimize_to_tray,
-            get_app_version
+            get_app_version,
+            save_attachment_file
         ])
         .setup(|app| {
             let open_item = MenuItem::with_id(app, "tray_open", "Open", true, None::<&str>)?;

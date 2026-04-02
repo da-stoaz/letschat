@@ -87,4 +87,8 @@ export const tauriCommands = {
   },
   getAppVersion: async () =>
     isTauriRuntime() ? invoke<string>('get_app_version') : 'web',
+  saveAttachmentFile: async (url: string, fileName: string): Promise<boolean> => {
+    if (!isTauriRuntime()) return false
+    return invoke<boolean>('save_attachment_file', { url, fileName })
+  },
 }
