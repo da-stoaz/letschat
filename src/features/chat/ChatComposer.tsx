@@ -88,6 +88,7 @@ export function ChatComposer({
   const lastTypingPulseMsRef = useRef(0)
   const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([])
   const [uploadStageByFileId, setUploadStageByFileId] = useState<Record<string, UploadStage>>({})
+  const [uploadProgressByFileId, setUploadProgressByFileId] = useState<Record<string, number>>({})
   const [localError, setLocalError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -201,12 +202,16 @@ export function ChatComposer({
               ? await uploadFiles(uploads, (file, stage) => {
                   const id = fileIdentity(file)
                   setUploadStageByFileId((current) => ({ ...current, [id]: stage }))
+                }, (file, progress) => {
+                  const id = fileIdentity(file)
+                  setUploadProgressByFileId((current) => ({ ...current, [id]: progress.fraction }))
                 })
               : []
 
           await onSubmit({ text: trimmed, attachments })
           setQueuedFiles([])
           setUploadStageByFileId({})
+          setUploadProgressByFileId({})
           if (fileInputRef.current) {
             fileInputRef.current.value = ''
           }
@@ -239,38 +244,57 @@ export function ChatComposer({
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-muted/20 p-2">
           {queuedFiles.map((entry) => {
             const stage = uploadStageByFileId[entry.id]
+            const progressFraction = uploadProgressByFileId[entry.id] ?? 0
+            const showProgress = stage === 'uploading' || stage === 'confirming'
+            const progressPercent = Math.round(progressFraction * 100)
             return (
-              <span
+              <div
                 key={entry.id}
-                className="inline-flex max-w-full items-center gap-2 rounded-md border border-border/70 bg-card px-2 py-1 text-xs"
+                className="inline-flex max-w-full flex-col gap-1 rounded-md border border-border/70 bg-card px-2 py-1 text-xs"
               >
-                <span className="truncate">{entry.file.name}</span>
-                <span className="shrink-0 text-muted-foreground">{formatFileSize(entry.file.size)}</span>
-                {stage ? (
-                  <span className="inline-flex items-center gap-1 text-muted-foreground">
-                    {stage !== 'done' ? <Loader2Icon className="size-3 animate-spin" /> : null}
-                    {stageLabel(stage)}
+                <span className="inline-flex w-full items-center gap-2">
+                  <span className="truncate">{entry.file.name}</span>
+                  <span className="shrink-0 text-muted-foreground">{formatFileSize(entry.file.size)}</span>
+                  {stage ? (
+                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      {stage !== 'done' ? <Loader2Icon className="size-3 animate-spin" /> : null}
+                      {stageLabel(stage)}
+                    </span>
+                  ) : null}
+                  {showProgress ? <span className="shrink-0 text-muted-foreground">{progressPercent}%</span> : null}
+                  <button
+                    type="button"
+                    className="ml-auto shrink-0 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                    onClick={() => {
+                      if (submitting) return
+                      setLocalError(null)
+                      setQueuedFiles((current) => current.filter((item) => item.id !== entry.id))
+                      setUploadStageByFileId((current) => {
+                        const next = { ...current }
+                        delete next[entry.id]
+                        return next
+                      })
+                      setUploadProgressByFileId((current) => {
+                        const next = { ...current }
+                        delete next[entry.id]
+                        return next
+                      })
+                    }}
+                    disabled={submitting}
+                    aria-label={`Remove ${entry.file.name}`}
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                </span>
+                {showProgress ? (
+                  <span className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <span
+                      className="block h-full rounded-full bg-primary transition-all duration-150 ease-out"
+                      style={{ width: `${progressPercent}%` }}
+                    />
                   </span>
                 ) : null}
-                <button
-                  type="button"
-                  className="shrink-0 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-                  onClick={() => {
-                    if (submitting) return
-                    setLocalError(null)
-                    setQueuedFiles((current) => current.filter((item) => item.id !== entry.id))
-                    setUploadStageByFileId((current) => {
-                      const next = { ...current }
-                      delete next[entry.id]
-                      return next
-                    })
-                  }}
-                  disabled={submitting}
-                  aria-label={`Remove ${entry.file.name}`}
-                >
-                  <XIcon className="size-3.5" />
-                </button>
-              </span>
+              </div>
             )
           })}
         </div>
