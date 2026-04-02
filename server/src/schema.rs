@@ -19,6 +19,12 @@ pub enum FriendStatus {
     Accepted,
 }
 
+#[derive(SpacetimeType, Clone, PartialEq, Eq)]
+pub enum InvitePolicy {
+    ModeratorsOnly,
+    Everyone,
+}
+
 #[spacetimedb::table(accessor = user, public)]
 pub struct User {
     #[primary_key]
@@ -53,6 +59,7 @@ pub struct Server {
     pub name: String,
     #[index(btree)]
     pub owner_identity: Identity,
+    pub invite_policy: InvitePolicy,
     pub icon_url: Option<String>,
     pub created_at: Timestamp,
 }

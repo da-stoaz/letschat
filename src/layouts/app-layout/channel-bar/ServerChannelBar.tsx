@@ -1,5 +1,5 @@
 import { BellIcon, BellOffIcon, ChevronsUpDownIcon, HashIcon, LockIcon, LogOutIcon, PlusIcon, Settings2Icon, ShieldIcon, UserPlusIcon, Volume2Icon } from 'lucide-react'
-import { canManageChannels } from '../../../lib/permissions'
+import { canInviteUsers, canManageChannels } from '../../../lib/permissions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -38,22 +38,26 @@ export function ServerChannelBar({
 }: ServerChannelBarProps) {
   const ownerCannotLeave = role === 'Owner'
   const canAccessServerPanel = role === 'Owner' || role === 'Moderator'
+  const canInvite =
+    Boolean(role && activeServer && canInviteUsers(role, activeServer.invitePolicy))
 
   return (
     <ChannelBarShell
       header={(
         <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="outline"
-            className="shrink-0"
-            onClick={onOpenInvite}
-            title="Invite users"
-            aria-label="Invite users"
-          >
-            <UserPlusIcon className="size-4" />
-          </Button>
+          {canInvite ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="shrink-0"
+              onClick={onOpenInvite}
+              title="Invite users"
+              aria-label="Invite users"
+            >
+              <UserPlusIcon className="size-4" />
+            </Button>
+          ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex w-full items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-left text-sm font-medium hover:bg-muted/60">
               <span className="truncate">{activeServer?.name ?? 'Server'}</span>

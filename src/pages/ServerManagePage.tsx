@@ -35,11 +35,12 @@ import {
   TimeoutMemberModal,
   TransferOwnershipModal,
 } from '../modals/member-actions'
-import type { Channel } from '../types/domain'
+import type { Channel, ServerInvitePolicy } from '../types/domain'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -115,6 +116,7 @@ export function ServerManagePage() {
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
   const [memberAction, setMemberAction] = useState<MemberActionModal | null>(null)
   const [leaving, setLeaving] = useState(false)
+  const [invitePolicySaving, setInvitePolicySaving] = useState(false)
 
   const isOwner = role === 'Owner'
   const canModerateMembers = role === 'Owner' || role === 'Moderator'
@@ -146,6 +148,20 @@ export function ServerManagePage() {
   const serverHomePath = firstTextChannelId ? `/app/${numericServerId}/${firstTextChannelId}` : `/app/${numericServerId}`
 
   const closeMemberAction = () => setMemberAction(null)
+
+  const updateInvitePolicy = async (nextPolicy: ServerInvitePolicy) => {
+    if (!isOwner || !server || nextPolicy === server.invitePolicy) return
+    setInvitePolicySaving(true)
+    try {
+      await reducers.setServerInvitePolicy(server.id, nextPolicy)
+      toast.success('Invite permission updated')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not update invite permission.'
+      toast.error('Failed to update invite permission', { description: message })
+    } finally {
+      setInvitePolicySaving(false)
+    }
+  }
 
   const leaveServer = async () => {
     if (!Number.isFinite(numericServerId) || isOwner) return
@@ -437,6 +453,27 @@ export function ServerManagePage() {
                     <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
                       <p className="text-sm font-medium">Created</p>
                       <p className="text-sm text-muted-foreground">{formatMemberSince(server.createdAt)}</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-medium">Who can invite users</p>
+                      <Select
+                        value={server.invitePolicy}
+                        onValueChange={(value) => void updateInvitePolicy(value as ServerInvitePolicy)}
+                        disabled={!isOwner || invitePolicySaving}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ModeratorsOnly">Owner + Moderators</SelectItem>
+                          <SelectItem value="Everyone">Everyone (all members)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {isOwner
+                          ? 'This setting controls invite links and direct in-app invites.'
+                          : 'Only the owner can change invite permissions.'}
+                      </p>
                     </div>
                     <Button
                       type="button"

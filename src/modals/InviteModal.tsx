@@ -7,6 +7,8 @@ import { useMembersStore } from '../stores/membersStore'
 import { useDmServerInvitesStore } from '../stores/dmServerInvitesStore'
 import { useUsersStore } from '../stores/usersStore'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useServerRole } from '../hooks/useServerRole'
+import { canInviteUsers } from '../lib/permissions'
 import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -161,6 +163,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
   const linksListContentRef = useRef<HTMLDivElement | null>(null)
   const invites = useInvitesStore((s) => s.invitesByServer[serverId] ?? EMPTY)
   const server = useServersStore((s) => s.servers.find((sv) => sv.id === serverId) ?? null)
+  const role = useServerRole(serverId)
   const selfIdentity = useConnectionStore((s) => s.identity)
   const dmInvites = useDmServerInvitesStore((s) => s.invites)
   const members = useMembersStore((s) => s.membersByServer[serverId] ?? EMPTY)
@@ -248,6 +251,10 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
   }, [dmInvites, serverId, usersByNormalizedIdentity])
 
   const handleSendDirectInvite = async () => {
+    if (!canSendInvites) {
+      setError('You do not have permission to invite users in this server.')
+      return
+    }
     if (selectedRecipients.length === 0) return
     setError(null)
     setSendingDirectInvite(true)
@@ -312,6 +319,10 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
   }
 
   const handleCreate = async () => {
+    if (!canSendInvites) {
+      setError('You do not have permission to invite users in this server.')
+      return
+    }
     setError(null)
     setCreating(true)
     const toastId = toast.loading('Creating invite link...')
@@ -348,6 +359,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
   }
 
   const activeInviteCount = invites.length
+  const canSendInvites = Boolean(role && server && canInviteUsers(role, server.invitePolicy))
   const expirySelectValue = expirySeconds == null ? 'never' : String(expirySeconds)
   const selectedExpiryLabel =
     EXPIRY_OPTIONS.find((opt) => (opt.value == null ? 'never' : String(opt.value)) === expirySelectValue)?.label
@@ -425,6 +437,11 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
         onValueChange={(value) => setActiveTab(value as InviteTab)}
         className="min-h-0 gap-0 overflow-hidden"
       >
+        {!canSendInvites ? (
+          <p className="text-xs text-muted-foreground">
+            Invites are restricted to owner and moderators in this server.
+          </p>
+        ) : null}
         <TabsList className="w-full">
           <TabsTrigger value="people" className="flex-1">Invite People</TabsTrigger>
           <TabsTrigger value="create-link" className="flex-1">Create Link</TabsTrigger>
@@ -494,12 +511,14 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                             key={candidate.identity}
                             type="button"
                             onClick={() => {
+                              if (!canSendInvites) return
                               setSelectedRecipientIdentities((prev) => (
                                 prev.includes(candidate.identity) ? prev : [...prev, candidate.identity]
                               ))
                               setRecipientQuery('')
                             }}
-                            className="w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                            className="w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={!canSendInvites}
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="min-w-0">
@@ -525,7 +544,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                     size="sm"
                     variant="secondary"
                     className="shrink-0"
-                    disabled={selectedRecipients.length === 0 || sendingDirectInvite}
+                    disabled={!canSendInvites || selectedRecipients.length === 0 || sendingDirectInvite}
                     onClick={handleSendDirectInvite}
                   >
                     <UserPlusIcon className="size-3.5" />
@@ -623,7 +642,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                 <Button type="button" variant="outline" onClick={onClose}>
                   Cancel
                 </Button>
-                <Button type="button" disabled={creating} onClick={handleCreate}>
+                <Button type="button" disabled={!canSendInvites || creating} onClick={handleCreate}>
                   <LinkIcon className="size-3.5" />
                   {creating ? 'Creating…' : 'Create Link'}
                 </Button>
@@ -639,6 +658,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                   type="button"
                   variant="outline"
                   size="sm"
+                  disabled={!canSendInvites}
                   onClick={() => setActiveTab('create-link')}
                 >
                   New Link

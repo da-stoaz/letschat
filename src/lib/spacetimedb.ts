@@ -42,6 +42,7 @@ import type {
   PresenceState,
   ReadState,
   Role,
+  ServerInvitePolicy,
   Server,
   ServerMember,
   TypingState,
@@ -174,6 +175,7 @@ function mapServer(row: DbRow): Server {
     id: toU64Number(row.id),
     name: rowString(row, 'name'),
     ownerIdentity: toIdentityString(row.ownerIdentity),
+    invitePolicy: (enumTag(row.invitePolicy || 'ModeratorsOnly') as ServerInvitePolicy),
     iconUrl: rowNullableString(row, 'iconUrl'),
     createdAt: toIsoString(row.createdAt),
   }
@@ -991,6 +993,11 @@ export const reducers = {
   createServer: (name: string) => spacetimedbClient.call('createServer', { name }),
   renameServer: (serverId: number, newName: string) =>
     spacetimedbClient.call('renameServer', { serverId: toU64(serverId, 'serverId'), newName }),
+  setServerInvitePolicy: (serverId: number, invitePolicy: ServerInvitePolicy) =>
+    spacetimedbClient.call('setServerInvitePolicy', {
+      serverId: toU64(serverId, 'serverId'),
+      invitePolicy: reducerEnum(invitePolicy),
+    }),
   deleteServer: (serverId: number) => spacetimedbClient.call('deleteServer', { serverId: toU64(serverId, 'serverId') }),
   leaveServer: (serverId: number) => spacetimedbClient.call('leaveServer', { serverId: toU64(serverId, 'serverId') }),
   createInvite: (serverId: number, expiresInSeconds?: number, maxUses?: number, allowedUsernames?: string[]) =>

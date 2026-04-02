@@ -105,6 +105,27 @@ pub(crate) fn require_owner(
     assert_or_err(role == Role::Owner, "owner permission required")
 }
 
+pub(crate) fn require_invite_permission(
+    ctx: &ReducerContext,
+    server_id: u64,
+    user_identity: Identity,
+) -> Result<(), String> {
+    let role = require_member_role(ctx, server_id, user_identity)?;
+    let server_row = ctx
+        .db
+        .server()
+        .id()
+        .find(server_id)
+        .ok_or_else(|| "server not found".to_string())?;
+
+    let allowed = match server_row.invite_policy {
+        InvitePolicy::Everyone => true,
+        InvitePolicy::ModeratorsOnly => matches!(role, Role::Owner | Role::Moderator),
+    };
+
+    assert_or_err(allowed, "insufficient permissions to invite users")
+}
+
 pub(crate) fn find_channel(ctx: &ReducerContext, channel_id: u64) -> Result<Channel, String> {
     ctx.db
         .channel()

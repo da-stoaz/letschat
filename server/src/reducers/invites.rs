@@ -1,7 +1,10 @@
 use spacetimedb::rand::{distributions::Alphanumeric, Rng};
 use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
 
-use crate::helpers::{assert_or_err, has_member_role, is_banned, member_key, require_mod_or_owner};
+use crate::helpers::{
+    assert_or_err, has_member_role, is_banned, member_key, require_invite_permission,
+    require_member_role,
+};
 use crate::schema::*;
 
 fn invite_is_active(ctx: &ReducerContext, invite: &Invite) -> bool {
@@ -59,7 +62,7 @@ pub fn create_invite(
     max_uses: Option<u32>,
     allowed_usernames: Vec<String>,
 ) -> Result<(), String> {
-    require_mod_or_owner(ctx, server_id, ctx.sender())?;
+    require_invite_permission(ctx, server_id, ctx.sender())?;
     cleanup_stale_invites_internal(ctx);
     assert_or_err(
         ctx.db.server().id().find(server_id).is_some(),
@@ -182,7 +185,21 @@ pub fn delete_invite(ctx: &ReducerContext, token: String) -> Result<(), String> 
         .find(&token)
         .ok_or_else(|| "invite not found".to_string())?;
 
-    require_mod_or_owner(ctx, invite_row.server_id, ctx.sender())?;
+    let caller_role = require_member_role(ctx, invite_row.server_id, ctx.sender())?;
+    let can_delete = match caller_role {
+        Role::Owner | Role::Moderator => true,
+        Role::Member => {
+            let server_row = ctx
+                .db
+                .server()
+                .id()
+                .find(invite_row.server_id)
+                .ok_or_else(|| "server not found".to_string())?;
+            matches!(server_row.invite_policy, InvitePolicy::Everyone)
+                && invite_row.created_by == ctx.sender()
+        }
+    };
+    assert_or_err(can_delete, "insufficient permissions to delete invite")?;
     ctx.db.invite().token().delete(token);
     Ok(())
 }
@@ -203,7 +220,7 @@ pub fn send_dm_server_invite(
     recipient_identity: Identity,
     server_id: u64,
 ) -> Result<(), String> {
-    require_mod_or_owner(ctx, server_id, ctx.sender())?;
+    require_invite_permission(ctx, server_id, ctx.sender())?;
     cleanup_stale_invites_internal(ctx);
     assert_or_err(
         ctx.db.server().id().find(server_id).is_some(),

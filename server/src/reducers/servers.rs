@@ -11,6 +11,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
         id: 0,
         name,
         owner_identity: ctx.sender(),
+        invite_policy: InvitePolicy::ModeratorsOnly,
         icon_url: None,
         created_at: ctx.timestamp,
     });
@@ -59,6 +60,25 @@ pub fn rename_server(ctx: &ReducerContext, server_id: u64, new_name: String) -> 
         .find(server_id)
         .ok_or_else(|| "server not found".to_string())?;
     server_row.name = new_name;
+    ctx.db.server().id().update(server_row);
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn set_server_invite_policy(
+    ctx: &ReducerContext,
+    server_id: u64,
+    invite_policy: InvitePolicy,
+) -> Result<(), String> {
+    require_owner(ctx, server_id, ctx.sender())?;
+
+    let mut server_row = ctx
+        .db
+        .server()
+        .id()
+        .find(server_id)
+        .ok_or_else(|| "server not found".to_string())?;
+    server_row.invite_policy = invite_policy;
     ctx.db.server().id().update(server_row);
     Ok(())
 }
