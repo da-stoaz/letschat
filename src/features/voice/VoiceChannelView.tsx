@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { LocalParticipant, RemoteParticipant } from 'livekit-client'
 import {
   getMicrophoneUnavailableReason,
@@ -17,7 +18,7 @@ import { useMembersStore } from '../../stores/membersStore'
 import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
 import type { VoiceParticipant, u64 } from '../../types/domain'
 import { ConnectionState } from 'livekit-client'
-import { PhoneCallIcon, PhoneOffIcon } from 'lucide-react'
+import { Maximize2Icon, Minimize2Icon, PhoneCallIcon, PhoneOffIcon } from 'lucide-react'
 import { warnOnce } from '../../lib/devWarnings'
 import { useOngoingCallDuration } from './hooks/useOngoingCallDuration'
 import { VoiceControlBar } from './components/VoiceControlBar'
@@ -25,8 +26,10 @@ import { useLegacyCallControlsVisible } from './hooks/useLegacyCallControls'
 import { useVoiceControlActions } from './hooks/useVoiceControlActions'
 import { VoiceMediaStage, type VoiceMediaTile } from './components/VoiceMediaStage'
 import { buildVoiceMediaTiles } from './mediaTiles'
+import { ActiveCallCard } from '../../layouts/app-layout/ActiveCallCard'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 const EMPTY_PARTICIPANTS: VoiceParticipant[] = []
 
@@ -62,6 +65,9 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const setJoining = useVoiceSessionStore((s) => s.setJoining)
   const setError = useVoiceSessionStore((s) => s.setError)
   const staleCleanupMarker = useRef<string | null>(null)
+  const [isPanelFullscreen, setIsPanelFullscreen] = useState(false)
+  const fullscreenDockHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showFullscreenDock, setShowFullscreenDock] = useState(false)
   const selfIdentity = useConnectionStore((s) => s.identity)
 
   useEffect(() => {
@@ -220,6 +226,71 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     selfIdentity,
   ])
 
+  const togglePanelFullscreen = useCallback(() => {
+    setIsPanelFullscreen((previous) => !previous)
+  }, [])
+
+  const revealFullscreenDock = useCallback(() => {
+    setShowFullscreenDock(true)
+    if (fullscreenDockHideTimerRef.current) {
+      clearTimeout(fullscreenDockHideTimerRef.current)
+    }
+    fullscreenDockHideTimerRef.current = setTimeout(() => {
+      setShowFullscreenDock(false)
+      fullscreenDockHideTimerRef.current = null
+    }, 1600)
+  }, [])
+
+  useEffect(() => {
+    if (!isPanelFullscreen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsPanelFullscreen(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [isPanelFullscreen])
+
+  useEffect(() => {
+    if (!isPanelFullscreen || typeof document === 'undefined') return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isPanelFullscreen])
+
+  useEffect(() => {
+    if (!isPanelFullscreen) {
+      setShowFullscreenDock(false)
+      if (fullscreenDockHideTimerRef.current) {
+        clearTimeout(fullscreenDockHideTimerRef.current)
+        fullscreenDockHideTimerRef.current = null
+      }
+      return
+    }
+
+    revealFullscreenDock()
+
+    const onMouseMove = (event: MouseEvent) => {
+      if (event.clientY >= window.innerHeight - 160) {
+        revealFullscreenDock()
+      }
+    }
+
+    window.addEventListener('mousemove', onMouseMove, { passive: true })
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      if (fullscreenDockHideTimerRef.current) {
+        clearTimeout(fullscreenDockHideTimerRef.current)
+        fullscreenDockHideTimerRef.current = null
+      }
+    }
+  }, [isPanelFullscreen, revealFullscreenDock])
+
   const onJoin = async () => {
     if (channelId === null) return
     setError(null)
@@ -245,8 +316,13 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a voice channel</div>
   }
 
-  return (
-    <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 rounded-xl border border-border/70 bg-card/60 p-3">
+  const panelContent = (
+    <section
+      className={cn(
+        'grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 border border-border/70 bg-card/60 p-3',
+        isPanelFullscreen ? 'h-full rounded-none border-0 bg-card/98 p-4' : 'rounded-xl',
+      )}
+    >
       <header className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">{channelName ? `Voice • ${channelName}` : `Voice Channel ${channelId}`}</h2>
@@ -257,6 +333,10 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={statusVariant}>{statusBadge}</Badge>
+          <Button size="sm" variant="outline" onClick={togglePanelFullscreen}>
+            {isPanelFullscreen ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}
+            {isPanelFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+          </Button>
           <Button
             size="sm"
             variant={joined ? 'destructive' : 'secondary'}
@@ -283,7 +363,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
         </p>
       ) : null}
 
-      <VoiceMediaStage tiles={mediaTiles} className="min-h-0" />
+      <VoiceMediaStage tiles={mediaTiles} className="min-h-0" showFullscreenToggle={false} />
 
       {showLegacyControls ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
@@ -317,4 +397,45 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
       ) : null}
     </section>
   )
+
+  return isPanelFullscreen
+    ? (
+      <>
+        {typeof document !== 'undefined'
+          ? createPortal(
+              <div className="fixed inset-0 z-[1200]">
+                <button
+                  type="button"
+                  className="absolute inset-0 bg-black/72 backdrop-blur-[2px]"
+                  onClick={togglePanelFullscreen}
+                  aria-label="Exit voice panel fullscreen"
+                />
+                <div className="absolute inset-0">
+                  {panelContent}
+                </div>
+                <div
+                  className="absolute inset-x-0 bottom-0 z-[1201] h-20"
+                  onMouseEnter={revealFullscreenDock}
+                />
+                <div
+                  className={cn(
+                    'pointer-events-none absolute inset-x-0 bottom-4 z-[1202] flex justify-center transition-all duration-200',
+                    showFullscreenDock ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0',
+                  )}
+                >
+                  <div
+                    className="pointer-events-auto w-[min(680px,calc(100vw-1.25rem))]"
+                    onMouseEnter={revealFullscreenDock}
+                    onMouseMove={revealFullscreenDock}
+                  >
+                    <ActiveCallCard variant="sidebar" />
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
+      </>
+    )
+    : panelContent
 }

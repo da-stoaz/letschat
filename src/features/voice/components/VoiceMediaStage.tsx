@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Maximize2Icon, Minimize2Icon } from 'lucide-react'
 import { type LocalParticipant, type RemoteParticipant } from 'livekit-client'
 import { Button } from '@/components/ui/button'
@@ -38,10 +38,8 @@ export function VoiceMediaStage({
   emptyStateText = 'No participants are sharing media yet.',
   emptyStateClassName,
 }: VoiceMediaStageProps) {
-  const stageRef = useRef<HTMLDivElement | null>(null)
   const [manualSpotlightKeys, setManualSpotlightKeys] = useState<string[]>([])
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [fullscreenError, setFullscreenError] = useState<string | null>(null)
 
   const sortedMediaTiles = useMemo(
     () => [...tiles].sort((left, right) => right.priority - left.priority),
@@ -106,155 +104,161 @@ export function VoiceMediaStage({
     })
   }, [])
 
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((previous) => !previous)
+  }, [])
+
   useEffect(() => {
-    if (typeof document === 'undefined') return
-    const onFullscreenChange = () => {
-      setIsFullscreen(document.fullscreenElement === stageRef.current)
-    }
-    document.addEventListener('fullscreenchange', onFullscreenChange)
-    onFullscreenChange()
-    return () => {
-      document.removeEventListener('fullscreenchange', onFullscreenChange)
-    }
-  }, [])
-
-  const toggleFullscreen = useCallback(async () => {
-    if (typeof document === 'undefined') return
-    const target = stageRef.current
-    if (!target) return
-
-    try {
-      if (document.fullscreenElement === target) {
-        await document.exitFullscreen()
-      } else {
-        await target.requestFullscreen()
+    if (!isFullscreen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsFullscreen(false)
       }
-      setFullscreenError(null)
-    } catch {
-      setFullscreenError('Fullscreen is not available in this environment.')
     }
-  }, [])
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [isFullscreen])
+
+  useEffect(() => {
+    if (!isFullscreen || typeof document === 'undefined') return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isFullscreen])
 
   return (
-    <div
-      ref={stageRef}
-      className={cn(
-        'relative flex h-full min-h-0 flex-col gap-2',
-        isFullscreen ? 'bg-background p-3' : null,
-        className,
-      )}
-    >
-      {showFullscreenToggle ? (
-        <div className="pointer-events-none absolute right-2 top-2 z-20 flex justify-end">
-          <Button
-            size="sm"
-            variant="outline"
-            className="pointer-events-auto h-8 bg-background/85 backdrop-blur-sm"
-            onClick={() => void toggleFullscreen()}
-          >
-            {isFullscreen ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}
-            {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-          </Button>
-        </div>
+    <>
+      {isFullscreen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-[119] bg-black/72 backdrop-blur-[2px]"
+          onClick={toggleFullscreen}
+          aria-label="Exit fullscreen"
+        />
       ) : null}
+      <div
+        className={cn(
+          'relative flex h-full min-h-0 flex-col gap-2',
+          isFullscreen
+            ? 'fixed inset-2 z-[120] h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] rounded-xl border border-border/70 bg-background/98 p-3 shadow-2xl'
+            : null,
+          className,
+        )}
+      >
+        {showFullscreenToggle ? (
+          <div className="pointer-events-none absolute right-2 top-2 z-20 flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              className="pointer-events-auto h-8 bg-background/85 backdrop-blur-sm"
+              onClick={toggleFullscreen}
+            >
+              {isFullscreen ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}
+              {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+            </Button>
+          </div>
+        ) : null}
 
-      {sortedMediaTiles.length === 0 ? (
-        <div
-          className={cn(
-            'grid h-full min-h-[260px] place-items-center rounded-xl border border-dashed border-border/70 bg-muted/10',
-            emptyStateClassName,
-          )}
-        >
-          <p className="text-sm text-muted-foreground">{emptyStateText}</p>
-        </div>
-      ) : (
-        <>
+        {sortedMediaTiles.length === 0 ? (
           <div
             className={cn(
-              'grid min-h-0 flex-1 gap-2',
-              spotlightTiles.length > 1 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1',
+              'grid h-full min-h-[260px] place-items-center rounded-xl border border-dashed border-border/70 bg-muted/10',
+              emptyStateClassName,
             )}
           >
-            {spotlightTiles.map((tile) => {
-              const manuallyPinned = manualSpotlightKeys.includes(tile.key)
-              return (
-                <button
-                  key={tile.key}
-                  type="button"
-                  onClick={() => toggleSpotlightTile(tile.key)}
-                  className={cn(
-                    'h-full min-h-0 rounded-xl text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
-                    manuallyPinned ? 'ring-2 ring-primary/60' : 'ring-1 ring-border/40 hover:ring-border/70',
-                  )}
-                  title={manuallyPinned ? 'Remove from big view' : 'Pin to big view'}
-                >
-                  <ParticipantMediaTile
-                    displayName={tile.displayName}
-                    avatarUrl={tile.avatarUrl}
-                    joinedAt={tile.joinedAt}
-                    participant={tile.participant}
-                    tileType={tile.tileType}
-                    isLocal={tile.isLocal}
-                    isSpeaking={tile.isSpeaking}
-                    isScreenAudioActive={tile.isScreenAudioActive}
-                    muted={tile.muted}
-                    deafened={tile.deafened}
-                    sharingScreen={tile.sharingScreen}
-                    sharingCamera={tile.sharingCamera}
-                    className="h-full min-h-0"
-                    stageClassName={cn(
-                      'aspect-auto h-full',
-                      spotlightTiles.length > 1 ? 'min-h-[220px]' : 'min-h-[320px]',
-                    )}
-                    avatarClassName={spotlightTiles.length > 1 ? 'size-28 sm:size-36' : 'size-36 sm:size-44 md:size-48'}
-                  />
-                </button>
-              )
-            })}
+            <p className="text-sm text-muted-foreground">{emptyStateText}</p>
           </div>
-
-          {secondaryMediaTiles.length > 0 ? (
-            <div className="shrink-0 overflow-x-auto pb-1">
-              <div className="flex min-w-max items-stretch gap-2 pr-1">
-                {secondaryMediaTiles.map((tile) => {
-                  const manuallyPinned = manualSpotlightKeys.includes(tile.key)
-                  return (
-                    <button
-                      key={tile.key}
-                      type="button"
-                      onClick={() => toggleSpotlightTile(tile.key)}
-                      className={cn(
-                        'w-[220px] shrink-0 rounded-lg text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 sm:w-[250px]',
-                        manuallyPinned ? 'ring-2 ring-primary/60' : 'ring-1 ring-border/40 hover:ring-border/70',
+        ) : (
+          <>
+            <div
+              className={cn(
+                'grid min-h-0 flex-1 gap-2',
+                spotlightTiles.length > 1 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1',
+              )}
+            >
+              {spotlightTiles.map((tile) => {
+                const manuallyPinned = manualSpotlightKeys.includes(tile.key)
+                return (
+                  <button
+                    key={tile.key}
+                    type="button"
+                    onClick={() => toggleSpotlightTile(tile.key)}
+                    className={cn(
+                      'h-full min-h-0 rounded-xl text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
+                      manuallyPinned ? 'ring-2 ring-primary/60' : 'ring-1 ring-border/40 hover:ring-border/70',
+                    )}
+                    title={manuallyPinned ? 'Remove from big view' : 'Pin to big view'}
+                  >
+                    <ParticipantMediaTile
+                      displayName={tile.displayName}
+                      avatarUrl={tile.avatarUrl}
+                      joinedAt={tile.joinedAt}
+                      participant={tile.participant}
+                      tileType={tile.tileType}
+                      isLocal={tile.isLocal}
+                      isSpeaking={tile.isSpeaking}
+                      isScreenAudioActive={tile.isScreenAudioActive}
+                      muted={tile.muted}
+                      deafened={tile.deafened}
+                      sharingScreen={tile.sharingScreen}
+                      sharingCamera={tile.sharingCamera}
+                      className="h-full min-h-0"
+                      stageClassName={cn(
+                        'aspect-auto h-full',
+                        spotlightTiles.length > 1 ? 'min-h-[220px]' : 'min-h-[320px]',
                       )}
-                      title={manuallyPinned ? 'Remove from big view' : 'Pin to big view'}
-                    >
-                      <ParticipantMediaTile
-                        displayName={tile.displayName}
-                        avatarUrl={tile.avatarUrl}
-                        joinedAt={tile.joinedAt}
-                        participant={tile.participant}
-                        tileType={tile.tileType}
-                        isLocal={tile.isLocal}
-                        isSpeaking={tile.isSpeaking}
-                        isScreenAudioActive={tile.isScreenAudioActive}
-                        muted={tile.muted}
-                        deafened={tile.deafened}
-                        sharingScreen={tile.sharingScreen}
-                        sharingCamera={tile.sharingCamera}
-                        stageClassName="aspect-video"
-                        avatarClassName="size-16 sm:size-20"
-                      />
-                    </button>
-                  )
-                })}
-              </div>
+                      avatarClassName={spotlightTiles.length > 1 ? 'size-28 sm:size-36' : 'size-36 sm:size-44 md:size-48'}
+                    />
+                  </button>
+                )
+              })}
             </div>
-          ) : null}
-        </>
-      )}
 
-      {fullscreenError ? <p className="text-xs text-destructive">{fullscreenError}</p> : null}
-    </div>
+            {secondaryMediaTiles.length > 0 ? (
+              <div className="shrink-0 overflow-x-auto pb-1">
+                <div className="flex min-w-max items-stretch gap-2 pr-1">
+                  {secondaryMediaTiles.map((tile) => {
+                    const manuallyPinned = manualSpotlightKeys.includes(tile.key)
+                    return (
+                      <button
+                        key={tile.key}
+                        type="button"
+                        onClick={() => toggleSpotlightTile(tile.key)}
+                        className={cn(
+                          'w-[220px] shrink-0 rounded-lg text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 sm:w-[250px]',
+                          manuallyPinned ? 'ring-2 ring-primary/60' : 'ring-1 ring-border/40 hover:ring-border/70',
+                        )}
+                        title={manuallyPinned ? 'Remove from big view' : 'Pin to big view'}
+                      >
+                        <ParticipantMediaTile
+                          displayName={tile.displayName}
+                          avatarUrl={tile.avatarUrl}
+                          joinedAt={tile.joinedAt}
+                          participant={tile.participant}
+                          tileType={tile.tileType}
+                          isLocal={tile.isLocal}
+                          isSpeaking={tile.isSpeaking}
+                          isScreenAudioActive={tile.isScreenAudioActive}
+                          muted={tile.muted}
+                          deafened={tile.deafened}
+                          sharingScreen={tile.sharingScreen}
+                          sharingCamera={tile.sharingCamera}
+                          stageClassName="aspect-video"
+                          avatarClassName="size-16 sm:size-20"
+                        />
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+    </>
   )
 }
