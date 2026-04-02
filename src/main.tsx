@@ -12,8 +12,16 @@ import { useServerConfigStore } from './stores/serverConfigStore'
 
 const queryClient = new QueryClient()
 
-if (useServerConfigStore.getState().config !== null) {
-  void initializeSpacetime()
+function initializePersistedSpacetime(): void {
+  if (useServerConfigStore.getState().config !== null) {
+    void initializeSpacetime()
+  }
+}
+
+if (useServerConfigStore.persist.hasHydrated()) {
+  initializePersistedSpacetime()
+} else {
+  useServerConfigStore.persist.onFinishHydration(initializePersistedSpacetime)
 }
 document.documentElement.classList.add('dark')
 

@@ -10,18 +10,27 @@ export interface ServerConfig {
 
 interface ServerConfigState {
   config: ServerConfig | null
+  hasHydrated: boolean
   setConfig: (config: ServerConfig) => void
   clearConfig: () => void
+  setHasHydrated: (value: boolean) => void
 }
 
 export const useServerConfigStore = create<ServerConfigState>()(
   persist(
     (set) => ({
       config: null,
+      hasHydrated: false,
       setConfig: (config) => set({ config }),
       clearConfig: () => set({ config: null }),
+      setHasHydrated: (value) => set({ hasHydrated: value }),
     }),
-    { name: 'letschat.server_config' },
+    {
+      name: 'letschat.server_config',
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      },
+    },
   ),
 )
 
@@ -39,7 +48,6 @@ export function buildJoinLink(config: ServerConfig): string {
 /** Parses a letschat://join?... deep-link URL into a ServerConfig, or returns null. */
 export function parseJoinLink(raw: string): ServerConfig | null {
   try {
-    // Accept both letschat://join?... and plain query strings
     const url = raw.startsWith('letschat://')
       ? new URL(raw.replace('letschat://', 'http://letschat/'))
       : new URL(raw)
