@@ -1,0 +1,56 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+
+@theme inline {
+  --font-sans: 'Geist Variable', sans-serif;
+
+  --color-background:        var(--background);
+  --color-foreground:        var(--foreground);
+  --color-card:              var(--card);
+  --color-card-foreground:   var(--card-foreground);
+  --color-primary:           var(--primary);
+  --color-primary-foreground:var(--primary-foreground);
+  --color-muted:             var(--muted);
+  --color-muted-foreground:  var(--muted-foreground);
+  --color-border:                  var(--border);
+  --color-border-hover:            oklch(1 0 0 / 20%);
+  --color-accent-blue:             var(--accent-blue);
+  --color-background-translucent: oklch(0.145 0 0 / 0.85);
+  --color-muted-hover:             oklch(0.33 0 0);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+/* The site defaults to dark mode — matches the app experience */
+:root {
+  --background:        oklch(0.145 0 0);
+  --foreground:        oklch(0.985 0 0);
+  --card:              oklch(0.205 0 0);
+  --card-foreground:   oklch(0.985 0 0);
+  --primary:           oklch(0.922 0 0);
+  --primary-foreground:oklch(0.205 0 0);
+  --muted:             oklch(0.269 0 0);
+  --muted-foreground:  oklch(0.708 0 0);
+  --border:            oklch(1 0 0 / 10%);
+  --accent-blue:       oklch(0.488 0.243 264.376);
+  --radius:            0.625rem;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    border-color: var(--border);
+  }
+  html {
+    font-family: var(--font-sans);
+    background-color: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    margin: 0;
+  }
+}
