@@ -68,19 +68,13 @@ jobs:
         shell: bash
         env:
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
         run: |
           key_path="$RUNNER_TEMP/AuthKey_${{ secrets.APPLE_API_KEY }}.p8"
-
-          if [ -n "${APPLE_API_KEY_P8:-}" ]; then
-            printf '%s' "$APPLE_API_KEY_P8" > "$key_path"
-          elif [ -n "${APPLE_API_KEY_P8_BASE64:-}" ]; then
-            # macOS runners use BSD base64 (-D)
-            printf '%s' "$APPLE_API_KEY_P8_BASE64" | base64 -D > "$key_path"
-          else
-            echo "Missing APPLE_API_KEY_P8 or APPLE_API_KEY_P8_BASE64 secret." >&2
+          if [ -z "${APPLE_API_KEY_P8:-}" ]; then
+            echo "Missing APPLE_API_KEY_P8 secret." >&2
             exit 1
           fi
+          printf '%s' "$APPLE_API_KEY_P8" > "$key_path"
 
           if ! grep -q "BEGIN PRIVATE KEY" "$key_path"; then
             {
@@ -92,7 +86,8 @@ jobs:
           fi
 
           if ! openssl pkey -in "$key_path" -noout >/dev/null 2>&1; then
-            echo "Invalid Apple API key content. Remove any trailing shell '%' and paste exact key content." >&2
+            echo "Invalid Apple API key content in APPLE_API_KEY_P8." >&2
+            echo "Set APPLE_API_KEY_P8 to the exact AuthKey_XXXX.p8 file content (preferred)." >&2
             exit 1
           fi
 
