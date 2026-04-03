@@ -80,6 +80,8 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
           maxScale={MAX_SCALE}
           initialScale={1}
           centerOnInit
+          limitToBounds
+          centerZoomedOut
           doubleClick={{ disabled: true }}
           wheel={{ step: 0.2 }}
           pinch={{ step: 5 }}
@@ -93,11 +95,23 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
               {activeImage ? (
                 <div className="flex min-h-full min-w-full items-center justify-center px-6 py-16 sm:px-8">
                   {activeImage.url ? (
-                    <TransformComponent>
+                    <TransformComponent
+                      wrapperStyle={{
+                        width: 'calc(100dvw - 3rem)',
+                        height: 'calc(100dvh - 8rem)',
+                      }}
+                      contentStyle={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
                       <img
                         src={activeImage.url}
                         alt={activeImage.fileName}
-                        className="block max-h-[calc(100dvh-8rem)] max-w-[calc(100dvw-3rem)] select-none object-contain"
+                        className="block h-full w-full select-none object-contain"
                         draggable={false}
                       />
                     </TransformComponent>
