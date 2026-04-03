@@ -97,6 +97,7 @@ export function AppRail({
                     }
                   >
                     <Avatar className="h-7 w-7 rounded-md">
+                      {server.iconUrl ? <AvatarImage src={server.iconUrl} alt={server.name} /> : null}
                       <AvatarFallback className="rounded-xl bg-primary/10 text-xs">{serverInitials(server.name)}</AvatarFallback>
                     </Avatar>
                     {hasUnreadInServer(server.id) ? (
