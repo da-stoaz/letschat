@@ -155,7 +155,7 @@ export function ChatMessageFeed({
     <div className="relative min-h-0 flex-1">
       <div
         ref={scrollRef}
-        className="h-full overflow-y-auto"
+        className="app-scrollbar h-full overflow-x-hidden overflow-y-auto"
         onScroll={(event) => {
           const target = event.currentTarget
           const atBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 80

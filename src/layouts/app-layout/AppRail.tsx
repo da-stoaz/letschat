@@ -80,8 +80,8 @@ export function AppRail({
 
         <Separator className="my-0.5" />
 
-        <div className="app-rail-scroll w-full min-h-0 flex-1 overflow-y-auto pr-1.5">
-          <div className="mx-auto flex w-9 flex-col items-center gap-2 py-1">
+        <div className="app-scrollbar w-full min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto pr-1.5">
+          <div className="mx-auto flex w-9 min-w-0 flex-col items-center gap-2 py-1">
             {servers.map((server) => {
               const serverUnread = countUnreadInServer(server.id)
               return (

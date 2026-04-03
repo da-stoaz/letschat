@@ -132,30 +132,54 @@
     }
   html {
     @apply font-sans;
+    color-scheme: dark;
     }
 }
 
 @layer components {
-  .app-rail-scroll {
+  :root {
+    --app-scrollbar-size: 8px;
+    --app-scrollbar-track: hsl(var(--background) / 0.18);
+    --app-scrollbar-thumb: hsl(var(--border) / 0.65);
+    --app-scrollbar-thumb-hover: hsl(var(--border) / 0.9);
+  }
+
+  .app-scrollbar,
+  textarea,
+  [data-slot='dropdown-menu-content'],
+  [data-slot='select-content'] {
     scrollbar-gutter: stable;
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--border) / 0.65) transparent;
+    scrollbar-color: var(--app-scrollbar-thumb) transparent;
   }
 
-  .app-rail-scroll::-webkit-scrollbar {
-    width: 6px;
+  .app-scrollbar::-webkit-scrollbar,
+  textarea::-webkit-scrollbar,
+  [data-slot='dropdown-menu-content']::-webkit-scrollbar,
+  [data-slot='select-content']::-webkit-scrollbar {
+    width: var(--app-scrollbar-size);
+    height: var(--app-scrollbar-size);
   }
 
-  .app-rail-scroll::-webkit-scrollbar-track {
-    background: transparent;
+  .app-scrollbar::-webkit-scrollbar-track,
+  textarea::-webkit-scrollbar-track,
+  [data-slot='dropdown-menu-content']::-webkit-scrollbar-track,
+  [data-slot='select-content']::-webkit-scrollbar-track {
+    background: var(--app-scrollbar-track);
   }
 
-  .app-rail-scroll::-webkit-scrollbar-thumb {
+  .app-scrollbar::-webkit-scrollbar-thumb,
+  textarea::-webkit-scrollbar-thumb,
+  [data-slot='dropdown-menu-content']::-webkit-scrollbar-thumb,
+  [data-slot='select-content']::-webkit-scrollbar-thumb {
     border-radius: 9999px;
-    background: hsl(var(--border) / 0.65);
+    background: var(--app-scrollbar-thumb);
   }
 
-  .app-rail-scroll::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--border) / 0.9);
+  .app-scrollbar::-webkit-scrollbar-thumb:hover,
+  textarea::-webkit-scrollbar-thumb:hover,
+  [data-slot='dropdown-menu-content']::-webkit-scrollbar-thumb:hover,
+  [data-slot='select-content']::-webkit-scrollbar-thumb:hover {
+    background: var(--app-scrollbar-thumb-hover);
   }
 }
