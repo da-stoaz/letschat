@@ -55,14 +55,16 @@ async function downloadForWeb({
   }
 
   const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
+  const chunks: ArrayBuffer[] = []
   let receivedBytes = 0
 
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
     if (!value) continue
-    chunks.push(value)
+    const chunkBuffer = new ArrayBuffer(value.byteLength)
+    new Uint8Array(chunkBuffer).set(value)
+    chunks.push(chunkBuffer)
     receivedBytes += value.byteLength
     if (totalBytes) {
       onProgress?.(Math.min(1, receivedBytes / totalBytes))
