@@ -11,7 +11,7 @@ const GITHUB_REPO = "da-stoaz/letschat";
     <nav class="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
       <span class="font-semibold text-[var(--foreground)] tracking-tight">LetsChat</span>
       <div class="flex items-center gap-4">
-        <a href="https://github.com/{GITHUB_REPO}" target="_blank" rel="noopener"
+        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener"
            class="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
           GitHub
         </a>
@@ -50,7 +50,7 @@ const GITHUB_REPO = "da-stoaz/letschat";
           </svg>
           Download for free
         </a>
-        <a href="https://github.com/{GITHUB_REPO}" target="_blank" rel="noopener"
+        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener"
            class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-[var(--radius-lg)] border border-[var(--border)] text-[var(--muted-foreground)] text-sm hover:text-[var(--foreground)] hover:border-[oklch(1_0_0_/_20%)] transition-colors">
           View on GitHub
         </a>
@@ -133,7 +133,7 @@ const GITHUB_REPO = "da-stoaz/letschat";
       <span>© {new Date().getFullYear()} Felix Steinberger</span>
       <div class="flex items-center gap-4">
         <a href="/download" class="hover:text-[var(--foreground)] transition-colors">Download</a>
-        <a href="https://github.com/{GITHUB_REPO}" target="_blank" rel="noopener" class="hover:text-[var(--foreground)] transition-colors">GitHub</a>
+        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="hover:text-[var(--foreground)] transition-colors">GitHub</a>
       </div>
     </div>
   </footer>

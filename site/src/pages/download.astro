@@ -13,7 +13,7 @@ const GITHUB_REPO = "da-stoaz/letschat";
   <header class="border-b border-[var(--border)] sticky top-0 z-50 backdrop-blur-sm bg-[oklch(0.145_0_0_/_0.85)]">
     <nav class="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
       <a href="/" class="font-semibold text-[var(--foreground)] tracking-tight hover:opacity-80 transition-opacity">LetsChat</a>
-      <a href="https://github.com/{GITHUB_REPO}" target="_blank" rel="noopener"
+      <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener"
          class="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
         GitHub
       </a>
@@ -148,13 +148,13 @@ const GITHUB_REPO = "da-stoaz/letschat";
     <!-- Error state -->
     <p id="release-error" class="hidden text-center text-sm text-[var(--muted-foreground)] mt-8">
       Could not load release data.
-      <a href="https://github.com/{GITHUB_REPO}/releases" target="_blank" rel="noopener"
+      <a href={`https://github.com/${GITHUB_REPO}/releases`} target="_blank" rel="noopener"
          class="underline underline-offset-2 hover:text-[var(--foreground)]">Browse releases on GitHub.</a>
     </p>
 
     <p class="text-center text-xs text-[var(--muted-foreground)] mt-8">
       All releases are signed and notarized. View all versions on
-      <a href="https://github.com/{GITHUB_REPO}/releases" target="_blank" rel="noopener"
+      <a href={`https://github.com/${GITHUB_REPO}/releases`} target="_blank" rel="noopener"
          class="underline underline-offset-2 hover:text-[var(--foreground)]">GitHub Releases</a>.
     </p>
 
@@ -166,7 +166,7 @@ const GITHUB_REPO = "da-stoaz/letschat";
       <span>© {new Date().getFullYear()} Felix Steinberger</span>
       <div class="flex items-center gap-4">
         <a href="/" class="hover:text-[var(--foreground)] transition-colors">Home</a>
-        <a href="https://github.com/{GITHUB_REPO}" target="_blank" rel="noopener" class="hover:text-[var(--foreground)] transition-colors">GitHub</a>
+        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="hover:text-[var(--foreground)] transition-colors">GitHub</a>
       </div>
     </div>
   </footer>
