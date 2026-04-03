@@ -13,6 +13,7 @@ import {
   DmInviteStatus,
 } from "./types";
 
+
 export default __t.row({
   id: __t.u64().primaryKey(),
   serverId: __t.u64().name("server_id"),

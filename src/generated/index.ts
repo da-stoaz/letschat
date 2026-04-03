@@ -37,12 +37,14 @@ import {
 import AcceptFriendRequestReducer from "./accept_friend_request_reducer";
 import BanMemberReducer from "./ban_member_reducer";
 import BlockUserReducer from "./block_user_reducer";
+import CleanupExpiredInvitesReducer from "./cleanup_expired_invites_reducer";
 import CreateChannelReducer from "./create_channel_reducer";
 import CreateInviteReducer from "./create_invite_reducer";
 import CreateServerReducer from "./create_server_reducer";
 import DeclineFriendRequestReducer from "./decline_friend_request_reducer";
 import DeleteChannelReducer from "./delete_channel_reducer";
 import DeleteDirectMessageReducer from "./delete_direct_message_reducer";
+import DeleteInviteReducer from "./delete_invite_reducer";
 import DeleteMessageReducer from "./delete_message_reducer";
 import DeleteServerReducer from "./delete_server_reducer";
 import EditMessageReducer from "./edit_message_reducer";
@@ -50,18 +52,24 @@ import JoinDmVoiceReducer from "./join_dm_voice_reducer";
 import JoinVoiceChannelReducer from "./join_voice_channel_reducer";
 import KickMemberReducer from "./kick_member_reducer";
 import LeaveDmVoiceReducer from "./leave_dm_voice_reducer";
+import LeaveServerReducer from "./leave_server_reducer";
 import LeaveVoiceChannelReducer from "./leave_voice_channel_reducer";
 import MarkChannelReadReducer from "./mark_channel_read_reducer";
 import MarkDmReadReducer from "./mark_dm_read_reducer";
 import RegisterUserReducer from "./register_user_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
+import RemoveTimeoutReducer from "./remove_timeout_reducer";
 import RenameServerReducer from "./rename_server_reducer";
+import RespondDmServerInviteReducer from "./respond_dm_server_invite_reducer";
 import SendDirectMessageReducer from "./send_direct_message_reducer";
+import SendDmServerInviteReducer from "./send_dm_server_invite_reducer";
 import SendFriendRequestReducer from "./send_friend_request_reducer";
 import SendMessageReducer from "./send_message_reducer";
 import SetMemberRoleReducer from "./set_member_role_reducer";
 import SetPresenceOfflineReducer from "./set_presence_offline_reducer";
+import SetServerInvitePolicyReducer from "./set_server_invite_policy_reducer";
 import SetTypingStateReducer from "./set_typing_state_reducer";
+import TimeoutMemberReducer from "./timeout_member_reducer";
 import TouchPresenceReducer from "./touch_presence_reducer";
 import TransferOwnershipReducer from "./transfer_ownership_reducer";
 import UnbanMemberReducer from "./unban_member_reducer";
@@ -71,12 +79,6 @@ import UpdateDmVoiceStateReducer from "./update_dm_voice_state_reducer";
 import UpdateProfileReducer from "./update_profile_reducer";
 import UpdateVoiceStateReducer from "./update_voice_state_reducer";
 import UseInviteReducer from "./use_invite_reducer";
-import TimeoutMemberReducer from "./timeout_member_reducer";
-import RemoveTimeoutReducer from "./remove_timeout_reducer";
-import CleanupExpiredInvitesReducer from "./cleanup_expired_invites_reducer";
-import DeleteInviteReducer from "./delete_invite_reducer";
-import SendDmServerInviteReducer from "./send_dm_server_invite_reducer";
-import RespondDmServerInviteReducer from "./respond_dm_server_invite_reducer";
 
 // Import all procedure arg schemas
 
@@ -326,12 +328,14 @@ const reducersSchema = __reducers(
   __reducerSchema("accept_friend_request", AcceptFriendRequestReducer),
   __reducerSchema("ban_member", BanMemberReducer),
   __reducerSchema("block_user", BlockUserReducer),
+  __reducerSchema("cleanup_expired_invites", CleanupExpiredInvitesReducer),
   __reducerSchema("create_channel", CreateChannelReducer),
   __reducerSchema("create_invite", CreateInviteReducer),
   __reducerSchema("create_server", CreateServerReducer),
   __reducerSchema("decline_friend_request", DeclineFriendRequestReducer),
   __reducerSchema("delete_channel", DeleteChannelReducer),
   __reducerSchema("delete_direct_message", DeleteDirectMessageReducer),
+  __reducerSchema("delete_invite", DeleteInviteReducer),
   __reducerSchema("delete_message", DeleteMessageReducer),
   __reducerSchema("delete_server", DeleteServerReducer),
   __reducerSchema("edit_message", EditMessageReducer),
@@ -339,18 +343,24 @@ const reducersSchema = __reducers(
   __reducerSchema("join_voice_channel", JoinVoiceChannelReducer),
   __reducerSchema("kick_member", KickMemberReducer),
   __reducerSchema("leave_dm_voice", LeaveDmVoiceReducer),
+  __reducerSchema("leave_server", LeaveServerReducer),
   __reducerSchema("leave_voice_channel", LeaveVoiceChannelReducer),
   __reducerSchema("mark_channel_read", MarkChannelReadReducer),
   __reducerSchema("mark_dm_read", MarkDmReadReducer),
   __reducerSchema("register_user", RegisterUserReducer),
   __reducerSchema("remove_friend", RemoveFriendReducer),
+  __reducerSchema("remove_timeout", RemoveTimeoutReducer),
   __reducerSchema("rename_server", RenameServerReducer),
+  __reducerSchema("respond_dm_server_invite", RespondDmServerInviteReducer),
   __reducerSchema("send_direct_message", SendDirectMessageReducer),
+  __reducerSchema("send_dm_server_invite", SendDmServerInviteReducer),
   __reducerSchema("send_friend_request", SendFriendRequestReducer),
   __reducerSchema("send_message", SendMessageReducer),
   __reducerSchema("set_member_role", SetMemberRoleReducer),
   __reducerSchema("set_presence_offline", SetPresenceOfflineReducer),
+  __reducerSchema("set_server_invite_policy", SetServerInvitePolicyReducer),
   __reducerSchema("set_typing_state", SetTypingStateReducer),
+  __reducerSchema("timeout_member", TimeoutMemberReducer),
   __reducerSchema("touch_presence", TouchPresenceReducer),
   __reducerSchema("transfer_ownership", TransferOwnershipReducer),
   __reducerSchema("unban_member", UnbanMemberReducer),
@@ -360,12 +370,6 @@ const reducersSchema = __reducers(
   __reducerSchema("update_profile", UpdateProfileReducer),
   __reducerSchema("update_voice_state", UpdateVoiceStateReducer),
   __reducerSchema("use_invite", UseInviteReducer),
-  __reducerSchema("timeout_member", TimeoutMemberReducer),
-  __reducerSchema("remove_timeout", RemoveTimeoutReducer),
-  __reducerSchema("cleanup_expired_invites", CleanupExpiredInvitesReducer),
-  __reducerSchema("delete_invite", DeleteInviteReducer),
-  __reducerSchema("send_dm_server_invite", SendDmServerInviteReducer),
-  __reducerSchema("respond_dm_server_invite", RespondDmServerInviteReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

@@ -8,9 +8,21 @@ import { initializeSpacetime } from './lib/spacetimedb'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
+import { useServerConfigStore } from './stores/serverConfigStore'
 
 const queryClient = new QueryClient()
-void initializeSpacetime()
+
+function initializePersistedSpacetime(): void {
+  if (useServerConfigStore.getState().config !== null) {
+    void initializeSpacetime()
+  }
+}
+
+if (useServerConfigStore.persist.hasHydrated()) {
+  initializePersistedSpacetime()
+} else {
+  useServerConfigStore.persist.onFinishHydration(initializePersistedSpacetime)
+}
 document.documentElement.classList.add('dark')
 
 createRoot(document.getElementById('root')!).render(

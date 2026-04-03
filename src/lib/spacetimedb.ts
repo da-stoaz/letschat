@@ -26,6 +26,7 @@ import { useTypingStore } from '../stores/typingStore'
 import { useInvitesStore } from '../stores/invitesStore'
 import { useDmServerInvitesStore } from '../stores/dmServerInvitesStore'
 import { clearBadgeCount, notify, syncUnreadBadgeCount } from './notifications'
+import { useServerConfigStore } from '../stores/serverConfigStore'
 import type { ServerMemberWithUser } from '../stores/membersStore'
 import type {
   Block,
@@ -58,8 +59,6 @@ export type SpacetimeDBClient = {
   call: <TArgs extends Record<string, unknown>>(reducer: string, args?: TArgs) => Promise<void>
 }
 
-const SPACETIMEDB_URI = (import.meta.env.VITE_SPACETIMEDB_URI as string | undefined) ?? 'ws://localhost:3000'
-const SPACETIMEDB_DATABASE = (import.meta.env.VITE_SPACETIMEDB_DATABASE as string | undefined) ?? 'letschat'
 const SPACETIMEDB_TOKEN_KEY = 'spacetimedb.auth_token'
 
 let connection: DbConnection | null = null
@@ -67,9 +66,6 @@ let subscriptionHandle: { unsubscribe: () => void } | null = null
 let connectPromise: Promise<void> | null = null
 let liveEventsEnabled = false
 
-function isPlaceholderEndpoint(url: string): boolean {
-  return /yourdomain\.com/i.test(url)
-}
 
 function getConnectionErrorDetails(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -835,11 +831,11 @@ async function connect(): Promise<void> {
   if (connection?.isActive) return
   if (connectPromise) return connectPromise
 
-  if (isPlaceholderEndpoint(SPACETIMEDB_URI)) {
-    throw new Error(
-      `SpacetimeDB URI is still a placeholder (${SPACETIMEDB_URI}). Rebuild with a real VITE_SPACETIMEDB_URI.`,
-    )
+  const serverConfig = useServerConfigStore.getState().config
+  if (!serverConfig) {
+    throw new Error('Server not configured. Please complete setup first.')
   }
+  const { spacetimedbUri: SPACETIMEDB_URI, spacetimedbDatabase: SPACETIMEDB_DATABASE } = serverConfig
 
   connectPromise = (async () => {
     useConnectionStore.getState().setStatus('connecting')

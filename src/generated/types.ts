@@ -70,6 +70,27 @@ export const DirectMessage = __t.object("DirectMessage", {
 });
 export type DirectMessage = __Infer<typeof DirectMessage>;
 
+// The tagged union or sum type for the algebraic type `DmInviteStatus`.
+export const DmInviteStatus = __t.enum("DmInviteStatus", {
+  Pending: __t.unit(),
+  Accepted: __t.unit(),
+  Declined: __t.unit(),
+});
+export type DmInviteStatus = __Infer<typeof DmInviteStatus>;
+
+export const DmServerInvite = __t.object("DmServerInvite", {
+  id: __t.u64(),
+  serverId: __t.u64(),
+  inviteToken: __t.string(),
+  senderIdentity: __t.identity(),
+  recipientIdentity: __t.identity(),
+  get status() {
+    return DmInviteStatus;
+  },
+  createdAt: __t.timestamp(),
+});
+export type DmServerInvite = __Infer<typeof DmServerInvite>;
+
 export const DmVoiceParticipant = __t.object("DmVoiceParticipant", {
   dmVoiceKey: __t.string(),
   roomKey: __t.string(),
@@ -114,26 +135,12 @@ export const Invite = __t.object("Invite", {
 });
 export type Invite = __Infer<typeof Invite>;
 
-// The tagged union or sum type for the algebraic type `DmInviteStatus`.
-export const DmInviteStatus = __t.enum("DmInviteStatus", {
-  Pending: __t.unit(),
-  Accepted: __t.unit(),
-  Declined: __t.unit(),
+// The tagged union or sum type for the algebraic type `InvitePolicy`.
+export const InvitePolicy = __t.enum("InvitePolicy", {
+  ModeratorsOnly: __t.unit(),
+  Everyone: __t.unit(),
 });
-export type DmInviteStatus = __Infer<typeof DmInviteStatus>;
-
-export const DmServerInvite = __t.object("DmServerInvite", {
-  id: __t.u64(),
-  serverId: __t.u64(),
-  inviteToken: __t.string(),
-  senderIdentity: __t.identity(),
-  recipientIdentity: __t.identity(),
-  get status() {
-    return DmInviteStatus;
-  },
-  createdAt: __t.timestamp(),
-});
-export type DmServerInvite = __Infer<typeof DmServerInvite>;
+export type InvitePolicy = __Infer<typeof InvitePolicy>;
 
 export const Message = __t.object("Message", {
   id: __t.u64(),
@@ -175,6 +182,9 @@ export const Server = __t.object("Server", {
   id: __t.u64(),
   name: __t.string(),
   ownerIdentity: __t.identity(),
+  get invitePolicy() {
+    return InvitePolicy;
+  },
   iconUrl: __t.option(__t.string()),
   createdAt: __t.timestamp(),
 });

@@ -7,36 +7,38 @@ Desktop chat app built with:
 - `src-tauri/`: Tauri shell
 - `src/`: React + TypeScript frontend
 
-## Dev Run Order
+## Local Dev Flow
 
-1. Start SpacetimeDB server:
-
-```bash
-spacetime start
-```
-
-2. Publish the Spacetime module:
+1. Start all supporting services (SpacetimeDB, LiveKit, MinIO):
 
 ```bash
-spacetime publish --server http://localhost:3000 letschat --module-path server --yes
+npm run services:up
 ```
 
-3. Start auth service (SQLite):
+2. Publish the SpacetimeDB module (only needed after `server/` changes):
+
+```bash
+spacetime publish --server http://localhost:4300 letschat --module-path server --yes
+```
+
+3. Start auth service (`.env.development` is loaded automatically via `APP_ENV=dev`):
 
 ```bash
 npm run auth:dev
 ```
 
-4. Start LiveKit:
-
-```bash
-docker compose -f livekit/docker-compose.yml up -d
-```
-
-5. Start the desktop app:
+4. Start the app:
 
 ```bash
 npm run tauri dev
+```
+
+## Service Helpers
+
+```bash
+npm run services:logs
+npm run services:down
+npm run services:reset
 ```
 
 ## Auth Service Environment
