@@ -16,6 +16,7 @@ import { useServerConfigStore } from './stores/serverConfigStore'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
 import { useVoiceStateReconciler } from './hooks/useVoiceStateReconciler'
 import { ensureNotificationPermission } from './lib/notifications'
+import { SplashScreen } from './components/SplashScreen'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoaderCircleIcon } from 'lucide-react'
 
@@ -37,7 +38,7 @@ function App() {
   }, [notificationsEnabled])
 
   if (!hasHydrated) {
-    return null
+    return <SplashScreen />
   }
 
   if (!isConfigured && !onSetupRoute) {
