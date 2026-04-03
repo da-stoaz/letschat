@@ -69,16 +69,25 @@ jobs:
         run: |
           key_path="$RUNNER_TEMP/AuthKey_${{ secrets.APPLE_API_KEY }}.p8"
           printf '%s' "${{ secrets.APPLE_API_KEY_P8 }}" > "$key_path"
+          if ! grep -q "BEGIN PRIVATE KEY" "$key_path"; then
+            { echo "-----BEGIN PRIVATE KEY-----"; cat "$key_path"; echo "-----END PRIVATE KEY-----"; } > "${key_path}.tmp"
+            mv "${key_path}.tmp" "$key_path"
+          fi
           chmod 600 "$key_path"
           echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Import Apple signing certificate (macOS)
+        if: matrix.platform == 'macos-latest'
+        uses: apple-actions/import-codesign-certs@v5
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
       - name: Build and release (macOS signed)
         if: matrix.platform == 'macos-latest'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
