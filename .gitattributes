@@ -1,0 +1,13 @@
+# Normalize line endings to LF everywhere
+* text=auto eol=lf
+
+# Generated SpacetimeDB bindings — always LF, never CRLF
+src/generated/**/*.ts text eol=lf
+
+# Binary files — no line ending conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.icns binary
+*.wasm binary
