@@ -18,6 +18,12 @@ const BLOCKED_MIME_PREFIXES = [
 
 type UploadStage = 'requesting' | 'uploading' | 'confirming' | 'done'
 type UploadStageCallback = (file: File, stage: UploadStage) => void
+export type UploadProgress = {
+  loadedBytes: number
+  totalBytes: number
+  fraction: number
+}
+type UploadProgressCallback = (file: File, progress: UploadProgress) => void
 
 function safeMimeType(file: File): string {
   const mimeType = file.type?.trim().toLowerCase()
@@ -36,9 +42,55 @@ export function isBlockedMimeType(mimeType: string): boolean {
   return BLOCKED_MIME_PREFIXES.some((prefix) => normalized.startsWith(prefix))
 }
 
+async function uploadFileToStorage(
+  file: File,
+  uploadUrl: string,
+  mimeType: string,
+  onProgress?: UploadProgressCallback,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const request = new XMLHttpRequest()
+    request.open('PUT', uploadUrl, true)
+    request.setRequestHeader('Content-Type', mimeType)
+    request.responseType = 'text'
+
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return
+      const totalBytes = Math.max(1, event.total)
+      onProgress?.(file, {
+        loadedBytes: event.loaded,
+        totalBytes,
+        fraction: Math.min(1, event.loaded / totalBytes),
+      })
+    }
+
+    request.onerror = () => {
+      reject(new Error('Storage upload failed (network error).'))
+    }
+    request.onabort = () => {
+      reject(new Error('Storage upload was cancelled.'))
+    }
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) {
+        onProgress?.(file, {
+          loadedBytes: file.size,
+          totalBytes: Math.max(1, file.size),
+          fraction: 1,
+        })
+        resolve()
+        return
+      }
+      reject(new Error(`Storage upload failed (${request.status})`))
+    }
+
+    request.send(file)
+  })
+}
+
 export async function uploadSingleFile(
   file: File,
   onStage?: UploadStageCallback,
+  onProgress?: UploadProgressCallback,
 ): Promise<ChatMessageAttachment> {
   const mimeType = safeMimeType(file)
 
@@ -65,16 +117,12 @@ export async function uploadSingleFile(
   )
 
   onStage?.(file, 'uploading')
-  const uploadResponse = await fetch(request.uploadUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': mimeType,
-    },
-    body: file,
+  onProgress?.(file, {
+    loadedBytes: 0,
+    totalBytes: Math.max(1, file.size),
+    fraction: 0,
   })
-  if (!uploadResponse.ok) {
-    throw new Error(`Storage upload failed (${uploadResponse.status})`)
-  }
+  await uploadFileToStorage(file, request.uploadUrl, mimeType, onProgress)
 
   onStage?.(file, 'confirming')
   const confirmed = await withSessionTokenRetry((sessionToken) =>
@@ -96,12 +144,13 @@ export async function uploadSingleFile(
 export async function uploadFiles(
   files: File[],
   onStage?: UploadStageCallback,
+  onProgress?: UploadProgressCallback,
 ): Promise<ChatMessageAttachment[]> {
   const uploaded: ChatMessageAttachment[] = []
 
   for (const file of files) {
     try {
-      const next = await uploadSingleFile(file, onStage)
+      const next = await uploadSingleFile(file, onStage, onProgress)
       uploaded.push(next)
     } catch (error) {
       throw new Error(buildUploadErrorMessage(file.name, error))

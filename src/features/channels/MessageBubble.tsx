@@ -80,7 +80,7 @@ export function MessageBubble({
       )
 
     return (
-      <article className="px-2 py-2">
+      <article className="px-3 py-1.5">
         <div className="flex justify-center">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
             {systemIcon}
@@ -95,15 +95,15 @@ export function MessageBubble({
   }
 
   return (
-    <article className="group/bubble rounded-lg px-2 py-1 transition-colors hover:bg-muted/35">
-      <div className="flex items-start gap-3">
-        <Avatar className="mt-0.5 size-8 rounded-lg">
+    <article className="group/bubble rounded-lg px-3 py-1 transition-colors hover:bg-muted/35">
+      <div className="flex items-start gap-3.5">
+        <Avatar className="mt-0.5 size-9 rounded-lg">
           {sender.avatarUrl ? <AvatarImage src={sender.avatarUrl} alt={sender.displayName} /> : null}
           <AvatarFallback className="rounded-lg bg-primary/10 text-xs">{userInitials(sender.displayName)}</AvatarFallback>
         </Avatar>
 
         <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-2">
+          <div className="mb-1.5 flex items-center gap-2">
             <span className="text-sm font-semibold">{sender.displayName}</span>
             <PresenceDot status={sender.status} />
             <span className="text-xs text-muted-foreground">{formatTimestamp(firstMessage.sentAt)}</span>
@@ -122,7 +122,7 @@ export function MessageBubble({
                   {message.deleted ? (
                     <p className="text-sm italic text-muted-foreground">[message deleted]</p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <MessageAttachmentList attachments={parsed.attachments} />
                       {hasText ? (
                         <div className="prose prose-invert max-w-none break-words text-sm text-foreground prose-p:my-0 prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-pre:rounded prose-pre:border prose-pre:border-border/70 prose-pre:bg-muted/70 prose-a:text-sky-400 hover:prose-a:text-sky-300">

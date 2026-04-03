@@ -1,9 +1,16 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { authServiceGenerateLivekitToken, clearStoredAuthSessionToken, getStoredAuthSessionToken } from './authService'
 import { clearSignedDownloadUrlCache } from './uploads'
 import { useServerConfigStore } from '../stores/serverConfigStore'
 import type { Identity } from '../types/domain'
 export type NotificationPermissionState = NotificationPermission | 'unsupported'
+export type AttachmentDownloadProgressEvent = {
+  operationId: string
+  bytesDownloaded: number
+  totalBytes: number | null
+  completed: boolean
+}
 
 function isTauriRuntime(): boolean {
   if (typeof window === 'undefined') return false
@@ -87,8 +94,22 @@ export const tauriCommands = {
   },
   getAppVersion: async () =>
     isTauriRuntime() ? invoke<string>('get_app_version') : 'web',
-  saveAttachmentFile: async (url: string, fileName: string): Promise<boolean> => {
+  saveAttachmentFile: async (url: string, fileName: string, operationId: string): Promise<boolean> => {
     if (!isTauriRuntime()) return false
-    return invoke<boolean>('save_attachment_file', { url, fileName })
+    return invoke<boolean>('save_attachment_file', { url, fileName, operationId })
+  },
+  cancelAttachmentDownload: async (operationId: string): Promise<void> => {
+    if (!isTauriRuntime()) return
+    await invoke<void>('cancel_attachment_download', { operationId })
+  },
+  onAttachmentDownloadProgress: async (
+    callback: (event: AttachmentDownloadProgressEvent) => void,
+  ): Promise<UnlistenFn> => {
+    if (!isTauriRuntime()) {
+      return () => undefined
+    }
+    return listen<AttachmentDownloadProgressEvent>('attachment-download-progress', (event) => {
+      callback(event.payload)
+    })
   },
 }

@@ -134,3 +134,28 @@
     @apply font-sans;
     }
 }
+
+@layer components {
+  .app-rail-scroll {
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border) / 0.65) transparent;
+  }
+
+  .app-rail-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .app-rail-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .app-rail-scroll::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: hsl(var(--border) / 0.65);
+  }
+
+  .app-rail-scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--border) / 0.9);
+  }
+}

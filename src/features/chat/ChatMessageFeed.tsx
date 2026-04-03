@@ -193,7 +193,7 @@ export function ChatMessageFeed({
                 }}
               >
                 {item.type === 'date' ? (
-                  <div className="my-2 flex items-center gap-2 px-3">
+                  <div className="my-1.5 flex items-center gap-2 px-4">
                     <Separator className="flex-1" />
                     <span className="text-xs text-muted-foreground">{item.dateLabel}</span>
                     <Separator className="flex-1" />
