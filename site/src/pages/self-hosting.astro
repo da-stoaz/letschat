@@ -19,32 +19,93 @@ const GITHUB_REPO = "da-stoaz/letschat";
     </nav>
   </header>
 
-  <main class="max-w-6xl mx-auto px-6 py-16 space-y-14">
-    <section class="space-y-4">
-      <p class="inline-flex text-xs px-3 py-1 rounded-full border border-border text-muted-foreground">Beginner-first production tutorial (Ubuntu + Docker Compose)</p>
-      <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Self-host the LetsChat backend</h1>
-      <p class="text-muted-foreground max-w-3xl leading-relaxed">
-        This guide walks you from network basics to a working production stack with two deployment tracks.
-        Both tracks run the same backend services: SpacetimeDB, auth-service, LiveKit, and MinIO.
-      </p>
-      <div class="rounded-xl border border-border bg-card p-5">
-        <h2 class="text-lg font-medium mb-3">Choose your deployment track</h2>
-        <div class="grid md:grid-cols-2 gap-4">
-          <a href="#track-tunnel" class="rounded-lg border border-border p-4 hover:border-border-hover transition-colors">
-            <p class="font-medium">Track A: Cloudflare Tunnel</p>
-            <p class="text-sm text-muted-foreground mt-1">Tunnel `auth/chat/files` through Cloudflare. Keep LiveKit media on forwarded TCP/UDP ports.</p>
-          </a>
-          <a href="#track-caddy" class="rounded-lg border border-border p-4 hover:border-border-hover transition-colors">
-            <p class="font-medium">Track B: Caddy Reverse Proxy</p>
-            <p class="text-sm text-muted-foreground mt-1">Use Caddy on ports 80/443 and Cloudflare DNS records pointed to your server public IP.</p>
-          </a>
+  <main class="relative max-w-6xl mx-auto px-6 py-16 space-y-14 overflow-hidden">
+    <div class="hero-glow hero-glow-a"></div>
+    <div class="hero-glow hero-glow-b"></div>
+
+    <section class="relative z-10 grid lg:grid-cols-[1.1fr_0.9fr] gap-6 items-start">
+      <div class="space-y-4">
+        <p class="inline-flex text-xs px-3 py-1 rounded-full border border-border text-muted-foreground">Beginner-first production tutorial (Ubuntu + Docker Compose)</p>
+        <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Self-host the LetsChat backend</h1>
+        <p class="text-muted-foreground max-w-3xl leading-relaxed">
+          LetsChat is not a single server. It is a small backend stack: chat state, auth, voice signaling, file storage,
+          and startup discovery. This guide explains what each part does, why it matters, and how to deploy it in production.
+        </p>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <span class="pill">SpacetimeDB</span>
+          <span class="pill">Auth Service</span>
+          <span class="pill">LiveKit</span>
+          <span class="pill">MinIO</span>
+          <span class="pill">Discovery URL</span>
         </div>
+      </div>
+      <aside class="frost p-5 rounded-2xl space-y-4">
+        <p class="text-sm font-medium text-foreground">Architecture At A Glance</p>
+        <div class="space-y-2 text-sm">
+          <div class="flow-chip"><span>Client App</span><span class="flow-dot"></span><span>connect.example.com</span></div>
+          <div class="flow-chip"><span>Discovery JSON</span><span class="flow-dot"></span><span>auth/chat/lk/files URLs</span></div>
+          <div class="flow-chip"><span>Runtime Services</span><span class="flow-dot"></span><span>Auth + Spacetime + LiveKit + MinIO</span></div>
+        </div>
+        <p class="text-xs text-muted-foreground">If discovery is reachable, startup can auto-configure backend endpoints without manual join links.</p>
+      </aside>
+    </section>
+
+    <section class="frost rounded-2xl p-6 space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">What Runs In Production (And Why)</h2>
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+        <article class="service-card rounded-xl p-4 space-y-1">
+          <p class="font-medium">SpacetimeDB</p>
+          <p class="text-muted-foreground">Real-time chat/game state backend. Required for channels, messages, membership, and sync.</p>
+        </article>
+        <article class="service-card rounded-xl p-4 space-y-1">
+          <p class="font-medium">Auth Service</p>
+          <p class="text-muted-foreground">Login/session API and token minting. Required for user authentication and LiveKit token creation.</p>
+        </article>
+        <article class="service-card rounded-xl p-4 space-y-1">
+          <p class="font-medium">LiveKit</p>
+          <p class="text-muted-foreground">Voice/media signaling and transport. Required for voice channels and real-time audio.</p>
+        </article>
+        <article class="service-card rounded-xl p-4 space-y-1">
+          <p class="font-medium">MinIO</p>
+          <p class="text-muted-foreground">S3-compatible object storage. Required for uploads, attachments, and download URLs.</p>
+        </article>
+        <article class="service-card rounded-xl p-4 space-y-1 md:col-span-2 lg:col-span-2">
+          <p class="font-medium">Discovery Endpoint (`/.well-known/letschat.json`)</p>
+          <p class="text-muted-foreground">Lets app startup auto-discover your backend from one URL (for example `https://connect.example.com`).
+          Without this, users must paste a full join link manually.</p>
+        </article>
       </div>
     </section>
 
-    <section class="space-y-3 rounded-xl border border-border bg-card p-6">
-      <h2 class="text-2xl font-semibold tracking-tight">Deployment interface</h2>
-      <p class="text-sm text-muted-foreground">Production now uses a shared compose base plus one topology overlay:</p>
+    <section class="frost rounded-2xl p-6 space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">Choose Your Deployment Track</h2>
+      <div class="grid md:grid-cols-2 gap-4">
+        <a href="#track-tunnel" class="track-card tunnel rounded-xl p-5 space-y-2">
+          <p class="text-lg font-medium">Track A: Cloudflare Tunnel</p>
+          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Routes `auth/chat/files/connect` over Cloudflare Tunnel; LiveKit media remains direct via forwarded ports.</p>
+          <p class="text-sm text-muted-foreground"><strong class="text-foreground">Why:</strong> Keeps web services off direct public IP while still supporting voice traffic.</p>
+          <p class="text-sm text-muted-foreground"><strong class="text-foreground">Best for:</strong> Home servers where you want Cloudflare ingress control without exposing 80/443 directly.</p>
+          <div class="flex flex-wrap gap-2 pt-1">
+            <span class="mini-pill">Zero Trust Ingress</span>
+            <span class="mini-pill">Lower Host Exposure</span>
+          </div>
+        </a>
+        <a href="#track-caddy" class="track-card caddy rounded-xl p-5 space-y-2">
+          <p class="text-lg font-medium">Track B: Caddy Reverse Proxy</p>
+          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Caddy terminates TLS on your host and proxies `auth/chat/files/lk/connect` locally.</p>
+          <p class="text-sm text-muted-foreground"><strong class="text-foreground">Why:</strong> Simple standard architecture with fewer external moving parts.</p>
+          <p class="text-sm text-muted-foreground"><strong class="text-foreground">Best for:</strong> Operators comfortable exposing 80/443 and managing direct DNS to host IP.</p>
+          <div class="flex flex-wrap gap-2 pt-1">
+            <span class="mini-pill">Direct HTTPS</span>
+            <span class="mini-pill">Classic Reverse Proxy</span>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <section class="frost rounded-2xl p-6 space-y-3">
+      <h2 class="text-2xl font-semibold tracking-tight">Deployment Interface</h2>
+      <p class="text-sm text-muted-foreground">Production is split into one shared compose base plus one track overlay:</p>
       <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`# Track A: Tunnel
 cp .env.production.tunnel.example .env
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --build
@@ -57,170 +118,159 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
     <section id="track-tunnel" class="space-y-6">
       <h2 class="text-3xl font-semibold tracking-tight">Track A: Cloudflare Tunnel</h2>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 0: Prerequisites</h3>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Requirements (Read First)</h3>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li>Ubuntu host with Docker Engine + Compose plugin installed.</li>
-          <li>Domain managed in Cloudflare DNS.</li>
-          <li>Router access for port forwarding (LiveKit media ports).</li>
-          <li>Optional: dynamic DNS updater if your ISP changes IP frequently.</li>
+          <li>Ubuntu host with Docker Engine + Compose plugin.</li>
+          <li>Cloudflare-managed domain plus Zero Trust access (to create a tunnel token).</li>
+          <li>Router access for LiveKit media port forwarding (`44381/tcp+udp`, `44382/udp`).</li>
+          <li>Public IPv4 (or ISP config) for reliable media. CGNAT can break voice.</li>
         </ul>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker --version
-docker compose version`}</code></pre>
+docker compose version
+curl -4 ifconfig.me`}</code></pre>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 1: Check public IP / CGNAT</h3>
-        <p class="text-sm text-muted-foreground">If your router WAN IP is private-range (CGNAT), direct inbound media can fail. You need a routable public IP for reliable LiveKit media.</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -4 ifconfig.me`}</code></pre>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">How This Track Works</h3>
+        <p class="text-sm text-muted-foreground">Cloudflare Tunnel proxies HTTP/WebSocket services (`auth/chat/files/connect`) from Cloudflare to your Docker network.</p>
+        <p class="text-sm text-muted-foreground">LiveKit media is different: raw UDP/TCP media must still be reachable directly on your host via router forwarding.</p>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 2: Cloudflare DNS aliases</h3>
-        <p class="text-sm text-muted-foreground">Create DNS records (names can be customized):</p>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 1: DNS + Tunnel Ingress</h3>
+        <p class="text-sm text-muted-foreground">Create these hostnames in Cloudflare and configure tunnel ingress:</p>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li>`auth.example.com` (for auth-service)</li>
-          <li>`chat.example.com` (for SpacetimeDB websocket)</li>
-          <li>`files.example.com` (for MinIO API)</li>
-          <li>`lk.example.com` (for LiveKit signaling; point to server IP)</li>
-          <li>`connect.example.com` (LetsChat startup discovery endpoint)</li>
+          <li>`auth.example.com` -> `http://auth-service:44301`</li>
+          <li>`chat.example.com` -> `http://spacetimedb:3000` (WebSocket enabled)</li>
+          <li>`files.example.com` -> `http://minio:44390`</li>
+          <li>`connect.example.com` -> `http://discovery:80`</li>
+          <li>`lk.example.com` -> DNS to your host public IP (not tunnelled media)</li>
         </ul>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 3: Secrets + env</h3>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 2: Configure Secrets + Endpoints</h3>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`cp .env.production.tunnel.example .env
 
 # generate secrets and paste into .env
 openssl rand -hex 32
 openssl rand -base64 32`}</code></pre>
-        <p class="text-sm text-muted-foreground">Required values: `AUTH_JWT_SECRET`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT`, `CLOUDFLARE_TUNNEL_TOKEN`.</p>
+        <p class="text-sm text-muted-foreground">Set all required values, especially `CLOUDFLARE_TUNNEL_TOKEN` and `DISCOVERY_*` fields used by startup auto-discovery.</p>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 4: LiveKit production config</h3>
-        <p class="text-sm text-muted-foreground">Update `livekit/config.prod.yaml` keys to match `.env` exactly. Keep media ports aligned with compose and router forwarding.</p>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 3: LiveKit Production Config</h3>
+        <p class="text-sm text-muted-foreground">In `livekit/config.prod.yaml`, match API keys with `.env` and keep media ports aligned.</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`port: 44380
 rtc:
   use_external_ip: true
   tcp_port: 44381
   udp_port: 44382
 keys:
-  letschat-prod: <same-as-LIVEKIT_API_SECRET>`}</code></pre>
+  letschat-prod: <same as LIVEKIT_API_SECRET>`}</code></pre>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 5: Start services</h3>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 4: Start Services</h3>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --build
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml ps
 curl -i http://127.0.0.1:44305/.well-known/letschat.json`}</code></pre>
-        <p class="text-sm text-muted-foreground">The `discovery` container now serves LetsChat startup config on port `44305` (host) and must be exposed via `connect.<domain>` in your tunnel ingress.</p>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 6: Publish SpacetimeDB module</h3>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 5: Publish SpacetimeDB Module</h3>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`spacetime publish --server http://127.0.0.1:44300 letschat --module-path server --yes`}</code></pre>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 7: Verify services</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml logs --tail=120
-curl -i https://auth.example.com/health
-curl -i https://files.example.com/minio/health/live`}</code></pre>
-        <p class="text-sm text-muted-foreground">Also confirm router forwarding for `44381/tcp`, `44381/udp`, `44382/udp` to your host.</p>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 6: Validate Public Endpoints</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
+curl -i https://files.example.com/minio/health/live
+curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
+        <p class="text-sm text-muted-foreground">Confirm router forwarding to host: `44381/tcp`, `44381/udp`, `44382/udp`.</p>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 8: Client onboarding + discovery</h3>
-        <p class="text-sm text-muted-foreground">Share a LetsChat join link from app settings, or tell users to enter `https://connect.example.com` in startup. The app will fetch `/.well-known/letschat.json` automatically.</p>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 7: Client Onboarding</h3>
+        <p class="text-sm text-muted-foreground">Users can enter `https://connect.example.com` in startup and LetsChat will auto-discover backend URLs.</p>
+        <p class="text-sm text-muted-foreground">Discovery JSON example:</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
   "spacetimedb": "wss://chat.example.com",
   "auth": "https://auth.example.com",
   "livekit": "ws://lk.example.com:44380",
   "database": "letschat"
 }`}</code></pre>
-        <p class="text-sm text-muted-foreground">Use `wss://lk.example.com` only if you add TLS in front of LiveKit signaling.</p>
-      </article>
-
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 9: Operations basics</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`# update images and restart
-
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
-
-# backups (minimum)
-# - auth_data volume (SQLite)
-# - minio_data volume (attachments)
-# - spacetimedb_home volume`}</code></pre>
+        <p class="text-sm text-muted-foreground">Use `wss://lk...` only if you add TLS in front of LiveKit signaling.</p>
       </article>
     </section>
 
     <section id="track-caddy" class="space-y-6">
       <h2 class="text-3xl font-semibold tracking-tight">Track B: Caddy Reverse Proxy</h2>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 0: Prerequisites</h3>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Requirements (Read First)</h3>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
           <li>Ubuntu host with Docker Engine + Compose plugin.</li>
-          <li>Domain in Cloudflare; DNS records should be set to DNS-only for Caddy ACME issuance.</li>
-          <li>Router forwarding: `80/tcp`, `443/tcp`, plus LiveKit media ports.</li>
+          <li>Cloudflare DNS records set to your host public IP (DNS-only mode for ACME issuance).</li>
+          <li>Router/firewall allows `80/tcp` and `443/tcp` to host (for Caddy TLS/HTTP).</li>
+          <li>LiveKit media forwarding still required: `44381/tcp+udp`, `44382/udp`.</li>
         </ul>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 1: Check public IP / CGNAT</h3>
-        <p class="text-sm text-muted-foreground">CGNAT blocks inbound connections. Ask ISP for a public IPv4 if your router WAN is private-range.</p>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">How This Track Works</h3>
+        <p class="text-sm text-muted-foreground">Caddy runs on your host, terminates HTTPS, and routes by hostname to internal Docker services.</p>
+        <p class="text-sm text-muted-foreground">This removes Cloudflare Tunnel complexity, but your host directly exposes `80/443` to the internet.</p>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 2: Cloudflare DNS aliases</h3>
-        <p class="text-sm text-muted-foreground">Create DNS A/AAAA records to your host public IP for:</p>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 1: DNS + Network Setup</h3>
+        <p class="text-sm text-muted-foreground">Point these DNS records to your host public IP:</p>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
           <li>`auth.example.com`</li>
           <li>`chat.example.com`</li>
           <li>`files.example.com`</li>
           <li>`lk.example.com`</li>
-          <li>`connect.example.com` (startup discovery endpoint)</li>
+          <li>`connect.example.com`</li>
         </ul>
+        <p class="text-sm text-muted-foreground">Open ports: `80/tcp`, `443/tcp`, `44381/tcp+udp`, `44382/udp`.</p>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 3: Secrets + env</h3>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 2: Configure Secrets + Domains</h3>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`cp .env.production.caddy.example .env
 openssl rand -hex 32
 openssl rand -base64 32`}</code></pre>
-        <p class="text-sm text-muted-foreground">Fill `*_DOMAIN` and `DISCOVERY_*` values in `.env` to match your DNS and endpoint URLs. Caddy uses hostnames from `deploy/caddy/Caddyfile`.</p>
+        <p class="text-sm text-muted-foreground">Set `*_DOMAIN` and `DISCOVERY_*` values. `CONNECT_DOMAIN` is required for startup auto-discovery route.</p>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 4: LiveKit production config</h3>
-        <p class="text-sm text-muted-foreground">Same as tunnel track: keep keys in sync and maintain TCP/UDP media ports.</p>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 3: LiveKit Production Config</h3>
+        <p class="text-sm text-muted-foreground">Same key/port alignment rules as Tunnel track.</p>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 5: Start services</h3>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 4: Start Services</h3>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d --build
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps
-curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`}</code></pre>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 6: Publish SpacetimeDB module</h3>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 5: Publish SpacetimeDB Module</h3>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`spacetime publish --server http://127.0.0.1:44300 letschat --module-path server --yes`}</code></pre>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 7: Verify services</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml logs --tail=120
-curl -i https://auth.example.com/health
-curl -i https://files.example.com/minio/health/live`}</code></pre>
-        <p class="text-sm text-muted-foreground">Forward `44381/tcp`, `44381/udp`, and `44382/udp` for LiveKit media.</p>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 6: Validate Public Endpoints</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
+curl -i https://files.example.com/minio/health/live
+curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
       </article>
 
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 8: Client onboarding + discovery</h3>
-        <p class="text-sm text-muted-foreground">Users can type `https://connect.example.com` in startup and LetsChat will auto-discover from `/.well-known/letschat.json`.</p>
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 7: Client Onboarding</h3>
+        <p class="text-sm text-muted-foreground">Users can enter `https://connect.example.com` in startup. Discovery JSON should point to your public endpoints:</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
   "spacetimedb": "wss://chat.example.com",
   "auth": "https://auth.example.com",
@@ -228,17 +278,11 @@ curl -i https://files.example.com/minio/health/live`}</code></pre>
   "database": "letschat"
 }`}</code></pre>
       </article>
-
-      <article class="rounded-xl border border-border p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 9: Operations basics</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d`}</code></pre>
-      </article>
     </section>
 
     <section class="space-y-4">
-      <h2 class="text-3xl font-semibold tracking-tight">Common mistakes</h2>
-      <div class="overflow-x-auto rounded-xl border border-border">
+      <h2 class="text-3xl font-semibold tracking-tight">Common Mistakes</h2>
+      <div class="overflow-x-auto rounded-2xl border border-border/70 bg-card/60 backdrop-blur-sm">
         <table class="w-full text-sm">
           <thead class="bg-card text-left">
             <tr>
@@ -256,7 +300,7 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
             <tr>
               <td class="p-3">Setup discovery fails</td>
               <td class="p-3">`connect.<domain>` not routed to discovery container</td>
-              <td class="p-3">Route to `discovery:80` (or host port `44305`) and verify JSON path</td>
+              <td class="p-3">Tunnel: `connect -> discovery:80`; Caddy: set `CONNECT_DOMAIN` correctly</td>
             </tr>
             <tr>
               <td class="p-3">Upload/download errors</td>
@@ -265,18 +309,13 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
             </tr>
             <tr>
               <td class="p-3">Caddy cert issuance fails</td>
-              <td class="p-3">Cloudflare proxied records / blocked 80,443</td>
+              <td class="p-3">Cloudflare proxy enabled or closed 80/443</td>
               <td class="p-3">Use DNS-only records and open `80/tcp`, `443/tcp`</td>
             </tr>
             <tr>
               <td class="p-3">LiveKit setup fails immediately</td>
               <td class="p-3">Wrong signaling scheme (`ws://` vs `wss://`)</td>
-              <td class="p-3">Tunnel track usually uses `ws://lk...:44380`; Caddy track uses `wss://lk...`</td>
-            </tr>
-            <tr>
-              <td class="p-3">Auth/LiveKit token failures</td>
-              <td class="p-3">Mismatched LiveKit key/secret values</td>
-              <td class="p-3">Keep `.env` and `livekit/config.prod.yaml` keys identical</td>
+              <td class="p-3">Tunnel often uses `ws://lk...:44380`; Caddy usually uses `wss://lk...`</td>
             </tr>
             <tr>
               <td class="p-3">Spacetime connect timeout</td>
@@ -301,3 +340,139 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
     </div>
   </footer>
 </Layout>
+
+<style>
+  .hero-glow {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 9999px;
+    filter: blur(56px);
+    opacity: 0.22;
+  }
+
+  .hero-glow-a {
+    width: 360px;
+    height: 260px;
+    top: -80px;
+    left: -80px;
+    background: radial-gradient(circle at 40% 40%, color-mix(in oklch, var(--accent-blue) 80%, white 20%), transparent 70%);
+    animation: drift 12s ease-in-out infinite;
+  }
+
+  .hero-glow-b {
+    width: 340px;
+    height: 240px;
+    top: 120px;
+    right: -120px;
+    background: radial-gradient(circle at 60% 50%, color-mix(in oklch, var(--accent-blue) 70%, cyan 30%), transparent 72%);
+    animation: drift 15s ease-in-out infinite reverse;
+  }
+
+  .frost {
+    background:
+      linear-gradient(160deg, oklch(0.24 0 0 / 0.8), oklch(0.20 0 0 / 0.75)),
+      radial-gradient(1200px 380px at -10% -30%, oklch(0.54 0.23 264.3 / 0.16), transparent 60%);
+    border: 1px solid oklch(1 0 0 / 0.11);
+    box-shadow:
+      0 1px 0 oklch(1 0 0 / 0.08) inset,
+      0 20px 50px oklch(0 0 0 / 0.24);
+    backdrop-filter: blur(8px);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.65rem;
+    border-radius: 9999px;
+    border: 1px solid oklch(1 0 0 / 0.16);
+    background: oklch(0.23 0 0 / 0.72);
+    color: var(--color-muted-foreground);
+  }
+
+  .flow-chip {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 0.55rem;
+    align-items: center;
+    padding: 0.58rem 0.72rem;
+    border-radius: 0.72rem;
+    border: 1px solid oklch(1 0 0 / 0.1);
+    background: oklch(0.18 0 0 / 0.64);
+    color: var(--color-muted-foreground);
+  }
+
+  .flow-dot {
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 9999px;
+    background: var(--color-accent-blue);
+    box-shadow: 0 0 0 6px oklch(0.49 0.23 264.3 / 0.18);
+  }
+
+  .service-card {
+    border: 1px solid oklch(1 0 0 / 0.12);
+    background: linear-gradient(180deg, oklch(0.21 0 0 / 0.88), oklch(0.19 0 0 / 0.88));
+    box-shadow: 0 12px 28px oklch(0 0 0 / 0.2);
+  }
+
+  .track-card {
+    position: relative;
+    border: 1px solid oklch(1 0 0 / 0.14);
+    background: linear-gradient(180deg, oklch(0.22 0 0 / 0.9), oklch(0.18 0 0 / 0.86));
+    box-shadow: 0 14px 32px oklch(0 0 0 / 0.2);
+    overflow: hidden;
+    transition: transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+  }
+
+  .track-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--color-accent-blue), transparent);
+    opacity: 0.75;
+  }
+
+  .track-card:hover {
+    transform: translateY(-2px);
+    border-color: oklch(1 0 0 / 0.24);
+    box-shadow: 0 20px 40px oklch(0 0 0 / 0.28);
+  }
+
+  .track-card.tunnel {
+    background:
+      linear-gradient(165deg, oklch(0.23 0.02 260 / 0.96), oklch(0.18 0 0 / 0.9)),
+      radial-gradient(420px 180px at 120% -10%, oklch(0.49 0.23 264.3 / 0.25), transparent 65%);
+  }
+
+  .track-card.caddy {
+    background:
+      linear-gradient(165deg, oklch(0.22 0.01 220 / 0.96), oklch(0.18 0 0 / 0.9)),
+      radial-gradient(420px 180px at 120% -10%, oklch(0.74 0.16 190 / 0.2), transparent 65%);
+  }
+
+  .mini-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    padding: 0.28rem 0.55rem;
+    border: 1px solid oklch(1 0 0 / 0.16);
+    font-size: 0.68rem;
+    color: var(--color-muted-foreground);
+    background: oklch(0.16 0 0 / 0.6);
+  }
+
+  .step-card {
+    border: 1px solid oklch(1 0 0 / 0.12);
+    background:
+      linear-gradient(180deg, oklch(0.22 0 0 / 0.82), oklch(0.185 0 0 / 0.8)),
+      linear-gradient(90deg, oklch(0.49 0.23 264.3 / 0.2) 0 4px, transparent 4px 100%);
+    box-shadow: 0 14px 34px oklch(0 0 0 / 0.2);
+  }
+
+  @keyframes drift {
+    0% { transform: translate3d(0, 0, 0) scale(1); }
+    50% { transform: translate3d(8px, -12px, 0) scale(1.04); }
+    100% { transform: translate3d(0, 0, 0) scale(1); }
+  }
+</style>
