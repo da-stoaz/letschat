@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
   ClockIcon,
   CrownIcon,
   ExternalLinkIcon,
@@ -38,6 +40,7 @@ import {
 import type { Channel, ServerInvitePolicy } from '../types/domain'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -62,6 +65,7 @@ import {
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from '@/components/ui/sonner'
+import { serverInitials } from '../layouts/app-layout/helpers'
 
 type MemberActionModal =
   | { kind: 'kick'; member: ServerMemberWithUser }
@@ -93,6 +97,10 @@ function hasActiveTimeout(member: ServerMemberWithUser): boolean {
   return Date.parse(member.timeoutUntil) > Date.now()
 }
 
+function invitePolicyLabel(policy: ServerInvitePolicy): string {
+  return policy === 'Everyone' ? 'Everyone (all members)' : 'Owner + Moderators'
+}
+
 function roleBadgeClassName(role: ServerMemberWithUser['role']): string {
   if (role === 'Owner') return 'bg-amber-500/15 text-amber-300 border-amber-500/30'
   if (role === 'Moderator') return 'bg-blue-500/15 text-blue-300 border-blue-500/30'
@@ -114,6 +122,7 @@ export function ServerManagePage() {
   const [showDeleteServer, setShowDeleteServer] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
+  const [reorderingChannelId, setReorderingChannelId] = useState<number | null>(null)
   const [memberAction, setMemberAction] = useState<MemberActionModal | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [invitePolicySaving, setInvitePolicySaving] = useState(false)
@@ -160,6 +169,32 @@ export function ServerManagePage() {
       toast.error('Failed to update invite permission', { description: message })
     } finally {
       setInvitePolicySaving(false)
+    }
+  }
+
+  const moveChannel = async (channelId: number, direction: -1 | 1) => {
+    if (!canManageServerChannels || reorderingChannelId !== null) return
+
+    const index = sortedChannels.findIndex((channel) => channel.id === channelId)
+    if (index < 0) return
+    const swapWith = sortedChannels[index + direction]
+    if (!swapWith) return
+
+    const current = sortedChannels[index]
+    const maxPosition = sortedChannels.reduce((max, channel) => Math.max(max, channel.position), 0)
+    const temporaryPosition = maxPosition + 1
+
+    setReorderingChannelId(channelId)
+    try {
+      // Three-step swap avoids unique-position collisions on strict backends.
+      await reducers.updateChannel(swapWith.id, { position: temporaryPosition })
+      await reducers.updateChannel(current.id, { position: swapWith.position })
+      await reducers.updateChannel(swapWith.id, { position: current.position })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not reorder channels.'
+      toast.error('Failed to reorder channel', { description: message })
+    } finally {
+      setReorderingChannelId(null)
     }
   }
 
@@ -217,7 +252,13 @@ export function ServerManagePage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Server Panel</p>
-              <h1 className="text-2xl font-semibold leading-tight">{server.name}</h1>
+              <div className="mt-0.5 flex items-center gap-2">
+                <Avatar className="size-8 rounded-lg">
+                  {server.iconUrl ? <AvatarImage src={server.iconUrl} alt={server.name} /> : null}
+                  <AvatarFallback className="rounded-lg bg-primary/10 text-xs">{serverInitials(server.name)}</AvatarFallback>
+                </Avatar>
+                <h1 className="text-2xl font-semibold leading-tight">{server.name}</h1>
+              </div>
               <p className="text-sm text-muted-foreground">Manage members, channels, and server settings in one place.</p>
             </div>
             <div className="flex items-center gap-2">
@@ -402,34 +443,64 @@ export function ServerManagePage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {sortedChannels.map((channel) => (
-                            <TableRow key={channel.id}>
-                              <TableCell className="font-medium">{channel.kind === 'Text' ? '#' : 'Voice'} {channel.name}</TableCell>
-                              <TableCell>
-                                <Badge variant="outline">{channel.kind}</Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={channel.moderatorOnly ? 'secondary' : 'outline'}>
-                                  {channel.moderatorOnly ? 'Moderators only' : 'Everyone'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {canManageServerChannels ? (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setEditingChannel(channel)}
-                                  >
-                                    <Settings2Icon className="size-4" />
-                                    Manage
-                                  </Button>
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">Read only</span>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                          {sortedChannels.map((channel, index) => {
+                            const canMoveUp = index > 0
+                            const canMoveDown = index < sortedChannels.length - 1
+                            const isReordering = reorderingChannelId !== null
+                            return (
+                              <TableRow key={channel.id}>
+                                <TableCell className="font-medium">{channel.kind === 'Text' ? '#' : 'Voice'} {channel.name}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline">{channel.kind}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={channel.moderatorOnly ? 'secondary' : 'outline'}>
+                                    {channel.moderatorOnly ? 'Moderators only' : 'Everyone'}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {canManageServerChannels ? (
+                                    <div className="inline-flex items-center gap-1">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon-sm"
+                                        onClick={() => void moveChannel(channel.id, -1)}
+                                        disabled={!canMoveUp || isReordering}
+                                        aria-label="Move channel up"
+                                        title="Move up"
+                                      >
+                                        <ArrowUpIcon className="size-3.5" />
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon-sm"
+                                        onClick={() => void moveChannel(channel.id, 1)}
+                                        disabled={!canMoveDown || isReordering}
+                                        aria-label="Move channel down"
+                                        title="Move down"
+                                      >
+                                        <ArrowDownIcon className="size-3.5" />
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setEditingChannel(channel)}
+                                        disabled={isReordering}
+                                      >
+                                        <Settings2Icon className="size-4" />
+                                        Manage
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">Read only</span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
                         </TableBody>
                       </Table>
                     )}
@@ -443,18 +514,42 @@ export function ServerManagePage() {
                 <Card className="border-border/70 bg-background/40">
                   <CardHeader>
                     <CardTitle className="text-base">Server Settings</CardTitle>
-                    <CardDescription>Update core server settings.</CardDescription>
+                    <CardDescription>Manage branding and invitation permissions.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
-                      <p className="text-sm font-medium">Name</p>
-                      <p className="text-sm text-muted-foreground">{server.name}</p>
+                    <div className="rounded-xl border border-border/70 bg-muted/20 p-3.5">
+                      <p className="text-sm font-medium">Server Profile</p>
+                      <p className="text-xs text-muted-foreground">Icon and name shown across rails, headers, and invites.</p>
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <Avatar className="size-12 rounded-xl">
+                            {server.iconUrl ? <AvatarImage src={server.iconUrl} alt={server.name} /> : null}
+                            <AvatarFallback className="rounded-xl bg-primary/10 text-sm">{serverInitials(server.name)}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{server.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {server.iconUrl ? 'Custom icon enabled' : 'Using initials as fallback icon'}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!isOwner}
+                          onClick={() => setShowEditServer(true)}
+                        >
+                          <Settings2Icon className="size-4" />
+                          Edit Name/Icon
+                        </Button>
+                      </div>
                     </div>
-                    <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
+                    <div className="rounded-xl border border-border/70 bg-muted/20 p-3.5">
                       <p className="text-sm font-medium">Created</p>
                       <p className="text-sm text-muted-foreground">{formatMemberSince(server.createdAt)}</p>
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 rounded-xl border border-border/70 bg-muted/20 p-3.5">
                       <p className="text-sm font-medium">Who can invite users</p>
                       <Select
                         value={server.invitePolicy}
@@ -462,7 +557,7 @@ export function ServerManagePage() {
                         disabled={!isOwner || invitePolicySaving}
                       >
                         <SelectTrigger className="w-full">
-                          <SelectValue />
+                          <SelectValue>{invitePolicyLabel(server.invitePolicy)}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="ModeratorsOnly">Owner + Moderators</SelectItem>
@@ -471,30 +566,25 @@ export function ServerManagePage() {
                       </Select>
                       <p className="text-xs text-muted-foreground">
                         {isOwner
-                          ? 'This setting controls invite links and direct in-app invites.'
+                          ? 'This controls invite links and direct in-app invites.'
                           : 'Only the owner can change invite permissions.'}
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={!isOwner}
-                      onClick={() => setShowEditServer(true)}
-                    >
-                      <Settings2Icon className="size-4" />
-                      Rename Server
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      disabled={!isOwner}
-                      onClick={() => setShowDeleteServer(true)}
-                    >
-                      <Trash2Icon className="size-4" />
-                      Delete Server
-                    </Button>
+                    <div className="rounded-xl border border-destructive/35 bg-destructive/5 p-3.5">
+                      <p className="text-sm font-medium text-destructive">Danger Zone</p>
+                      <p className="mb-2 text-xs text-muted-foreground">Delete the entire server and all channels/messages.</p>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        disabled={!isOwner}
+                        onClick={() => setShowDeleteServer(true)}
+                      >
+                        <Trash2Icon className="size-4" />
+                        Delete Server
+                      </Button>
+                    </div>
                     {!isOwner ? (
-                      <p className="text-xs text-muted-foreground">Only the server owner can rename or delete this server.</p>
+                      <p className="text-xs text-muted-foreground">Only the server owner can edit branding or delete the server.</p>
                     ) : null}
                   </CardContent>
                 </Card>
@@ -532,6 +622,7 @@ export function ServerManagePage() {
           <EditServerModal
             serverId={server.id}
             currentName={server.name}
+            currentIconUrl={server.iconUrl}
             onClose={() => setShowEditServer(false)}
           />
         </DialogContent>

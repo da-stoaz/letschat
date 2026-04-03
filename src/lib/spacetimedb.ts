@@ -1094,6 +1094,11 @@ export const reducers = {
   createServer: (name: string) => spacetimedbClient.call('createServer', { name }),
   renameServer: (serverId: number, newName: string) =>
     spacetimedbClient.call('renameServer', { serverId: toU64(serverId, 'serverId'), newName }),
+  setServerIcon: (serverId: number, iconUrl: string | null) =>
+    spacetimedbClient.call('setServerIcon', {
+      serverId: toU64(serverId, 'serverId'),
+      iconUrl: iconUrl === null ? null : iconUrl.trim(),
+    }),
   setServerInvitePolicy: (serverId: number, invitePolicy: ServerInvitePolicy) =>
     spacetimedbClient.call('setServerInvitePolicy', {
       serverId: toU64(serverId, 'serverId'),

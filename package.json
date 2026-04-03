@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "auth:dev": "cross-env APP_ENV=dev cargo run --manifest-path auth-service/Cargo.toml",
     "spacetime:generate": "spacetime generate --lang typescript --out-dir src/generated --module-path server --yes",
+    "spacetime:publish": "spacetime publish --server http://localhost:4300 letschat --module-path server --yes",
     "services:up": "docker compose -f docker-compose.dev.yml up -d",
     "services:down": "docker compose -f docker-compose.dev.yml down",
     "services:logs": "docker compose -f docker-compose.dev.yml logs -f",

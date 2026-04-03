@@ -67,6 +67,7 @@ import SendFriendRequestReducer from "./send_friend_request_reducer";
 import SendMessageReducer from "./send_message_reducer";
 import SetMemberRoleReducer from "./set_member_role_reducer";
 import SetPresenceOfflineReducer from "./set_presence_offline_reducer";
+import SetServerIconReducer from "./set_server_icon_reducer";
 import SetServerInvitePolicyReducer from "./set_server_invite_policy_reducer";
 import SetTypingStateReducer from "./set_typing_state_reducer";
 import TimeoutMemberReducer from "./timeout_member_reducer";
@@ -358,6 +359,7 @@ const reducersSchema = __reducers(
   __reducerSchema("send_message", SendMessageReducer),
   __reducerSchema("set_member_role", SetMemberRoleReducer),
   __reducerSchema("set_presence_offline", SetPresenceOfflineReducer),
+  __reducerSchema("set_server_icon", SetServerIconReducer),
   __reducerSchema("set_server_invite_policy", SetServerInvitePolicyReducer),
   __reducerSchema("set_typing_state", SetTypingStateReducer),
   __reducerSchema("timeout_member", TimeoutMemberReducer),

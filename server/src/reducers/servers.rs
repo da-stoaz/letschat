@@ -84,6 +84,33 @@ pub fn set_server_invite_policy(
 }
 
 #[spacetimedb::reducer]
+pub fn set_server_icon(
+    ctx: &ReducerContext,
+    server_id: u64,
+    icon_url: Option<String>,
+) -> Result<(), String> {
+    require_owner(ctx, server_id, ctx.sender())?;
+
+    let normalized_icon_url = icon_url
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    if let Some(url) = normalized_icon_url.as_ref() {
+        assert_or_err(url.len() <= 2048, "server icon url must be at most 2048 chars")?;
+    }
+
+    let mut server_row = ctx
+        .db
+        .server()
+        .id()
+        .find(server_id)
+        .ok_or_else(|| "server not found".to_string())?;
+    server_row.icon_url = normalized_icon_url;
+    ctx.db.server().id().update(server_row);
+    Ok(())
+}
+
+#[spacetimedb::reducer]
 pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
     require_owner(ctx, server_id, ctx.sender())?;
 
