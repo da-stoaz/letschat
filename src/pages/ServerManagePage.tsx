@@ -138,6 +138,7 @@ export function ServerManagePage() {
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
   const [reorderingChannelId, setReorderingChannelId] = useState<number | null>(null)
   const [draggingChannelId, setDraggingChannelId] = useState<number | null>(null)
+  const [draggingGroupKey, setDraggingGroupKey] = useState<string | null>(null)
   const [dropTargetChannelId, setDropTargetChannelId] = useState<number | null>(null)
   const [memberAction, setMemberAction] = useState<MemberActionModal | null>(null)
   const [leaving, setLeaving] = useState(false)
@@ -175,30 +176,42 @@ export function ServerManagePage() {
     [channels],
   )
 
-  const channelOrderMeta = useMemo(() => {
-    const siblingsByGroup = new Map<string, Channel[]>()
+  const channelGroups = useMemo(() => {
+    const grouped = new Map<string, { key: string; kind: Channel['kind']; section: string | null; channels: Channel[] }>()
     for (const channel of sortedChannels) {
       const key = channelGroupKey(channel)
-      const siblings = siblingsByGroup.get(key) ?? []
-      siblings.push(channel)
-      siblingsByGroup.set(key, siblings)
+      const current = grouped.get(key) ?? { key, kind: channel.kind, section: channel.section, channels: [] }
+      current.channels.push(channel)
+      grouped.set(key, current)
     }
 
-    const byChannelId = new Map<number, { index: number; size: number }>()
-    for (const siblings of siblingsByGroup.values()) {
-      siblings
-        .sort((left, right) => {
-          const positionDelta = left.position - right.position
-          if (positionDelta !== 0) return positionDelta
-          return left.id - right.id
-        })
-        .forEach((channel, index) => {
-          byChannelId.set(channel.id, { index, size: siblings.length })
-        })
+    const groups = [...grouped.values()]
+    groups.sort((left, right) => {
+      const kindDelta = left.kind.localeCompare(right.kind)
+      if (kindDelta !== 0) return kindDelta
+      return sectionKey(left.section).localeCompare(sectionKey(right.section))
+    })
+
+    for (const group of groups) {
+      group.channels.sort((left, right) => {
+        const positionDelta = left.position - right.position
+        if (positionDelta !== 0) return positionDelta
+        return left.id - right.id
+      })
     }
 
-    return byChannelId
+    return groups
   }, [sortedChannels])
+
+  const channelGroupById = useMemo(() => {
+    const byId = new Map<number, string>()
+    for (const group of channelGroups) {
+      for (const channel of group.channels) {
+        byId.set(channel.id, group.key)
+      }
+    }
+    return byId
+  }, [channelGroups])
 
   const firstTextChannelId = useMemo(() => {
     const textChannel = sortedChannels.find((channel) => channel.kind === 'Text')
@@ -236,22 +249,37 @@ export function ServerManagePage() {
     }
   }
 
+  const deleteChannel = async (channel: Channel) => {
+    if (!canManageServerChannels) return
+    const confirmed = window.confirm(`Delete channel "${channel.name}"? This cannot be undone.`)
+    if (!confirmed) return
+
+    try {
+      await reducers.deleteChannel(channel.id)
+      if (editingChannel?.id === channel.id) {
+        setEditingChannel(null)
+      }
+      toast.success('Channel deleted')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not delete channel.'
+      toast.error('Failed to delete channel', { description: message })
+    }
+  }
+
   const moveChannelToTarget = async (channelId: number, targetChannelId: number) => {
     if (!canManageServerChannels || reorderingChannelId !== null) return
     if (channelId === targetChannelId) return
 
-    const current = sortedChannels.find((channel) => channel.id === channelId)
-    const target = sortedChannels.find((channel) => channel.id === targetChannelId)
-    if (!current || !target) return
-
-    if (channelGroupKey(current) !== channelGroupKey(target)) {
+    const sourceGroup = channelGroupById.get(channelId)
+    const targetGroup = channelGroupById.get(targetChannelId)
+    if (!sourceGroup || !targetGroup) return
+    if (sourceGroup !== targetGroup) {
       toast.error('You can only drag within the same type and section.')
       return
     }
 
-    const siblings = sortedChannels
-      .filter((channel) => channelGroupKey(channel) === channelGroupKey(current))
-      .sort((left, right) => left.position - right.position || left.id - right.id)
+    const siblings = channelGroups.find((group) => group.key === sourceGroup)?.channels ?? []
+    if (siblings.length === 0) return
 
     const fromIndex = siblings.findIndex((channel) => channel.id === channelId)
     const toIndex = siblings.findIndex((channel) => channel.id === targetChannelId)
@@ -509,120 +537,140 @@ export function ServerManagePage() {
                     {sortedChannels.length === 0 ? (
                       <p className="py-6 text-center text-sm text-muted-foreground">No channels found.</p>
                     ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Section</TableHead>
-                            <TableHead>Access</TableHead>
-                            <TableHead className="w-[120px] text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {sortedChannels.map((channel) => {
-                            const orderMeta = channelOrderMeta.get(channel.id)
-                            const canMoveUp = Boolean(orderMeta && orderMeta.index > 0)
-                            const canMoveDown = Boolean(orderMeta && orderMeta.index < orderMeta.size - 1)
-                            const isReordering = reorderingChannelId !== null
-                            const isDragSource = draggingChannelId === channel.id
-                            const isDropTarget = dropTargetChannelId === channel.id
-                            return (
-                              <TableRow
-                                key={channel.id}
-                                draggable={canManageServerChannels && !isReordering}
-                                onDragStart={() => {
-                                  setDraggingChannelId(channel.id)
-                                  setDropTargetChannelId(null)
-                                }}
-                                onDragOver={(event) => {
-                                  if (draggingChannelId === null || draggingChannelId === channel.id) return
-                                  const dragging = sortedChannels.find((entry) => entry.id === draggingChannelId)
-                                  if (!dragging) return
-                                  if (channelGroupKey(dragging) !== channelGroupKey(channel)) return
-                                  event.preventDefault()
-                                  setDropTargetChannelId(channel.id)
-                                }}
-                                onDrop={(event) => {
-                                  event.preventDefault()
-                                  const sourceId = draggingChannelId
-                                  setDraggingChannelId(null)
-                                  setDropTargetChannelId(null)
-                                  if (sourceId === null) return
-                                  void moveChannelToTarget(sourceId, channel.id)
-                                }}
-                                onDragEnd={() => {
-                                  setDraggingChannelId(null)
-                                  setDropTargetChannelId(null)
-                                }}
-                                className={isDropTarget ? 'bg-primary/10' : isDragSource ? 'opacity-60' : ''}
-                              >
-                                <TableCell className="font-medium">{channel.kind === 'Text' ? '#' : 'Voice'} {channel.name}</TableCell>
-                                <TableCell>
-                                  <Badge variant="outline">{channel.kind}</Badge>
-                                </TableCell>
-                                <TableCell className="text-muted-foreground">{sectionLabel(channel.section)}</TableCell>
-                                <TableCell>
-                                  <Badge variant={channel.moderatorOnly ? 'secondary' : 'outline'}>
-                                    {channel.moderatorOnly ? 'Moderators only' : 'Everyone'}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {canManageServerChannels ? (
-                                    <div className="inline-flex items-center gap-1">
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        className="cursor-grab active:cursor-grabbing"
-                                        disabled={isReordering}
-                                        aria-label="Drag to reorder channel"
-                                        title="Drag to reorder"
-                                      >
-                                        <GripVerticalIcon className="size-3.5" />
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon-sm"
-                                        onClick={() => void moveChannel(channel.id, -1)}
-                                        disabled={!canMoveUp || isReordering}
-                                        aria-label="Move channel up"
-                                        title="Move up"
-                                      >
-                                        <ArrowUpIcon className="size-3.5" />
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon-sm"
-                                        onClick={() => void moveChannel(channel.id, 1)}
-                                        disabled={!canMoveDown || isReordering}
-                                        aria-label="Move channel down"
-                                        title="Move down"
-                                      >
-                                        <ArrowDownIcon className="size-3.5" />
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setEditingChannel(channel)}
-                                        disabled={isReordering}
-                                      >
-                                        <Settings2Icon className="size-4" />
-                                        Manage
-                                      </Button>
-                                    </div>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">Read only</span>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
+                      <div className="space-y-3">
+                        <p className="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                          Reordering limitation: channels can only be reordered inside the same group.
+                          A group is defined by channel type plus section.
+                        </p>
+                        {channelGroups.map((group) => (
+                          <div key={group.key} className="rounded-lg border border-border/70 bg-muted/15">
+                            <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline">{group.kind}</Badge>
+                                <span className="text-sm font-medium">{sectionLabel(group.section)}</span>
+                              </div>
+                              <Badge variant="secondary">{group.channels.length}</Badge>
+                            </div>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Name</TableHead>
+                                  <TableHead>Access</TableHead>
+                                  <TableHead className="w-[210px] text-right">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {group.channels.map((channel, index) => {
+                                  const canMoveUp = index > 0
+                                  const canMoveDown = index < group.channels.length - 1
+                                  const isReordering = reorderingChannelId !== null
+                                  const isDragSource = draggingChannelId === channel.id
+                                  const isDropTarget = dropTargetChannelId === channel.id
+                                  return (
+                                    <TableRow
+                                      key={channel.id}
+                                      onDragOver={(event) => {
+                                        if (draggingChannelId === null || draggingChannelId === channel.id) return
+                                        if (draggingGroupKey !== group.key) return
+                                        event.preventDefault()
+                                        setDropTargetChannelId(channel.id)
+                                      }}
+                                      onDrop={(event) => {
+                                        event.preventDefault()
+                                        const sourceId = draggingChannelId
+                                        setDraggingChannelId(null)
+                                        setDraggingGroupKey(null)
+                                        setDropTargetChannelId(null)
+                                        if (sourceId === null) return
+                                        void moveChannelToTarget(sourceId, channel.id)
+                                      }}
+                                      className={isDropTarget ? 'bg-primary/10' : isDragSource ? 'opacity-60' : ''}
+                                    >
+                                      <TableCell className="font-medium">{channel.kind === 'Text' ? '#' : 'Voice'} {channel.name}</TableCell>
+                                      <TableCell>
+                                        <Badge variant={channel.moderatorOnly ? 'secondary' : 'outline'}>
+                                          {channel.moderatorOnly ? 'Moderators only' : 'Everyone'}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        {canManageServerChannels ? (
+                                          <div className="inline-flex items-center gap-1">
+                                            <span
+                                              role="button"
+                                              tabIndex={-1}
+                                              draggable={!isReordering}
+                                              aria-label="Drag to reorder channel"
+                                              title="Drag to reorder"
+                                              className="inline-flex h-8 w-8 cursor-grab items-center justify-center rounded-md border border-border/70 bg-background hover:bg-muted active:cursor-grabbing"
+                                              onDragStart={() => {
+                                                setDraggingChannelId(channel.id)
+                                                setDraggingGroupKey(group.key)
+                                                setDropTargetChannelId(null)
+                                              }}
+                                              onDragEnd={() => {
+                                                setDraggingChannelId(null)
+                                                setDraggingGroupKey(null)
+                                                setDropTargetChannelId(null)
+                                              }}
+                                            >
+                                              <GripVerticalIcon className="size-3.5" />
+                                            </span>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="icon-sm"
+                                              onClick={() => void moveChannel(channel.id, -1)}
+                                              disabled={!canMoveUp || isReordering}
+                                              aria-label="Move channel up"
+                                              title="Move up"
+                                            >
+                                              <ArrowUpIcon className="size-3.5" />
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="icon-sm"
+                                              onClick={() => void moveChannel(channel.id, 1)}
+                                              disabled={!canMoveDown || isReordering}
+                                              aria-label="Move channel down"
+                                              title="Move down"
+                                            >
+                                              <ArrowDownIcon className="size-3.5" />
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              variant="destructive"
+                                              size="icon-sm"
+                                              onClick={() => void deleteChannel(channel)}
+                                              disabled={isReordering}
+                                              aria-label="Delete channel"
+                                              title="Delete channel"
+                                            >
+                                              <Trash2Icon className="size-3.5" />
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => setEditingChannel(channel)}
+                                              disabled={isReordering}
+                                            >
+                                              <Settings2Icon className="size-4" />
+                                              Manage
+                                            </Button>
+                                          </div>
+                                        ) : (
+                                          <span className="text-xs text-muted-foreground">Read only</span>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  )
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </ScrollArea>
                 </CardContent>

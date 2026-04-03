@@ -97,7 +97,7 @@ export function EditChannelModal({
     >
       <DialogHeader>
         <DialogTitle>Edit Channel</DialogTitle>
-        <DialogDescription>Update channel details or delete it.</DialogDescription>
+        <DialogDescription>Update channel details.</DialogDescription>
       </DialogHeader>
       <div className="space-y-2">
         <Label htmlFor="edit-channel-name">Channel name</Label>
@@ -141,17 +141,10 @@ export function EditChannelModal({
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <div className="flex items-center justify-end gap-2">
-        <Button type="submit">Save</Button>
-        <Button
-          variant="destructive"
-          type="button"
-          onClick={async () => {
-            await reducers.deleteChannel(channelId)
-            onClose()
-          }}
-        >
-          Delete Channel
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
         </Button>
+        <Button type="submit">Save</Button>
       </div>
     </form>
   )
