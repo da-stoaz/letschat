@@ -102,11 +102,35 @@ services:
       "
     restart: "no"
 
+  # ── Discovery endpoint for app startup ──────────────────────────────────────
+  # Serves /.well-known/letschat.json so Setup → Server URL can auto-discover
+  # backend endpoints.
+  discovery:
+    image: nginx:alpine
+    container_name: letschat-discovery
+    ports:
+      - "44305:80"
+    command: >
+      /bin/sh -c "
+        mkdir -p /usr/share/nginx/html/.well-known;
+        cat > /usr/share/nginx/html/.well-known/letschat.json <<'JSON'
+        {
+          \"spacetimedb\": \"${DISCOVERY_SPACETIMEDB_URI}\",
+          \"auth\": \"${DISCOVERY_AUTH_URL}\",
+          \"livekit\": \"${DISCOVERY_LIVEKIT_URL}\",
+          \"database\": \"${DISCOVERY_DATABASE:-letschat}\"
+        }
+        JSON
+        exec nginx -g 'daemon off;'
+      "
+    restart: unless-stopped
+
   # ── Cloudflare Tunnel ────────────────────────────────────────────────────────
   # Configure these ingress rules in the Cloudflare Zero Trust dashboard:
   #   auth.yourdomain.com   → http://auth-service:44301
   #   chat.yourdomain.com   → http://spacetimedb:3000   (enable WebSocket)
   #   files.yourdomain.com  → http://minio:44390
+  #   connect.yourdomain.com → http://discovery:80
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: letschat-cloudflared
@@ -117,6 +141,7 @@ services:
       - auth-service
       - spacetimedb
       - minio
+      - discovery
     restart: unless-stopped
 
 volumes:

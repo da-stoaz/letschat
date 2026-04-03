@@ -93,6 +93,29 @@ services:
       "
     restart: "no"
 
+  # ── Discovery endpoint for app startup ──────────────────────────────────────
+  # Serves /.well-known/letschat.json so Setup → Server URL can auto-discover
+  # backend endpoints without manual join-link entry.
+  discovery:
+    image: nginx:alpine
+    container_name: letschat-discovery
+    ports:
+      - "44305:80"
+    command: >
+      /bin/sh -c "
+        mkdir -p /usr/share/nginx/html/.well-known;
+        cat > /usr/share/nginx/html/.well-known/letschat.json <<'JSON'
+        {
+          \"spacetimedb\": \"${DISCOVERY_SPACETIMEDB_URI}\",
+          \"auth\": \"${DISCOVERY_AUTH_URL}\",
+          \"livekit\": \"${DISCOVERY_LIVEKIT_URL}\",
+          \"database\": \"${DISCOVERY_DATABASE:-letschat}\"
+        }
+        JSON
+        exec nginx -g 'daemon off;'
+      "
+    restart: unless-stopped
+
 volumes:
   spacetimedb_home:
   auth_data:

@@ -83,7 +83,7 @@ docker compose version`}</code></pre>
           <li>`chat.example.com` (for SpacetimeDB websocket)</li>
           <li>`files.example.com` (for MinIO API)</li>
           <li>`lk.example.com` (for LiveKit signaling; point to server IP)</li>
-          <li>`connect.example.com` (optional website/discovery endpoint)</li>
+          <li>`connect.example.com` (LetsChat startup discovery endpoint)</li>
         </ul>
       </article>
 
@@ -112,7 +112,9 @@ keys:
       <article class="rounded-xl border border-border p-6 space-y-3">
         <h3 class="text-xl font-medium">Step 5: Start services</h3>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --build
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml ps`}</code></pre>
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml ps
+curl -i http://127.0.0.1:44305/.well-known/letschat.json`}</code></pre>
+        <p class="text-sm text-muted-foreground">The `discovery` container now serves LetsChat startup config on port `44305` (host) and must be exposed via `connect.<domain>` in your tunnel ingress.</p>
       </article>
 
       <article class="rounded-xl border border-border p-6 space-y-3">
@@ -130,7 +132,7 @@ curl -i https://files.example.com/minio/health/live`}</code></pre>
 
       <article class="rounded-xl border border-border p-6 space-y-3">
         <h3 class="text-xl font-medium">Step 8: Client onboarding + discovery</h3>
-        <p class="text-sm text-muted-foreground">Share a LetsChat join link from app settings, or host a discovery file at `https://connect.example.com/.well-known/letschat.json`.</p>
+        <p class="text-sm text-muted-foreground">Share a LetsChat join link from app settings, or tell users to enter `https://connect.example.com` in startup. The app will fetch `/.well-known/letschat.json` automatically.</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
   "spacetimedb": "wss://chat.example.com",
   "auth": "https://auth.example.com",
@@ -179,7 +181,7 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml
           <li>`chat.example.com`</li>
           <li>`files.example.com`</li>
           <li>`lk.example.com`</li>
-          <li>`connect.example.com` (optional)</li>
+          <li>`connect.example.com` (startup discovery endpoint)</li>
         </ul>
       </article>
 
@@ -188,7 +190,7 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`cp .env.production.caddy.example .env
 openssl rand -hex 32
 openssl rand -base64 32`}</code></pre>
-        <p class="text-sm text-muted-foreground">Fill domain variables in `.env` to match your DNS records. Caddy uses these in `deploy/caddy/Caddyfile`.</p>
+        <p class="text-sm text-muted-foreground">Fill `*_DOMAIN` and `DISCOVERY_*` values in `.env` to match your DNS and endpoint URLs. Caddy uses hostnames from `deploy/caddy/Caddyfile`.</p>
       </article>
 
       <article class="rounded-xl border border-border p-6 space-y-3">
@@ -199,7 +201,8 @@ openssl rand -base64 32`}</code></pre>
       <article class="rounded-xl border border-border p-6 space-y-3">
         <h3 class="text-xl font-medium">Step 5: Start services</h3>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d --build
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`}</code></pre>
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps
+curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
       </article>
 
       <article class="rounded-xl border border-border p-6 space-y-3">
@@ -217,7 +220,7 @@ curl -i https://files.example.com/minio/health/live`}</code></pre>
 
       <article class="rounded-xl border border-border p-6 space-y-3">
         <h3 class="text-xl font-medium">Step 8: Client onboarding + discovery</h3>
-        <p class="text-sm text-muted-foreground">Same discovery format as tunnel track. You can serve it from any static host under `/.well-known/letschat.json`.</p>
+        <p class="text-sm text-muted-foreground">Users can type `https://connect.example.com` in startup and LetsChat will auto-discover from `/.well-known/letschat.json`.</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
   "spacetimedb": "wss://chat.example.com",
   "auth": "https://auth.example.com",
@@ -252,8 +255,8 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
             </tr>
             <tr>
               <td class="p-3">Setup discovery fails</td>
-              <td class="p-3">Missing `/.well-known/letschat.json`</td>
-              <td class="p-3">Host valid JSON with `spacetimedb`, `auth`, `livekit` fields</td>
+              <td class="p-3">`connect.<domain>` not routed to discovery container</td>
+              <td class="p-3">Route to `discovery:80` (or host port `44305`) and verify JSON path</td>
             </tr>
             <tr>
               <td class="p-3">Upload/download errors</td>

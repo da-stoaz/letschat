@@ -16,3 +16,7 @@
 {$LIVEKIT_DOMAIN} {
   reverse_proxy livekit:44380
 }
+
+{$CONNECT_DOMAIN} {
+  reverse_proxy discovery:80
+}

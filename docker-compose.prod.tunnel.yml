@@ -4,6 +4,7 @@ services:
   #   auth.<domain>   -> http://auth-service:44301
   #   chat.<domain>   -> http://spacetimedb:3000  (WebSocket enabled)
   #   files.<domain>  -> http://minio:44390
+  #   connect.<domain> -> http://discovery:80
   # livekit.<domain> is NOT tunnelled for media; keep 44381/44382 forwarded.
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -15,4 +16,5 @@ services:
       - auth-service
       - spacetimedb
       - minio
+      - discovery
     restart: unless-stopped
