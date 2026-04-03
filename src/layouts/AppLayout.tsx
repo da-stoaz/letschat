@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { PanelRightCloseIcon, PanelRightOpenIcon } from 'lucide-react'
 import { Track } from 'livekit-client'
 import { AWAY_AFTER_MS, type UserPresenceStatus } from '../hooks/useUserPresentation'
 import { useServerRole } from '../hooks/useServerRole'
@@ -31,7 +30,6 @@ import { AppRail } from './app-layout/AppRail'
 import { ChannelBar } from './app-layout/ChannelBar'
 import { cn } from '../lib/utils'
 import { useIsMobile } from '../hooks/use-mobile'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from '@/components/ui/sonner'
 import type { Channel } from '../types/domain'
@@ -93,7 +91,6 @@ export function AppLayout() {
   const setActiveCallDockVisible = useUiStore((s) => s.setActiveCallDockVisible)
   const clearUnread = useUiStore((s) => s.clearUnread)
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen)
-  const toggleRightPanel = useUiStore((s) => s.toggleRightPanel)
   const role = useServerRole(activeServerId)
   const isMobile = useIsMobile()
   const activeDmIdentity = params.identity && params.identity !== 'friends' ? params.identity : null
@@ -233,7 +230,7 @@ export function AppLayout() {
   const onlineByIdentity = usePresenceStore((s) => s.onlineByIdentity)
   const lastActiveByIdentity = usePresenceStore((s) => s.lastActiveByIdentity)
 
-  const resolveDmPresenceStatus = (
+  const resolveDmPresenceStatus = useCallback((
     identity: string,
     fallbackSeenAtMs: number | null = null,
   ): UserPresenceStatus => {
@@ -252,7 +249,7 @@ export function AppLayout() {
     if (!connected) return 'offline'
     const effectiveLastActiveAt = lastActiveAt > 0 ? lastActiveAt : nowMs
     return nowMs - effectiveLastActiveAt > AWAY_AFTER_MS ? 'away' : 'online'
-  }
+  }, [connectionStatus, dmCallActiveByIdentity, lastActiveByIdentity, normalizedSelfIdentity, nowMs, onlineByIdentity])
 
   useIncomingDmRing({
     participantsByRoom: dmVoiceParticipantsByRoom,
@@ -455,24 +452,17 @@ export function AppLayout() {
   }, [channelBarWidth, isMobile])
 
   const mainPane = (
-    <div className={cn('grid min-h-0 min-w-0 gap-3 overflow-hidden', rightPanelOpen && activeServerId && !isServerManagePage ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
-      <Card className="relative h-full min-h-0 border-border/60 bg-card/80 backdrop-blur">
-        {activeServerId && !isServerManagePage ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="absolute right-3 top-3 z-20 h-8 gap-1.5"
-            onClick={toggleRightPanel}
-          >
-            {rightPanelOpen ? <PanelRightCloseIcon className="size-4" /> : <PanelRightOpenIcon className="size-4" />}
-            Members
-          </Button>
-          ) : null}
-          <CardContent className={cn('h-full min-h-0 overflow-hidden p-3', activeServerId ? 'pt-12' : '')}>
-            <Outlet />
-          </CardContent>
-        </Card>
+    <div className={cn('grid min-h-0 min-w-0 gap-2 overflow-hidden', rightPanelOpen && activeServerId && !isServerManagePage ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
+      <Card className="relative h-full min-h-0 gap-0 border-border/60 bg-card/80 py-0 backdrop-blur">
+        <CardContent
+          className={cn(
+            'h-full min-h-0 overflow-hidden',
+            isSettingsPage || isServerManagePage ? 'p-1.5 sm:p-2' : 'p-0',
+          )}
+        >
+          <Outlet />
+        </CardContent>
+      </Card>
 
       {rightPanelOpen && activeServerId && !isServerManagePage ? (
         <MemberPanel
@@ -497,12 +487,12 @@ export function AppLayout() {
   return (
     <>
       <main
-        className="relative h-screen overflow-hidden bg-background p-2 text-foreground"
+        className="relative h-screen overflow-hidden bg-background p-1 text-foreground"
         style={{ ['--channel-bar-width' as string]: `${channelBarWidth}px` }}
       >
         <div
           className={cn(
-            'grid h-full min-h-0 grid-rows-1 gap-2 overflow-hidden',
+            'grid h-full min-h-0 grid-rows-1 gap-1.5 overflow-hidden',
             isSettingsPage
               ? 'grid-cols-[48px_minmax(0,1fr)]'
               : 'grid-cols-[48px_var(--channel-bar-width)_minmax(0,1fr)] max-md:grid-cols-[48px_minmax(0,1fr)]',

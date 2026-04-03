@@ -1,7 +1,6 @@
 import { MessageCircleIcon, PlusIcon, SettingsIcon, Volume2Icon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -66,7 +65,7 @@ export function AppRail({
 
   return (
     <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur">
-      <CardContent className="flex min-h-0 flex-1 flex-col items-center gap-1 p-1">
+      <CardContent className="flex min-h-0 flex-1 flex-col items-center gap-1 px-0 py-1">
         <Tooltip>
           <TooltipTrigger
             render={
@@ -81,8 +80,8 @@ export function AppRail({
 
         <Separator className="my-0.5" />
 
-        <ScrollArea className="w-full min-h-0 flex-1 px-0.5">
-          <div className="flex flex-col items-center gap-2 py-1">
+        <div className="app-rail-scroll w-full min-h-0 flex-1 overflow-y-auto pr-1.5">
+          <div className="mx-auto flex w-9 flex-col items-center gap-2 py-1">
             {servers.map((server) => {
               const serverUnread = countUnreadInServer(server.id)
               return (
@@ -127,7 +126,7 @@ export function AppRail({
               <TooltipContent side="right">Create Server</TooltipContent>
             </Tooltip>
           </div>
-        </ScrollArea>
+        </div>
 
         <Separator className="my-0.5" />
 

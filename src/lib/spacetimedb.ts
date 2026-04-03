@@ -827,47 +827,88 @@ function clearStoredToken(): void {
   localStorage.removeItem(SPACETIMEDB_TOKEN_KEY)
 }
 
-async function connect(): Promise<void> {
-  if (connection?.isActive) return
-  if (connectPromise) return connectPromise
+const SPACETIMEDB_CONNECT_TIMEOUT_MS = 5_000
 
-  const serverConfig = useServerConfigStore.getState().config
-  if (!serverConfig) {
-    throw new Error('Server not configured. Please complete setup first.')
-  }
-  const { spacetimedbUri: SPACETIMEDB_URI, spacetimedbDatabase: SPACETIMEDB_DATABASE } = serverConfig
-
-  connectPromise = (async () => {
-    useConnectionStore.getState().setStatus('connecting')
-
-    let appliedOnce = false
-    let resolveApplied: (() => void) | null = null
-    let rejectApplied: ((error: unknown) => void) | null = null
-    const firstSyncApplied = new Promise<void>((resolve, reject) => {
-      resolveApplied = resolve
-      rejectApplied = reject
-    })
-    const rejectIfPending = (error: unknown): void => {
-      if (appliedOnce) return
-      appliedOnce = true
-      rejectApplied?.(error)
+function canonicalizeUriCandidate(raw: string): string {
+  try {
+    const parsed = new URL(raw.trim())
+    if (parsed.pathname === '/' && !parsed.search && !parsed.hash) {
+      return `${parsed.protocol}//${parsed.host}`
     }
-    const connectTimeoutMs = 15000
-    const connectTimeout = setTimeout(() => {
-      rejectIfPending(
-        new Error(
-          `Timed out connecting to SpacetimeDB at ${SPACETIMEDB_URI}. Ensure \`spacetime start\` is running and the module is published.`,
-        ),
-      )
-    }, connectTimeoutMs)
+    return parsed.toString()
+  } catch {
+    return raw.trim()
+  }
+}
 
+function buildSpacetimeUriCandidates(raw: string): string[] {
+  const trimmed = raw.trim()
+  if (!trimmed) return ['ws://127.0.0.1:4300']
+
+  const orderedCandidates: string[] = []
+  const seenCandidates = new Set<string>()
+  const pushCandidate = (candidate: string): void => {
+    const canonical = canonicalizeUriCandidate(candidate)
+    if (!canonical) return
+    if (seenCandidates.has(canonical)) return
+    seenCandidates.add(canonical)
+    orderedCandidates.push(canonical)
+  }
+
+  pushCandidate(trimmed)
+
+  try {
+    const parsed = new URL(trimmed)
+    const hostname = parsed.hostname.toLowerCase()
+    const isLoopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+    if (!isLoopback) return orderedCandidates
+
+    const loopbackHosts = ['127.0.0.1', 'localhost', '::1']
+    for (const host of loopbackHosts) {
+      try {
+        const next = new URL(parsed.toString())
+        next.hostname = host
+        pushCandidate(next.toString())
+      } catch {
+        // Ignore malformed host rewrites and continue with remaining candidates.
+      }
+    }
+  } catch {
+    // Keep the original raw URI as-is when URL parsing fails.
+  }
+
+  return orderedCandidates
+}
+
+async function connectWithUri(uri: string, database: string, reportErrors: boolean): Promise<void> {
+  let appliedOnce = false
+  let resolveApplied: (() => void) | null = null
+  let rejectApplied: ((error: unknown) => void) | null = null
+  const firstSyncApplied = new Promise<void>((resolve, reject) => {
+    resolveApplied = resolve
+    rejectApplied = reject
+  })
+  const rejectIfPending = (error: unknown): void => {
+    if (appliedOnce) return
+    appliedOnce = true
+    rejectApplied?.(error)
+  }
+  const connectTimeoutMs = SPACETIMEDB_CONNECT_TIMEOUT_MS
+  const connectTimeout = setTimeout(() => {
+    rejectIfPending(
+      new Error(
+        `Timed out connecting to SpacetimeDB at ${uri}. Ensure \`spacetime start\` is running and the module is published.`,
+      ),
+    )
+  }, connectTimeoutMs)
+
+  try {
     const builder = DbConnection.builder()
-      .withUri(SPACETIMEDB_URI)
-      .withDatabaseName(SPACETIMEDB_DATABASE)
+      .withUri(uri)
+      .withDatabaseName(database)
       .withLightMode(false)
       .withToken(getStoredToken())
-      .onConnect((conn, identity, token) => {
-        connection = conn
+      .onConnect((_conn, identity, token) => {
         const identityString = toIdentityString(identity)
         useConnectionStore.getState().setStatus('connected')
         useConnectionStore.getState().setIdentity(identityString)
@@ -880,18 +921,21 @@ async function connect(): Promise<void> {
       .onConnectError((_ctx, error) => {
         void _ctx
         const details = getConnectionErrorDetails(error)
-        const wrapped = new Error(`SpacetimeDB connection failed at ${SPACETIMEDB_URI} (${details}).`)
+        const wrapped = new Error(`SpacetimeDB connection failed at ${uri} (${details}).`)
         rejectIfPending(wrapped)
-        void onError(wrapped)
+        if (reportErrors) {
+          void onError(wrapped)
+        }
       })
 
-    connection = builder.build()
-    watchLiveTables(connection)
+    const nextConnection = builder.build()
+    connection = nextConnection
+    watchLiveTables(nextConnection)
 
-    subscriptionHandle = connection
+    subscriptionHandle = nextConnection
       .subscriptionBuilder()
       .onApplied(() => {
-        syncAll(connection as DbConnection)
+        syncAll(nextConnection)
         liveEventsEnabled = true
         if (appliedOnce) return
         appliedOnce = true
@@ -900,7 +944,9 @@ async function connect(): Promise<void> {
       })
       .onError((_ctx) => {
         void _ctx
-        void onError(new Error('Subscription failed'))
+        if (reportErrors) {
+          void onError(new Error('Subscription failed'))
+        }
         clearTimeout(connectTimeout)
         rejectIfPending(new Error('Subscription failed'))
       })
@@ -922,11 +968,57 @@ async function connect(): Promise<void> {
         tables.dm_server_invite,
       ])
 
-    try {
-      await firstSyncApplied
-    } finally {
-      clearTimeout(connectTimeout)
+    await firstSyncApplied
+  } finally {
+    clearTimeout(connectTimeout)
+    if (!appliedOnce) {
+      subscriptionHandle?.unsubscribe()
+      subscriptionHandle = null
+      liveEventsEnabled = false
+      connection?.disconnect()
+      connection = null
     }
+  }
+}
+
+async function connect(): Promise<void> {
+  if (connection?.isActive) return
+  if (connectPromise) return connectPromise
+
+  const serverConfig = useServerConfigStore.getState().config
+  if (!serverConfig) {
+    throw new Error('Server not configured. Please complete setup first.')
+  }
+  const { spacetimedbUri: SPACETIMEDB_URI, spacetimedbDatabase: SPACETIMEDB_DATABASE } = serverConfig
+
+  connectPromise = (async () => {
+    useConnectionStore.getState().setStatus('connecting')
+    const uriCandidates = buildSpacetimeUriCandidates(SPACETIMEDB_URI)
+    const errors: string[] = []
+
+    for (const [index, candidate] of uriCandidates.entries()) {
+      const isLastCandidate = index === uriCandidates.length - 1
+      try {
+        await connectWithUri(candidate, SPACETIMEDB_DATABASE, isLastCandidate)
+
+        if (candidate !== SPACETIMEDB_URI) {
+          const currentConfig = useServerConfigStore.getState().config
+          if (currentConfig && currentConfig.spacetimedbUri === SPACETIMEDB_URI) {
+            useServerConfigStore.getState().setConfig({
+              ...currentConfig,
+              spacetimedbUri: candidate,
+            })
+          }
+        }
+        return
+      } catch (error) {
+        errors.push(`${candidate} -> ${getConnectionErrorDetails(error)}`)
+      }
+    }
+
+    throw new Error(
+      `SpacetimeDB connection failed at ${SPACETIMEDB_URI}. Tried ${uriCandidates.length} URI(s): ${errors.join('; ')}`,
+    )
   })()
 
   try {

@@ -313,7 +313,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
 
   return (
     <section className="flex h-full min-h-0 flex-col rounded-xl border border-border/70 bg-card/60">
-      <header className="flex items-center gap-2 border-b border-border/70 px-4 py-3">
+      <header className="flex items-center gap-2 border-b border-border/70 px-4 py-2">
         <div className="min-w-0 flex flex-1 items-center gap-2">
           <Avatar className="size-8 rounded-lg">
             {partner.avatarUrl ? <AvatarImage src={partner.avatarUrl} alt={partner.displayName} /> : null}
@@ -356,7 +356,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
       </header>
 
       {!callPanelMinimized ? (
-        <div className="border-b border-border/70 p-3">
+        <div className="border-b border-border/70 p-2">
           <DmVoicePanel partnerIdentity={partnerIdentity} showHeader={false} />
         </div>
       ) : null}

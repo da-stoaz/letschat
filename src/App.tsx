@@ -16,6 +16,7 @@ import { useServerConfigStore } from './stores/serverConfigStore'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
 import { useVoiceStateReconciler } from './hooks/useVoiceStateReconciler'
 import { ensureNotificationPermission } from './lib/notifications'
+import { SplashScreen } from './components/SplashScreen'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoaderCircleIcon } from 'lucide-react'
 
@@ -26,6 +27,7 @@ function App() {
   const connectionStatus = useConnectionStore((s) => s.status)
   const notificationsEnabled = useUiStore((s) => s.notificationSettings.enabled)
   const isConfigured = useServerConfigStore((s) => s.config !== null)
+  const hasHydrated = useServerConfigStore((s) => s.hasHydrated)
   const location = useLocation()
   const onAuthRoute = location.pathname.startsWith('/auth')
   const onSetupRoute = location.pathname.startsWith('/setup')
@@ -34,6 +36,10 @@ function App() {
     if (!notificationsEnabled) return
     void ensureNotificationPermission({ prompt: false })
   }, [notificationsEnabled])
+
+  if (!hasHydrated) {
+    return <SplashScreen />
+  }
 
   if (!isConfigured && !onSetupRoute) {
     return <Navigate to="/setup" replace />

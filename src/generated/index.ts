@@ -52,6 +52,7 @@ import JoinDmVoiceReducer from "./join_dm_voice_reducer";
 import JoinVoiceChannelReducer from "./join_voice_channel_reducer";
 import KickMemberReducer from "./kick_member_reducer";
 import LeaveDmVoiceReducer from "./leave_dm_voice_reducer";
+import LeaveServerReducer from "./leave_server_reducer";
 import LeaveVoiceChannelReducer from "./leave_voice_channel_reducer";
 import MarkChannelReadReducer from "./mark_channel_read_reducer";
 import MarkDmReadReducer from "./mark_dm_read_reducer";
@@ -66,6 +67,7 @@ import SendFriendRequestReducer from "./send_friend_request_reducer";
 import SendMessageReducer from "./send_message_reducer";
 import SetMemberRoleReducer from "./set_member_role_reducer";
 import SetPresenceOfflineReducer from "./set_presence_offline_reducer";
+import SetServerInvitePolicyReducer from "./set_server_invite_policy_reducer";
 import SetTypingStateReducer from "./set_typing_state_reducer";
 import TimeoutMemberReducer from "./timeout_member_reducer";
 import TouchPresenceReducer from "./touch_presence_reducer";
@@ -341,6 +343,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_voice_channel", JoinVoiceChannelReducer),
   __reducerSchema("kick_member", KickMemberReducer),
   __reducerSchema("leave_dm_voice", LeaveDmVoiceReducer),
+  __reducerSchema("leave_server", LeaveServerReducer),
   __reducerSchema("leave_voice_channel", LeaveVoiceChannelReducer),
   __reducerSchema("mark_channel_read", MarkChannelReadReducer),
   __reducerSchema("mark_dm_read", MarkDmReadReducer),
@@ -355,6 +358,7 @@ const reducersSchema = __reducers(
   __reducerSchema("send_message", SendMessageReducer),
   __reducerSchema("set_member_role", SetMemberRoleReducer),
   __reducerSchema("set_presence_offline", SetPresenceOfflineReducer),
+  __reducerSchema("set_server_invite_policy", SetServerInvitePolicyReducer),
   __reducerSchema("set_typing_state", SetTypingStateReducer),
   __reducerSchema("timeout_member", TimeoutMemberReducer),
   __reducerSchema("touch_presence", TouchPresenceReducer),

@@ -88,6 +88,7 @@ export function ChatComposer({
   const lastTypingPulseMsRef = useRef(0)
   const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([])
   const [uploadStageByFileId, setUploadStageByFileId] = useState<Record<string, UploadStage>>({})
+  const [uploadProgressByFileId, setUploadProgressByFileId] = useState<Record<string, number>>({})
   const [localError, setLocalError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -185,7 +186,7 @@ export function ChatComposer({
 
   return (
     <form
-      className="space-y-2 p-3"
+      className="space-y-1 p-1.5"
       onSubmit={async (event) => {
         event.preventDefault()
         if (disabled || submitting) return
@@ -201,12 +202,16 @@ export function ChatComposer({
               ? await uploadFiles(uploads, (file, stage) => {
                   const id = fileIdentity(file)
                   setUploadStageByFileId((current) => ({ ...current, [id]: stage }))
+                }, (file, progress) => {
+                  const id = fileIdentity(file)
+                  setUploadProgressByFileId((current) => ({ ...current, [id]: progress.fraction }))
                 })
               : []
 
           await onSubmit({ text: trimmed, attachments })
           setQueuedFiles([])
           setUploadStageByFileId({})
+          setUploadProgressByFileId({})
           if (fileInputRef.current) {
             fileInputRef.current.value = ''
           }
@@ -236,41 +241,60 @@ export function ChatComposer({
       />
 
       {queuedFiles.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-muted/20 p-2">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border/70 bg-muted/20 p-1.5">
           {queuedFiles.map((entry) => {
             const stage = uploadStageByFileId[entry.id]
+            const progressFraction = uploadProgressByFileId[entry.id] ?? 0
+            const showProgress = stage === 'uploading' || stage === 'confirming'
+            const progressPercent = Math.round(progressFraction * 100)
             return (
-              <span
+              <div
                 key={entry.id}
-                className="inline-flex max-w-full items-center gap-2 rounded-md border border-border/70 bg-card px-2 py-1 text-xs"
+                className="inline-flex max-w-full flex-col gap-1 rounded-md border border-border/70 bg-card px-2 py-1 text-xs"
               >
-                <span className="truncate">{entry.file.name}</span>
-                <span className="shrink-0 text-muted-foreground">{formatFileSize(entry.file.size)}</span>
-                {stage ? (
-                  <span className="inline-flex items-center gap-1 text-muted-foreground">
-                    {stage !== 'done' ? <Loader2Icon className="size-3 animate-spin" /> : null}
-                    {stageLabel(stage)}
+                <span className="inline-flex w-full items-center gap-2">
+                  <span className="truncate">{entry.file.name}</span>
+                  <span className="shrink-0 text-muted-foreground">{formatFileSize(entry.file.size)}</span>
+                  {stage ? (
+                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      {stage !== 'done' ? <Loader2Icon className="size-3 animate-spin" /> : null}
+                      {stageLabel(stage)}
+                    </span>
+                  ) : null}
+                  {showProgress ? <span className="shrink-0 text-muted-foreground">{progressPercent}%</span> : null}
+                  <button
+                    type="button"
+                    className="ml-auto shrink-0 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                    onClick={() => {
+                      if (submitting) return
+                      setLocalError(null)
+                      setQueuedFiles((current) => current.filter((item) => item.id !== entry.id))
+                      setUploadStageByFileId((current) => {
+                        const next = { ...current }
+                        delete next[entry.id]
+                        return next
+                      })
+                      setUploadProgressByFileId((current) => {
+                        const next = { ...current }
+                        delete next[entry.id]
+                        return next
+                      })
+                    }}
+                    disabled={submitting}
+                    aria-label={`Remove ${entry.file.name}`}
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                </span>
+                {showProgress ? (
+                  <span className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <span
+                      className="block h-full rounded-full bg-primary transition-all duration-150 ease-out"
+                      style={{ width: `${progressPercent}%` }}
+                    />
                   </span>
                 ) : null}
-                <button
-                  type="button"
-                  className="shrink-0 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-                  onClick={() => {
-                    if (submitting) return
-                    setLocalError(null)
-                    setQueuedFiles((current) => current.filter((item) => item.id !== entry.id))
-                    setUploadStageByFileId((current) => {
-                      const next = { ...current }
-                      delete next[entry.id]
-                      return next
-                    })
-                  }}
-                  disabled={submitting}
-                  aria-label={`Remove ${entry.file.name}`}
-                >
-                  <XIcon className="size-3.5" />
-                </button>
-              </span>
+              </div>
             )
           })}
         </div>
@@ -297,33 +321,41 @@ export function ChatComposer({
         maxLength={maxLength}
         placeholder={placeholder}
         disabled={disabled || submitting}
-        className="min-h-12 resize-none overflow-y-auto"
+        className="min-h-10 resize-none overflow-y-auto"
       />
       {disabled ? <p className="text-xs text-muted-foreground">{disabledHint}</p> : (helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null)}
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          {typingScopeKey ? (
-            <TypingIndicator scopeKey={typingScopeKey} selfIdentity={typingIdentity} className="max-w-full" />
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || submitting}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <PaperclipIcon className="size-4" />
-            Attach
-          </Button>
-          <p className="text-xs text-muted-foreground">
+      <div className="flex items-center gap-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled || submitting}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <PaperclipIcon className="size-4" />
+          Attach
+        </Button>
+        {typingScopeKey ? (
+          <TypingIndicator
+            scopeKey={typingScopeKey}
+            selfIdentity={typingIdentity}
+            className="min-w-0 truncate text-xs text-muted-foreground"
+            fallbackText={value.length >= 3500 ? `${value.length}/${maxLength}` : 'Shift+Enter for newline'}
+          />
+        ) : (
+          <p className="truncate text-xs text-muted-foreground">
             {value.length >= 3500 ? `${value.length}/${maxLength}` : 'Shift+Enter for newline'}
           </p>
-          <Button type="submit" disabled={disabled || submitting || (value.trim().length === 0 && queuedFiles.length === 0)}>
-            {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <SendHorizonalIcon className="size-4" />}
-            {submitting ? 'Sending…' : sendLabel}
-          </Button>
-        </div>
+        )}
+        <Button
+          type="submit"
+          size="sm"
+          className="ml-auto"
+          disabled={disabled || submitting || (value.trim().length === 0 && queuedFiles.length === 0)}
+        >
+          {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <SendHorizonalIcon className="size-4" />}
+          {submitting ? 'Sending…' : sendLabel}
+        </Button>
       </div>
       {localError ? <p className="text-sm text-destructive">{localError}</p> : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
