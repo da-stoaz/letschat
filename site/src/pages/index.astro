@@ -11,6 +11,10 @@ const GITHUB_REPO = "da-stoaz/letschat";
     <nav class="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
       <span class="font-semibold text-foreground tracking-tight">LetsChat</span>
       <div class="flex items-center gap-4">
+        <a href="/self-hosting"
+           class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+          Self-Hosting
+        </a>
         <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener"
            class="text-sm text-muted-foreground hover:text-foreground transition-colors">
           GitHub
@@ -53,6 +57,10 @@ const GITHUB_REPO = "da-stoaz/letschat";
         <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener"
            class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg border border-border text-muted-foreground text-sm hover:text-foreground hover:border-border-hover transition-colors">
           View on GitHub
+        </a>
+        <a href="/self-hosting"
+           class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg border border-border text-muted-foreground text-sm hover:text-foreground hover:border-border-hover transition-colors">
+          Self-Hosting Guide
         </a>
       </div>
 
@@ -113,13 +121,17 @@ const GITHUB_REPO = "da-stoaz/letschat";
           <h2 class="text-2xl font-semibold tracking-tight mb-1">Ready to get started?</h2>
           <p class="text-sm text-muted-foreground">Free, open source, runs on your hardware.</p>
         </div>
-        <div class="flex flex-col sm:flex-row gap-3 shrink-0">
-          <a href="/download"
-             class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-accent-blue text-white text-sm font-medium hover:opacity-90 transition-opacity">
+      <div class="flex flex-col sm:flex-row gap-3 shrink-0">
+        <a href="/download"
+           class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-accent-blue text-white text-sm font-medium hover:opacity-90 transition-opacity">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             All Downloads
+          </a>
+          <a href="/self-hosting"
+             class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:border-border-hover transition-colors">
+            Self-Hosting Guide
           </a>
         </div>
       </div>
@@ -133,6 +145,7 @@ const GITHUB_REPO = "da-stoaz/letschat";
       <span>© {new Date().getFullYear()} Felix Steinberger</span>
       <div class="flex items-center gap-4">
         <a href="/download" class="hover:text-foreground transition-colors">Download</a>
+        <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
         <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="hover:text-foreground transition-colors">GitHub</a>
       </div>
     </div>

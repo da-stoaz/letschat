@@ -1,0 +1,300 @@
+---
+import Layout from "@/layouts/Layout.astro";
+
+const GITHUB_REPO = "da-stoaz/letschat";
+---
+
+<Layout
+  title="LetsChat Self-Hosting Guide"
+  description="Step-by-step production guide for self-hosting LetsChat backend with Cloudflare Tunnel or Caddy reverse proxy."
+>
+  <header class="border-b border-border sticky top-0 z-50 backdrop-blur-sm bg-background-translucent">
+    <nav class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
+      <a href="/" class="font-semibold text-foreground tracking-tight hover:opacity-80 transition-opacity">LetsChat</a>
+      <div class="flex items-center gap-4 text-sm">
+        <a href="/download" class="text-muted-foreground hover:text-foreground transition-colors">Download</a>
+        <a href="/self-hosting" class="text-foreground">Self-Hosting</a>
+        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="text-muted-foreground hover:text-foreground transition-colors">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 py-16 space-y-14">
+    <section class="space-y-4">
+      <p class="inline-flex text-xs px-3 py-1 rounded-full border border-border text-muted-foreground">Beginner-first production tutorial (Ubuntu + Docker Compose)</p>
+      <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Self-host the LetsChat backend</h1>
+      <p class="text-muted-foreground max-w-3xl leading-relaxed">
+        This guide walks you from network basics to a working production stack with two deployment tracks.
+        Both tracks run the same backend services: SpacetimeDB, auth-service, LiveKit, and MinIO.
+      </p>
+      <div class="rounded-xl border border-border bg-card p-5">
+        <h2 class="text-lg font-medium mb-3">Choose your deployment track</h2>
+        <div class="grid md:grid-cols-2 gap-4">
+          <a href="#track-tunnel" class="rounded-lg border border-border p-4 hover:border-border-hover transition-colors">
+            <p class="font-medium">Track A: Cloudflare Tunnel</p>
+            <p class="text-sm text-muted-foreground mt-1">Tunnel `auth/chat/files` through Cloudflare. Keep LiveKit media on forwarded TCP/UDP ports.</p>
+          </a>
+          <a href="#track-caddy" class="rounded-lg border border-border p-4 hover:border-border-hover transition-colors">
+            <p class="font-medium">Track B: Caddy Reverse Proxy</p>
+            <p class="text-sm text-muted-foreground mt-1">Use Caddy on ports 80/443 and Cloudflare DNS records pointed to your server public IP.</p>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="space-y-3 rounded-xl border border-border bg-card p-6">
+      <h2 class="text-2xl font-semibold tracking-tight">Deployment interface</h2>
+      <p class="text-sm text-muted-foreground">Production now uses a shared compose base plus one topology overlay:</p>
+      <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`# Track A: Tunnel
+cp .env.production.tunnel.example .env
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --build
+
+# Track B: Caddy
+cp .env.production.caddy.example .env
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d --build`}</code></pre>
+    </section>
+
+    <section id="track-tunnel" class="space-y-6">
+      <h2 class="text-3xl font-semibold tracking-tight">Track A: Cloudflare Tunnel</h2>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 0: Prerequisites</h3>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li>Ubuntu host with Docker Engine + Compose plugin installed.</li>
+          <li>Domain managed in Cloudflare DNS.</li>
+          <li>Router access for port forwarding (LiveKit media ports).</li>
+          <li>Optional: dynamic DNS updater if your ISP changes IP frequently.</li>
+        </ul>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker --version
+docker compose version`}</code></pre>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 1: Check public IP / CGNAT</h3>
+        <p class="text-sm text-muted-foreground">If your router WAN IP is private-range (CGNAT), direct inbound media can fail. You need a routable public IP for reliable LiveKit media.</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -4 ifconfig.me`}</code></pre>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 2: Cloudflare DNS aliases</h3>
+        <p class="text-sm text-muted-foreground">Create DNS records (names can be customized):</p>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li>`auth.example.com` (for auth-service)</li>
+          <li>`chat.example.com` (for SpacetimeDB websocket)</li>
+          <li>`files.example.com` (for MinIO API)</li>
+          <li>`lk.example.com` (for LiveKit signaling; point to server IP)</li>
+          <li>`connect.example.com` (optional website/discovery endpoint)</li>
+        </ul>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 3: Secrets + env</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`cp .env.production.tunnel.example .env
+
+# generate secrets and paste into .env
+openssl rand -hex 32
+openssl rand -base64 32`}</code></pre>
+        <p class="text-sm text-muted-foreground">Required values: `AUTH_JWT_SECRET`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT`, `CLOUDFLARE_TUNNEL_TOKEN`.</p>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 4: LiveKit production config</h3>
+        <p class="text-sm text-muted-foreground">Update `livekit/config.prod.yaml` keys to match `.env` exactly. Keep media ports aligned with compose and router forwarding.</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`port: 44380
+rtc:
+  use_external_ip: true
+  tcp_port: 44381
+  udp_port: 44382
+keys:
+  letschat-prod: <same-as-LIVEKIT_API_SECRET>`}</code></pre>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 5: Start services</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --build
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml ps`}</code></pre>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 6: Publish SpacetimeDB module</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`spacetime publish --server http://127.0.0.1:44300 letschat --module-path server --yes`}</code></pre>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 7: Verify services</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml logs --tail=120
+curl -i https://auth.example.com/health
+curl -i https://files.example.com/minio/health/live`}</code></pre>
+        <p class="text-sm text-muted-foreground">Also confirm router forwarding for `44381/tcp`, `44381/udp`, `44382/udp` to your host.</p>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 8: Client onboarding + discovery</h3>
+        <p class="text-sm text-muted-foreground">Share a LetsChat join link from app settings, or host a discovery file at `https://connect.example.com/.well-known/letschat.json`.</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
+  "spacetimedb": "wss://chat.example.com",
+  "auth": "https://auth.example.com",
+  "livekit": "ws://lk.example.com:44380",
+  "database": "letschat"
+}`}</code></pre>
+        <p class="text-sm text-muted-foreground">Use `wss://lk.example.com` only if you add TLS in front of LiveKit signaling.</p>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 9: Operations basics</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`# update images and restart
+
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
+
+# backups (minimum)
+# - auth_data volume (SQLite)
+# - minio_data volume (attachments)
+# - spacetimedb_home volume`}</code></pre>
+      </article>
+    </section>
+
+    <section id="track-caddy" class="space-y-6">
+      <h2 class="text-3xl font-semibold tracking-tight">Track B: Caddy Reverse Proxy</h2>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 0: Prerequisites</h3>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li>Ubuntu host with Docker Engine + Compose plugin.</li>
+          <li>Domain in Cloudflare; DNS records should be set to DNS-only for Caddy ACME issuance.</li>
+          <li>Router forwarding: `80/tcp`, `443/tcp`, plus LiveKit media ports.</li>
+        </ul>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 1: Check public IP / CGNAT</h3>
+        <p class="text-sm text-muted-foreground">CGNAT blocks inbound connections. Ask ISP for a public IPv4 if your router WAN is private-range.</p>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 2: Cloudflare DNS aliases</h3>
+        <p class="text-sm text-muted-foreground">Create DNS A/AAAA records to your host public IP for:</p>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li>`auth.example.com`</li>
+          <li>`chat.example.com`</li>
+          <li>`files.example.com`</li>
+          <li>`lk.example.com`</li>
+          <li>`connect.example.com` (optional)</li>
+        </ul>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 3: Secrets + env</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`cp .env.production.caddy.example .env
+openssl rand -hex 32
+openssl rand -base64 32`}</code></pre>
+        <p class="text-sm text-muted-foreground">Fill domain variables in `.env` to match your DNS records. Caddy uses these in `deploy/caddy/Caddyfile`.</p>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 4: LiveKit production config</h3>
+        <p class="text-sm text-muted-foreground">Same as tunnel track: keep keys in sync and maintain TCP/UDP media ports.</p>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 5: Start services</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d --build
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`}</code></pre>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 6: Publish SpacetimeDB module</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`spacetime publish --server http://127.0.0.1:44300 letschat --module-path server --yes`}</code></pre>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 7: Verify services</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml logs --tail=120
+curl -i https://auth.example.com/health
+curl -i https://files.example.com/minio/health/live`}</code></pre>
+        <p class="text-sm text-muted-foreground">Forward `44381/tcp`, `44381/udp`, and `44382/udp` for LiveKit media.</p>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 8: Client onboarding + discovery</h3>
+        <p class="text-sm text-muted-foreground">Same discovery format as tunnel track. You can serve it from any static host under `/.well-known/letschat.json`.</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
+  "spacetimedb": "wss://chat.example.com",
+  "auth": "https://auth.example.com",
+  "livekit": "wss://lk.example.com",
+  "database": "letschat"
+}`}</code></pre>
+      </article>
+
+      <article class="rounded-xl border border-border p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 9: Operations basics</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d`}</code></pre>
+      </article>
+    </section>
+
+    <section class="space-y-4">
+      <h2 class="text-3xl font-semibold tracking-tight">Common mistakes</h2>
+      <div class="overflow-x-auto rounded-xl border border-border">
+        <table class="w-full text-sm">
+          <thead class="bg-card text-left">
+            <tr>
+              <th class="p-3 font-medium">Problem</th>
+              <th class="p-3 font-medium">Likely cause</th>
+              <th class="p-3 font-medium">Fix</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border text-muted-foreground">
+            <tr>
+              <td class="p-3">Voice joins but no audio</td>
+              <td class="p-3">LiveKit media ports not forwarded</td>
+              <td class="p-3">Forward `44381/tcp+udp` and `44382/udp` to host</td>
+            </tr>
+            <tr>
+              <td class="p-3">Setup discovery fails</td>
+              <td class="p-3">Missing `/.well-known/letschat.json`</td>
+              <td class="p-3">Host valid JSON with `spacetimedb`, `auth`, `livekit` fields</td>
+            </tr>
+            <tr>
+              <td class="p-3">Upload/download errors</td>
+              <td class="p-3">Wrong `MINIO_PUBLIC_ENDPOINT`</td>
+              <td class="p-3">Set to public `https://files...` endpoint clients can reach</td>
+            </tr>
+            <tr>
+              <td class="p-3">Caddy cert issuance fails</td>
+              <td class="p-3">Cloudflare proxied records / blocked 80,443</td>
+              <td class="p-3">Use DNS-only records and open `80/tcp`, `443/tcp`</td>
+            </tr>
+            <tr>
+              <td class="p-3">LiveKit setup fails immediately</td>
+              <td class="p-3">Wrong signaling scheme (`ws://` vs `wss://`)</td>
+              <td class="p-3">Tunnel track usually uses `ws://lk...:44380`; Caddy track uses `wss://lk...`</td>
+            </tr>
+            <tr>
+              <td class="p-3">Auth/LiveKit token failures</td>
+              <td class="p-3">Mismatched LiveKit key/secret values</td>
+              <td class="p-3">Keep `.env` and `livekit/config.prod.yaml` keys identical</td>
+            </tr>
+            <tr>
+              <td class="p-3">Spacetime connect timeout</td>
+              <td class="p-3">Module not published to production SpacetimeDB</td>
+              <td class="p-3">Run `spacetime publish --server http://127.0.0.1:44300 ...`</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-border">
+    <div class="max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
+      <span>© {new Date().getFullYear()} Felix Steinberger</span>
+      <div class="flex items-center gap-4">
+        <a href="/" class="hover:text-foreground transition-colors">Home</a>
+        <a href="/download" class="hover:text-foreground transition-colors">Download</a>
+        <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
+        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="hover:text-foreground transition-colors">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</Layout>

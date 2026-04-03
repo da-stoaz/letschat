@@ -1,13 +1,7 @@
-# Legacy combined production file.
-# Prefer the split interface for new deployments:
-#   docker-compose.prod.base.yml + docker-compose.prod.tunnel.yml
-#   docker-compose.prod.base.yml + docker-compose.prod.caddy.yml
-
 services:
-
   # ── SpacetimeDB ─────────────────────────────────────────────────────────────
-  # Cloudflare Tunnel routes chat.yourdomain.com → spacetimedb:3000 (internal).
-  # Port 44300 is only used for local/admin access on the host.
+  # Host port 44300 is optional admin access. Public clients should use the
+  # chat subdomain through either tunnel or reverse proxy.
   spacetimedb:
     image: clockworklabs/spacetime:latest
     command: start
@@ -19,7 +13,8 @@ services:
     restart: unless-stopped
 
   # ── Auth service ─────────────────────────────────────────────────────────────
-  # Cloudflare Tunnel routes auth.yourdomain.com → auth-service:44301 (internal).
+  # Host port 44301 is for local admin checks. Public clients should use the
+  # auth subdomain via tunnel or reverse proxy.
   auth-service:
     build:
       context: ./auth-service
@@ -33,9 +28,7 @@ services:
       AUTH_JWT_SECRET: "${AUTH_JWT_SECRET}"
       LIVEKIT_API_KEY: "${LIVEKIT_API_KEY}"
       LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET}"
-      # Internal: auth-service → MinIO on the Docker network.
       MINIO_INTERNAL_ENDPOINT: "http://minio:44390"
-      # Public: embedded in presigned URLs that clients PUT/GET to directly.
       MINIO_PUBLIC_ENDPOINT: "${MINIO_PUBLIC_ENDPOINT}"
       MINIO_ACCESS_KEY: "${MINIO_ACCESS_KEY}"
       MINIO_SECRET_KEY: "${MINIO_SECRET_KEY}"
@@ -48,33 +41,31 @@ services:
     restart: unless-stopped
 
   # ── LiveKit ──────────────────────────────────────────────────────────────────
-  # Port 44380 (HTTP/WS signaling) can go through Cloudflare Tunnel.
-  # Ports 44381 (TCP) and 44382 (UDP) carry WebRTC media — they MUST be
-  # port-forwarded on your router; Cloudflare Tunnels cannot proxy raw UDP.
+  # Port 44380 is signaling (HTTP/WS). Media uses 44381 TCP/UDP and 44382 UDP.
+  # Router port forwarding is required for media traffic.
   livekit:
     image: livekit/livekit-server:latest
     container_name: letschat-livekit
     command: --config /etc/livekit.yaml
     ports:
-      - "44380:44380"         # HTTP / WS signaling
-      - "44381:44381"         # RTC TCP fallback
+      - "44380:44380"
+      - "44381:44381"
       - "44381:44381/udp"
-      - "44382:44382/udp"     # RTC UDP (primary media path)
+      - "44382:44382/udp"
     volumes:
       - ./livekit/config.prod.yaml:/etc/livekit.yaml:ro
     restart: unless-stopped
 
   # ── MinIO (file storage) ─────────────────────────────────────────────────────
-  # S3 API (44390) should be accessible by clients for presigned uploads/downloads.
-  # Route it through Cloudflare Tunnel (files.yourdomain.com → minio:44390).
-  # Console (44391) — keep on the host only, never expose publicly.
+  # 44390 is S3 API for presigned file upload/download URLs.
+  # 44391 is MinIO console (admin) and should be access-restricted.
   minio:
     image: minio/minio:latest
     container_name: letschat-minio
     command: server /data --address ":44390" --console-address ":44391"
     ports:
       - "44390:44390"
-      - "44391:44391"   # admin console — bind to 127.0.0.1 in production if needed
+      - "44391:44391"
     environment:
       MINIO_ROOT_USER: "${MINIO_ACCESS_KEY}"
       MINIO_ROOT_PASSWORD: "${MINIO_SECRET_KEY}"
@@ -83,7 +74,7 @@ services:
     restart: unless-stopped
 
   # ── MinIO bucket init ────────────────────────────────────────────────────────
-  # Runs once on first start, creates the letschat-files bucket, then exits.
+  # Runs once on startup and ensures the letschat-files bucket exists.
   minio-init:
     image: minio/mc:latest
     container_name: letschat-minio-init
@@ -101,23 +92,6 @@ services:
         echo 'bucket ready';
       "
     restart: "no"
-
-  # ── Cloudflare Tunnel ────────────────────────────────────────────────────────
-  # Configure these ingress rules in the Cloudflare Zero Trust dashboard:
-  #   auth.yourdomain.com   → http://auth-service:44301
-  #   chat.yourdomain.com   → http://spacetimedb:3000   (enable WebSocket)
-  #   files.yourdomain.com  → http://minio:44390
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: letschat-cloudflared
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN}"
-    depends_on:
-      - auth-service
-      - spacetimedb
-      - minio
-    restart: unless-stopped
 
 volumes:
   spacetimedb_home:

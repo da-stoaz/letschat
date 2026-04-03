@@ -1,0 +1,6 @@
+{
+  "spacetimedb": "wss://chat.example.com",
+  "auth": "https://auth.example.com",
+  "livekit": "wss://lk.example.com",
+  "database": "letschat"
+}

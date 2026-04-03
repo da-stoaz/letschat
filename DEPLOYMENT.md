@@ -1,68 +1,102 @@
-# LetsChat Deployment Notes
+# LetsChat Deployment Index
 
-## SpacetimeDB
+Full tutorial (beginner step-by-step):
 
-```bash
-PATH="$HOME/.cargo/bin:$PATH" spacetime build
-PATH="$HOME/.cargo/bin:$PATH" spacetime publish --server http://localhost:3000 your-app-name
-```
+- Astro page: `/self-hosting` (source: `site/src/pages/self-hosting.astro`)
+- Local preview URL: `http://localhost:4321/self-hosting`
 
-If Homebrew Rust is installed, keep rustup shims first in `PATH` for SpacetimeDB wasm builds:
+Use this file as a compact operator reference.
 
-```bash
-export PATH="$HOME/.cargo/bin:$PATH"
-```
+## Production Compose Entry Points
 
-Publish module:
+Shared core services:
 
-```bash
-spacetime publish --server http://localhost:3000 your-app-name
-```
+- `docker-compose.prod.base.yml`
 
-Production baseline:
+Topology overlays:
 
-```bash
-spacetime start
-spacetime publish --server http://your-server:3000 your-app-name
-```
+- Cloudflare Tunnel: `docker-compose.prod.tunnel.yml`
+- Caddy reverse proxy: `docker-compose.prod.caddy.yml`
 
-## LiveKit
-
-- Use `livekit/config.yaml` and configure STUN/TURN for production.
-- Set `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
-- In this implementation, JWT signing is performed by the Tauri shell command `generate_livekit_token`.
-- Provide `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` to the desktop app environment at build/runtime.
-
-## Auth Service (`auth-framework` + SQLite)
-
-Development:
+### Tunnel track
 
 ```bash
-cargo run --manifest-path auth-service/Cargo.toml
+cp .env.production.tunnel.example .env
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --build
 ```
 
-Key env vars:
-
-- `AUTH_BIND` (default `127.0.0.1:8787`)
-- `AUTH_DATABASE_URL` (default `sqlite://auth-service/auth.db`)
-- `AUTH_JWT_SECRET` (must be set to a strong value in production)
-
-Frontend uses:
-
-- `VITE_AUTH_SERVICE_URL` (default `http://127.0.0.1:8787`)
-
-## Tauri Build
+### Caddy track
 
 ```bash
-npm run tauri build
+cp .env.production.caddy.example .env
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d --build
 ```
 
-Artifacts:
+Validate config before start:
 
-- macOS: `.dmg`
-- Windows: `.msi`
+```bash
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml config >/tmp/letschat-tunnel-config.yml
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml config >/tmp/letschat-caddy-config.yml
+```
 
-Build env:
+## SpacetimeDB Publish (Production)
 
-- `SPACETIMEDB_HOST`
-- `LIVEKIT_URL`
+After stack is up, publish the module:
+
+```bash
+spacetime publish --server http://127.0.0.1:44300 letschat --module-path server --yes
+```
+
+## Service / Env Reference
+
+| Area | Key env / file | Notes |
+|---|---|---|
+| Auth | `AUTH_JWT_SECRET` | Required in both tracks |
+| LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `livekit/config.prod.yaml` | Keys must match exactly |
+| MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT` | Public endpoint is used in presigned URLs |
+| Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
+| Caddy only | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN` | Used by `deploy/caddy/Caddyfile` |
+
+## Discovery Contract (`/.well-known/letschat.json`)
+
+LetsChat setup auto-discovery expects this shape:
+
+```json
+{
+  "spacetimedb": "wss://chat.example.com",
+  "auth": "https://auth.example.com",
+  "livekit": "wss://lk.example.com",
+  "database": "letschat"
+}
+```
+
+LiveKit scheme by track:
+
+- Tunnel track: usually `ws://lk.<domain>:44380`
+- Caddy track: usually `wss://lk.<domain>`
+
+Template file:
+
+- `deploy/examples/letschat.well-known.json.example`
+
+## Operations Basics
+
+Tunnel update cycle:
+
+```bash
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
+```
+
+Caddy update cycle:
+
+```bash
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
+```
+
+Minimum backups:
+
+- `auth_data` volume (auth SQLite)
+- `minio_data` volume (attachments)
+- `spacetimedb_home` volume

@@ -1,0 +1,18 @@
+# LetsChat production reverse-proxy map.
+# Domains are provided via docker-compose.prod.caddy.yml environment variables.
+
+{$AUTH_DOMAIN} {
+  reverse_proxy auth-service:44301
+}
+
+{$CHAT_DOMAIN} {
+  reverse_proxy spacetimedb:3000
+}
+
+{$FILES_DOMAIN} {
+  reverse_proxy minio:44390
+}
+
+{$LIVEKIT_DOMAIN} {
+  reverse_proxy livekit:44380
+}

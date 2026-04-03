@@ -1,0 +1,29 @@
+services:
+  # ── Caddy reverse-proxy track ───────────────────────────────────────────────
+  # Expose 80/443 publicly to this host. Caddy terminates TLS and proxies to
+  # internal services on the Docker network.
+  caddy:
+    image: caddy:2
+    container_name: letschat-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      AUTH_DOMAIN: "${AUTH_DOMAIN}"
+      CHAT_DOMAIN: "${CHAT_DOMAIN}"
+      FILES_DOMAIN: "${FILES_DOMAIN}"
+      LIVEKIT_DOMAIN: "${LIVEKIT_DOMAIN}"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - auth-service
+      - spacetimedb
+      - minio
+      - livekit
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
