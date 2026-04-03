@@ -6,6 +6,7 @@ import {
   ClockIcon,
   CrownIcon,
   ExternalLinkIcon,
+  GripVerticalIcon,
   HammerIcon,
   ListXIcon,
   LogOutIcon,
@@ -101,6 +102,19 @@ function invitePolicyLabel(policy: ServerInvitePolicy): string {
   return policy === 'Everyone' ? 'Everyone (all members)' : 'Owner + Moderators'
 }
 
+function sectionLabel(section: string | null): string {
+  const normalized = section?.trim()
+  return normalized && normalized.length > 0 ? normalized : 'general'
+}
+
+function sectionKey(section: string | null): string {
+  return (section ?? '').trim().toLowerCase()
+}
+
+function channelGroupKey(channel: Channel): string {
+  return `${channel.kind}::${sectionKey(channel.section)}`
+}
+
 function roleBadgeClassName(role: ServerMemberWithUser['role']): string {
   if (role === 'Owner') return 'bg-amber-500/15 text-amber-300 border-amber-500/30'
   if (role === 'Moderator') return 'bg-blue-500/15 text-blue-300 border-blue-500/30'
@@ -123,6 +137,8 @@ export function ServerManagePage() {
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
   const [reorderingChannelId, setReorderingChannelId] = useState<number | null>(null)
+  const [draggingChannelId, setDraggingChannelId] = useState<number | null>(null)
+  const [dropTargetChannelId, setDropTargetChannelId] = useState<number | null>(null)
   const [memberAction, setMemberAction] = useState<MemberActionModal | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [invitePolicySaving, setInvitePolicySaving] = useState(false)
@@ -146,9 +162,43 @@ export function ServerManagePage() {
   }, [members])
 
   const sortedChannels = useMemo(
-    () => [...channels].sort((left, right) => left.position - right.position),
+    () =>
+      [...channels].sort((left, right) => {
+        const kindDelta = left.kind.localeCompare(right.kind)
+        if (kindDelta !== 0) return kindDelta
+        const sectionDelta = sectionKey(left.section).localeCompare(sectionKey(right.section))
+        if (sectionDelta !== 0) return sectionDelta
+        const positionDelta = left.position - right.position
+        if (positionDelta !== 0) return positionDelta
+        return left.id - right.id
+      }),
     [channels],
   )
+
+  const channelOrderMeta = useMemo(() => {
+    const siblingsByGroup = new Map<string, Channel[]>()
+    for (const channel of sortedChannels) {
+      const key = channelGroupKey(channel)
+      const siblings = siblingsByGroup.get(key) ?? []
+      siblings.push(channel)
+      siblingsByGroup.set(key, siblings)
+    }
+
+    const byChannelId = new Map<number, { index: number; size: number }>()
+    for (const siblings of siblingsByGroup.values()) {
+      siblings
+        .sort((left, right) => {
+          const positionDelta = left.position - right.position
+          if (positionDelta !== 0) return positionDelta
+          return left.id - right.id
+        })
+        .forEach((channel, index) => {
+          byChannelId.set(channel.id, { index, size: siblings.length })
+        })
+    }
+
+    return byChannelId
+  }, [sortedChannels])
 
   const firstTextChannelId = useMemo(() => {
     const textChannel = sortedChannels.find((channel) => channel.kind === 'Text')
@@ -175,21 +225,47 @@ export function ServerManagePage() {
   const moveChannel = async (channelId: number, direction: -1 | 1) => {
     if (!canManageServerChannels || reorderingChannelId !== null) return
 
-    const index = sortedChannels.findIndex((channel) => channel.id === channelId)
-    if (index < 0) return
-    const swapWith = sortedChannels[index + direction]
-    if (!swapWith) return
+    setReorderingChannelId(channelId)
+    try {
+      await reducers.moveChannel(channelId, direction)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not reorder channels.'
+      toast.error('Failed to reorder channel', { description: message })
+    } finally {
+      setReorderingChannelId(null)
+    }
+  }
 
-    const current = sortedChannels[index]
-    const maxPosition = sortedChannels.reduce((max, channel) => Math.max(max, channel.position), 0)
-    const temporaryPosition = maxPosition + 1
+  const moveChannelToTarget = async (channelId: number, targetChannelId: number) => {
+    if (!canManageServerChannels || reorderingChannelId !== null) return
+    if (channelId === targetChannelId) return
+
+    const current = sortedChannels.find((channel) => channel.id === channelId)
+    const target = sortedChannels.find((channel) => channel.id === targetChannelId)
+    if (!current || !target) return
+
+    if (channelGroupKey(current) !== channelGroupKey(target)) {
+      toast.error('You can only drag within the same type and section.')
+      return
+    }
+
+    const siblings = sortedChannels
+      .filter((channel) => channelGroupKey(channel) === channelGroupKey(current))
+      .sort((left, right) => left.position - right.position || left.id - right.id)
+
+    const fromIndex = siblings.findIndex((channel) => channel.id === channelId)
+    const toIndex = siblings.findIndex((channel) => channel.id === targetChannelId)
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return
+
+    const direction: -1 | 1 = fromIndex < toIndex ? 1 : -1
+    const movesNeeded = Math.abs(toIndex - fromIndex)
 
     setReorderingChannelId(channelId)
     try {
-      // Three-step swap avoids unique-position collisions on strict backends.
-      await reducers.updateChannel(swapWith.id, { position: temporaryPosition })
-      await reducers.updateChannel(current.id, { position: swapWith.position })
-      await reducers.updateChannel(swapWith.id, { position: current.position })
+      for (let step = 0; step < movesNeeded; step += 1) {
+        // Reuse server-side move reducer for safe sibling swaps.
+        await reducers.moveChannel(channelId, direction)
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not reorder channels.'
       toast.error('Failed to reorder channel', { description: message })
@@ -419,7 +495,7 @@ export function ServerManagePage() {
                 <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                   <div>
                     <CardTitle className="text-base">Channels</CardTitle>
-                    <CardDescription>Create, rename, update permissions, and delete channels.</CardDescription>
+                    <CardDescription>Drag channels to reorder within a section. Create, rename, regroup, and delete channels.</CardDescription>
                   </div>
                   {canManageServerChannels ? (
                     <Button type="button" size="sm" onClick={() => setShowCreateChannel(true)}>
@@ -438,21 +514,54 @@ export function ServerManagePage() {
                           <TableRow>
                             <TableHead>Name</TableHead>
                             <TableHead>Type</TableHead>
+                            <TableHead>Section</TableHead>
                             <TableHead>Access</TableHead>
                             <TableHead className="w-[120px] text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {sortedChannels.map((channel, index) => {
-                            const canMoveUp = index > 0
-                            const canMoveDown = index < sortedChannels.length - 1
+                          {sortedChannels.map((channel) => {
+                            const orderMeta = channelOrderMeta.get(channel.id)
+                            const canMoveUp = Boolean(orderMeta && orderMeta.index > 0)
+                            const canMoveDown = Boolean(orderMeta && orderMeta.index < orderMeta.size - 1)
                             const isReordering = reorderingChannelId !== null
+                            const isDragSource = draggingChannelId === channel.id
+                            const isDropTarget = dropTargetChannelId === channel.id
                             return (
-                              <TableRow key={channel.id}>
+                              <TableRow
+                                key={channel.id}
+                                draggable={canManageServerChannels && !isReordering}
+                                onDragStart={() => {
+                                  setDraggingChannelId(channel.id)
+                                  setDropTargetChannelId(null)
+                                }}
+                                onDragOver={(event) => {
+                                  if (draggingChannelId === null || draggingChannelId === channel.id) return
+                                  const dragging = sortedChannels.find((entry) => entry.id === draggingChannelId)
+                                  if (!dragging) return
+                                  if (channelGroupKey(dragging) !== channelGroupKey(channel)) return
+                                  event.preventDefault()
+                                  setDropTargetChannelId(channel.id)
+                                }}
+                                onDrop={(event) => {
+                                  event.preventDefault()
+                                  const sourceId = draggingChannelId
+                                  setDraggingChannelId(null)
+                                  setDropTargetChannelId(null)
+                                  if (sourceId === null) return
+                                  void moveChannelToTarget(sourceId, channel.id)
+                                }}
+                                onDragEnd={() => {
+                                  setDraggingChannelId(null)
+                                  setDropTargetChannelId(null)
+                                }}
+                                className={isDropTarget ? 'bg-primary/10' : isDragSource ? 'opacity-60' : ''}
+                              >
                                 <TableCell className="font-medium">{channel.kind === 'Text' ? '#' : 'Voice'} {channel.name}</TableCell>
                                 <TableCell>
                                   <Badge variant="outline">{channel.kind}</Badge>
                                 </TableCell>
+                                <TableCell className="text-muted-foreground">{sectionLabel(channel.section)}</TableCell>
                                 <TableCell>
                                   <Badge variant={channel.moderatorOnly ? 'secondary' : 'outline'}>
                                     {channel.moderatorOnly ? 'Moderators only' : 'Everyone'}
@@ -461,6 +570,17 @@ export function ServerManagePage() {
                                 <TableCell className="text-right">
                                   {canManageServerChannels ? (
                                     <div className="inline-flex items-center gap-1">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        className="cursor-grab active:cursor-grabbing"
+                                        disabled={isReordering}
+                                        aria-label="Drag to reorder channel"
+                                        title="Drag to reorder"
+                                      >
+                                        <GripVerticalIcon className="size-3.5" />
+                                      </Button>
                                       <Button
                                         type="button"
                                         variant="outline"
@@ -655,6 +775,7 @@ export function ServerManagePage() {
               channelId={editingChannel.id}
               currentName={editingChannel.name}
               currentModeratorOnly={editingChannel.moderatorOnly}
+              currentSection={editingChannel.section}
               onClose={() => setEditingChannel(null)}
             />
           ) : null}

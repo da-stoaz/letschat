@@ -56,6 +56,7 @@ import LeaveServerReducer from "./leave_server_reducer";
 import LeaveVoiceChannelReducer from "./leave_voice_channel_reducer";
 import MarkChannelReadReducer from "./mark_channel_read_reducer";
 import MarkDmReadReducer from "./mark_dm_read_reducer";
+import MoveChannelReducer from "./move_channel_reducer";
 import RegisterUserReducer from "./register_user_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
 import RemoveTimeoutReducer from "./remove_timeout_reducer";
@@ -65,6 +66,7 @@ import SendDirectMessageReducer from "./send_direct_message_reducer";
 import SendDmServerInviteReducer from "./send_dm_server_invite_reducer";
 import SendFriendRequestReducer from "./send_friend_request_reducer";
 import SendMessageReducer from "./send_message_reducer";
+import SetChannelSectionReducer from "./set_channel_section_reducer";
 import SetMemberRoleReducer from "./set_member_role_reducer";
 import SetPresenceOfflineReducer from "./set_presence_offline_reducer";
 import SetServerIconReducer from "./set_server_icon_reducer";
@@ -348,6 +350,7 @@ const reducersSchema = __reducers(
   __reducerSchema("leave_voice_channel", LeaveVoiceChannelReducer),
   __reducerSchema("mark_channel_read", MarkChannelReadReducer),
   __reducerSchema("mark_dm_read", MarkDmReadReducer),
+  __reducerSchema("move_channel", MoveChannelReducer),
   __reducerSchema("register_user", RegisterUserReducer),
   __reducerSchema("remove_friend", RemoveFriendReducer),
   __reducerSchema("remove_timeout", RemoveTimeoutReducer),
@@ -357,6 +360,7 @@ const reducersSchema = __reducers(
   __reducerSchema("send_dm_server_invite", SendDmServerInviteReducer),
   __reducerSchema("send_friend_request", SendFriendRequestReducer),
   __reducerSchema("send_message", SendMessageReducer),
+  __reducerSchema("set_channel_section", SetChannelSectionReducer),
   __reducerSchema("set_member_role", SetMemberRoleReducer),
   __reducerSchema("set_presence_offline", SetPresenceOfflineReducer),
   __reducerSchema("set_server_icon", SetServerIconReducer),

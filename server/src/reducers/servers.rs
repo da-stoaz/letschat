@@ -33,6 +33,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
         name: "general".to_string(),
         kind: ChannelKind::Text,
         position: 0,
+        section: None,
         moderator_only: false,
     });
 
@@ -42,6 +43,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
         name: "General".to_string(),
         kind: ChannelKind::Voice,
         position: 0,
+        section: None,
         moderator_only: false,
     });
 

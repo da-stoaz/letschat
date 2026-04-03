@@ -226,6 +226,7 @@ function mapChannel(row: DbRow): Channel {
     name: rowString(row, 'name'),
     kind: enumTag(row.kind) as ChannelKind,
     position: Number(row.position),
+    section: rowNullableString(row, 'section'),
     moderatorOnly: Boolean(row.moderatorOnly),
   }
 }
@@ -1164,11 +1165,18 @@ export const reducers = {
       serverId: toU64(serverId, 'serverId'),
       targetIdentity: toReducerIdentity(targetIdentity),
     }),
-  createChannel: (serverId: number, name: string, kind: 'Text' | 'Voice', moderatorOnly: boolean) =>
+  createChannel: (
+    serverId: number,
+    name: string,
+    kind: 'Text' | 'Voice',
+    moderatorOnly: boolean,
+    section: string | null = null,
+  ) =>
     spacetimedbClient.call('createChannel', {
       serverId: toU64(serverId, 'serverId'),
       name,
       kind: reducerEnum(kind),
+      section: section === null ? null : section.trim(),
       moderatorOnly,
     }),
   updateChannel: (channelId: number, payload: { name?: string; moderatorOnly?: boolean; position?: number }) =>
@@ -1177,6 +1185,16 @@ export const reducers = {
       name: payload.name ?? null,
       moderatorOnly: payload.moderatorOnly ?? null,
       position: payload.position ?? null,
+    }),
+  setChannelSection: (channelId: number, section: string | null) =>
+    spacetimedbClient.call('setChannelSection', {
+      channelId: toU64(channelId, 'channelId'),
+      section: section === null ? null : section.trim(),
+    }),
+  moveChannel: (channelId: number, direction: -1 | 1) =>
+    spacetimedbClient.call('moveChannel', {
+      channelId: toU64(channelId, 'channelId'),
+      direction,
     }),
   deleteChannel: (channelId: number) =>
     spacetimedbClient.call('deleteChannel', { channelId: toU64(channelId, 'channelId') }),

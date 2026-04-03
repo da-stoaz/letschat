@@ -49,6 +49,7 @@ export const Channel = __t.object("Channel", {
   },
   position: __t.u32(),
   moderatorOnly: __t.bool(),
+  section: __t.option(__t.string()),
 });
 export type Channel = __Infer<typeof Channel>;
 

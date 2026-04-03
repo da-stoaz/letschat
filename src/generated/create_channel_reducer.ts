@@ -20,5 +20,6 @@ export default {
   get kind() {
     return ChannelKind;
   },
+  section: __t.option(__t.string()),
   moderatorOnly: __t.bool(),
 };
