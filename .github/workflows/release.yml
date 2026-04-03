@@ -97,6 +97,7 @@ jobs:
 
       - name: Build and release (macOS signed)
         if: matrix.platform == 'macos-latest'
+        timeout-minutes: 25
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
