@@ -65,31 +65,11 @@ jobs:
 
       - name: Prepare Apple API key (macOS)
         if: matrix.platform == 'macos-latest'
-        shell: bash
         env:
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
         run: |
           key_path="$RUNNER_TEMP/AuthKey_${{ secrets.APPLE_API_KEY }}.p8"
-          if [ -n "$APPLE_API_KEY_P8" ]; then
-            printf '%s' "$APPLE_API_KEY_P8" > "$key_path"
-          elif [ -n "$APPLE_API_KEY_P8_BASE64" ]; then
-            if ! printf '%s' "$APPLE_API_KEY_P8_BASE64" | base64 -D > "$key_path" 2>/dev/null; then
-              printf '%s' "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$key_path"
-            fi
-          else
-            echo "Missing APPLE_API_KEY_P8 or APPLE_API_KEY_P8_BASE64 secret." >&2
-            exit 1
-          fi
-
-          if ! grep -q "BEGIN PRIVATE KEY" "$key_path"; then
-            {
-              echo "-----BEGIN PRIVATE KEY-----"
-              cat "$key_path"
-              echo "-----END PRIVATE KEY-----"
-            } > "${key_path}.tmp"
-            mv "${key_path}.tmp" "$key_path"
-          fi
+          echo "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$key_path"
           chmod 600 "$key_path"
           echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
 
