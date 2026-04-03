@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type TouchEventHandler } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, MinusIcon, PlusIcon, RotateCcwIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { downloadAttachment } from '@/lib/attachmentDownload'
 
 type PreviewImage = {
   url: string | null
@@ -33,6 +34,9 @@ function normalizeIndex(index: number, length: number): number {
 export function AttachmentImageLightbox({ images, initialIndex, onClose }: AttachmentImageLightboxProps) {
   const [scale, setScale] = useState(1)
   const [activeIndex, setActiveIndex] = useState(0)
+  const [isSaving, setIsSaving] = useState(false)
+  const pinchStartDistanceRef = useRef<number | null>(null)
+  const pinchStartScaleRef = useRef(1)
   const open = initialIndex !== null
 
   useEffect(() => {
@@ -90,6 +94,34 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
     setScale(1)
   }
 
+  const onTouchStart: TouchEventHandler<HTMLDivElement> = (event) => {
+    if (event.touches.length !== 2) return
+    const [first, second] = event.touches
+    const deltaX = second.clientX - first.clientX
+    const deltaY = second.clientY - first.clientY
+    pinchStartDistanceRef.current = Math.hypot(deltaX, deltaY)
+    pinchStartScaleRef.current = scale
+  }
+
+  const onTouchMove: TouchEventHandler<HTMLDivElement> = (event) => {
+    if (event.touches.length !== 2) return
+    const startDistance = pinchStartDistanceRef.current
+    if (!startDistance || startDistance <= 0) return
+    const [first, second] = event.touches
+    const deltaX = second.clientX - first.clientX
+    const deltaY = second.clientY - first.clientY
+    const nextDistance = Math.hypot(deltaX, deltaY)
+    const ratio = nextDistance / startDistance
+    setScale(clampScale(pinchStartScaleRef.current * ratio))
+    event.preventDefault()
+  }
+
+  const onTouchEnd: TouchEventHandler<HTMLDivElement> = (event) => {
+    if (event.touches.length >= 2) return
+    pinchStartDistanceRef.current = null
+    pinchStartScaleRef.current = scale
+  }
+
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
       <DialogContent
@@ -98,7 +130,13 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
       >
         <DialogTitle className="sr-only">Image preview</DialogTitle>
 
-        <div className="group relative h-full w-full overflow-auto">
+        <div
+          className="group relative h-full w-full overflow-auto touch-none"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onTouchCancel={onTouchEnd}
+        >
           {activeImage ? (
             <div className="flex min-h-full min-w-full items-center justify-center px-6 py-16 sm:px-8">
               {activeImage.url ? (
@@ -195,13 +233,22 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
                 size="sm"
                 variant="ghost"
                 className="text-white hover:bg-white/15"
-                disabled={!activeImage?.url}
-                asChild
+                disabled={!activeImage?.url || isSaving}
+                onClick={async () => {
+                  if (!activeImage?.url) return
+                  setIsSaving(true)
+                  try {
+                    await downloadAttachment({
+                      url: activeImage.url,
+                      fileName: activeImage.fileName,
+                    })
+                  } finally {
+                    setIsSaving(false)
+                  }
+                }}
               >
-                <a href={activeImage?.url ?? '#'} download={activeImage?.fileName ?? 'image'}>
-                  <DownloadIcon className="size-4" />
-                  Save
-                </a>
+                <DownloadIcon className="size-4" />
+                {isSaving ? 'Saving…' : 'Save'}
               </Button>
 
               <Button

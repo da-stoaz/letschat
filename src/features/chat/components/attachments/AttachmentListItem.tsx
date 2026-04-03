@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { DownloadIcon, ExternalLinkIcon, FileIcon, ImageIcon, Loader2Icon, MusicIcon, VideoIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { isDesktopTauriRuntime, tauriCommands } from '@/lib/tauri'
+import { downloadAttachment } from '@/lib/attachmentDownload'
 import type { ChatMessageAttachment } from '@/types/attachments'
 import { formatFileSize, getAttachmentKind } from './attachmentUtils'
 import type { AttachmentResolution } from './useAttachmentResolver'
@@ -18,70 +18,6 @@ function openUrl(url: string): void {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
-function triggerDownload(url: string, fileName: string): void {
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = fileName
-  anchor.rel = 'noopener noreferrer'
-  document.body.appendChild(anchor)
-  anchor.click()
-  anchor.remove()
-}
-
-function createDownloadOperationId(storageKey: string): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `${storageKey}-${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
-
-async function downloadFile(
-  url: string,
-  fileName: string,
-  onProgress?: (fraction: number | null) => void,
-  onRequestCreated?: (request: XMLHttpRequest) => void,
-): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const request = new XMLHttpRequest()
-    onRequestCreated?.(request)
-    request.open('GET', url, true)
-    request.responseType = 'blob'
-
-    request.onprogress = (event) => {
-      if (!event.lengthComputable || event.total <= 0) {
-        onProgress?.(null)
-        return
-      }
-      onProgress?.(Math.min(1, event.loaded / event.total))
-    }
-    request.onerror = () => reject(new Error('Download failed (network error).'))
-    request.onabort = () => reject(new Error('Download was cancelled.'))
-    request.onload = () => {
-      if (request.status < 200 || request.status >= 300) {
-        reject(new Error(`Download failed (${request.status}).`))
-        return
-      }
-
-      onProgress?.(1)
-      const blob = request.response
-      if (!blob) {
-        reject(new Error('Download failed (empty response).'))
-        return
-      }
-
-      const blobUrl = URL.createObjectURL(blob)
-      try {
-        triggerDownload(blobUrl, fileName)
-        resolve()
-      } finally {
-        window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0)
-      }
-    }
-
-    request.send()
-  })
-}
-
 function isPdfAttachment(attachment: ChatMessageAttachment): boolean {
   return (
     attachment.mimeType.toLowerCase() === 'application/pdf' ||
@@ -90,11 +26,10 @@ function isPdfAttachment(attachment: ChatMessageAttachment): boolean {
 }
 
 export function AttachmentListItem({ attachment, resolution, onRetry, onOpenImage, onOpenPdf }: AttachmentListItemProps) {
-  const webDownloadRequestRef = useRef<XMLHttpRequest | null>(null)
+  const cancelDownloadRef = useRef<(() => Promise<void>) | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [downloadProgressFraction, setDownloadProgressFraction] = useState<number | null>(null)
-  const [activeDownloadOperationId, setActiveDownloadOperationId] = useState<string | null>(null)
   const kind = getAttachmentKind(attachment.mimeType)
   const canOpen = Boolean(resolution.url)
   const isPdf = isPdfAttachment(attachment)
@@ -178,52 +113,23 @@ export function AttachmentListItem({ attachment, resolution, onRetry, onOpenImag
               setIsSaving(true)
               setIsCancelling(false)
               setDownloadProgressFraction(0)
-              setActiveDownloadOperationId(null)
-              webDownloadRequestRef.current = null
-              const isDesktopTauri = isDesktopTauriRuntime()
+              cancelDownloadRef.current = null
               try {
-                if (isDesktopTauri) {
-                  const operationId = createDownloadOperationId(attachment.storageKey)
-                  setActiveDownloadOperationId(operationId)
-                  const unlisten = await tauriCommands.onAttachmentDownloadProgress((event) => {
-                    if (event.operationId !== operationId) return
-                    if (event.totalBytes && event.totalBytes > 0) {
-                      setDownloadProgressFraction(Math.min(1, event.bytesDownloaded / event.totalBytes))
-                    } else if (event.completed) {
-                      setDownloadProgressFraction(1)
-                    } else {
-                      setDownloadProgressFraction(null)
-                    }
-                  })
-                  try {
-                    await tauriCommands.saveAttachmentFile(resolution.url, attachment.fileName, operationId)
-                  } finally {
-                    unlisten()
-                    setActiveDownloadOperationId(null)
-                  }
-                  return
-                }
-                await downloadFile(
-                  resolution.url,
-                  attachment.fileName,
-                  setDownloadProgressFraction,
-                  (request) => {
-                    webDownloadRequestRef.current = request
+                await downloadAttachment({
+                  url: resolution.url,
+                  fileName: attachment.fileName,
+                  onProgress: setDownloadProgressFraction,
+                  onCancelReady: (cancel) => {
+                    cancelDownloadRef.current = cancel
                   },
-                )
+                })
               } catch (error) {
-                const isCancelled =
-                  error instanceof Error && error.message.toLowerCase().includes('cancelled')
-                if (!isDesktopTauri && !isCancelled) {
-                  // Fallback: keep old browser flow if blob download is blocked by platform/CORS.
-                  triggerDownload(resolution.url, attachment.fileName)
-                }
+                void error
               } finally {
                 setIsSaving(false)
                 setIsCancelling(false)
                 setDownloadProgressFraction(null)
-                setActiveDownloadOperationId(null)
-                webDownloadRequestRef.current = null
+                cancelDownloadRef.current = null
               }
             }}
           >
@@ -238,14 +144,7 @@ export function AttachmentListItem({ attachment, resolution, onRetry, onOpenImag
               onClick={async () => {
                 if (!isSaving) return
                 setIsCancelling(true)
-                const isDesktopTauri = isDesktopTauriRuntime()
-                if (isDesktopTauri) {
-                  if (activeDownloadOperationId) {
-                    await tauriCommands.cancelAttachmentDownload(activeDownloadOperationId)
-                  }
-                  return
-                }
-                webDownloadRequestRef.current?.abort()
+                await cancelDownloadRef.current?.()
               }}
             >
               <XIcon className="size-4" />
