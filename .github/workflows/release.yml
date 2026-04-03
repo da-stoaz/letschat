@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   build-tauri:
+    environment: production
     strategy:
       fail-fast: false
       matrix:
@@ -20,12 +21,12 @@ jobs:
             tauri-args: --target universal-apple-darwin
 
           - platform: windows-latest
-            rust-targets: ''
-            tauri-args: ''
+            rust-targets: ""
+            tauri-args: ""
 
           - platform: ubuntu-22.04
-            rust-targets: ''
-            tauri-args: ''
+            rust-targets: ""
+            tauri-args: ""
 
     runs-on: ${{ matrix.platform }}
 
@@ -62,7 +63,47 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Build and release
+      - name: Prepare Apple API key (macOS)
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        run: |
+          key_path="$RUNNER_TEMP/AuthKey_${{ secrets.APPLE_API_KEY }}.p8"
+          printf '%s' "${{ secrets.APPLE_API_KEY_P8 }}" > "$key_path"
+          chmod 600 "$key_path"
+          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Build and release (macOS signed)
+        if: matrix.platform == 'macos-latest'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
+
+        with:
+          tagName: v__VERSION__
+          releaseName: LetsChat v__VERSION__
+          releaseBody: |
+            ## LetsChat v__VERSION__
+
+            ### Downloads
+            | Platform | File |
+            |----------|------|
+            | macOS (Universal) | `.dmg` |
+            | Windows | `.msi` (recommended) · `.exe` (NSIS) |
+            | Linux | `.AppImage` · `.deb` |
+
+            > **Note:** macOS builds are signed and notarized. Windows users may still see SmartScreen warnings until reputation builds.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.tauri-args }}
+
+      - name: Build and release (non-mac)
+        if: matrix.platform != 'macos-latest'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -79,7 +120,7 @@ jobs:
             | Windows | `.msi` (recommended) · `.exe` (NSIS) |
             | Linux | `.AppImage` · `.deb` |
 
-            > **Note:** Builds are currently unsigned. macOS users may need to right-click → Open to bypass Gatekeeper. Windows users may see a SmartScreen warning — click "More info" → "Run anyway".
+            > **Note:** macOS builds are signed and notarized. Windows users may still see SmartScreen warnings until reputation builds.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.tauri-args }}
