@@ -21,7 +21,7 @@ export function TypingIndicator({
   className = '',
   fallbackText,
 }: {
-  scopeKey?: string
+  scopeKey: string
   selfIdentity: Identity | null
   className?: string
   fallbackText?: string
@@ -38,7 +38,6 @@ export function TypingIndicator({
   }, [pruneExpired])
 
   const names = useMemo(() => {
-    if (!scopeKey) return []
     const current = typingByScope[scopeKey] ?? {}
     const selfKey = normalizeIdentity(selfIdentity)
     return Object.keys(current)

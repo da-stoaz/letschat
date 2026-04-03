@@ -325,26 +325,32 @@ export function ChatComposer({
       />
       {disabled ? <p className="text-xs text-muted-foreground">{disabledHint}</p> : (helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null)}
       <div className="flex items-center gap-1.5">
-        <TypingIndicator
-          scopeKey={typingScopeKey}
-          selfIdentity={typingIdentity}
-          className="min-w-0 truncate text-xs text-muted-foreground"
-          fallbackText={value.length >= 3500 ? `${value.length}/${maxLength}` : 'Shift+Enter for newline'}
-        />
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="ml-auto"
           disabled={disabled || submitting}
           onClick={() => fileInputRef.current?.click()}
         >
           <PaperclipIcon className="size-4" />
           Attach
         </Button>
+        {typingScopeKey ? (
+          <TypingIndicator
+            scopeKey={typingScopeKey}
+            selfIdentity={typingIdentity}
+            className="min-w-0 truncate text-xs text-muted-foreground"
+            fallbackText={value.length >= 3500 ? `${value.length}/${maxLength}` : 'Shift+Enter for newline'}
+          />
+        ) : (
+          <p className="truncate text-xs text-muted-foreground">
+            {value.length >= 3500 ? `${value.length}/${maxLength}` : 'Shift+Enter for newline'}
+          </p>
+        )}
         <Button
           type="submit"
           size="sm"
+          className="ml-auto"
           disabled={disabled || submitting || (value.trim().length === 0 && queuedFiles.length === 0)}
         >
           {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <SendHorizonalIcon className="size-4" />}
