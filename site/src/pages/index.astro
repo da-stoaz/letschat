@@ -7,16 +7,16 @@ const GITHUB_REPO = "da-stoaz/letschat";
 <Layout title="LetsChat — Your team chat. Your infrastructure.">
 
   <!-- Nav -->
-  <header class="border-b border-[var(--border)] sticky top-0 z-50 backdrop-blur-sm bg-[oklch(0.145_0_0_/_0.85)]">
+  <header class="border-b border-border sticky top-0 z-50 backdrop-blur-sm bg-background-translucent">
     <nav class="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-      <span class="font-semibold text-[var(--foreground)] tracking-tight">LetsChat</span>
+      <span class="font-semibold text-foreground tracking-tight">LetsChat</span>
       <div class="flex items-center gap-4">
         <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener"
-           class="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+           class="text-sm text-muted-foreground hover:text-foreground transition-colors">
           GitHub
         </a>
         <a href="/download"
-           class="text-sm px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--accent-blue)] text-white font-medium hover:opacity-90 transition-opacity">
+           class="text-sm px-3 py-1.5 rounded-md bg-accent-blue text-white font-medium hover:opacity-90 transition-opacity">
           Download
         </a>
       </div>
@@ -27,8 +27,8 @@ const GITHUB_REPO = "da-stoaz/letschat";
 
     <!-- Hero -->
     <section class="max-w-5xl mx-auto px-6 pt-24 pb-20 text-center">
-      <div class="inline-flex items-center gap-2 text-xs text-[var(--muted-foreground)] border border-[var(--border)] rounded-full px-3 py-1 mb-8">
-        <span class="w-1.5 h-1.5 rounded-full bg-[var(--accent-blue)] animate-pulse"></span>
+      <div class="inline-flex items-center gap-2 text-xs text-muted-foreground border border-border rounded-full px-3 py-1 mb-8">
+        <span class="w-1.5 h-1.5 rounded-full bg-accent-blue animate-pulse"></span>
         <span id="hero-version">Open source · Free forever</span>
       </div>
 
@@ -37,85 +37,85 @@ const GITHUB_REPO = "da-stoaz/letschat";
         Your infrastructure.
       </h1>
 
-      <p class="text-lg text-[var(--muted-foreground)] max-w-xl mx-auto mb-10 leading-relaxed">
+      <p class="text-lg text-muted-foreground max-w-xl mx-auto mb-10 leading-relaxed">
         LetsChat is a self-hosted desktop app for real-time team communication.
         Voice channels, messaging, and file sharing — fully under your control.
       </p>
 
       <div class="flex flex-col sm:flex-row gap-3 justify-center">
         <a id="hero-download-btn" href="/download"
-           class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-[var(--radius-lg)] bg-[var(--foreground)] text-[var(--background)] font-medium text-sm hover:opacity-90 transition-opacity">
+           class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-foreground text-background font-medium text-sm hover:opacity-90 transition-opacity">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
           Download for free
         </a>
         <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener"
-           class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-[var(--radius-lg)] border border-[var(--border)] text-[var(--muted-foreground)] text-sm hover:text-[var(--foreground)] hover:border-[oklch(1_0_0_/_20%)] transition-colors">
+           class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg border border-border text-muted-foreground text-sm hover:text-foreground hover:border-border-hover transition-colors">
           View on GitHub
         </a>
       </div>
 
-      <p class="mt-6 text-xs text-[var(--muted-foreground)]">macOS · Windows · Linux &nbsp;·&nbsp; Free &amp; open source</p>
+      <p class="mt-6 text-xs text-muted-foreground">macOS · Windows · Linux &nbsp;·&nbsp; Free &amp; open source</p>
     </section>
 
     <!-- Features -->
     <section class="max-w-5xl mx-auto px-6 pb-24">
       <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
-        <div class="rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--card)] p-6">
-          <div class="w-9 h-9 rounded-[var(--radius-md)] bg-[var(--muted)] flex items-center justify-center mb-4">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-[var(--foreground)]">
+        <div class="rounded-xl border border-border bg-card p-6">
+          <div class="w-9 h-9 rounded-md bg-muted flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-foreground">
               <rect x="2" y="2" width="20" height="20" rx="5"/><path d="M7 10h10M7 14h6"/>
             </svg>
           </div>
           <h3 class="font-medium text-sm mb-1.5">Self-Hosted</h3>
-          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">Deploy on your own server. Your conversations never leave your infrastructure.</p>
+          <p class="text-xs text-muted-foreground leading-relaxed">Deploy on your own server. Your conversations never leave your infrastructure.</p>
         </div>
 
-        <div class="rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--card)] p-6">
-          <div class="w-9 h-9 rounded-[var(--radius-md)] bg-[var(--muted)] flex items-center justify-center mb-4">
+        <div class="rounded-xl border border-border bg-card p-6">
+          <div class="w-9 h-9 rounded-md bg-muted flex items-center justify-center mb-4">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
             </svg>
           </div>
           <h3 class="font-medium text-sm mb-1.5">Voice &amp; Video Rooms</h3>
-          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">Drop into always-on voice channels. Real-time WebRTC, low-latency, no call setup needed.</p>
+          <p class="text-xs text-muted-foreground leading-relaxed">Drop into always-on voice channels. Real-time WebRTC, low-latency, no call setup needed.</p>
         </div>
 
-        <div class="rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--card)] p-6">
-          <div class="w-9 h-9 rounded-[var(--radius-md)] bg-[var(--muted)] flex items-center justify-center mb-4">
+        <div class="rounded-xl border border-border bg-card p-6">
+          <div class="w-9 h-9 rounded-md bg-muted flex items-center justify-center mb-4">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="13 2 13 9 20 9"/><path d="M20 14.5V7l-5-5H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8"/><circle cx="19" cy="19" r="3"/><path d="m21 21-1.5-1.5"/>
             </svg>
           </div>
           <h3 class="font-medium text-sm mb-1.5">Native &amp; Fast</h3>
-          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">Built with Tauri, not Electron. Instant startup, a fraction of the memory usage.</p>
+          <p class="text-xs text-muted-foreground leading-relaxed">Built with Tauri, not Electron. Instant startup, a fraction of the memory usage.</p>
         </div>
 
-        <div class="rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--card)] p-6">
-          <div class="w-9 h-9 rounded-[var(--radius-md)] bg-[var(--muted)] flex items-center justify-center mb-4">
+        <div class="rounded-xl border border-border bg-card p-6">
+          <div class="w-9 h-9 rounded-md bg-muted flex items-center justify-center mb-4">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
             </svg>
           </div>
           <h3 class="font-medium text-sm mb-1.5">Cross-Platform</h3>
-          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">macOS, Windows, and Linux. One app for every desk in your team.</p>
+          <p class="text-xs text-muted-foreground leading-relaxed">macOS, Windows, and Linux. One app for every desk in your team.</p>
         </div>
 
       </div>
     </section>
 
     <!-- Download strip -->
-    <section class="border-t border-[var(--border)] bg-[var(--card)]">
+    <section class="border-t border-border bg-card">
       <div class="max-w-5xl mx-auto px-6 py-16 flex flex-col sm:flex-row items-center justify-between gap-8">
         <div>
           <h2 class="text-2xl font-semibold tracking-tight mb-1">Ready to get started?</h2>
-          <p class="text-sm text-[var(--muted-foreground)]">Free, open source, runs on your hardware.</p>
+          <p class="text-sm text-muted-foreground">Free, open source, runs on your hardware.</p>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 shrink-0">
           <a href="/download"
-             class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[var(--radius-lg)] bg-[var(--accent-blue)] text-white text-sm font-medium hover:opacity-90 transition-opacity">
+             class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-accent-blue text-white text-sm font-medium hover:opacity-90 transition-opacity">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
@@ -128,12 +128,12 @@ const GITHUB_REPO = "da-stoaz/letschat";
   </main>
 
   <!-- Footer -->
-  <footer class="border-t border-[var(--border)]">
-    <div class="max-w-5xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[var(--muted-foreground)]">
+  <footer class="border-t border-border">
+    <div class="max-w-5xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
       <span>© {new Date().getFullYear()} Felix Steinberger</span>
       <div class="flex items-center gap-4">
-        <a href="/download" class="hover:text-[var(--foreground)] transition-colors">Download</a>
-        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="hover:text-[var(--foreground)] transition-colors">GitHub</a>
+        <a href="/download" class="hover:text-foreground transition-colors">Download</a>
+        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="hover:text-foreground transition-colors">GitHub</a>
       </div>
     </div>
   </footer>
@@ -141,7 +141,6 @@ const GITHUB_REPO = "da-stoaz/letschat";
 </Layout>
 
 <script>
-  // Detect OS and update the hero download button label
   const btn = document.getElementById("hero-download-btn");
   if (btn) {
     const ua = navigator.userAgent;

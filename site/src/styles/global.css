@@ -12,8 +12,11 @@
   --color-primary-foreground:var(--primary-foreground);
   --color-muted:             var(--muted);
   --color-muted-foreground:  var(--muted-foreground);
-  --color-border:            var(--border);
-  --color-accent-blue:       var(--accent-blue);
+  --color-border:                  var(--border);
+  --color-border-hover:            oklch(1 0 0 / 20%);
+  --color-accent-blue:             var(--accent-blue);
+  --color-background-translucent: oklch(0.145 0 0 / 0.85);
+  --color-muted-hover:             oklch(0.33 0 0);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
