@@ -70,7 +70,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-card/40">
-      <header className="flex items-center justify-between border-b border-border/70 px-3 py-2.5 sm:px-4">
+      <header className="flex items-center justify-between border-b border-border/70 px-3 py-2 sm:px-4">
         <div className="flex items-center gap-2">
           <HashIcon className="size-4 text-muted-foreground" />
           <strong className="font-medium">{channel?.name ?? `channel-${channelId}`}</strong>

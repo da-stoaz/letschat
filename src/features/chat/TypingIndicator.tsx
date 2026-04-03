@@ -19,10 +19,12 @@ export function TypingIndicator({
   scopeKey,
   selfIdentity,
   className = '',
+  fallbackText,
 }: {
-  scopeKey: string
+  scopeKey?: string
   selfIdentity: Identity | null
   className?: string
+  fallbackText?: string
 }) {
   const typingByScope = useTypingStore((s) => s.typingByScope)
   const pruneExpired = useTypingStore((s) => s.pruneExpired)
@@ -36,6 +38,7 @@ export function TypingIndicator({
   }, [pruneExpired])
 
   const names = useMemo(() => {
+    if (!scopeKey) return []
     const current = typingByScope[scopeKey] ?? {}
     const selfKey = normalizeIdentity(selfIdentity)
     return Object.keys(current)
@@ -48,16 +51,18 @@ export function TypingIndicator({
       })
   }, [scopeKey, selfIdentity, typingByScope, usersByIdentity])
 
-  if (names.length === 0) return null
+  if (names.length === 0) {
+    return fallbackText ? <span className={className}>{fallbackText}</span> : null
+  }
 
   return (
-    <p className={`flex items-center gap-2 text-xs text-muted-foreground ${className}`}>
+    <span className={`inline-flex items-center gap-2 text-xs text-muted-foreground ${className}`}>
       <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-2 py-1">
         <span className="size-1.5 rounded-full bg-muted-foreground/80 animate-pulse [animation-delay:-0.25s]" />
         <span className="size-1.5 rounded-full bg-muted-foreground/80 animate-pulse [animation-delay:-0.125s]" />
         <span className="size-1.5 rounded-full bg-muted-foreground/80 animate-pulse" />
       </span>
       <span className="truncate">{renderTypingText(names)}</span>
-    </p>
+    </span>
   )
 }

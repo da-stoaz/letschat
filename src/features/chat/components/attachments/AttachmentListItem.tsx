@@ -109,21 +109,21 @@ export function AttachmentListItem({ attachment, resolution, onRetry, onOpenImag
   }
 
   return (
-    <div className="rounded-lg border border-border/70 bg-muted/20 p-2">
+    <div className="rounded-lg border border-border/70 bg-muted/20 p-1">
       {(kind === 'image' || kind === 'video' || kind === 'audio') && canOpen ? (
-        <div className="mb-2 overflow-hidden rounded-md border border-border/60 bg-background/50">
+        <div className="mb-1 overflow-hidden rounded-md border border-border/60 bg-background/50">
           {kind === 'image' ? (
             <button
               type="button"
               className="block w-full cursor-zoom-in focus:outline-none"
               onClick={() => resolution.url && onOpenImage({ url: resolution.url, fileName: attachment.fileName })}
             >
-              <img src={resolution.url ?? ''} alt={attachment.fileName} className="max-h-72 w-full object-contain" />
+              <img src={resolution.url ?? ''} alt={attachment.fileName} className="max-h-56 w-full object-contain" />
             </button>
           ) : kind === 'video' ? (
-            <video src={resolution.url ?? ''} controls className="max-h-80 w-full bg-black" />
+            <video src={resolution.url ?? ''} controls className="max-h-56 w-full bg-black" />
           ) : (
-            <audio src={resolution.url ?? ''} controls className="w-full p-2" />
+            <audio src={resolution.url ?? ''} controls className="w-full p-1.5" />
           )}
         </div>
       ) : null}

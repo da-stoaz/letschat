@@ -452,9 +452,14 @@ export function AppLayout() {
   }, [channelBarWidth, isMobile])
 
   const mainPane = (
-    <div className={cn('grid min-h-0 min-w-0 gap-3 overflow-hidden', rightPanelOpen && activeServerId && !isServerManagePage ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
-      <Card className="relative h-full min-h-0 border-border/60 bg-card/80 backdrop-blur">
-        <CardContent className="h-full min-h-0 overflow-hidden p-2 sm:p-3">
+    <div className={cn('grid min-h-0 min-w-0 gap-2 overflow-hidden', rightPanelOpen && activeServerId && !isServerManagePage ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
+      <Card className="relative h-full min-h-0 gap-0 border-border/60 bg-card/80 py-0 backdrop-blur">
+        <CardContent
+          className={cn(
+            'h-full min-h-0 overflow-hidden',
+            isSettingsPage || isServerManagePage ? 'p-1.5 sm:p-2' : 'p-0',
+          )}
+        >
           <Outlet />
         </CardContent>
       </Card>
@@ -482,12 +487,12 @@ export function AppLayout() {
   return (
     <>
       <main
-        className="relative h-screen overflow-hidden bg-background p-2 text-foreground"
+        className="relative h-screen overflow-hidden bg-background p-1 text-foreground"
         style={{ ['--channel-bar-width' as string]: `${channelBarWidth}px` }}
       >
         <div
           className={cn(
-            'grid h-full min-h-0 grid-rows-1 gap-2 overflow-hidden',
+            'grid h-full min-h-0 grid-rows-1 gap-1.5 overflow-hidden',
             isSettingsPage
               ? 'grid-cols-[48px_minmax(0,1fr)]'
               : 'grid-cols-[48px_var(--channel-bar-width)_minmax(0,1fr)] max-md:grid-cols-[48px_minmax(0,1fr)]',

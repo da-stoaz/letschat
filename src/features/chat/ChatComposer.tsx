@@ -186,7 +186,7 @@ export function ChatComposer({
 
   return (
     <form
-      className="space-y-1.5 p-2.5"
+      className="space-y-1 p-1.5"
       onSubmit={async (event) => {
         event.preventDefault()
         if (disabled || submitting) return
@@ -241,7 +241,7 @@ export function ChatComposer({
       />
 
       {queuedFiles.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-muted/20 p-2">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border/70 bg-muted/20 p-1.5">
           {queuedFiles.map((entry) => {
             const stage = uploadStageByFileId[entry.id]
             const progressFraction = uploadProgressByFileId[entry.id] ?? 0
@@ -321,36 +321,36 @@ export function ChatComposer({
         maxLength={maxLength}
         placeholder={placeholder}
         disabled={disabled || submitting}
-        className="min-h-12 resize-none overflow-y-auto"
+        className="min-h-10 resize-none overflow-y-auto"
       />
       {disabled ? <p className="text-xs text-muted-foreground">{disabledHint}</p> : (helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null)}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
+        <TypingIndicator
+          scopeKey={typingScopeKey}
+          selfIdentity={typingIdentity}
+          className="min-w-0 truncate text-xs text-muted-foreground"
+          fallbackText={value.length >= 3500 ? `${value.length}/${maxLength}` : 'Shift+Enter for newline'}
+        />
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="ml-auto"
           disabled={disabled || submitting}
           onClick={() => fileInputRef.current?.click()}
         >
           <PaperclipIcon className="size-4" />
           Attach
         </Button>
-        <p className="truncate text-xs text-muted-foreground">
-          {value.length >= 3500 ? `${value.length}/${maxLength}` : 'Shift+Enter for newline'}
-        </p>
         <Button
           type="submit"
           size="sm"
-          className="ml-auto"
           disabled={disabled || submitting || (value.trim().length === 0 && queuedFiles.length === 0)}
         >
           {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <SendHorizonalIcon className="size-4" />}
           {submitting ? 'Sending…' : sendLabel}
         </Button>
       </div>
-      {typingScopeKey ? (
-        <TypingIndicator scopeKey={typingScopeKey} selfIdentity={typingIdentity} className="max-w-full text-xs" />
-      ) : null}
       {localError ? <p className="text-sm text-destructive">{localError}</p> : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </form>
