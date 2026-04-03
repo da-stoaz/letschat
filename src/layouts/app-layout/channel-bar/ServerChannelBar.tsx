@@ -1,6 +1,7 @@
 import { BellIcon, BellOffIcon, ChevronsUpDownIcon, HashIcon, LockIcon, LogOutIcon, PlusIcon, Settings2Icon, ShieldIcon, UserPlusIcon, Volume2Icon } from 'lucide-react'
 import { canInviteUsers, canManageChannels } from '../../../lib/permissions'
 import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -13,6 +14,7 @@ import { Separator } from '@/components/ui/separator'
 import { VoiceChannelButton } from '../VoiceChannelButton'
 import { ChannelBarShell } from './ChannelBarShell'
 import type { ServerChannelBarProps } from './types'
+import { serverInitials } from '../helpers'
 
 const EMPTY_ACTIVE_SPEAKERS = new Set<string>()
 
@@ -60,7 +62,15 @@ export function ServerChannelBar({
           ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex w-full items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-left text-sm font-medium hover:bg-muted/60">
-              <span className="truncate">{activeServer?.name ?? 'Server'}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <Avatar className="size-5 rounded-md">
+                  {activeServer?.iconUrl ? <AvatarImage src={activeServer.iconUrl} alt={activeServer.name} /> : null}
+                  <AvatarFallback className="rounded-md bg-primary/10 text-[10px]">
+                    {serverInitials(activeServer?.name ?? 'Server')}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="truncate">{activeServer?.name ?? 'Server'}</span>
+              </span>
               <ChevronsUpDownIcon className="size-4 text-muted-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
