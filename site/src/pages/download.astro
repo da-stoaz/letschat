@@ -13,10 +13,15 @@ const GITHUB_REPO = "da-stoaz/letschat";
   <header class="border-b border-border sticky top-0 z-50 backdrop-blur-sm bg-background-translucent">
     <nav class="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
       <a href="/" class="font-semibold text-foreground tracking-tight hover:opacity-80 transition-opacity">LetsChat</a>
-      <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener"
-         class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-        GitHub
-      </a>
+      <div class="flex items-center gap-4">
+        <a href="/self-hosting" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+          Self-Hosting
+        </a>
+        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener"
+           class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+          GitHub
+        </a>
+      </div>
     </nav>
   </header>
 
@@ -163,6 +168,7 @@ const GITHUB_REPO = "da-stoaz/letschat";
       <span>© {new Date().getFullYear()} Felix Steinberger</span>
       <div class="flex items-center gap-4">
         <a href="/" class="hover:text-foreground transition-colors">Home</a>
+        <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
         <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="hover:text-foreground transition-colors">GitHub</a>
       </div>
     </div>

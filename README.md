@@ -7,6 +7,11 @@ Desktop chat app built with:
 - `src-tauri/`: Tauri shell
 - `src/`: React + TypeScript frontend
 
+## Self-Hosting Backend
+
+- Full step-by-step guide: `/self-hosting` on the Astro site (`site/src/pages/self-hosting.astro`)
+- Operator quick reference: `DEPLOYMENT.md`
+
 ## Local Dev Flow
 
 1. Start all supporting services (SpacetimeDB, LiveKit, MinIO):
