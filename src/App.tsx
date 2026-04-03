@@ -26,6 +26,7 @@ function App() {
   const connectionStatus = useConnectionStore((s) => s.status)
   const notificationsEnabled = useUiStore((s) => s.notificationSettings.enabled)
   const isConfigured = useServerConfigStore((s) => s.config !== null)
+  const hasHydrated = useServerConfigStore((s) => s.hasHydrated)
   const location = useLocation()
   const onAuthRoute = location.pathname.startsWith('/auth')
   const onSetupRoute = location.pathname.startsWith('/setup')
@@ -34,6 +35,10 @@ function App() {
     if (!notificationsEnabled) return
     void ensureNotificationPermission({ prompt: false })
   }, [notificationsEnabled])
+
+  if (!hasHydrated) {
+    return null
+  }
 
   if (!isConfigured && !onSetupRoute) {
     return <Navigate to="/setup" replace />
