@@ -104,13 +104,22 @@ const GITHUB_REPO = "da-stoaz/letschat";
             <p class="text-xs text-muted-foreground">ARM64 — Snapdragon &amp; Surface</p>
           </div>
         </div>
-        <a href="#" data-asset="windows-arm-msi"
-           class="download-link shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-md bg-muted text-sm font-medium hover:bg-muted-hover transition-colors opacity-50 pointer-events-none">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          <span>.msi</span>
-        </a>
+        <div class="flex gap-2 shrink-0">
+          <a href="#" data-asset="windows-arm-msi"
+             class="download-link inline-flex items-center gap-2 px-4 py-2 rounded-md bg-muted text-sm font-medium hover:bg-muted-hover transition-colors opacity-50 pointer-events-none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span>.msi</span>
+          </a>
+          <a href="#" data-asset="windows-arm-exe"
+             class="download-link inline-flex items-center gap-2 px-4 py-2 rounded-md bg-muted text-sm font-medium hover:bg-muted-hover transition-colors opacity-50 pointer-events-none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span>.exe</span>
+          </a>
+        </div>
       </div>
 
       <!-- Linux -->
@@ -184,6 +193,7 @@ const GITHUB_REPO = "da-stoaz/letschat";
     "windows-x64-msi": /[_-]x64[_-].*\.msi$|(?<!aarch64)(?<!arm64)\.msi$/i,
     "windows-x64-exe": /[_-]x64[_-].*\.exe$|(?<!aarch64)(?<!arm64)(?<!setup)\.exe$|NSIS.*\.exe$/i,
     "windows-arm-msi": /aarch64.*\.msi$|arm64.*\.msi$/i,
+    "windows-arm-exe": /aarch64.*\.exe$|arm64.*\.exe$/i,
     "linux-deb":        /\.deb$/i,
     "linux-appimage":   /\.AppImage$/i,
   };
