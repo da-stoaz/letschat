@@ -55,6 +55,7 @@ jobs:
 
       - run: npm ci
 
+      # ── macOS: import certificate ──────────────────────────────────────────
       - name: Import Apple certificate
         if: matrix.platform == 'macos-latest'
         uses: apple-actions/import-codesign-certs@v5
@@ -62,18 +63,37 @@ jobs:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
-      - name: Detect signing identity
+      # Explicitly filter for Developer ID Application — the correct class for
+      # distribution outside the Mac App Store. Fails fast if not found.
+      - name: Detect Developer ID signing identity
         if: matrix.platform == 'macos-latest'
         run: |
-          IDENTITY=$(security find-identity -v -p codesigning | grep -o '"[^"]*"' | head -1 | tr -d '"')
+          IDENTITY=$(security find-identity -v -p codesigning \
+            | grep "Developer ID Application" \
+            | grep -o '"[^"]*"' | head -1 | tr -d '"')
+          if [ -z "$IDENTITY" ]; then
+            echo "ERROR: No 'Developer ID Application' identity found in keychain." >&2
+            echo "Available identities:" >&2
+            security find-identity -v -p codesigning >&2
+            exit 1
+          fi
+          echo "Using identity: $IDENTITY"
           echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
+      # ── Build ──────────────────────────────────────────────────────────────
+      # Notarization: pass APPLE_ID, APPLE_PASSWORD (app-specific), APPLE_TEAM_ID
+      # to enable. Tauri will submit for notarization via notarytool automatically.
+      # To generate an app-specific password: appleid.apple.com → Security → App-Specific Passwords
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         timeout-minutes: 20
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+          # Notarization — add these 3 secrets to enable:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: v__VERSION__
           releaseName: LetsChat v__VERSION__
@@ -84,9 +104,18 @@ jobs:
             |----------|----------|
             | macOS Universal | `.dmg` |
             | Windows x64 | `.msi` · `.exe` |
+            | Windows ARM64 | `.msi` |
             | Linux | `.AppImage` · `.deb` |
-
-            > macOS: App is signed. First launch may require right-click → Open to bypass Gatekeeper.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.tauri-args }}
+
+      # ── macOS: verify the signature is valid and Gatekeeper-accepted ───────
+      - name: Verify macOS signature
+        if: matrix.platform == 'macos-latest'
+        run: |
+          APP=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos \
+            -name "*.app" | head -1)
+          echo "Verifying: $APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl --assess --type exec --verbose "$APP"
