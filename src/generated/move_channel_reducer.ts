@@ -9,19 +9,8 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
-import {
-  ChannelKind,
-} from "./types";
 
-
-export default __t.row({
-  id: __t.u64().primaryKey(),
-  serverId: __t.u64().name("server_id"),
-  name: __t.string(),
-  get kind() {
-    return ChannelKind;
-  },
-  position: __t.u32(),
-  moderatorOnly: __t.bool().name("moderator_only"),
-  section: __t.option(__t.string()),
-});
+export default {
+  channelId: __t.u64(),
+  direction: __t.i32(),
+};

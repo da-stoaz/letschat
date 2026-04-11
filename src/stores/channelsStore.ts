@@ -19,6 +19,7 @@ function areChannelsEqual(a: Channel[], b: Channel[]): boolean {
       left.name !== right.name ||
       left.kind !== right.kind ||
       left.position !== right.position ||
+      left.section !== right.section ||
       left.moderatorOnly !== right.moderatorOnly
     ) {
       return false
@@ -51,6 +52,7 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
         currentRow.name === channel.name &&
         currentRow.kind === channel.kind &&
         currentRow.position === channel.position &&
+        currentRow.section === channel.section &&
         currentRow.moderatorOnly === channel.moderatorOnly
       ) {
         return

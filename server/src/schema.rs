@@ -151,6 +151,8 @@ pub struct Channel {
     pub kind: ChannelKind,
     pub position: u32,
     pub moderator_only: bool,
+    #[default(None::<String>)]
+    pub section: Option<String>,
 }
 
 #[spacetimedb::table(

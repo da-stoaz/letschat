@@ -67,6 +67,7 @@ export interface Channel {
   name: string
   kind: ChannelKind
   position: number
+  section: string | null
   moderatorOnly: boolean
 }
 

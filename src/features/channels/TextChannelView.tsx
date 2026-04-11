@@ -57,12 +57,19 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const memberCount = channel?.serverId ? (membersByServer[channel.serverId] ?? []).length : 0
   const unreadCount = channelId === null ? 0 : (unreadByChannel[channelId] ?? 0)
   const typingScopeKey = `channel:${channelId}`
+  const lastMessageId = messages[messages.length - 1]?.id ?? null
 
   useEffect(() => {
     if (channelId === null) return
-    clearUnread(channelId)
-    reducers.markChannelRead(channelId).catch(() => undefined)
-  }, [channelId, clearUnread])
+    const markRead = () => {
+      if (!document.hasFocus()) return
+      clearUnread(channelId)
+      reducers.markChannelRead(channelId).catch(() => undefined)
+    }
+    markRead()
+    window.addEventListener('focus', markRead)
+    return () => window.removeEventListener('focus', markRead)
+  }, [channelId, lastMessageId, clearUnread])
 
   if (channelId === null) {
     return <div className="grid h-full place-items-center rounded-xl border border-dashed border-border/70 bg-muted/20">Select a text channel</div>

@@ -306,10 +306,18 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
     )
   }, [messages, partnerIdentity])
 
+  const lastMessageId = messages[messages.length - 1]?.id ?? null
+
   useEffect(() => {
-    clearDmUnread(partnerIdentity)
-    reducers.markDmRead(partnerIdentity).catch(() => undefined)
-  }, [clearDmUnread, partnerIdentity])
+    const markRead = () => {
+      if (!document.hasFocus()) return
+      clearDmUnread(partnerIdentity)
+      reducers.markDmRead(partnerIdentity).catch(() => undefined)
+    }
+    markRead()
+    window.addEventListener('focus', markRead)
+    return () => window.removeEventListener('focus', markRead)
+  }, [clearDmUnread, partnerIdentity, lastMessageId])
 
   return (
     <section className="flex h-full min-h-0 flex-col rounded-xl border border-border/70 bg-card/60">
