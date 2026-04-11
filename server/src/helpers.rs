@@ -48,11 +48,7 @@ pub(crate) fn dm_voice_key(room_key: &str, user_identity: Identity) -> String {
 }
 
 pub(crate) fn ordered_pair(a: Identity, b: Identity) -> (Identity, Identity) {
-    if a <= b {
-        (a, b)
-    } else {
-        (b, a)
-    }
+    if a <= b { (a, b) } else { (b, a) }
 }
 
 pub(crate) fn friend_pair_key(a: Identity, b: Identity) -> String {

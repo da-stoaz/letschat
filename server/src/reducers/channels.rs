@@ -24,6 +24,34 @@ fn same_channel_section(left: &Option<String>, right: &Option<String>) -> bool {
     left.as_deref() == right.as_deref()
 }
 
+fn delete_channel_with_dependencies(ctx: &ReducerContext, channel_id: u64) {
+    let message_ids: Vec<u64> = ctx
+        .db
+        .message()
+        .iter()
+        .filter(|m| m.channel_id == channel_id)
+        .map(|m| m.id)
+        .collect();
+
+    for msg_id in message_ids {
+        ctx.db.message().id().delete(msg_id);
+    }
+
+    let participant_keys: Vec<String> = ctx
+        .db
+        .voice_participant()
+        .iter()
+        .filter(|v| v.channel_id == channel_id)
+        .map(|v| v.voice_key)
+        .collect();
+
+    for key in participant_keys {
+        ctx.db.voice_participant().voice_key().delete(key);
+    }
+
+    ctx.db.channel().id().delete(channel_id);
+}
+
 #[spacetimedb::reducer]
 pub fn create_channel(
     ctx: &ReducerContext,
@@ -34,7 +62,10 @@ pub fn create_channel(
     moderator_only: bool,
 ) -> Result<(), String> {
     require_mod_or_owner(ctx, server_id, ctx.sender())?;
-    assert_or_err((1..=100).contains(&name.len()), "channel name must be 1-100 chars")?;
+    assert_or_err(
+        (1..=100).contains(&name.len()),
+        "channel name must be 1-100 chars",
+    )?;
     let normalized_section = normalize_channel_section(section)?;
 
     let max_position = ctx
@@ -50,16 +81,11 @@ pub fn create_channel(
         .max()
         .unwrap_or(0);
 
-    let next_position = if ctx
-        .db
-        .channel()
-        .iter()
-        .any(|c| {
-            c.server_id == server_id
-                && c.kind == kind
-                && same_channel_section(&c.section, &normalized_section)
-        })
-    {
+    let next_position = if ctx.db.channel().iter().any(|c| {
+        c.server_id == server_id
+            && c.kind == kind
+            && same_channel_section(&c.section, &normalized_section)
+    }) {
         max_position.saturating_add(1)
     } else {
         0
@@ -90,7 +116,10 @@ pub fn update_channel(
     require_mod_or_owner(ctx, channel_row.server_id, ctx.sender())?;
 
     if let Some(new_name) = name {
-        assert_or_err((1..=100).contains(&new_name.len()), "channel name must be 1-100 chars")?;
+        assert_or_err(
+            (1..=100).contains(&new_name.len()),
+            "channel name must be 1-100 chars",
+        )?;
         channel_row.name = new_name;
     }
     if let Some(mod_only) = moderator_only {
@@ -171,7 +200,11 @@ pub fn move_channel(ctx: &ReducerContext, channel_id: u64, direction: i32) -> Re
         })
         .collect();
 
-    siblings.sort_by(|left, right| left.position.cmp(&right.position).then(left.id.cmp(&right.id)));
+    siblings.sort_by(|left, right| {
+        left.position
+            .cmp(&right.position)
+            .then(left.id.cmp(&right.id))
+    });
 
     let index = siblings
         .iter()
@@ -218,30 +251,50 @@ pub fn delete_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), Strin
         assert_or_err(text_count > 1, "cannot delete the last text channel")?;
     }
 
-    let message_ids: Vec<u64> = ctx
+    delete_channel_with_dependencies(ctx, channel_id);
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn delete_channel_section(
+    ctx: &ReducerContext,
+    server_id: u64,
+    kind: ChannelKind,
+    section: Option<String>,
+) -> Result<(), String> {
+    require_mod_or_owner(ctx, server_id, ctx.sender())?;
+
+    let normalized_section = normalize_channel_section(section)?;
+    let channel_ids: Vec<u64> = ctx
         .db
-        .message()
+        .channel()
         .iter()
-        .filter(|m| m.channel_id == channel_id)
-        .map(|m| m.id)
+        .filter(|channel| {
+            channel.server_id == server_id
+                && channel.kind == kind
+                && same_channel_section(&channel.section, &normalized_section)
+        })
+        .map(|channel| channel.id)
         .collect();
 
-    for msg_id in message_ids {
-        ctx.db.message().id().delete(msg_id);
+    assert_or_err(!channel_ids.is_empty(), "section has no channels")?;
+
+    if kind == ChannelKind::Text {
+        let total_text_channels = ctx
+            .db
+            .channel()
+            .iter()
+            .filter(|channel| channel.server_id == server_id && channel.kind == ChannelKind::Text)
+            .count();
+        assert_or_err(
+            total_text_channels > channel_ids.len(),
+            "cannot delete all text channels in a server",
+        )?;
     }
 
-    let participant_keys: Vec<String> = ctx
-        .db
-        .voice_participant()
-        .iter()
-        .filter(|v| v.channel_id == channel_id)
-        .map(|v| v.voice_key)
-        .collect();
-
-    for key in participant_keys {
-        ctx.db.voice_participant().voice_key().delete(key);
+    for channel_id in channel_ids {
+        delete_channel_with_dependencies(ctx, channel_id);
     }
 
-    ctx.db.channel().id().delete(channel_id);
     Ok(())
 }

@@ -63,7 +63,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from '@/components/ui/sonner'
 import { serverInitials } from '../layouts/app-layout/helpers'
@@ -75,6 +75,10 @@ type MemberActionModal =
   | { kind: 'setRole'; member: ServerMemberWithUser; newRole: 'Member' | 'Moderator' }
   | { kind: 'transferOwnership'; member: ServerMemberWithUser }
   | { kind: 'banList' }
+
+type PendingDeleteAction =
+  | { kind: 'channel'; channel: Channel }
+  | { kind: 'section'; group: { kind: Channel['kind']; section: string | null; channels: Channel[] } }
 
 function memberLabel(member: ServerMemberWithUser): string {
   return member.user?.displayName || member.user?.username || member.userIdentity.slice(0, 12)
@@ -138,9 +142,10 @@ export function ServerManagePage() {
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
   const [reorderingChannelId, setReorderingChannelId] = useState<number | null>(null)
   const [draggingChannelId, setDraggingChannelId] = useState<number | null>(null)
-  const [draggingGroupKey, setDraggingGroupKey] = useState<string | null>(null)
   const [dropTargetChannelId, setDropTargetChannelId] = useState<number | null>(null)
   const [memberAction, setMemberAction] = useState<MemberActionModal | null>(null)
+  const [pendingDeleteAction, setPendingDeleteAction] = useState<PendingDeleteAction | null>(null)
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [invitePolicySaving, setInvitePolicySaving] = useState(false)
 
@@ -251,19 +256,12 @@ export function ServerManagePage() {
 
   const deleteChannel = async (channel: Channel) => {
     if (!canManageServerChannels) return
-    const confirmed = window.confirm(`Delete channel "${channel.name}"? This cannot be undone.`)
-    if (!confirmed) return
+    setPendingDeleteAction({ kind: 'channel', channel })
+  }
 
-    try {
-      await reducers.deleteChannel(channel.id)
-      if (editingChannel?.id === channel.id) {
-        setEditingChannel(null)
-      }
-      toast.success('Channel deleted')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not delete channel.'
-      toast.error('Failed to delete channel', { description: message })
-    }
+  const deleteChannelGroup = async (group: { kind: Channel['kind']; section: string | null; channels: Channel[] }) => {
+    if (!canManageServerChannels || !server) return
+    setPendingDeleteAction({ kind: 'section', group })
   }
 
   const moveChannelToTarget = async (channelId: number, targetChannelId: number) => {
@@ -299,6 +297,47 @@ export function ServerManagePage() {
       toast.error('Failed to reorder channel', { description: message })
     } finally {
       setReorderingChannelId(null)
+    }
+  }
+
+  const getDraggedChannelId = (event: { dataTransfer: DataTransfer }): number | null => {
+    const fromPayload = Number.parseInt(event.dataTransfer.getData('text/plain'), 10)
+    if (Number.isFinite(fromPayload)) return fromPayload
+    return draggingChannelId
+  }
+
+  const confirmDeleteAction = async () => {
+    if (!pendingDeleteAction || !server || deleteSubmitting) return
+    setDeleteSubmitting(true)
+    try {
+      if (pendingDeleteAction.kind === 'channel') {
+        const { channel } = pendingDeleteAction
+        await reducers.deleteChannel(channel.id)
+        if (editingChannel?.id === channel.id) {
+          setEditingChannel(null)
+        }
+        toast.success('Channel deleted')
+      } else {
+        const { group } = pendingDeleteAction
+        await reducers.deleteChannelSection(server.id, group.kind, group.section)
+        if (editingChannel && group.channels.some((channel) => channel.id === editingChannel.id)) {
+          setEditingChannel(null)
+        }
+        toast.success(`Deleted ${group.kind.toLowerCase()} section "${sectionLabel(group.section)}"`)
+      }
+      setPendingDeleteAction(null)
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : pendingDeleteAction.kind === 'channel'
+          ? 'Could not delete channel.'
+          : 'Could not delete channel section.'
+      toast.error(
+        pendingDeleteAction.kind === 'channel' ? 'Failed to delete channel' : 'Failed to delete section',
+        { description: message },
+      )
+    } finally {
+      setDeleteSubmitting(false)
     }
   }
 
@@ -549,11 +588,26 @@ export function ServerManagePage() {
                                 <Badge variant="outline">{group.kind}</Badge>
                                 <span className="text-sm font-medium">{sectionLabel(group.section)}</span>
                               </div>
-                              <Badge variant="secondary">{group.channels.length}</Badge>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary">{group.channels.length}</Badge>
+                                {canManageServerChannels ? (
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="icon-sm"
+                                    onClick={() => void deleteChannelGroup(group)}
+                                    aria-label="Delete entire section"
+                                    title="Delete section and all channels"
+                                  >
+                                    <Trash2Icon className="size-3.5" />
+                                  </Button>
+                                ) : null}
+                              </div>
                             </div>
                             <Table>
                               <TableHeader>
                                 <TableRow>
+                                  <TableHead className="w-[60px]">Order</TableHead>
                                   <TableHead>Name</TableHead>
                                   <TableHead>Access</TableHead>
                                   <TableHead className="w-[210px] text-right">Actions</TableHead>
@@ -570,22 +624,50 @@ export function ServerManagePage() {
                                     <TableRow
                                       key={channel.id}
                                       onDragOver={(event) => {
-                                        if (draggingChannelId === null || draggingChannelId === channel.id) return
-                                        if (draggingGroupKey !== group.key) return
+                                        const sourceId = getDraggedChannelId(event)
+                                        if (sourceId === null || sourceId === channel.id) return
+                                        const sourceGroup = channelGroupById.get(sourceId)
+                                        if (sourceGroup !== group.key) return
                                         event.preventDefault()
+                                        event.dataTransfer.dropEffect = 'move'
                                         setDropTargetChannelId(channel.id)
                                       }}
                                       onDrop={(event) => {
                                         event.preventDefault()
-                                        const sourceId = draggingChannelId
+                                        const sourceId = getDraggedChannelId(event)
                                         setDraggingChannelId(null)
-                                        setDraggingGroupKey(null)
                                         setDropTargetChannelId(null)
                                         if (sourceId === null) return
                                         void moveChannelToTarget(sourceId, channel.id)
                                       }}
                                       className={isDropTarget ? 'bg-primary/10' : isDragSource ? 'opacity-60' : ''}
                                     >
+                                      <TableCell>
+                                        {canManageServerChannels ? (
+                                          <span
+                                            role="button"
+                                            tabIndex={-1}
+                                            draggable={!isReordering}
+                                            aria-label="Drag to reorder channel"
+                                            title="Drag to reorder"
+                                            className="inline-flex h-8 w-8 cursor-grab items-center justify-center rounded-md border border-border/70 bg-background hover:bg-muted active:cursor-grabbing"
+                                            onDragStart={(event) => {
+                                              event.dataTransfer.effectAllowed = 'move'
+                                              event.dataTransfer.setData('text/plain', String(channel.id))
+                                              setDraggingChannelId(channel.id)
+                                              setDropTargetChannelId(null)
+                                            }}
+                                            onDragEnd={() => {
+                                              setDraggingChannelId(null)
+                                              setDropTargetChannelId(null)
+                                            }}
+                                          >
+                                            <GripVerticalIcon className="size-3.5" />
+                                          </span>
+                                        ) : (
+                                          <span className="text-xs text-muted-foreground">-</span>
+                                        )}
+                                      </TableCell>
                                       <TableCell className="font-medium">{channel.kind === 'Text' ? '#' : 'Voice'} {channel.name}</TableCell>
                                       <TableCell>
                                         <Badge variant={channel.moderatorOnly ? 'secondary' : 'outline'}>
@@ -595,26 +677,6 @@ export function ServerManagePage() {
                                       <TableCell className="text-right">
                                         {canManageServerChannels ? (
                                           <div className="inline-flex items-center gap-1">
-                                            <span
-                                              role="button"
-                                              tabIndex={-1}
-                                              draggable={!isReordering}
-                                              aria-label="Drag to reorder channel"
-                                              title="Drag to reorder"
-                                              className="inline-flex h-8 w-8 cursor-grab items-center justify-center rounded-md border border-border/70 bg-background hover:bg-muted active:cursor-grabbing"
-                                              onDragStart={() => {
-                                                setDraggingChannelId(channel.id)
-                                                setDraggingGroupKey(group.key)
-                                                setDropTargetChannelId(null)
-                                              }}
-                                              onDragEnd={() => {
-                                                setDraggingChannelId(null)
-                                                setDraggingGroupKey(null)
-                                                setDropTargetChannelId(null)
-                                              }}
-                                            >
-                                              <GripVerticalIcon className="size-3.5" />
-                                            </span>
                                             <Button
                                               type="button"
                                               variant="outline"
@@ -884,6 +946,50 @@ export function ServerManagePage() {
           {memberAction?.kind === 'banList' ? (
             <BanListModal serverId={server.id} onClose={closeMemberAction} />
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingDeleteAction !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteSubmitting) setPendingDeleteAction(null)
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {pendingDeleteAction?.kind === 'channel'
+                ? `Delete channel "${pendingDeleteAction.channel.name}"?`
+                : pendingDeleteAction?.kind === 'section'
+                  ? `Delete section "${sectionLabel(pendingDeleteAction.group.section)}" (${pendingDeleteAction.group.kind})?`
+                  : 'Delete item?'}
+            </DialogTitle>
+            <DialogDescription>
+              {pendingDeleteAction?.kind === 'channel'
+                ? 'This will permanently remove the channel and its messages.'
+                : pendingDeleteAction?.kind === 'section'
+                  ? `This will delete all ${pendingDeleteAction.group.channels.length} channels in this section and their messages.`
+                  : 'This action cannot be undone.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingDeleteAction(null)}
+              disabled={deleteSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmDeleteAction()}
+              disabled={deleteSubmitting}
+            >
+              {deleteSubmitting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

@@ -162,6 +162,16 @@ export const reducers = {
     }),
   deleteChannel: (channelId: number) =>
     spacetimedbClient.call('deleteChannel', { channelId: toU64(channelId, 'channelId') }),
+  deleteChannelSection: (
+    serverId: number,
+    kind: 'Text' | 'Voice',
+    section: string | null,
+  ) =>
+    spacetimedbClient.call('deleteChannelSection', {
+      serverId: toU64(serverId, 'serverId'),
+      kind: reducerEnum(kind),
+      section: section === null ? null : section.trim(),
+    }),
   sendMessage: (channelId: number, content: string) =>
     spacetimedbClient.call('sendMessage', { channelId: toU64(channelId, 'channelId'), content }),
   editMessage: (messageId: number, newContent: string) =>

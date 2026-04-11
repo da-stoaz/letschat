@@ -4,7 +4,11 @@ use crate::helpers::{assert_or_err, is_valid_username, normalize_username};
 use crate::schema::*;
 
 #[spacetimedb::reducer]
-pub fn register_user(ctx: &ReducerContext, username: String, display_name: String) -> Result<(), String> {
+pub fn register_user(
+    ctx: &ReducerContext,
+    username: String,
+    display_name: String,
+) -> Result<(), String> {
     let normalized = normalize_username(&username);
     assert_or_err(
         is_valid_username(&normalized),

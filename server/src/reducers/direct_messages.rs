@@ -9,7 +9,10 @@ pub fn send_direct_message(
     recipient_identity: Identity,
     content: String,
 ) -> Result<(), String> {
-    assert_or_err((1..=4000).contains(&content.len()), "message must be 1-4000 chars")?;
+    assert_or_err(
+        (1..=4000).contains(&content.len()),
+        "message must be 1-4000 chars",
+    )?;
     assert_or_err(
         !has_block_either_direction(ctx, ctx.sender(), recipient_identity),
         "blocked relationship exists",
@@ -17,7 +20,10 @@ pub fn send_direct_message(
 
     let friend_row = find_friend_row(ctx, ctx.sender(), recipient_identity)
         .ok_or_else(|| "friend relationship not found".to_string())?;
-    assert_or_err(friend_row.status == FriendStatus::Accepted, "friendship not accepted")?;
+    assert_or_err(
+        friend_row.status == FriendStatus::Accepted,
+        "friendship not accepted",
+    )?;
 
     ctx.db.direct_message().insert(DirectMessage {
         id: 0,

@@ -1,11 +1,7 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err,
-    dm_room_key,
-    dm_voice_key,
-    find_friend_row,
-    has_block_either_direction,
+    assert_or_err, dm_room_key, dm_voice_key, find_friend_row, has_block_either_direction,
     ordered_pair,
 };
 use crate::schema::*;
@@ -22,7 +18,10 @@ pub fn join_dm_voice(ctx: &ReducerContext, other_identity: Identity) -> Result<(
 
     let friend_row = find_friend_row(ctx, ctx.sender(), other_identity)
         .ok_or_else(|| "friend relationship not found".to_string())?;
-    assert_or_err(friend_row.status == FriendStatus::Accepted, "friendship not accepted")?;
+    assert_or_err(
+        friend_row.status == FriendStatus::Accepted,
+        "friendship not accepted",
+    )?;
 
     let room_key = dm_room_key(ctx.sender(), other_identity);
     let (user_a, user_b) = ordered_pair(ctx.sender(), other_identity);
