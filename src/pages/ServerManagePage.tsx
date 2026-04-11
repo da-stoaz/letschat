@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { DndContext, PointerSensor, closestCenter, type DragEndEvent, useSensor, useSensors } from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -80,6 +83,129 @@ type PendingDeleteAction =
   | { kind: 'channel'; channel: Channel }
   | { kind: 'section'; group: { kind: Channel['kind']; section: string | null; channels: Channel[] } }
 
+type ChannelGroup = {
+  key: string
+  kind: Channel['kind']
+  section: string | null
+  channels: Channel[]
+}
+
+type SortableChannelRowProps = {
+  channel: Channel
+  canMoveUp: boolean
+  canMoveDown: boolean
+  canManageServerChannels: boolean
+  isReordering: boolean
+  onMoveChannel: (channelId: number, direction: -1 | 1) => void
+  onDeleteChannel: (channel: Channel) => void
+  onManageChannel: (channel: Channel) => void
+}
+
+function SortableChannelRow({
+  channel,
+  canMoveUp,
+  canMoveDown,
+  canManageServerChannels,
+  isReordering,
+  onMoveChannel,
+  onDeleteChannel,
+  onManageChannel,
+}: SortableChannelRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: channel.id,
+    disabled: !canManageServerChannels || isReordering,
+  })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={style}
+      className={isDragging ? 'bg-primary/10 opacity-80' : undefined}
+    >
+      <TableCell>
+        {canManageServerChannels ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label="Drag to reorder channel"
+            title="Drag to reorder"
+            className="cursor-grab active:cursor-grabbing"
+            disabled={isReordering}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVerticalIcon className="size-3.5" />
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">-</span>
+        )}
+      </TableCell>
+      <TableCell className="font-medium">{channel.kind === 'Text' ? '#' : 'Voice'} {channel.name}</TableCell>
+      <TableCell>
+        <Badge variant={channel.moderatorOnly ? 'secondary' : 'outline'}>
+          {channel.moderatorOnly ? 'Moderators only' : 'Everyone'}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right">
+        {canManageServerChannels ? (
+          <div className="inline-flex items-center gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              onClick={() => onMoveChannel(channel.id, -1)}
+              disabled={!canMoveUp || isReordering}
+              aria-label="Move channel up"
+              title="Move up"
+            >
+              <ArrowUpIcon className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              onClick={() => onMoveChannel(channel.id, 1)}
+              disabled={!canMoveDown || isReordering}
+              aria-label="Move channel down"
+              title="Move down"
+            >
+              <ArrowDownIcon className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon-sm"
+              onClick={() => onDeleteChannel(channel)}
+              disabled={isReordering}
+              aria-label="Delete channel"
+              title="Delete channel"
+            >
+              <Trash2Icon className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onManageChannel(channel)}
+              disabled={isReordering}
+            >
+              <Settings2Icon className="size-4" />
+              Manage
+            </Button>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">Read only</span>
+        )}
+      </TableCell>
+    </TableRow>
+  )
+}
+
 function memberLabel(member: ServerMemberWithUser): string {
   return member.user?.displayName || member.user?.username || member.userIdentity.slice(0, 12)
 }
@@ -141,13 +267,16 @@ export function ServerManagePage() {
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
   const [reorderingChannelId, setReorderingChannelId] = useState<number | null>(null)
-  const [draggingChannelId, setDraggingChannelId] = useState<number | null>(null)
-  const [dropTargetChannelId, setDropTargetChannelId] = useState<number | null>(null)
   const [memberAction, setMemberAction] = useState<MemberActionModal | null>(null)
   const [pendingDeleteAction, setPendingDeleteAction] = useState<PendingDeleteAction | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [invitePolicySaving, setInvitePolicySaving] = useState(false)
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+  )
 
   const isOwner = role === 'Owner'
   const canModerateMembers = role === 'Owner' || role === 'Moderator'
@@ -182,7 +311,7 @@ export function ServerManagePage() {
   )
 
   const channelGroups = useMemo(() => {
-    const grouped = new Map<string, { key: string; kind: Channel['kind']; section: string | null; channels: Channel[] }>()
+    const grouped = new Map<string, ChannelGroup>()
     for (const channel of sortedChannels) {
       const key = channelGroupKey(channel)
       const current = grouped.get(key) ?? { key, kind: channel.kind, section: channel.section, channels: [] }
@@ -254,12 +383,12 @@ export function ServerManagePage() {
     }
   }
 
-  const deleteChannel = async (channel: Channel) => {
+  const deleteChannel = (channel: Channel) => {
     if (!canManageServerChannels) return
     setPendingDeleteAction({ kind: 'channel', channel })
   }
 
-  const deleteChannelGroup = async (group: { kind: Channel['kind']; section: string | null; channels: Channel[] }) => {
+  const deleteChannelGroup = (group: ChannelGroup) => {
     if (!canManageServerChannels || !server) return
     setPendingDeleteAction({ kind: 'section', group })
   }
@@ -300,10 +429,21 @@ export function ServerManagePage() {
     }
   }
 
-  const getDraggedChannelId = (event: { dataTransfer: DataTransfer }): number | null => {
-    const fromPayload = Number.parseInt(event.dataTransfer.getData('text/plain'), 10)
-    if (Number.isFinite(fromPayload)) return fromPayload
-    return draggingChannelId
+  const handleChannelDragEnd = (groupKey: string) => (event: DragEndEvent) => {
+    if (!canManageServerChannels || reorderingChannelId !== null) return
+    const { active, over } = event
+    if (!over) return
+
+    const sourceId = Number(active.id)
+    const targetId = Number(over.id)
+    if (!Number.isFinite(sourceId) || !Number.isFinite(targetId)) return
+    if (sourceId === targetId) return
+
+    if (channelGroupById.get(sourceId) !== groupKey || channelGroupById.get(targetId) !== groupKey) {
+      return
+    }
+
+    void moveChannelToTarget(sourceId, targetId)
   }
 
   const confirmDeleteAction = async () => {
@@ -604,132 +744,44 @@ export function ServerManagePage() {
                                 ) : null}
                               </div>
                             </div>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="w-[60px]">Order</TableHead>
-                                  <TableHead>Name</TableHead>
-                                  <TableHead>Access</TableHead>
-                                  <TableHead className="w-[210px] text-right">Actions</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {group.channels.map((channel, index) => {
-                                  const canMoveUp = index > 0
-                                  const canMoveDown = index < group.channels.length - 1
-                                  const isReordering = reorderingChannelId !== null
-                                  const isDragSource = draggingChannelId === channel.id
-                                  const isDropTarget = dropTargetChannelId === channel.id
-                                  return (
-                                    <TableRow
-                                      key={channel.id}
-                                      onDragOver={(event) => {
-                                        const sourceId = getDraggedChannelId(event)
-                                        if (sourceId === null || sourceId === channel.id) return
-                                        const sourceGroup = channelGroupById.get(sourceId)
-                                        if (sourceGroup !== group.key) return
-                                        event.preventDefault()
-                                        event.dataTransfer.dropEffect = 'move'
-                                        setDropTargetChannelId(channel.id)
-                                      }}
-                                      onDrop={(event) => {
-                                        event.preventDefault()
-                                        const sourceId = getDraggedChannelId(event)
-                                        setDraggingChannelId(null)
-                                        setDropTargetChannelId(null)
-                                        if (sourceId === null) return
-                                        void moveChannelToTarget(sourceId, channel.id)
-                                      }}
-                                      className={isDropTarget ? 'bg-primary/10' : isDragSource ? 'opacity-60' : ''}
-                                    >
-                                      <TableCell>
-                                        {canManageServerChannels ? (
-                                          <span
-                                            role="button"
-                                            tabIndex={-1}
-                                            draggable={!isReordering}
-                                            aria-label="Drag to reorder channel"
-                                            title="Drag to reorder"
-                                            className="inline-flex h-8 w-8 cursor-grab items-center justify-center rounded-md border border-border/70 bg-background hover:bg-muted active:cursor-grabbing"
-                                            onDragStart={(event) => {
-                                              event.dataTransfer.effectAllowed = 'move'
-                                              event.dataTransfer.setData('text/plain', String(channel.id))
-                                              setDraggingChannelId(channel.id)
-                                              setDropTargetChannelId(null)
-                                            }}
-                                            onDragEnd={() => {
-                                              setDraggingChannelId(null)
-                                              setDropTargetChannelId(null)
-                                            }}
-                                          >
-                                            <GripVerticalIcon className="size-3.5" />
-                                          </span>
-                                        ) : (
-                                          <span className="text-xs text-muted-foreground">-</span>
-                                        )}
-                                      </TableCell>
-                                      <TableCell className="font-medium">{channel.kind === 'Text' ? '#' : 'Voice'} {channel.name}</TableCell>
-                                      <TableCell>
-                                        <Badge variant={channel.moderatorOnly ? 'secondary' : 'outline'}>
-                                          {channel.moderatorOnly ? 'Moderators only' : 'Everyone'}
-                                        </Badge>
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                        {canManageServerChannels ? (
-                                          <div className="inline-flex items-center gap-1">
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              size="icon-sm"
-                                              onClick={() => void moveChannel(channel.id, -1)}
-                                              disabled={!canMoveUp || isReordering}
-                                              aria-label="Move channel up"
-                                              title="Move up"
-                                            >
-                                              <ArrowUpIcon className="size-3.5" />
-                                            </Button>
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              size="icon-sm"
-                                              onClick={() => void moveChannel(channel.id, 1)}
-                                              disabled={!canMoveDown || isReordering}
-                                              aria-label="Move channel down"
-                                              title="Move down"
-                                            >
-                                              <ArrowDownIcon className="size-3.5" />
-                                            </Button>
-                                            <Button
-                                              type="button"
-                                              variant="destructive"
-                                              size="icon-sm"
-                                              onClick={() => void deleteChannel(channel)}
-                                              disabled={isReordering}
-                                              aria-label="Delete channel"
-                                              title="Delete channel"
-                                            >
-                                              <Trash2Icon className="size-3.5" />
-                                            </Button>
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              size="sm"
-                                              onClick={() => setEditingChannel(channel)}
-                                              disabled={isReordering}
-                                            >
-                                              <Settings2Icon className="size-4" />
-                                              Manage
-                                            </Button>
-                                          </div>
-                                        ) : (
-                                          <span className="text-xs text-muted-foreground">Read only</span>
-                                        )}
-                                      </TableCell>
-                                    </TableRow>
-                                  )
-                                })}
-                              </TableBody>
-                            </Table>
+                            <DndContext
+                              sensors={dndSensors}
+                              collisionDetection={closestCenter}
+                              onDragEnd={handleChannelDragEnd(group.key)}
+                            >
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="w-[60px]">Order</TableHead>
+                                    <TableHead>Name</TableHead>
+                                    <TableHead>Access</TableHead>
+                                    <TableHead className="w-[210px] text-right">Actions</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <SortableContext
+                                  items={group.channels.map((channel) => channel.id)}
+                                  strategy={verticalListSortingStrategy}
+                                >
+                                  <TableBody>
+                                    {group.channels.map((channel, index) => (
+                                      <SortableChannelRow
+                                        key={channel.id}
+                                        channel={channel}
+                                        canMoveUp={index > 0}
+                                        canMoveDown={index < group.channels.length - 1}
+                                        canManageServerChannels={canManageServerChannels}
+                                        isReordering={reorderingChannelId !== null}
+                                        onMoveChannel={(channelId, direction) => {
+                                          void moveChannel(channelId, direction)
+                                        }}
+                                        onDeleteChannel={deleteChannel}
+                                        onManageChannel={(nextChannel) => setEditingChannel(nextChannel)}
+                                      />
+                                    ))}
+                                  </TableBody>
+                                </SortableContext>
+                              </Table>
+                            </DndContext>
                           </div>
                         ))}
                       </div>
