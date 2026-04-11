@@ -1,3 +1,4 @@
+mod db;
 mod uploads;
 
 use std::{net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
@@ -12,7 +13,6 @@ use auth_framework::{
     methods::{AuthMethodEnum, JwtMethod},
     tokens::AuthToken,
 };
-use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use axum::{
     Json, Router,
     extract::State,
@@ -20,9 +20,10 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
 use sqlx::{
-    FromRow, SqlitePool,
+    SqlitePool,
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
 use thiserror::Error;
@@ -30,11 +31,15 @@ use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::Level;
 
+use crate::db::accounts::{self as account_db, NewAccount};
+use crate::db::uploads as upload_db;
+
 #[derive(Clone)]
 struct AppState {
     db: SqlitePool,
     auth: Arc<RwLock<AuthFramework>>,
     uploads: uploads::UploadConfig,
+    admin_api_key: Option<String>,
 }
 
 #[derive(Debug, Error)]
@@ -117,6 +122,16 @@ struct LivekitTokenRequest {
     session_token: AuthToken,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminRebindAccountRequest {
+    admin_api_key: String,
+    username: String,
+    spacetime_identity: String,
+    spacetime_token: Option<String>,
+    display_name: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AuthResponse {
@@ -152,6 +167,13 @@ struct LivekitTokenResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct AdminRebindAccountResponse {
+    username: String,
+    spacetime_identity: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct LivekitVideoGrant {
     room_join: bool,
     room: String,
@@ -168,22 +190,17 @@ struct LivekitClaims {
     video: LivekitVideoGrant,
 }
 
-#[derive(Debug, FromRow)]
-struct AccountRow {
-    username: String,
-    display_name: String,
-    password_hash: String,
-    spacetime_token: String,
-    spacetime_identity: String,
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Load .env.dev when APP_ENV=dev, .env otherwise.
     // In Docker the file won't exist and this silently no-ops.
     match std::env::var("APP_ENV").as_deref() {
-        Ok("dev") => { dotenvy::from_filename(".env.development").ok(); }
-        _         => { dotenvy::dotenv().ok(); }
+        Ok("dev") => {
+            dotenvy::from_filename(".env.development").ok();
+        }
+        _ => {
+            dotenvy::dotenv().ok();
+        }
     }
 
     tracing_subscriber::fmt()
@@ -191,11 +208,15 @@ async fn main() -> anyhow::Result<()> {
         .with_max_level(Level::INFO)
         .init();
 
-    let database_url =
-        std::env::var("AUTH_DATABASE_URL").unwrap_or_else(|_| "sqlite://auth-service/auth.db".to_string());
+    let database_url = std::env::var("AUTH_DATABASE_URL")
+        .unwrap_or_else(|_| "sqlite://auth-service/auth.db".to_string());
     let bind = std::env::var("AUTH_BIND").unwrap_or_else(|_| "127.0.0.1:8787".to_string());
     let jwt_secret = std::env::var("AUTH_JWT_SECRET")
         .unwrap_or_else(|_| "w7Qk9R2mN5xH3cV8pL4tJ6dF1sA0zB7uY2gE5nK8qM3rT9hC".to_string());
+    let admin_api_key = std::env::var("AUTH_ADMIN_API_KEY")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
 
     // MinIO / S3
     let minio_access_key =
@@ -204,13 +225,14 @@ async fn main() -> anyhow::Result<()> {
         std::env::var("MINIO_SECRET_KEY").unwrap_or_else(|_| "minioadmin".to_string());
     let minio_bucket =
         std::env::var("MINIO_BUCKET").unwrap_or_else(|_| "letschat-files".to_string());
-    let minio_internal_endpoint =
-        std::env::var("MINIO_INTERNAL_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:9000".to_string());
+    let minio_internal_endpoint = std::env::var("MINIO_INTERNAL_ENDPOINT")
+        .unwrap_or_else(|_| "http://127.0.0.1:9000".to_string());
     // Public endpoint is what gets baked into presigned URLs that clients use.
     let minio_public_endpoint =
         std::env::var("MINIO_PUBLIC_ENDPOINT").unwrap_or_else(|_| minio_internal_endpoint.clone());
 
-    ensure_sqlite_parent_exists(&database_url).context("failed to prepare SQLite parent directory")?;
+    ensure_sqlite_parent_exists(&database_url)
+        .context("failed to prepare SQLite parent directory")?;
 
     let connect_options = SqliteConnectOptions::from_str(&database_url)
         .with_context(|| format!("invalid sqlite connection string: {database_url}"))?
@@ -222,63 +244,15 @@ async fn main() -> anyhow::Result<()> {
         .await
         .with_context(|| format!("failed to connect to sqlite at {database_url}"))?;
 
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS accounts (
-            username TEXT PRIMARY KEY,
-            display_name TEXT NOT NULL,
-            password_hash TEXT NOT NULL,
-            spacetime_token TEXT NOT NULL,
-            spacetime_identity TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-        "#,
-    )
-    .execute(&db)
-    .await
-    .context("failed to create accounts table")?;
-
-    // TODO: replace CREATE TABLE IF NOT EXISTS with proper sqlx migrations.
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS pending_uploads (
-            id          TEXT    PRIMARY KEY,
-            username    TEXT    NOT NULL,
-            storage_key TEXT    NOT NULL,
-            file_name   TEXT    NOT NULL,
-            file_size   INTEGER NOT NULL,
-            mime_type   TEXT    NOT NULL,
-            expires_at  INTEGER NOT NULL
-        )
-        "#,
-    )
-    .execute(&db)
-    .await
-    .context("failed to create pending_uploads table")?;
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS upload_quota (
-            username       TEXT    NOT NULL,
-            quota_date     TEXT    NOT NULL,
-            bytes_uploaded INTEGER NOT NULL DEFAULT 0,
-            PRIMARY KEY (username, quota_date)
-        )
-        "#,
-    )
-    .execute(&db)
-    .await
-    .context("failed to create upload_quota table")?;
+    db::run_migrations(&db).await?;
+    account_db::ensure_schema_invariants(&db).await?;
 
     // Purge stale pending_uploads left from previous runs.
     let now_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64;
-    sqlx::query("DELETE FROM pending_uploads WHERE expires_at < ?")
-        .bind(now_unix)
-        .execute(&db)
+    upload_db::delete_expired_pending_uploads(&db, now_unix)
         .await
         .context("failed to clean up expired pending uploads")?;
 
@@ -314,6 +288,7 @@ async fn main() -> anyhow::Result<()> {
         db,
         auth: Arc::new(RwLock::new(auth)),
         uploads: upload_config,
+        admin_api_key,
     };
 
     let app = Router::new()
@@ -323,9 +298,13 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/login", post(login))
         .route("/auth/verify", post(verify))
         .route("/auth/renew-session", post(renew_session))
+        .route("/admin/accounts/rebind", post(admin_rebind_account))
         .route("/livekit/token", post(livekit_token))
         // File uploads
-        .route("/auth/refresh-spacetime-token", post(refresh_spacetime_token))
+        .route(
+            "/auth/refresh-spacetime-token",
+            post(refresh_spacetime_token),
+        )
         .route("/uploads/request", post(uploads::upload_request))
         .route("/uploads/confirm", post(uploads::upload_confirm))
         .route("/uploads/download-url", post(uploads::download_url))
@@ -374,47 +353,68 @@ async fn register(
     validate_username(&username)?;
     validate_password(&request.password)?;
     if request.display_name.trim().is_empty() {
-        return Err(ApiError::BadRequest("Display name is required.".to_string()));
+        return Err(ApiError::BadRequest(
+            "Display name is required.".to_string(),
+        ));
     }
     if request.spacetime_token.trim().is_empty() {
-        return Err(ApiError::BadRequest("Spacetime token is required.".to_string()));
+        return Err(ApiError::BadRequest(
+            "Spacetime token is required.".to_string(),
+        ));
     }
     if request.spacetime_identity.trim().is_empty() {
-        return Err(ApiError::BadRequest("Spacetime identity is required.".to_string()));
+        return Err(ApiError::BadRequest(
+            "Spacetime identity is required.".to_string(),
+        ));
     }
+    let spacetime_identity = request.spacetime_identity.trim();
+    let spacetime_token = request.spacetime_token.trim();
+    let display_name = request.display_name.trim();
 
-    let existing = sqlx::query_scalar::<_, String>("SELECT username FROM accounts WHERE username = ?")
-        .bind(&username)
-        .fetch_optional(&state.db)
+    if account_db::find_by_username(&state.db, &username)
         .await
-        .map_err(internal)?;
-    if existing.is_some() {
+        .map_err(internal)?
+        .is_some()
+    {
         return Err(ApiError::Conflict("Username already exists.".to_string()));
+    }
+    if account_db::find_by_identity(&state.db, spacetime_identity)
+        .await
+        .map_err(internal)?
+        .is_some()
+    {
+        return Err(ApiError::Conflict(
+            "Spacetime identity is already linked to another account.".to_string(),
+        ));
     }
 
     let password_hash = hash_password(&request.password).map_err(internal)?;
-    sqlx::query(
-        r#"
-        INSERT INTO accounts (username, display_name, password_hash, spacetime_token, spacetime_identity)
-        VALUES (?, ?, ?, ?, ?)
-        "#,
+    account_db::insert_account(
+        &state.db,
+        &NewAccount {
+            username: &username,
+            display_name,
+            password_hash: &password_hash,
+            spacetime_token,
+            spacetime_identity,
+        },
     )
-    .bind(&username)
-    .bind(request.display_name.trim())
-    .bind(password_hash)
-    .bind(request.spacetime_token.trim())
-    .bind(request.spacetime_identity.trim())
-    .execute(&state.db)
     .await
-    .map_err(internal)?;
+    .map_err(|error| {
+        if db::is_unique_violation(&error) {
+            ApiError::Conflict("Username or identity is already linked.".to_string())
+        } else {
+            internal(error)
+        }
+    })?;
 
     let session_token = issue_session_token(&state, &username).await?;
 
     Ok(Json(AuthResponse {
         username,
-        display_name: request.display_name.trim().to_string(),
-        spacetime_token: request.spacetime_token.trim().to_string(),
-        spacetime_identity: request.spacetime_identity.trim().to_string(),
+        display_name: display_name.to_string(),
+        spacetime_token: spacetime_token.to_string(),
+        spacetime_identity: spacetime_identity.to_string(),
         session_token,
     }))
 }
@@ -427,14 +427,10 @@ async fn login(
     validate_username(&username)?;
     validate_password(&request.password)?;
 
-    let account = sqlx::query_as::<_, AccountRow>(
-        "SELECT username, display_name, password_hash, spacetime_token, spacetime_identity FROM accounts WHERE username = ?",
-    )
-    .bind(&username)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?
-    .ok_or_else(|| ApiError::Unauthorized("Invalid username or password.".to_string()))?;
+    let account = account_db::find_by_username(&state.db, &username)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| ApiError::Unauthorized("Invalid username or password.".to_string()))?;
 
     verify_password(&request.password, &account.password_hash)
         .map_err(|_| ApiError::Unauthorized("Invalid username or password.".to_string()))?;
@@ -458,70 +454,88 @@ async fn link(
     validate_username(&username)?;
     validate_password(&request.password)?;
     if request.display_name.trim().is_empty() {
-        return Err(ApiError::BadRequest("Display name is required.".to_string()));
+        return Err(ApiError::BadRequest(
+            "Display name is required.".to_string(),
+        ));
     }
     if request.spacetime_token.trim().is_empty() {
-        return Err(ApiError::BadRequest("Spacetime token is required.".to_string()));
+        return Err(ApiError::BadRequest(
+            "Spacetime token is required.".to_string(),
+        ));
     }
     if request.spacetime_identity.trim().is_empty() {
-        return Err(ApiError::BadRequest("Spacetime identity is required.".to_string()));
+        return Err(ApiError::BadRequest(
+            "Spacetime identity is required.".to_string(),
+        ));
     }
+    let spacetime_identity = request.spacetime_identity.trim();
+    let spacetime_token = request.spacetime_token.trim();
+    let display_name = request.display_name.trim();
 
-    let existing = sqlx::query_as::<_, AccountRow>(
-        "SELECT username, display_name, password_hash, spacetime_token, spacetime_identity FROM accounts WHERE username = ?",
-    )
-    .bind(&username)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?;
+    let existing = account_db::find_by_username(&state.db, &username)
+        .await
+        .map_err(internal)?;
 
     let password_hash = hash_password(&request.password).map_err(internal)?;
     match existing {
         Some(account) => {
-            if account.spacetime_identity != request.spacetime_identity.trim() {
+            if !account
+                .spacetime_identity
+                .trim()
+                .eq_ignore_ascii_case(spacetime_identity)
+            {
                 return Err(ApiError::Conflict(
                     "Username is linked to a different Spacetime identity.".to_string(),
                 ));
             }
-            sqlx::query(
-                r#"
-                UPDATE accounts
-                SET display_name = ?, password_hash = ?, spacetime_token = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE username = ?
-                "#,
+            account_db::update_linked_credentials(
+                &state.db,
+                &username,
+                display_name,
+                &password_hash,
+                spacetime_token,
             )
-            .bind(request.display_name.trim())
-            .bind(password_hash)
-            .bind(request.spacetime_token.trim())
-            .bind(&username)
-            .execute(&state.db)
             .await
             .map_err(internal)?;
         }
         None => {
-            sqlx::query(
-                r#"
-                INSERT INTO accounts (username, display_name, password_hash, spacetime_token, spacetime_identity)
-                VALUES (?, ?, ?, ?, ?)
-                "#,
+            if account_db::find_by_identity(&state.db, spacetime_identity)
+                .await
+                .map_err(internal)?
+                .is_some()
+            {
+                return Err(ApiError::Conflict(
+                    "Spacetime identity is already linked to another account.".to_string(),
+                ));
+            }
+
+            account_db::insert_account(
+                &state.db,
+                &NewAccount {
+                    username: &username,
+                    display_name,
+                    password_hash: &password_hash,
+                    spacetime_token,
+                    spacetime_identity,
+                },
             )
-            .bind(&username)
-            .bind(request.display_name.trim())
-            .bind(password_hash)
-            .bind(request.spacetime_token.trim())
-            .bind(request.spacetime_identity.trim())
-            .execute(&state.db)
             .await
-            .map_err(internal)?;
+            .map_err(|error| {
+                if db::is_unique_violation(&error) {
+                    ApiError::Conflict("Username or identity is already linked.".to_string())
+                } else {
+                    internal(error)
+                }
+            })?;
         }
     }
 
     let session_token = issue_session_token(&state, &username).await?;
     Ok(Json(AuthResponse {
         username,
-        display_name: request.display_name.trim().to_string(),
-        spacetime_token: request.spacetime_token.trim().to_string(),
-        spacetime_identity: request.spacetime_identity.trim().to_string(),
+        display_name: display_name.to_string(),
+        spacetime_token: spacetime_token.to_string(),
+        spacetime_identity: spacetime_identity.to_string(),
         session_token,
     }))
 }
@@ -542,36 +556,91 @@ async fn renew_session(
     State(state): State<AppState>,
     Json(request): Json<RenewSessionRequest>,
 ) -> Result<Json<RenewSessionResponse>, ApiError> {
-    if request.spacetime_token.trim().is_empty() {
-        return Err(ApiError::BadRequest("Spacetime token is required.".to_string()));
+    let spacetime_token = request.spacetime_token.trim();
+    let spacetime_identity = request.spacetime_identity.trim();
+    if spacetime_token.is_empty() {
+        return Err(ApiError::BadRequest(
+            "Spacetime token is required.".to_string(),
+        ));
     }
-    if request.spacetime_identity.trim().is_empty() {
-        return Err(ApiError::BadRequest("Spacetime identity is required.".to_string()));
-    }
-
-    let account = sqlx::query_as::<_, AccountRow>(
-        "SELECT username, display_name, password_hash, spacetime_token, spacetime_identity
-         FROM accounts
-         WHERE spacetime_token = ?",
-    )
-    .bind(request.spacetime_token.trim())
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?
-    .ok_or_else(|| ApiError::Unauthorized("Could not renew session for this account.".to_string()))?;
-
-    if !account
-        .spacetime_identity
-        .trim()
-        .eq_ignore_ascii_case(request.spacetime_identity.trim())
-    {
-        return Err(ApiError::Unauthorized(
-            "Could not renew session for this account.".to_string(),
+    if spacetime_identity.is_empty() {
+        return Err(ApiError::BadRequest(
+            "Spacetime identity is required.".to_string(),
         ));
     }
 
+    let account =
+        account_db::find_by_token_and_identity(&state.db, spacetime_token, spacetime_identity)
+            .await
+            .map_err(internal)?
+            .ok_or_else(|| {
+                ApiError::Unauthorized("Could not renew session for this account.".to_string())
+            })?;
+
     let session_token = issue_session_token(&state, &account.username).await?;
     Ok(Json(RenewSessionResponse { session_token }))
+}
+
+async fn admin_rebind_account(
+    State(state): State<AppState>,
+    Json(request): Json<AdminRebindAccountRequest>,
+) -> Result<Json<AdminRebindAccountResponse>, ApiError> {
+    let configured_key = state
+        .admin_api_key
+        .as_deref()
+        .ok_or_else(|| ApiError::Unauthorized("Admin rebind endpoint is disabled.".to_string()))?;
+
+    if request.admin_api_key.trim() != configured_key {
+        return Err(ApiError::Unauthorized("Invalid admin API key.".to_string()));
+    }
+
+    let username = normalize_username(&request.username);
+    validate_username(&username)?;
+
+    let spacetime_identity = request.spacetime_identity.trim();
+    if spacetime_identity.is_empty() {
+        return Err(ApiError::BadRequest(
+            "Spacetime identity is required.".to_string(),
+        ));
+    }
+
+    let display_name = request
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let spacetime_token = request
+        .spacetime_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    let rows_affected = account_db::admin_rebind_identity(
+        &state.db,
+        &username,
+        display_name,
+        spacetime_token,
+        spacetime_identity,
+    )
+    .await
+    .map_err(|error| {
+        if db::is_unique_violation(&error) {
+            ApiError::Conflict("Target identity is already linked to another account.".to_string())
+        } else {
+            internal(error)
+        }
+    })?;
+
+    if rows_affected == 0 {
+        return Err(ApiError::BadRequest(
+            "Account username was not found.".to_string(),
+        ));
+    }
+
+    Ok(Json(AdminRebindAccountResponse {
+        username,
+        spacetime_identity: spacetime_identity.to_string(),
+    }))
 }
 
 async fn livekit_token(
@@ -596,14 +665,12 @@ async fn livekit_token(
     drop(auth);
 
     let username = request.session_token.user_id.trim().to_lowercase();
-    let account = sqlx::query_as::<_, AccountRow>(
-        "SELECT username, display_name, password_hash, spacetime_token, spacetime_identity FROM accounts WHERE username = ?",
-    )
-    .bind(&username)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?
-    .ok_or_else(|| ApiError::Unauthorized("Account not found for session token.".to_string()))?;
+    let account = account_db::find_by_username(&state.db, &username)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| {
+            ApiError::Unauthorized("Account not found for session token.".to_string())
+        })?;
 
     if !account
         .spacetime_identity
@@ -714,16 +781,13 @@ async fn refresh_spacetime_token(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let username = require_valid_session(&state, &request.session_token).await?;
     if request.spacetime_token.trim().is_empty() {
-        return Err(ApiError::BadRequest("spacetimeToken is required.".to_string()));
+        return Err(ApiError::BadRequest(
+            "spacetimeToken is required.".to_string(),
+        ));
     }
-    sqlx::query(
-        "UPDATE accounts SET spacetime_token = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?",
-    )
-    .bind(request.spacetime_token.trim())
-    .bind(&username)
-    .execute(&state.db)
-    .await
-    .map_err(internal)?;
+    account_db::update_spacetime_token(&state.db, &username, request.spacetime_token.trim())
+        .await
+        .map_err(internal)?;
     Ok(Json(serde_json::json!({})))
 }
 

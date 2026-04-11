@@ -2,11 +2,11 @@ use axum::{Json, extract::State};
 use chrono::Utc;
 use s3::{Bucket, Region, creds::Credentials as S3Credentials};
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
 use std::collections::HashSet;
 use uuid::Uuid;
 
-use crate::{AppState, ApiError, internal, require_valid_session};
+use crate::db::uploads::{self as upload_db, PendingUploadInsert};
+use crate::{ApiError, AppState, internal, require_valid_session};
 
 // ─── Limits ──────────────────────────────────────────────────────────────────
 
@@ -159,18 +159,6 @@ pub struct DownloadUrlsResponse {
     pub items: Vec<DownloadUrlItem>,
 }
 
-// ─── Internal DB row ──────────────────────────────────────────────────────────
-
-#[derive(Debug, FromRow)]
-struct PendingUploadRow {
-    username: String,
-    storage_key: String,
-    file_name: String,
-    file_size: i64,
-    mime_type: String,
-    expires_at: i64,
-}
-
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
 /// **Step 1** — client requests a presigned PUT URL.
@@ -190,12 +178,16 @@ pub async fn upload_request(
         return Err(ApiError::BadRequest("file_name is required.".to_string()));
     }
     if file_name.contains("..") || file_name.contains('/') || file_name.contains('\\') {
-        return Err(ApiError::BadRequest("file_name contains invalid characters.".to_string()));
+        return Err(ApiError::BadRequest(
+            "file_name contains invalid characters.".to_string(),
+        ));
     }
 
     // Validate size.
     if payload.file_size == 0 {
-        return Err(ApiError::BadRequest("file_size must be greater than 0.".to_string()));
+        return Err(ApiError::BadRequest(
+            "file_size must be greater than 0.".to_string(),
+        ));
     }
     if payload.file_size > MAX_FILE_SIZE {
         return Err(ApiError::BadRequest(format!(
@@ -211,21 +203,17 @@ pub async fn upload_request(
     }
     for blocked in BLOCKED_MIME_PREFIXES {
         if mime_type.starts_with(blocked) {
-            return Err(ApiError::BadRequest("This file type is not allowed.".to_string()));
+            return Err(ApiError::BadRequest(
+                "This file type is not allowed.".to_string(),
+            ));
         }
     }
 
     // Check daily quota.
     let today = Utc::now().format("%Y-%m-%d").to_string();
-    let used_today: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(bytes_uploaded, 0) FROM upload_quota WHERE username = ? AND quota_date = ?",
-    )
-    .bind(&username)
-    .bind(&today)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?
-    .unwrap_or(0);
+    let used_today = upload_db::quota_used_for_day(&state.db, &username, &today)
+        .await
+        .map_err(internal)?;
 
     if (used_today as u64).saturating_add(payload.file_size) > DAILY_QUOTA {
         return Err(ApiError::BadRequest(format!(
@@ -258,18 +246,18 @@ pub async fn upload_request(
 
     // Persist pending record so /confirm can look it up.
     let expires_at = (unix_now_secs() + PENDING_UPLOAD_TTL_SECS) as i64;
-    sqlx::query(
-        "INSERT INTO pending_uploads (id, username, storage_key, file_name, file_size, mime_type, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+    upload_db::create_pending_upload(
+        &state.db,
+        &PendingUploadInsert {
+            id: &upload_id,
+            username: &username,
+            storage_key: &storage_key,
+            file_name: &file_name,
+            file_size: payload.file_size as i64,
+            mime_type: &mime_type,
+            expires_at,
+        },
     )
-    .bind(&upload_id)
-    .bind(&username)
-    .bind(&storage_key)
-    .bind(&file_name)
-    .bind(payload.file_size as i64)
-    .bind(&mime_type)
-    .bind(expires_at)
-    .execute(&state.db)
     .await
     .map_err(internal)?;
 
@@ -293,25 +281,21 @@ pub async fn upload_confirm(
     let username = require_valid_session(&state, &payload.session_token).await?;
 
     // Load pending record.
-    let pending = sqlx::query_as::<_, PendingUploadRow>(
-        "SELECT username, storage_key, file_name, file_size, mime_type, expires_at
-         FROM pending_uploads WHERE id = ?",
-    )
-    .bind(&payload.upload_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?
-    .ok_or_else(|| ApiError::BadRequest("Upload ID not found or already confirmed.".to_string()))?;
+    let pending = upload_db::find_pending_upload(&state.db, &payload.upload_id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| {
+            ApiError::BadRequest("Upload ID not found or already confirmed.".to_string())
+        })?;
 
     if pending.username != username {
-        return Err(ApiError::Unauthorized("Upload does not belong to this session.".to_string()));
+        return Err(ApiError::Unauthorized(
+            "Upload does not belong to this session.".to_string(),
+        ));
     }
     if pending.expires_at < unix_now_secs() as i64 {
         // Clean up the stale row, then tell the client.
-        let _ = sqlx::query("DELETE FROM pending_uploads WHERE id = ?")
-            .bind(&payload.upload_id)
-            .execute(&state.db)
-            .await;
+        let _ = upload_db::delete_pending_upload(&state.db, &payload.upload_id).await;
         return Err(ApiError::BadRequest(
             "Upload session expired. Please start over.".to_string(),
         ));
@@ -323,23 +307,12 @@ pub async fn upload_confirm(
 
     // Update daily quota.
     let today = Utc::now().format("%Y-%m-%d").to_string();
-    sqlx::query(
-        "INSERT INTO upload_quota (username, quota_date, bytes_uploaded)
-         VALUES (?, ?, ?)
-         ON CONFLICT (username, quota_date)
-         DO UPDATE SET bytes_uploaded = bytes_uploaded + excluded.bytes_uploaded",
-    )
-    .bind(&username)
-    .bind(&today)
-    .bind(pending.file_size)
-    .execute(&state.db)
-    .await
-    .map_err(internal)?;
+    upload_db::increment_quota(&state.db, &username, &today, pending.file_size)
+        .await
+        .map_err(internal)?;
 
     // Delete the pending record — it has been confirmed.
-    sqlx::query("DELETE FROM pending_uploads WHERE id = ?")
-        .bind(&payload.upload_id)
-        .execute(&state.db)
+    upload_db::delete_pending_upload(&state.db, &payload.upload_id)
         .await
         .map_err(internal)?;
 
@@ -399,7 +372,9 @@ pub async fn download_urls(
     require_valid_session(&state, &payload.session_token).await?;
 
     if payload.storage_keys.is_empty() {
-        return Err(ApiError::BadRequest("storageKeys must not be empty.".to_string()));
+        return Err(ApiError::BadRequest(
+            "storageKeys must not be empty.".to_string(),
+        ));
     }
     if payload.storage_keys.len() > 128 {
         return Err(ApiError::BadRequest(
@@ -451,7 +426,9 @@ async fn verify_object_exists(bucket: &Bucket, s3_path: &str) -> Result<(), ApiE
                     "File has not been uploaded yet — complete the PUT request first.".to_string(),
                 ))
             } else {
-                Err(ApiError::Internal(format!("Storage error while verifying upload: {e}")))
+                Err(ApiError::Internal(format!(
+                    "Storage error while verifying upload: {e}"
+                )))
             }
         }
     }
