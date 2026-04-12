@@ -125,12 +125,16 @@ export function AppLayout() {
     () => (activeServerId ? channelsByServer[activeServerId] ?? EMPTY_CHANNELS : EMPTY_CHANNELS),
     [activeServerId, channelsByServer],
   )
-  const textChannels = useMemo(
-    () => [...activeChannels].filter((c) => c.kind === 'Text').sort((a, b) => a.position - b.position),
-    [activeChannels],
-  )
-  const voiceChannels = useMemo(
-    () => [...activeChannels].filter((c) => c.kind === 'Voice').sort((a, b) => a.position - b.position),
+  const sidebarChannels = useMemo(
+    () =>
+      [...activeChannels].sort((left, right) => {
+        if (left.section !== right.section) {
+          return (left.section ?? '').localeCompare(right.section ?? '', undefined, { sensitivity: 'base' })
+        }
+        const positionDelta = left.position - right.position
+        if (positionDelta !== 0) return positionDelta
+        return left.id - right.id
+      }),
     [activeChannels],
   )
   const activeServer = servers.find((server) => server.id === activeServerId) ?? null
@@ -350,7 +354,7 @@ export function AppLayout() {
 
   const openServer = (serverId: number) => {
     const channels = channelsByServer[serverId] ?? []
-    const preferred = channels.find((channel) => channel.kind === 'Text') ?? channels[0]
+    const preferred = channels.find((channel) => channel.kind !== 'Voice') ?? channels[0]
     if (!preferred) {
       setActiveServerId(serverId)
       navigate(`/app/${serverId}`)
@@ -528,9 +532,8 @@ export function AppLayout() {
                   activeServer={activeServer}
                   activeChannelId={activeChannelId}
                   role={role}
-                  textChannels={textChannels}
-                  voiceChannels={voiceChannels}
-                  activeChannelsCount={activeChannels.length}
+                  channels={sidebarChannels}
+                  activeChannelsCount={sidebarChannels.length}
                   unreadByChannel={unreadByChannel}
                   participantsByChannel={participantsByChannel}
                   joinedVoiceChannelId={joinedVoiceChannelId}

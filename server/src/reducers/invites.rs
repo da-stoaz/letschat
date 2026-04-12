@@ -1,4 +1,4 @@
-use spacetimedb::rand::{distributions::Alphanumeric, Rng};
+use spacetimedb::rand::{Rng, distributions::Alphanumeric};
 use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
 
 use crate::helpers::{
@@ -71,7 +71,10 @@ pub fn create_invite(
 
     // Validate that a whitelist and max_uses are not set simultaneously
     if !allowed_usernames.is_empty() {
-        assert_or_err(max_uses.is_none(), "cannot combine allowed_usernames whitelist with max_uses")?;
+        assert_or_err(
+            max_uses.is_none(),
+            "cannot combine allowed_usernames whitelist with max_uses",
+        )?;
     }
 
     let token: String = ctx
@@ -89,7 +92,10 @@ pub fn create_invite(
     };
 
     // Normalize allowed usernames to lowercase
-    let normalized_usernames: Vec<String> = allowed_usernames.into_iter().map(|u| u.trim().to_lowercase()).collect();
+    let normalized_usernames: Vec<String> = allowed_usernames
+        .into_iter()
+        .map(|u| u.trim().to_lowercase())
+        .collect();
 
     ctx.db.invite().insert(Invite {
         token: token.clone(),
@@ -120,7 +126,10 @@ pub fn use_invite(ctx: &ReducerContext, token: String) -> Result<(), String> {
         assert_or_err(invite_row.use_count < max_uses, "invite max uses reached")?;
     }
 
-    assert_or_err(!is_banned(ctx, invite_row.server_id, ctx.sender()), "you are banned")?;
+    assert_or_err(
+        !is_banned(ctx, invite_row.server_id, ctx.sender()),
+        "you are banned",
+    )?;
     assert_or_err(
         has_member_role(ctx, invite_row.server_id, ctx.sender()).is_none(),
         "already a member",
@@ -128,7 +137,11 @@ pub fn use_invite(ctx: &ReducerContext, token: String) -> Result<(), String> {
 
     // Check username whitelist if set
     if !invite_row.allowed_usernames.is_empty() {
-        let caller_user = ctx.db.user().identity().find(ctx.sender())
+        let caller_user = ctx
+            .db
+            .user()
+            .identity()
+            .find(ctx.sender())
             .ok_or_else(|| "user not found".to_string())?;
         let caller_username = caller_user.username.trim().to_lowercase();
         assert_or_err(
@@ -235,17 +248,16 @@ pub fn send_dm_server_invite(
         has_member_role(ctx, server_id, recipient_identity).is_none(),
         "user is already a member",
     )?;
-    assert_or_err(!is_banned(ctx, server_id, recipient_identity), "user is banned from this server")?;
+    assert_or_err(
+        !is_banned(ctx, server_id, recipient_identity),
+        "user is banned from this server",
+    )?;
 
-    let has_pending_targeted_invite = ctx
-        .db
-        .dm_server_invite()
-        .iter()
-        .any(|inv| {
-            inv.server_id == server_id
-                && inv.recipient_identity == recipient_identity
-                && matches!(inv.status, DmInviteStatus::Pending)
-        });
+    let has_pending_targeted_invite = ctx.db.dm_server_invite().iter().any(|inv| {
+        inv.server_id == server_id
+            && inv.recipient_identity == recipient_identity
+            && matches!(inv.status, DmInviteStatus::Pending)
+    });
     assert_or_err(
         !has_pending_targeted_invite,
         "recipient already has an active invite for this server",
@@ -330,7 +342,10 @@ pub fn respond_dm_server_invite(
         }
     } else {
         // Declining should invalidate the one-off invite link immediately.
-        ctx.db.invite().token().delete(dm_invite.invite_token.clone());
+        ctx.db
+            .invite()
+            .token()
+            .delete(dm_invite.invite_token.clone());
         dm_invite.status = DmInviteStatus::Declined;
         ctx.db.dm_server_invite().id().update(dm_invite);
     }

@@ -1,0 +1,2 @@
+FROM clockworklabs/spacetime:latest
+COPY target/wasm32-unknown-unknown/release/letschat_server.wasm /module/letschat_server.wasm

@@ -6,7 +6,10 @@ use crate::schema::*;
 #[spacetimedb::reducer]
 pub fn join_voice_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), String> {
     let channel_row = find_channel(ctx, channel_id)?;
-    assert_or_err(channel_row.kind == ChannelKind::Voice, "not a voice channel")?;
+    assert_or_err(
+        channel_row.kind == ChannelKind::Voice,
+        "not a voice channel",
+    )?;
 
     let role = require_member_role(ctx, channel_row.server_id, ctx.sender())?;
     if channel_row.moderator_only {
@@ -86,6 +89,9 @@ pub fn update_voice_state(
     participant_row.sharing_screen = sharing_screen;
     participant_row.sharing_camera = sharing_camera;
 
-    ctx.db.voice_participant().voice_key().update(participant_row);
+    ctx.db
+        .voice_participant()
+        .voice_key()
+        .update(participant_row);
     Ok(())
 }

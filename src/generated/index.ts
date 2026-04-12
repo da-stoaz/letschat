@@ -43,6 +43,7 @@ import CreateInviteReducer from "./create_invite_reducer";
 import CreateServerReducer from "./create_server_reducer";
 import DeclineFriendRequestReducer from "./decline_friend_request_reducer";
 import DeleteChannelReducer from "./delete_channel_reducer";
+import DeleteChannelSectionReducer from "./delete_channel_section_reducer";
 import DeleteDirectMessageReducer from "./delete_direct_message_reducer";
 import DeleteInviteReducer from "./delete_invite_reducer";
 import DeleteMessageReducer from "./delete_message_reducer";
@@ -56,6 +57,9 @@ import LeaveServerReducer from "./leave_server_reducer";
 import LeaveVoiceChannelReducer from "./leave_voice_channel_reducer";
 import MarkChannelReadReducer from "./mark_channel_read_reducer";
 import MarkDmReadReducer from "./mark_dm_read_reducer";
+import MoveChannelReducer from "./move_channel_reducer";
+import MoveChannelRelativeReducer from "./move_channel_relative_reducer";
+import MoveChannelToReducer from "./move_channel_to_reducer";
 import RegisterUserReducer from "./register_user_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
 import RemoveTimeoutReducer from "./remove_timeout_reducer";
@@ -65,6 +69,7 @@ import SendDirectMessageReducer from "./send_direct_message_reducer";
 import SendDmServerInviteReducer from "./send_dm_server_invite_reducer";
 import SendFriendRequestReducer from "./send_friend_request_reducer";
 import SendMessageReducer from "./send_message_reducer";
+import SetChannelSectionReducer from "./set_channel_section_reducer";
 import SetMemberRoleReducer from "./set_member_role_reducer";
 import SetPresenceOfflineReducer from "./set_presence_offline_reducer";
 import SetServerIconReducer from "./set_server_icon_reducer";
@@ -335,6 +340,7 @@ const reducersSchema = __reducers(
   __reducerSchema("create_server", CreateServerReducer),
   __reducerSchema("decline_friend_request", DeclineFriendRequestReducer),
   __reducerSchema("delete_channel", DeleteChannelReducer),
+  __reducerSchema("delete_channel_section", DeleteChannelSectionReducer),
   __reducerSchema("delete_direct_message", DeleteDirectMessageReducer),
   __reducerSchema("delete_invite", DeleteInviteReducer),
   __reducerSchema("delete_message", DeleteMessageReducer),
@@ -348,6 +354,9 @@ const reducersSchema = __reducers(
   __reducerSchema("leave_voice_channel", LeaveVoiceChannelReducer),
   __reducerSchema("mark_channel_read", MarkChannelReadReducer),
   __reducerSchema("mark_dm_read", MarkDmReadReducer),
+  __reducerSchema("move_channel", MoveChannelReducer),
+  __reducerSchema("move_channel_relative", MoveChannelRelativeReducer),
+  __reducerSchema("move_channel_to", MoveChannelToReducer),
   __reducerSchema("register_user", RegisterUserReducer),
   __reducerSchema("remove_friend", RemoveFriendReducer),
   __reducerSchema("remove_timeout", RemoveTimeoutReducer),
@@ -357,6 +366,7 @@ const reducersSchema = __reducers(
   __reducerSchema("send_dm_server_invite", SendDmServerInviteReducer),
   __reducerSchema("send_friend_request", SendFriendRequestReducer),
   __reducerSchema("send_message", SendMessageReducer),
+  __reducerSchema("set_channel_section", SetChannelSectionReducer),
   __reducerSchema("set_member_role", SetMemberRoleReducer),
   __reducerSchema("set_presence_offline", SetPresenceOfflineReducer),
   __reducerSchema("set_server_icon", SetServerIconReducer),

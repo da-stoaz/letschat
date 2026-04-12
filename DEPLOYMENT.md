@@ -52,6 +52,7 @@ spacetime publish --server http://127.0.0.1:44300 letschat --module-path server 
 | Area | Key env / file | Notes |
 |---|---|---|
 | Auth | `AUTH_JWT_SECRET` | Required in both tracks |
+| Auth admin | `AUTH_ADMIN_API_KEY` | Optional; enables explicit host-admin account rebinding endpoint |
 | LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `livekit/config.prod.yaml` | Keys must match exactly |
 | MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT` | Public endpoint is used in presigned URLs |
 | Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_DATABASE` | Served by `discovery` container at `/.well-known/letschat.json` |

@@ -2,7 +2,7 @@ export type u64 = number
 export type Identity = string
 
 export type Role = 'Member' | 'Moderator' | 'Owner'
-export type ChannelKind = 'Text' | 'Voice'
+export type ChannelKind = 'Text' | 'Voice' | 'Announcement'
 export type FriendStatus = 'Pending' | 'Accepted'
 export type ServerInvitePolicy = 'ModeratorsOnly' | 'Everyone'
 
@@ -67,6 +67,7 @@ export interface Channel {
   name: string
   kind: ChannelKind
   position: number
+  section: string | null
   moderatorOnly: boolean
 }
 

@@ -7,6 +7,20 @@ interface ChannelsState {
   upsertChannel: (channel: Channel) => void
 }
 
+function channelSectionSortValue(section: string | null): string {
+  return (section ?? '').trim().toLowerCase()
+}
+
+function compareChannelsByLayout(a: Channel, b: Channel): number {
+  const sectionDelta = channelSectionSortValue(a.section).localeCompare(channelSectionSortValue(b.section))
+  if (sectionDelta !== 0) return sectionDelta
+
+  const positionDelta = a.position - b.position
+  if (positionDelta !== 0) return positionDelta
+
+  return a.id - b.id
+}
+
 function areChannelsEqual(a: Channel[], b: Channel[]): boolean {
   if (a === b) return true
   if (a.length !== b.length) return false
@@ -19,6 +33,7 @@ function areChannelsEqual(a: Channel[], b: Channel[]): boolean {
       left.name !== right.name ||
       left.kind !== right.kind ||
       left.position !== right.position ||
+      left.section !== right.section ||
       left.moderatorOnly !== right.moderatorOnly
     ) {
       return false
@@ -51,13 +66,14 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
         currentRow.name === channel.name &&
         currentRow.kind === channel.kind &&
         currentRow.position === channel.position &&
+        currentRow.section === channel.section &&
         currentRow.moderatorOnly === channel.moderatorOnly
       ) {
         return
       }
       next[idx] = channel
     }
-    next.sort((a, b) => a.position - b.position)
+    next.sort(compareChannelsByLayout)
 
     if (areChannelsEqual(current, next)) return
 

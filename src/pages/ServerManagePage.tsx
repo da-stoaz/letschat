@@ -7,8 +7,10 @@ import {
   CrownIcon,
   ExternalLinkIcon,
   HammerIcon,
+  HashIcon,
   ListXIcon,
   LogOutIcon,
+  MegaphoneIcon,
   MoreHorizontalIcon,
   PlusIcon,
   Settings2Icon,
@@ -17,6 +19,7 @@ import {
   TimerOffIcon,
   Trash2Icon,
   UserMinusIcon,
+  Volume2Icon,
 } from 'lucide-react'
 import { reducers } from '../lib/spacetimedb'
 import { useChannelsStore } from '../stores/channelsStore'
@@ -62,7 +65,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from '@/components/ui/sonner'
 import { serverInitials } from '../layouts/app-layout/helpers'
@@ -74,6 +77,119 @@ type MemberActionModal =
   | { kind: 'setRole'; member: ServerMemberWithUser; newRole: 'Member' | 'Moderator' }
   | { kind: 'transferOwnership'; member: ServerMemberWithUser }
   | { kind: 'banList' }
+
+type PendingDeleteAction =
+  | { kind: 'channel'; channel: Channel }
+  | { kind: 'section'; group: { section: string | null; channels: Channel[] } }
+
+type ChannelGroup = {
+  key: string
+  section: string | null
+  channels: Channel[]
+}
+
+type SortableChannelRowProps = {
+  channel: Channel
+  orderLabel: number
+  canMoveUp: boolean
+  canMoveDown: boolean
+  canManageServerChannels: boolean
+  isReordering: boolean
+  onMoveChannel: (channelId: number, direction: -1 | 1) => void
+  onDeleteChannel: (channel: Channel) => void
+  onManageChannel: (channel: Channel) => void
+}
+
+function SortableChannelRow({
+  channel,
+  orderLabel,
+  canMoveUp,
+  canMoveDown,
+  canManageServerChannels,
+  isReordering,
+  onMoveChannel,
+  onDeleteChannel,
+  onManageChannel,
+}: SortableChannelRowProps) {
+  const KindIcon = channel.kind === 'Voice'
+    ? Volume2Icon
+    : channel.kind === 'Announcement'
+      ? MegaphoneIcon
+      : HashIcon
+
+  return (
+    <TableRow>
+      <TableCell>
+        <span className="text-xs text-muted-foreground">{orderLabel}</span>
+      </TableCell>
+      <TableCell className="font-medium">
+        <span className="inline-flex items-center gap-2">
+          <KindIcon className="size-4 opacity-70" />
+          {channel.name}
+          <Badge variant="outline" className="text-[10px]">
+            {channel.kind}
+          </Badge>
+        </span>
+      </TableCell>
+      <TableCell>
+        <Badge variant={channel.moderatorOnly ? 'secondary' : 'outline'}>
+          {channel.moderatorOnly ? 'Moderators only' : 'Everyone'}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right">
+        {canManageServerChannels ? (
+          <div className="inline-flex items-center gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              onClick={() => onMoveChannel(channel.id, -1)}
+              disabled={!canMoveUp || isReordering}
+              aria-label="Move channel up"
+              title="Move up"
+            >
+              <ArrowUpIcon className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              onClick={() => onMoveChannel(channel.id, 1)}
+              disabled={!canMoveDown || isReordering}
+              aria-label="Move channel down"
+              title="Move down"
+            >
+              <ArrowDownIcon className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon-sm"
+              onClick={() => onDeleteChannel(channel)}
+              disabled={isReordering}
+              aria-label="Delete channel"
+              title="Delete channel"
+            >
+              <Trash2Icon className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onManageChannel(channel)}
+              disabled={isReordering}
+            >
+              <Settings2Icon className="size-4" />
+              Manage
+            </Button>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">Read only</span>
+        )}
+      </TableCell>
+    </TableRow>
+  )
+}
 
 function memberLabel(member: ServerMemberWithUser): string {
   return member.user?.displayName || member.user?.username || member.userIdentity.slice(0, 12)
@@ -101,6 +217,19 @@ function invitePolicyLabel(policy: ServerInvitePolicy): string {
   return policy === 'Everyone' ? 'Everyone (all members)' : 'Owner + Moderators'
 }
 
+function sectionLabel(section: string | null): string {
+  const normalized = section?.trim()
+  return normalized && normalized.length > 0 ? normalized : 'general'
+}
+
+function sectionKey(section: string | null): string {
+  return (section ?? '').trim()
+}
+
+function channelGroupKey(channel: Channel): string {
+  return sectionKey(channel.section)
+}
+
 function roleBadgeClassName(role: ServerMemberWithUser['role']): string {
   if (role === 'Owner') return 'bg-amber-500/15 text-amber-300 border-amber-500/30'
   if (role === 'Moderator') return 'bg-blue-500/15 text-blue-300 border-blue-500/30'
@@ -121,9 +250,13 @@ export function ServerManagePage() {
   const [showEditServer, setShowEditServer] = useState(false)
   const [showDeleteServer, setShowDeleteServer] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
+  const [createChannelInitialSection, setCreateChannelInitialSection] = useState<string | null>(null)
+  const [createChannelDialogSeed, setCreateChannelDialogSeed] = useState(0)
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
   const [reorderingChannelId, setReorderingChannelId] = useState<number | null>(null)
   const [memberAction, setMemberAction] = useState<MemberActionModal | null>(null)
+  const [pendingDeleteAction, setPendingDeleteAction] = useState<PendingDeleteAction | null>(null)
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [invitePolicySaving, setInvitePolicySaving] = useState(false)
 
@@ -146,15 +279,45 @@ export function ServerManagePage() {
   }, [members])
 
   const sortedChannels = useMemo(
-    () => [...channels].sort((left, right) => left.position - right.position),
+    () =>
+      [...channels].sort((left, right) => {
+        const sectionDelta = sectionKey(left.section).localeCompare(sectionKey(right.section))
+        if (sectionDelta !== 0) return sectionDelta
+        const positionDelta = left.position - right.position
+        if (positionDelta !== 0) return positionDelta
+        return left.id - right.id
+      }),
     [channels],
   )
 
-  const firstTextChannelId = useMemo(() => {
-    const textChannel = sortedChannels.find((channel) => channel.kind === 'Text')
-    return textChannel?.id ?? sortedChannels[0]?.id ?? null
+  const channelGroups = useMemo(() => {
+    const grouped = new Map<string, ChannelGroup>()
+    for (const channel of sortedChannels) {
+      const key = channelGroupKey(channel)
+      const current = grouped.get(key) ?? { key, section: channel.section, channels: [] }
+      current.channels.push(channel)
+      grouped.set(key, current)
+    }
+
+    const groups = [...grouped.values()]
+    groups.sort((left, right) => sectionKey(left.section).localeCompare(sectionKey(right.section)))
+
+    for (const group of groups) {
+      group.channels.sort((left, right) => {
+        const positionDelta = left.position - right.position
+        if (positionDelta !== 0) return positionDelta
+        return left.id - right.id
+      })
+    }
+
+    return groups
   }, [sortedChannels])
-  const serverHomePath = firstTextChannelId ? `/app/${numericServerId}/${firstTextChannelId}` : `/app/${numericServerId}`
+
+  const firstMessageChannelId = useMemo(() => {
+    const messageChannel = sortedChannels.find((channel) => channel.kind !== 'Voice')
+    return messageChannel?.id ?? sortedChannels[0]?.id ?? null
+  }, [sortedChannels])
+  const serverHomePath = firstMessageChannelId ? `/app/${numericServerId}/${firstMessageChannelId}` : `/app/${numericServerId}`
 
   const closeMemberAction = () => setMemberAction(null)
 
@@ -175,26 +338,65 @@ export function ServerManagePage() {
   const moveChannel = async (channelId: number, direction: -1 | 1) => {
     if (!canManageServerChannels || reorderingChannelId !== null) return
 
-    const index = sortedChannels.findIndex((channel) => channel.id === channelId)
-    if (index < 0) return
-    const swapWith = sortedChannels[index + direction]
-    if (!swapWith) return
-
-    const current = sortedChannels[index]
-    const maxPosition = sortedChannels.reduce((max, channel) => Math.max(max, channel.position), 0)
-    const temporaryPosition = maxPosition + 1
-
     setReorderingChannelId(channelId)
     try {
-      // Three-step swap avoids unique-position collisions on strict backends.
-      await reducers.updateChannel(swapWith.id, { position: temporaryPosition })
-      await reducers.updateChannel(current.id, { position: swapWith.position })
-      await reducers.updateChannel(swapWith.id, { position: current.position })
+      await reducers.moveChannel(channelId, direction)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not reorder channels.'
       toast.error('Failed to reorder channel', { description: message })
     } finally {
       setReorderingChannelId(null)
+    }
+  }
+
+  const deleteChannel = (channel: Channel) => {
+    if (!canManageServerChannels) return
+    setPendingDeleteAction({ kind: 'channel', channel })
+  }
+
+  const deleteChannelGroup = (group: ChannelGroup) => {
+    if (!canManageServerChannels || !server) return
+    setPendingDeleteAction({ kind: 'section', group })
+  }
+
+  const openCreateChannelDialog = (section: string | null) => {
+    setCreateChannelInitialSection(section)
+    setCreateChannelDialogSeed((value) => value + 1)
+    setShowCreateChannel(true)
+  }
+
+  const confirmDeleteAction = async () => {
+    if (!pendingDeleteAction || !server || deleteSubmitting) return
+    setDeleteSubmitting(true)
+    try {
+      if (pendingDeleteAction.kind === 'channel') {
+        const { channel } = pendingDeleteAction
+        await reducers.deleteChannel(channel.id)
+        if (editingChannel?.id === channel.id) {
+          setEditingChannel(null)
+        }
+        toast.success('Channel deleted')
+      } else {
+        const { group } = pendingDeleteAction
+        await reducers.deleteChannelSection(server.id, group.section)
+        if (editingChannel && group.channels.some((channel) => channel.id === editingChannel.id)) {
+          setEditingChannel(null)
+        }
+        toast.success(`Deleted section "${sectionLabel(group.section)}"`)
+      }
+      setPendingDeleteAction(null)
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : pendingDeleteAction.kind === 'channel'
+          ? 'Could not delete channel.'
+          : 'Could not delete channel section.'
+      toast.error(
+        pendingDeleteAction.kind === 'channel' ? 'Failed to delete channel' : 'Failed to delete section',
+        { description: message },
+      )
+    } finally {
+      setDeleteSubmitting(false)
     }
   }
 
@@ -419,10 +621,10 @@ export function ServerManagePage() {
                 <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                   <div>
                     <CardTitle className="text-base">Channels</CardTitle>
-                    <CardDescription>Create, rename, update permissions, and delete channels.</CardDescription>
+                    <CardDescription>Manage channels, sections, and ordering with explicit controls.</CardDescription>
                   </div>
                   {canManageServerChannels ? (
-                    <Button type="button" size="sm" onClick={() => setShowCreateChannel(true)}>
+                    <Button type="button" size="sm" onClick={() => openCreateChannelDialog(null)}>
                       <PlusIcon className="size-4" />
                       Create Channel
                     </Button>
@@ -433,76 +635,74 @@ export function ServerManagePage() {
                     {sortedChannels.length === 0 ? (
                       <p className="py-6 text-center text-sm text-muted-foreground">No channels found.</p>
                     ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Access</TableHead>
-                            <TableHead className="w-[120px] text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {sortedChannels.map((channel, index) => {
-                            const canMoveUp = index > 0
-                            const canMoveDown = index < sortedChannels.length - 1
-                            const isReordering = reorderingChannelId !== null
-                            return (
-                              <TableRow key={channel.id}>
-                                <TableCell className="font-medium">{channel.kind === 'Text' ? '#' : 'Voice'} {channel.name}</TableCell>
-                                <TableCell>
-                                  <Badge variant="outline">{channel.kind}</Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant={channel.moderatorOnly ? 'secondary' : 'outline'}>
-                                    {channel.moderatorOnly ? 'Moderators only' : 'Everyone'}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {canManageServerChannels ? (
-                                    <div className="inline-flex items-center gap-1">
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon-sm"
-                                        onClick={() => void moveChannel(channel.id, -1)}
-                                        disabled={!canMoveUp || isReordering}
-                                        aria-label="Move channel up"
-                                        title="Move up"
-                                      >
-                                        <ArrowUpIcon className="size-3.5" />
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon-sm"
-                                        onClick={() => void moveChannel(channel.id, 1)}
-                                        disabled={!canMoveDown || isReordering}
-                                        aria-label="Move channel down"
-                                        title="Move down"
-                                      >
-                                        <ArrowDownIcon className="size-3.5" />
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setEditingChannel(channel)}
-                                        disabled={isReordering}
-                                      >
-                                        <Settings2Icon className="size-4" />
-                                        Manage
-                                      </Button>
-                                    </div>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">Read only</span>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
+                      <div className="space-y-3">
+                        {channelGroups.map((group) => (
+                          <div key={group.key} className="rounded-lg border border-border/70 bg-muted/15">
+                            <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{sectionLabel(group.section)}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary">{group.channels.length}</Badge>
+                                {canManageServerChannels ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon-sm"
+                                    onClick={() => openCreateChannelDialog(group.section)}
+                                    aria-label={`Create channel in ${sectionLabel(group.section)}`}
+                                    title={`Create channel in ${sectionLabel(group.section)}`}
+                                  >
+                                    <PlusIcon className="size-3.5" />
+                                  </Button>
+                                ) : null}
+                                {canManageServerChannels ? (
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="icon-sm"
+                                    onClick={() => void deleteChannelGroup(group)}
+                                    aria-label="Delete entire section"
+                                    title="Delete section and all channels"
+                                  >
+                                    <Trash2Icon className="size-3.5" />
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="w-[60px]">Order</TableHead>
+                                  <TableHead>Name</TableHead>
+                                  <TableHead>Access</TableHead>
+                                  <TableHead className="w-[210px] text-right">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {group.channels.map((channel, index) => {
+                                  return (
+                                    <SortableChannelRow
+                                      key={channel.id}
+                                      channel={channel}
+                                      orderLabel={index + 1}
+                                      canMoveUp={index > 0}
+                                      canMoveDown={index < group.channels.length - 1}
+                                      canManageServerChannels={canManageServerChannels}
+                                      isReordering={reorderingChannelId !== null}
+                                      onMoveChannel={(channelId, direction) => {
+                                        void moveChannel(channelId, direction)
+                                      }}
+                                      onDeleteChannel={deleteChannel}
+                                      onManageChannel={(nextChannel) => setEditingChannel(nextChannel)}
+                                    />
+                                  )
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </ScrollArea>
                 </CardContent>
@@ -642,9 +842,22 @@ export function ServerManagePage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showCreateChannel} onOpenChange={setShowCreateChannel}>
+      <Dialog
+        open={showCreateChannel}
+        onOpenChange={(open) => {
+          setShowCreateChannel(open)
+          if (!open) {
+            setCreateChannelInitialSection(null)
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
-          <CreateChannelModal serverId={server.id} onClose={() => setShowCreateChannel(false)} />
+          <CreateChannelModal
+            key={`${createChannelDialogSeed}:${createChannelInitialSection ?? '__none__'}`}
+            serverId={server.id}
+            initialSection={createChannelInitialSection}
+            onClose={() => setShowCreateChannel(false)}
+          />
         </DialogContent>
       </Dialog>
 
@@ -655,6 +868,7 @@ export function ServerManagePage() {
               channelId={editingChannel.id}
               currentName={editingChannel.name}
               currentModeratorOnly={editingChannel.moderatorOnly}
+              currentSection={editingChannel.section}
               onClose={() => setEditingChannel(null)}
             />
           ) : null}
@@ -715,6 +929,50 @@ export function ServerManagePage() {
           {memberAction?.kind === 'banList' ? (
             <BanListModal serverId={server.id} onClose={closeMemberAction} />
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingDeleteAction !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteSubmitting) setPendingDeleteAction(null)
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {pendingDeleteAction?.kind === 'channel'
+                ? `Delete channel "${pendingDeleteAction.channel.name}"?`
+                : pendingDeleteAction?.kind === 'section'
+                  ? `Delete section "${sectionLabel(pendingDeleteAction.group.section)}"?`
+                  : 'Delete item?'}
+            </DialogTitle>
+            <DialogDescription>
+              {pendingDeleteAction?.kind === 'channel'
+                ? 'This will permanently remove the channel and its messages.'
+                : pendingDeleteAction?.kind === 'section'
+                  ? `This will delete all ${pendingDeleteAction.group.channels.length} channels in this section and their messages.`
+                  : 'This action cannot be undone.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingDeleteAction(null)}
+              disabled={deleteSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmDeleteAction()}
+              disabled={deleteSubmitting}
+            >
+              {deleteSubmitting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

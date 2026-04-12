@@ -3,21 +3,9 @@ use std::collections::HashSet;
 use spacetimedb::{Identity, ViewContext};
 
 use crate::schema::{
-    Block,
-    DmVoiceParticipant,
-    Friend,
-    FriendStatus,
-    PresenceState,
-    ReadState,
-    TypingState,
-    block__view,
-    read_state__view,
-    dm_voice_participant__view,
-    friend__view,
-    presence_state__view,
-    typing_state__view,
-    channel__view,
-    server_member__view,
+    Block, DmVoiceParticipant, Friend, FriendStatus, PresenceState, ReadState, TypingState,
+    block__view, channel__view, dm_voice_participant__view, friend__view, presence_state__view,
+    read_state__view, server_member__view, typing_state__view,
 };
 
 fn normalize_identity(value: &str) -> String {
@@ -56,12 +44,8 @@ pub fn my_blocks(ctx: &ViewContext) -> Vec<Block> {
 #[spacetimedb::view(accessor = my_dm_voice_participants, public)]
 pub fn my_dm_voice_participants(ctx: &ViewContext) -> Vec<DmVoiceParticipant> {
     let me = ctx.sender();
-    let mut rows: Vec<DmVoiceParticipant> = ctx
-        .db
-        .dm_voice_participant()
-        .user_a()
-        .filter(me)
-        .collect();
+    let mut rows: Vec<DmVoiceParticipant> =
+        ctx.db.dm_voice_participant().user_a().filter(me).collect();
     rows.extend(ctx.db.dm_voice_participant().user_b().filter(me));
     rows
 }

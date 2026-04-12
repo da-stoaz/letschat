@@ -1,11 +1,7 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err,
-    find_channel,
-    find_friend_row,
-    normalize_identity_string,
-    ordered_pair,
+    assert_or_err, find_channel, find_friend_row, normalize_identity_string, ordered_pair,
 };
 use crate::schema::*;
 
@@ -54,7 +50,10 @@ pub fn mark_dm_read(ctx: &ReducerContext, other_identity: Identity) -> Result<()
 
     let friend_row = find_friend_row(ctx, ctx.sender(), other_identity)
         .ok_or_else(|| "friend relationship not found".to_string())?;
-    assert_or_err(friend_row.status == FriendStatus::Accepted, "friendship not accepted")?;
+    assert_or_err(
+        friend_row.status == FriendStatus::Accepted,
+        "friendship not accepted",
+    )?;
 
     upsert_read_state(ctx, dm_scope_key(ctx.sender(), other_identity));
     Ok(())

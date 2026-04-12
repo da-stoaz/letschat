@@ -17,8 +17,7 @@ export interface ChannelBarProps {
   activeServer: Server | null
   activeChannelId: number | null
   role: Role | null
-  textChannels: Channel[]
-  voiceChannels: Channel[]
+  channels: Channel[]
   activeChannelsCount: number
   unreadByChannel: Record<number, number>
   participantsByChannel: Record<number, VoiceParticipant[]>
@@ -46,8 +45,7 @@ export interface ServerChannelBarProps {
   activeServer: Server | null
   activeChannelId: number | null
   role: Role | null
-  textChannels: Channel[]
-  voiceChannels: Channel[]
+  channels: Channel[]
   activeChannelsCount: number
   unreadByChannel: Record<number, number>
   participantsByChannel: Record<number, VoiceParticipant[]>

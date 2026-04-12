@@ -1,6 +1,8 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, find_channel, member_key, require_member_role, require_mod_or_owner};
+use crate::helpers::{
+    assert_or_err, find_channel, member_key, require_member_role, require_mod_or_owner,
+};
 use crate::schema::*;
 
 #[spacetimedb::reducer]
@@ -13,13 +15,21 @@ pub fn send_message(ctx: &ReducerContext, channel_id: u64, content: String) -> R
     }
 
     // Check if member is timed out
-    if let Some(member_row) = ctx.db.server_member().member_key().find(member_key(channel_row.server_id, ctx.sender())) {
+    if let Some(member_row) = ctx
+        .db
+        .server_member()
+        .member_key()
+        .find(member_key(channel_row.server_id, ctx.sender()))
+    {
         if let Some(timeout_until) = member_row.timeout_until {
             assert_or_err(ctx.timestamp > timeout_until, "you are timed out")?;
         }
     }
 
-    assert_or_err((1..=4000).contains(&content.len()), "message must be 1-4000 chars")?;
+    assert_or_err(
+        (1..=4000).contains(&content.len()),
+        "message must be 1-4000 chars",
+    )?;
 
     ctx.db.message().insert(Message {
         id: 0,
@@ -35,8 +45,15 @@ pub fn send_message(ctx: &ReducerContext, channel_id: u64, content: String) -> R
 }
 
 #[spacetimedb::reducer]
-pub fn edit_message(ctx: &ReducerContext, message_id: u64, new_content: String) -> Result<(), String> {
-    assert_or_err((1..=4000).contains(&new_content.len()), "message must be 1-4000 chars")?;
+pub fn edit_message(
+    ctx: &ReducerContext,
+    message_id: u64,
+    new_content: String,
+) -> Result<(), String> {
+    assert_or_err(
+        (1..=4000).contains(&new_content.len()),
+        "message must be 1-4000 chars",
+    )?;
 
     let mut message_row = ctx
         .db

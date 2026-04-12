@@ -23,10 +23,7 @@ fn parse_dm_scope(scope_key: &str) -> Option<(String, String)> {
     Some((normalize_identity(a), normalize_identity(b)))
 }
 
-fn ensure_scope_allowed(
-    ctx: &ReducerContext,
-    scope_key: &str,
-) -> Result<(), String> {
+fn ensure_scope_allowed(ctx: &ReducerContext, scope_key: &str) -> Result<(), String> {
     if let Some(channel_id) = parse_channel_scope(scope_key) {
         let channel_row = find_channel(ctx, channel_id)?;
         let is_member = ctx
@@ -69,11 +66,7 @@ fn ensure_scope_allowed(
     Err("invalid typing scope".to_string())
 }
 
-fn upsert_presence(
-    ctx: &ReducerContext,
-    online: bool,
-    bump_interaction: bool,
-) {
+fn upsert_presence(ctx: &ReducerContext, online: bool, bump_interaction: bool) {
     if let Some(mut row) = ctx.db.presence_state().identity().find(ctx.sender()) {
         row.online = online;
         if bump_interaction {

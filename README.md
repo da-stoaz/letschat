@@ -51,6 +51,7 @@ npm run services:reset
 - `AUTH_BIND` (default: `127.0.0.1:8787`)
 - `AUTH_DATABASE_URL` (default: `sqlite://auth-service/auth.db`)
 - `AUTH_JWT_SECRET` (set this in real deployments)
+- `AUTH_ADMIN_API_KEY` (optional; enables `/admin/accounts/rebind` for host-admin account rebinding)
 
 Frontend auth API URL:
 

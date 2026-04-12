@@ -1,4 +1,5 @@
-import { BellIcon, BellOffIcon, ChevronsUpDownIcon, HashIcon, LockIcon, LogOutIcon, PlusIcon, Settings2Icon, ShieldIcon, UserPlusIcon, Volume2Icon } from 'lucide-react'
+import { useMemo } from 'react'
+import { BellIcon, BellOffIcon, ChevronsUpDownIcon, HashIcon, LockIcon, LogOutIcon, MegaphoneIcon, PlusIcon, Settings2Icon, ShieldIcon, UserPlusIcon } from 'lucide-react'
 import { canInviteUsers, canManageChannels } from '../../../lib/permissions'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -14,16 +15,25 @@ import { Separator } from '@/components/ui/separator'
 import { VoiceChannelButton } from '../VoiceChannelButton'
 import { ChannelBarShell } from './ChannelBarShell'
 import type { ServerChannelBarProps } from './types'
+import type { Channel } from '../../../types/domain'
 import { serverInitials } from '../helpers'
 
 const EMPTY_ACTIVE_SPEAKERS = new Set<string>()
+
+function sectionLabel(section: string | null): string {
+  const normalized = section?.trim()
+  return normalized && normalized.length > 0 ? normalized : 'general'
+}
+
+function sectionKey(section: string | null): string {
+  return (section ?? '').trim().toLowerCase()
+}
 
 export function ServerChannelBar({
   activeServer,
   activeChannelId,
   role,
-  textChannels,
-  voiceChannels,
+  channels,
   activeChannelsCount,
   unreadByChannel,
   participantsByChannel,
@@ -42,6 +52,35 @@ export function ServerChannelBar({
   const canAccessServerPanel = role === 'Owner' || role === 'Moderator'
   const canInvite =
     Boolean(role && activeServer && canInviteUsers(role, activeServer.invitePolicy))
+  const channelSections = useMemo(() => {
+    const grouped = new Map<string, { key: string; label: string; channels: Channel[] }>()
+    for (const channel of channels) {
+      const key = sectionKey(channel.section)
+      const existing = grouped.get(key) ?? {
+        key,
+        label: sectionLabel(channel.section),
+        channels: [],
+      }
+      existing.channels.push(channel)
+      grouped.set(key, existing)
+    }
+
+    const sortedSections = [...grouped.values()].sort((left, right) => {
+      if (left.key === '' && right.key !== '') return -1
+      if (left.key !== '' && right.key === '') return 1
+      return left.label.localeCompare(right.label, undefined, { sensitivity: 'base' })
+    })
+
+    for (const group of sortedSections) {
+      group.channels.sort((left, right) => {
+        const positionDelta = left.position - right.position
+        if (positionDelta !== 0) return positionDelta
+        return left.id - right.id
+      })
+    }
+
+    return sortedSections
+  }, [channels])
 
   return (
     <ChannelBarShell
@@ -94,66 +133,67 @@ export function ServerChannelBar({
       )}
     >
       <ScrollArea className="h-full pr-2">
-        <section className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Text Channels</h4>
-            <HashIcon className="size-3.5 text-muted-foreground" />
-          </div>
-          {textChannels.map((channel) => {
-            const unread = unreadByChannel[channel.id] ?? 0
-            const muted = isChannelMuted(channel.id)
-            return (
-              <div key={channel.id} className="flex items-center gap-1">
-                <Button
-                  variant={activeChannelId === channel.id ? 'secondary' : 'ghost'}
-                  className="min-w-0 flex-1 justify-start gap-2 rounded-lg"
-                  onClick={() => onSelectChannel(channel.id)}
-                >
-                  <HashIcon className="size-4 opacity-70" />
-                  <span className="truncate">{channel.name}</span>
-                  {channel.moderatorOnly ? <LockIcon className="ml-auto size-3.5 opacity-70" /> : null}
-                  {unread > 0 ? <Badge className="ml-auto">{unread}</Badge> : null}
-                </Button>
-                <Button
-                  type="button"
-                  size="icon-xs"
-                  variant={muted ? 'secondary' : 'ghost'}
-                  aria-label={muted ? 'Unmute channel' : 'Mute channel'}
-                  title={muted ? 'Unmute channel' : 'Mute channel'}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onToggleChannelMute(channel.id)
-                  }}
-                >
-                  {muted ? <BellOffIcon className="size-3.5" /> : <BellIcon className="size-3.5" />}
-                </Button>
-              </div>
-            )
-          })}
-        </section>
+        {channelSections.map((group, index) => (
+          <section key={group.key || '__default'} className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <h4 className="truncate text-xs font-semibold tracking-wide text-muted-foreground uppercase">{group.label}</h4>
+              <Badge variant="outline" className="h-5 px-1.5 text-[10px] text-muted-foreground">
+                {group.channels.length}
+              </Badge>
+            </div>
+            {group.channels.map((channel) => {
+              if (channel.kind === 'Voice') {
+                return (
+                  <VoiceChannelButton
+                    key={channel.id}
+                    channel={channel}
+                    active={activeChannelId === channel.id}
+                    participants={participantsByChannel[channel.id] ?? []}
+                    selfJoined={joinedVoiceChannelId === channel.id}
+                    activeSpeakerIdentityKeys={joinedVoiceChannelId === channel.id ? activeSpeakerIdentityKeys : EMPTY_ACTIVE_SPEAKERS}
+                    muted={isChannelMuted(channel.id)}
+                    memberProfileByIdentity={memberProfileByIdentity}
+                    onToggleMute={() => onToggleChannelMute(channel.id)}
+                    onSelect={() => onSelectChannel(channel.id)}
+                  />
+                )
+              }
 
-        <Separator className="my-4" />
+              const unread = unreadByChannel[channel.id] ?? 0
+              const muted = isChannelMuted(channel.id)
+              const ChannelIcon = channel.kind === 'Announcement' ? MegaphoneIcon : HashIcon
 
-        <section className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Voice Channels</h4>
-            <Volume2Icon className="size-3.5 text-muted-foreground" />
-          </div>
-          {voiceChannels.map((channel) => (
-            <VoiceChannelButton
-              key={channel.id}
-              channel={channel}
-              active={activeChannelId === channel.id}
-              participants={participantsByChannel[channel.id] ?? []}
-              selfJoined={joinedVoiceChannelId === channel.id}
-              activeSpeakerIdentityKeys={joinedVoiceChannelId === channel.id ? activeSpeakerIdentityKeys : EMPTY_ACTIVE_SPEAKERS}
-              muted={isChannelMuted(channel.id)}
-              memberProfileByIdentity={memberProfileByIdentity}
-              onToggleMute={() => onToggleChannelMute(channel.id)}
-              onSelect={() => onSelectChannel(channel.id)}
-            />
-          ))}
-        </section>
+              return (
+                <div key={channel.id} className="flex items-center gap-1">
+                  <Button
+                    variant={activeChannelId === channel.id ? 'secondary' : 'ghost'}
+                    className="min-w-0 flex-1 justify-start gap-2 rounded-lg"
+                    onClick={() => onSelectChannel(channel.id)}
+                  >
+                    <ChannelIcon className="size-4 opacity-70" />
+                    <span className="truncate">{channel.name}</span>
+                    {channel.moderatorOnly ? <LockIcon className="ml-auto size-3.5 opacity-70" /> : null}
+                    {unread > 0 ? <Badge className="ml-auto">{unread}</Badge> : null}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant={muted ? 'secondary' : 'ghost'}
+                    aria-label={muted ? 'Unmute channel' : 'Mute channel'}
+                    title={muted ? 'Unmute channel' : 'Mute channel'}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onToggleChannelMute(channel.id)
+                    }}
+                  >
+                    {muted ? <BellOffIcon className="size-3.5" /> : <BellIcon className="size-3.5" />}
+                  </Button>
+                </div>
+              )
+            })}
+            {index < channelSections.length - 1 ? <Separator className="my-4" /> : null}
+          </section>
+        ))}
 
         {activeChannelsCount === 0 ? (
           <div className="mt-6 rounded-xl border border-dashed border-border/70 bg-muted/25 p-4 text-sm text-muted-foreground">

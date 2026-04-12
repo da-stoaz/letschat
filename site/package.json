@@ -1,7 +1,7 @@
 {
   "name": "letschat-site",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
@@ -13,6 +13,10 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.4",
-    "tailwindcss": "^4.1.4"
+    "tailwindcss": "^4.1.4",
+    "vite": "^8.0.5"
+  },
+  "overrides": {
+    "vite": "^8.0.5"
   }
 }

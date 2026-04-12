@@ -5,7 +5,10 @@ use crate::schema::*;
 
 #[spacetimedb::reducer]
 pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
-    assert_or_err((2..=100).contains(&name.len()), "server name must be 2-100 chars")?;
+    assert_or_err(
+        (2..=100).contains(&name.len()),
+        "server name must be 2-100 chars",
+    )?;
 
     let server_row = ctx.db.server().insert(Server {
         id: 0,
@@ -33,6 +36,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
         name: "general".to_string(),
         kind: ChannelKind::Text,
         position: 0,
+        section: None,
         moderator_only: false,
     });
 
@@ -42,6 +46,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
         name: "General".to_string(),
         kind: ChannelKind::Voice,
         position: 0,
+        section: None,
         moderator_only: false,
     });
 
@@ -50,7 +55,10 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
 
 #[spacetimedb::reducer]
 pub fn rename_server(ctx: &ReducerContext, server_id: u64, new_name: String) -> Result<(), String> {
-    assert_or_err((2..=100).contains(&new_name.len()), "server name must be 2-100 chars")?;
+    assert_or_err(
+        (2..=100).contains(&new_name.len()),
+        "server name must be 2-100 chars",
+    )?;
     require_owner(ctx, server_id, ctx.sender())?;
 
     let mut server_row = ctx
@@ -96,7 +104,10 @@ pub fn set_server_icon(
         .filter(|value| !value.is_empty());
 
     if let Some(url) = normalized_icon_url.as_ref() {
-        assert_or_err(url.len() <= 2048, "server icon url must be at most 2048 chars")?;
+        assert_or_err(
+            url.len() <= 2048,
+            "server icon url must be at most 2048 chars",
+        )?;
     }
 
     let mut server_row = ctx
@@ -151,10 +162,18 @@ pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String>
         .filter(|m| m.server_id == server_id)
         .collect();
     for member in members {
-        ctx.db.server_member().member_key().delete(&member.member_key);
+        ctx.db
+            .server_member()
+            .member_key()
+            .delete(&member.member_key);
     }
 
-    let bans: Vec<Ban> = ctx.db.ban().iter().filter(|b| b.server_id == server_id).collect();
+    let bans: Vec<Ban> = ctx
+        .db
+        .ban()
+        .iter()
+        .filter(|b| b.server_id == server_id)
+        .collect();
     for ban_row in bans {
         ctx.db.ban().ban_key().delete(&ban_row.ban_key);
     }

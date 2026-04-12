@@ -11,6 +11,7 @@ pub enum Role {
 pub enum ChannelKind {
     Text,
     Voice,
+    Announcement,
 }
 
 #[derive(SpacetimeType, Clone, PartialEq, Eq)]
@@ -151,6 +152,8 @@ pub struct Channel {
     pub kind: ChannelKind,
     pub position: u32,
     pub moderator_only: bool,
+    #[default(None::<String>)]
+    pub section: Option<String>,
 }
 
 #[spacetimedb::table(

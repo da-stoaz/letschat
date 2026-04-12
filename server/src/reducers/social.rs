@@ -1,13 +1,8 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err,
-    block_key,
-    dm_room_key,
-    find_friend_row,
-    friend_pair_key,
-    has_block_either_direction,
-    ordered_pair,
+    assert_or_err, block_key, dm_room_key, find_friend_row, friend_pair_key,
+    has_block_either_direction, ordered_pair,
 };
 use crate::schema::*;
 
@@ -37,7 +32,10 @@ pub fn send_friend_request(ctx: &ReducerContext, target_identity: Identity) -> R
 }
 
 #[spacetimedb::reducer]
-pub fn accept_friend_request(ctx: &ReducerContext, requester_identity: Identity) -> Result<(), String> {
+pub fn accept_friend_request(
+    ctx: &ReducerContext,
+    requester_identity: Identity,
+) -> Result<(), String> {
     let key = friend_pair_key(ctx.sender(), requester_identity);
     let mut friend_row = ctx
         .db
@@ -46,7 +44,10 @@ pub fn accept_friend_request(ctx: &ReducerContext, requester_identity: Identity)
         .find(key)
         .ok_or_else(|| "friend request not found".to_string())?;
 
-    assert_or_err(friend_row.status == FriendStatus::Pending, "request is not pending")?;
+    assert_or_err(
+        friend_row.status == FriendStatus::Pending,
+        "request is not pending",
+    )?;
     assert_or_err(
         friend_row.requested_by != ctx.sender(),
         "cannot accept your own request",
@@ -60,7 +61,10 @@ pub fn accept_friend_request(ctx: &ReducerContext, requester_identity: Identity)
 }
 
 #[spacetimedb::reducer]
-pub fn decline_friend_request(ctx: &ReducerContext, requester_identity: Identity) -> Result<(), String> {
+pub fn decline_friend_request(
+    ctx: &ReducerContext,
+    requester_identity: Identity,
+) -> Result<(), String> {
     ctx.db
         .friend()
         .pair_key()

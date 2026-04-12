@@ -10,8 +10,7 @@ export function ChannelBar({
   activeServer,
   activeChannelId,
   role,
-  textChannels,
-  voiceChannels,
+  channels,
   activeChannelsCount,
   unreadByChannel,
   participantsByChannel,
@@ -40,8 +39,7 @@ export function ChannelBar({
         activeServer={activeServer}
         activeChannelId={activeChannelId}
         role={role}
-        textChannels={textChannels}
-        voiceChannels={voiceChannels}
+        channels={channels}
         activeChannelsCount={activeChannelsCount}
         unreadByChannel={unreadByChannel}
         participantsByChannel={participantsByChannel}

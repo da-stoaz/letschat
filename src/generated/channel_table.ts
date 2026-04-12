@@ -23,4 +23,5 @@ export default __t.row({
   },
   position: __t.u32(),
   moderatorOnly: __t.bool().name("moderator_only"),
+  section: __t.option(__t.string()),
 });
