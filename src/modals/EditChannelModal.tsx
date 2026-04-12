@@ -26,6 +26,21 @@ function sectionSelectionLabel(value: string): string {
   return decodeSectionValue(value) ?? 'Choose section'
 }
 
+async function retryOnceOnInstanceFatal<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+    if (!message.includes('fatal error')) {
+      throw error
+    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, 250)
+    })
+    return operation()
+  }
+}
+
 export function EditChannelModal({
   channelId,
   currentName,
@@ -79,14 +94,24 @@ export function EditChannelModal({
             setError('Enter a name for the new section.')
             return
           }
-          await reducers.updateChannel(channelId, { name, moderatorOnly })
+          const trimmedName = name.trim()
+          const nameChanged = trimmedName !== currentName
+          const moderatorOnlyChanged = moderatorOnly !== currentModeratorOnly
           const existingSection = decodeSectionValue(sectionSelection)
           const resolvedSection =
             sectionSelection === SECTION_NONE_VALUE ? null
             : sectionSelection === SECTION_NEW_VALUE ? newSectionName.trim() || null
             : existingSection
-          if ((resolvedSection ?? '').trim() !== (currentSection ?? '').trim()) {
-            await reducers.setChannelSection(channelId, resolvedSection)
+          const sectionChanged = (resolvedSection ?? '').trim() !== (currentSection ?? '').trim()
+
+          if (sectionChanged) {
+            await retryOnceOnInstanceFatal(() => reducers.setChannelSection(channelId, resolvedSection))
+          }
+          if (nameChanged || moderatorOnlyChanged) {
+            await reducers.updateChannel(channelId, {
+              name: nameChanged ? trimmedName : undefined,
+              moderatorOnly: moderatorOnlyChanged ? moderatorOnly : undefined,
+            })
           }
           onClose()
         } catch (e) {

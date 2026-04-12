@@ -57,6 +57,7 @@ export type Channel = __Infer<typeof Channel>;
 export const ChannelKind = __t.enum("ChannelKind", {
   Text: __t.unit(),
   Voice: __t.unit(),
+  Announcement: __t.unit(),
 });
 export type ChannelKind = __Infer<typeof ChannelKind>;
 

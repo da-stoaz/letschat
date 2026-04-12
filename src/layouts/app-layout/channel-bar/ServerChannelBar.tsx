@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { BellIcon, BellOffIcon, ChevronsUpDownIcon, HashIcon, LockIcon, LogOutIcon, PlusIcon, Settings2Icon, ShieldIcon, UserPlusIcon } from 'lucide-react'
+import { BellIcon, BellOffIcon, ChevronsUpDownIcon, HashIcon, LockIcon, LogOutIcon, MegaphoneIcon, PlusIcon, Settings2Icon, ShieldIcon, UserPlusIcon } from 'lucide-react'
 import { canInviteUsers, canManageChannels } from '../../../lib/permissions'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -33,8 +33,7 @@ export function ServerChannelBar({
   activeServer,
   activeChannelId,
   role,
-  textChannels,
-  voiceChannels,
+  channels,
   activeChannelsCount,
   unreadByChannel,
   participantsByChannel,
@@ -54,20 +53,15 @@ export function ServerChannelBar({
   const canInvite =
     Boolean(role && activeServer && canInviteUsers(role, activeServer.invitePolicy))
   const channelSections = useMemo(() => {
-    const grouped = new Map<string, { key: string; label: string; textChannels: Channel[]; voiceChannels: Channel[] }>()
-    for (const channel of [...textChannels, ...voiceChannels]) {
+    const grouped = new Map<string, { key: string; label: string; channels: Channel[] }>()
+    for (const channel of channels) {
       const key = sectionKey(channel.section)
       const existing = grouped.get(key) ?? {
         key,
         label: sectionLabel(channel.section),
-        textChannels: [],
-        voiceChannels: [],
+        channels: [],
       }
-      if (channel.kind === 'Voice') {
-        existing.voiceChannels.push(channel)
-      } else {
-        existing.textChannels.push(channel)
-      }
+      existing.channels.push(channel)
       grouped.set(key, existing)
     }
 
@@ -78,12 +72,15 @@ export function ServerChannelBar({
     })
 
     for (const group of sortedSections) {
-      group.textChannels.sort((left, right) => left.position - right.position || left.id - right.id)
-      group.voiceChannels.sort((left, right) => left.position - right.position || left.id - right.id)
+      group.channels.sort((left, right) => {
+        const positionDelta = left.position - right.position
+        if (positionDelta !== 0) return positionDelta
+        return left.id - right.id
+      })
     }
 
     return sortedSections
-  }, [textChannels, voiceChannels])
+  }, [channels])
 
   return (
     <ChannelBarShell
@@ -141,12 +138,31 @@ export function ServerChannelBar({
             <div className="flex items-center justify-between px-1">
               <h4 className="truncate text-xs font-semibold tracking-wide text-muted-foreground uppercase">{group.label}</h4>
               <Badge variant="outline" className="h-5 px-1.5 text-[10px] text-muted-foreground">
-                {group.textChannels.length + group.voiceChannels.length}
+                {group.channels.length}
               </Badge>
             </div>
-            {group.textChannels.map((channel) => {
+            {group.channels.map((channel) => {
+              if (channel.kind === 'Voice') {
+                return (
+                  <VoiceChannelButton
+                    key={channel.id}
+                    channel={channel}
+                    active={activeChannelId === channel.id}
+                    participants={participantsByChannel[channel.id] ?? []}
+                    selfJoined={joinedVoiceChannelId === channel.id}
+                    activeSpeakerIdentityKeys={joinedVoiceChannelId === channel.id ? activeSpeakerIdentityKeys : EMPTY_ACTIVE_SPEAKERS}
+                    muted={isChannelMuted(channel.id)}
+                    memberProfileByIdentity={memberProfileByIdentity}
+                    onToggleMute={() => onToggleChannelMute(channel.id)}
+                    onSelect={() => onSelectChannel(channel.id)}
+                  />
+                )
+              }
+
               const unread = unreadByChannel[channel.id] ?? 0
               const muted = isChannelMuted(channel.id)
+              const ChannelIcon = channel.kind === 'Announcement' ? MegaphoneIcon : HashIcon
+
               return (
                 <div key={channel.id} className="flex items-center gap-1">
                   <Button
@@ -154,7 +170,7 @@ export function ServerChannelBar({
                     className="min-w-0 flex-1 justify-start gap-2 rounded-lg"
                     onClick={() => onSelectChannel(channel.id)}
                   >
-                    <HashIcon className="size-4 opacity-70" />
+                    <ChannelIcon className="size-4 opacity-70" />
                     <span className="truncate">{channel.name}</span>
                     {channel.moderatorOnly ? <LockIcon className="ml-auto size-3.5 opacity-70" /> : null}
                     {unread > 0 ? <Badge className="ml-auto">{unread}</Badge> : null}
@@ -175,20 +191,6 @@ export function ServerChannelBar({
                 </div>
               )
             })}
-            {group.voiceChannels.map((channel) => (
-              <VoiceChannelButton
-                key={channel.id}
-                channel={channel}
-                active={activeChannelId === channel.id}
-                participants={participantsByChannel[channel.id] ?? []}
-                selfJoined={joinedVoiceChannelId === channel.id}
-                activeSpeakerIdentityKeys={joinedVoiceChannelId === channel.id ? activeSpeakerIdentityKeys : EMPTY_ACTIVE_SPEAKERS}
-                muted={isChannelMuted(channel.id)}
-                memberProfileByIdentity={memberProfileByIdentity}
-                onToggleMute={() => onToggleChannelMute(channel.id)}
-                onSelect={() => onSelectChannel(channel.id)}
-              />
-            ))}
             {index < channelSections.length - 1 ? <Separator className="my-4" /> : null}
           </section>
         ))}

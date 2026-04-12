@@ -1,18 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { DndContext, PointerSensor, closestCenter, type DragEndEvent, useDroppable, useSensor, useSensors } from '@dnd-kit/core'
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 import {
   ArrowDownIcon,
   ArrowUpIcon,
   ClockIcon,
   CrownIcon,
   ExternalLinkIcon,
-  GripVerticalIcon,
   HammerIcon,
+  HashIcon,
   ListXIcon,
   LogOutIcon,
+  MegaphoneIcon,
   MoreHorizontalIcon,
   PlusIcon,
   Settings2Icon,
@@ -21,6 +19,7 @@ import {
   TimerOffIcon,
   Trash2Icon,
   UserMinusIcon,
+  Volume2Icon,
 } from 'lucide-react'
 import { reducers } from '../lib/spacetimedb'
 import { useChannelsStore } from '../stores/channelsStore'
@@ -69,7 +68,6 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from '@/components/ui/sonner'
-import { cn } from '@/lib/utils'
 import { serverInitials } from '../layouts/app-layout/helpers'
 
 type MemberActionModal =
@@ -82,17 +80,17 @@ type MemberActionModal =
 
 type PendingDeleteAction =
   | { kind: 'channel'; channel: Channel }
-  | { kind: 'section'; group: { kind: Channel['kind']; section: string | null; channels: Channel[] } }
+  | { kind: 'section'; group: { section: string | null; channels: Channel[] } }
 
 type ChannelGroup = {
   key: string
-  kind: Channel['kind']
   section: string | null
   channels: Channel[]
 }
 
 type SortableChannelRowProps = {
   channel: Channel
+  orderLabel: number
   canMoveUp: boolean
   canMoveDown: boolean
   canManageServerChannels: boolean
@@ -102,28 +100,9 @@ type SortableChannelRowProps = {
   onManageChannel: (channel: Channel) => void
 }
 
-type ChannelSectionDropZoneProps = {
-  id: string
-  children: React.ReactNode
-}
-
-function ChannelSectionDropZone({ id, children }: ChannelSectionDropZoneProps) {
-  const { setNodeRef, isOver } = useDroppable({ id })
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        'rounded-lg border border-border/70 bg-muted/15 transition-colors',
-        isOver && 'border-primary/60 bg-primary/5',
-      )}
-    >
-      {children}
-    </div>
-  )
-}
-
 function SortableChannelRow({
   channel,
+  orderLabel,
   canMoveUp,
   canMoveDown,
   canManageServerChannels,
@@ -132,41 +111,26 @@ function SortableChannelRow({
   onDeleteChannel,
   onManageChannel,
 }: SortableChannelRowProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: channel.id,
-    disabled: !canManageServerChannels || isReordering,
-  })
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  }
+  const KindIcon = channel.kind === 'Voice'
+    ? Volume2Icon
+    : channel.kind === 'Announcement'
+      ? MegaphoneIcon
+      : HashIcon
 
   return (
-    <TableRow
-      ref={setNodeRef}
-      style={style}
-      className={isDragging ? 'bg-primary/10 opacity-80' : undefined}
-    >
+    <TableRow>
       <TableCell>
-        {canManageServerChannels ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            aria-label="Drag to reorder channel"
-            title="Drag to reorder"
-            className="cursor-grab active:cursor-grabbing"
-            disabled={isReordering}
-            {...attributes}
-            {...listeners}
-          >
-            <GripVerticalIcon className="size-3.5" />
-          </Button>
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        )}
+        <span className="text-xs text-muted-foreground">{orderLabel}</span>
       </TableCell>
-      <TableCell className="font-medium">{channel.kind === 'Text' ? '#' : 'Voice'} {channel.name}</TableCell>
+      <TableCell className="font-medium">
+        <span className="inline-flex items-center gap-2">
+          <KindIcon className="size-4 opacity-70" />
+          {channel.name}
+          <Badge variant="outline" className="text-[10px]">
+            {channel.kind}
+          </Badge>
+        </span>
+      </TableCell>
       <TableCell>
         <Badge variant={channel.moderatorOnly ? 'secondary' : 'outline'}>
           {channel.moderatorOnly ? 'Moderators only' : 'Everyone'}
@@ -259,20 +223,11 @@ function sectionLabel(section: string | null): string {
 }
 
 function sectionKey(section: string | null): string {
-  return (section ?? '').trim().toLowerCase()
+  return (section ?? '').trim()
 }
 
 function channelGroupKey(channel: Channel): string {
-  return `${channel.kind}::${sectionKey(channel.section)}`
-}
-
-function channelSectionDropId(groupKey: string): string {
-  return `section::${groupKey}`
-}
-
-function parseChannelSectionDropId(value: string): string | null {
-  const prefix = 'section::'
-  return value.startsWith(prefix) ? value.slice(prefix.length) : null
+  return sectionKey(channel.section)
 }
 
 function roleBadgeClassName(role: ServerMemberWithUser['role']): string {
@@ -295,6 +250,8 @@ export function ServerManagePage() {
   const [showEditServer, setShowEditServer] = useState(false)
   const [showDeleteServer, setShowDeleteServer] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
+  const [createChannelInitialSection, setCreateChannelInitialSection] = useState<string | null>(null)
+  const [createChannelDialogSeed, setCreateChannelDialogSeed] = useState(0)
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
   const [reorderingChannelId, setReorderingChannelId] = useState<number | null>(null)
   const [memberAction, setMemberAction] = useState<MemberActionModal | null>(null)
@@ -302,11 +259,6 @@ export function ServerManagePage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [invitePolicySaving, setInvitePolicySaving] = useState(false)
-  const dndSensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
-    }),
-  )
 
   const isOwner = role === 'Owner'
   const canModerateMembers = role === 'Owner' || role === 'Moderator'
@@ -329,8 +281,6 @@ export function ServerManagePage() {
   const sortedChannels = useMemo(
     () =>
       [...channels].sort((left, right) => {
-        const kindDelta = left.kind.localeCompare(right.kind)
-        if (kindDelta !== 0) return kindDelta
         const sectionDelta = sectionKey(left.section).localeCompare(sectionKey(right.section))
         if (sectionDelta !== 0) return sectionDelta
         const positionDelta = left.position - right.position
@@ -344,17 +294,13 @@ export function ServerManagePage() {
     const grouped = new Map<string, ChannelGroup>()
     for (const channel of sortedChannels) {
       const key = channelGroupKey(channel)
-      const current = grouped.get(key) ?? { key, kind: channel.kind, section: channel.section, channels: [] }
+      const current = grouped.get(key) ?? { key, section: channel.section, channels: [] }
       current.channels.push(channel)
       grouped.set(key, current)
     }
 
     const groups = [...grouped.values()]
-    groups.sort((left, right) => {
-      const kindDelta = left.kind.localeCompare(right.kind)
-      if (kindDelta !== 0) return kindDelta
-      return sectionKey(left.section).localeCompare(sectionKey(right.section))
-    })
+    groups.sort((left, right) => sectionKey(left.section).localeCompare(sectionKey(right.section)))
 
     for (const group of groups) {
       group.channels.sort((left, right) => {
@@ -367,29 +313,11 @@ export function ServerManagePage() {
     return groups
   }, [sortedChannels])
 
-  const channelGroupById = useMemo(() => {
-    const byId = new Map<number, string>()
-    for (const group of channelGroups) {
-      for (const channel of group.channels) {
-        byId.set(channel.id, group.key)
-      }
-    }
-    return byId
-  }, [channelGroups])
-
-  const firstTextChannelId = useMemo(() => {
-    const textChannel = sortedChannels.find((channel) => channel.kind === 'Text')
-    return textChannel?.id ?? sortedChannels[0]?.id ?? null
+  const firstMessageChannelId = useMemo(() => {
+    const messageChannel = sortedChannels.find((channel) => channel.kind !== 'Voice')
+    return messageChannel?.id ?? sortedChannels[0]?.id ?? null
   }, [sortedChannels])
-  const serverHomePath = firstTextChannelId ? `/app/${numericServerId}/${firstTextChannelId}` : `/app/${numericServerId}`
-
-  const channelsById = useMemo(() => {
-    const byId = new Map<number, Channel>()
-    for (const channel of sortedChannels) {
-      byId.set(channel.id, channel)
-    }
-    return byId
-  }, [sortedChannels])
+  const serverHomePath = firstMessageChannelId ? `/app/${numericServerId}/${firstMessageChannelId}` : `/app/${numericServerId}`
 
   const closeMemberAction = () => setMemberAction(null)
 
@@ -431,127 +359,10 @@ export function ServerManagePage() {
     setPendingDeleteAction({ kind: 'section', group })
   }
 
-  const moveChannelToTarget = async (channelId: number, targetChannelId: number) => {
-    if (!canManageServerChannels || reorderingChannelId !== null) return
-    if (channelId === targetChannelId) return
-
-    const sourceGroup = channelGroupById.get(channelId)
-    if (!sourceGroup) return
-
-    const siblings = channelGroups.find((group) => group.key === sourceGroup)?.channels ?? []
-    if (siblings.length === 0) return
-
-    const fromIndex = siblings.findIndex((channel) => channel.id === channelId)
-    const toIndex = siblings.findIndex((channel) => channel.id === targetChannelId)
-    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return
-
-    const direction: -1 | 1 = fromIndex < toIndex ? 1 : -1
-    const movesNeeded = Math.abs(toIndex - fromIndex)
-
-    setReorderingChannelId(channelId)
-    try {
-      for (let step = 0; step < movesNeeded; step += 1) {
-        // Reuse server-side move reducer for safe sibling swaps.
-        await reducers.moveChannel(channelId, direction)
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not reorder channels.'
-      toast.error('Failed to reorder channel', { description: message })
-    } finally {
-      setReorderingChannelId(null)
-    }
-  }
-
-  const moveChannelToDifferentSection = async (channelId: number, targetChannelId: number) => {
-    if (!canManageServerChannels || reorderingChannelId !== null) return
-
-    const source = channelsById.get(channelId)
-    const target = channelsById.get(targetChannelId)
-    if (!source || !target) return
-
-    if (source.kind !== target.kind) {
-      toast.error('You can only drag channels between sections of the same type.')
-      return
-    }
-
-    const targetGroup = channelGroups.find(
-      (group) => group.kind === target.kind && sectionKey(group.section) === sectionKey(target.section),
-    )
-    if (!targetGroup) return
-
-    const targetIndex = targetGroup.channels.findIndex((channel) => channel.id === targetChannelId)
-    if (targetIndex < 0) return
-
-    setReorderingChannelId(channelId)
-    try {
-      await reducers.setChannelSection(channelId, target.section)
-
-      const sourceIndexAfterSectionMove = targetGroup.channels.length
-      const movesNeeded = Math.max(0, sourceIndexAfterSectionMove - targetIndex)
-      for (let step = 0; step < movesNeeded; step += 1) {
-        await reducers.moveChannel(channelId, -1)
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not move channel to section.'
-      toast.error('Failed to move channel', { description: message })
-    } finally {
-      setReorderingChannelId(null)
-    }
-  }
-
-  const moveChannelToSectionEnd = async (channelId: number, targetSection: string | null) => {
-    if (!canManageServerChannels || reorderingChannelId !== null) return
-
-    setReorderingChannelId(channelId)
-    try {
-      await reducers.setChannelSection(channelId, targetSection)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not move channel to section.'
-      toast.error('Failed to move channel', { description: message })
-    } finally {
-      setReorderingChannelId(null)
-    }
-  }
-
-  const handleChannelDragEnd = (event: DragEndEvent) => {
-    if (!canManageServerChannels || reorderingChannelId !== null) return
-    const { active, over } = event
-    if (!over) return
-
-    const sourceId = Number(active.id)
-    if (!Number.isFinite(sourceId)) return
-
-    if (typeof over.id === 'string') {
-      const targetGroupKey = parseChannelSectionDropId(over.id)
-      if (targetGroupKey) {
-        const sourceChannel = channelsById.get(sourceId)
-        const sourceGroup = channelGroupById.get(sourceId)
-        const targetGroup = channelGroups.find((group) => group.key === targetGroupKey)
-        if (!sourceChannel || !sourceGroup || !targetGroup) return
-        if (sourceChannel.kind !== targetGroup.kind) {
-          toast.error('You can only drag channels between sections of the same type.')
-          return
-        }
-        if (sourceGroup === targetGroup.key) return
-        void moveChannelToSectionEnd(sourceId, targetGroup.section)
-        return
-      }
-    }
-
-    const targetId = Number(over.id)
-    if (!Number.isFinite(targetId)) return
-    if (sourceId === targetId) return
-
-    const sourceGroup = channelGroupById.get(sourceId)
-    const targetGroup = channelGroupById.get(targetId)
-    if (!sourceGroup || !targetGroup) return
-
-    if (sourceGroup === targetGroup) {
-      void moveChannelToTarget(sourceId, targetId)
-      return
-    }
-
-    void moveChannelToDifferentSection(sourceId, targetId)
+  const openCreateChannelDialog = (section: string | null) => {
+    setCreateChannelInitialSection(section)
+    setCreateChannelDialogSeed((value) => value + 1)
+    setShowCreateChannel(true)
   }
 
   const confirmDeleteAction = async () => {
@@ -567,11 +378,11 @@ export function ServerManagePage() {
         toast.success('Channel deleted')
       } else {
         const { group } = pendingDeleteAction
-        await reducers.deleteChannelSection(server.id, group.kind, group.section)
+        await reducers.deleteChannelSection(server.id, group.section)
         if (editingChannel && group.channels.some((channel) => channel.id === editingChannel.id)) {
           setEditingChannel(null)
         }
-        toast.success(`Deleted ${group.kind.toLowerCase()} section "${sectionLabel(group.section)}"`)
+        toast.success(`Deleted section "${sectionLabel(group.section)}"`)
       }
       setPendingDeleteAction(null)
     } catch (error) {
@@ -810,10 +621,10 @@ export function ServerManagePage() {
                 <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                   <div>
                     <CardTitle className="text-base">Channels</CardTitle>
-                    <CardDescription>Drag channels to reorder and move across sections of the same type. Create, rename, regroup, and delete channels.</CardDescription>
+                    <CardDescription>Manage channels, sections, and ordering with explicit controls.</CardDescription>
                   </div>
                   {canManageServerChannels ? (
-                    <Button type="button" size="sm" onClick={() => setShowCreateChannel(true)}>
+                    <Button type="button" size="sm" onClick={() => openCreateChannelDialog(null)}>
                       <PlusIcon className="size-4" />
                       Create Channel
                     </Button>
@@ -824,74 +635,74 @@ export function ServerManagePage() {
                     {sortedChannels.length === 0 ? (
                       <p className="py-6 text-center text-sm text-muted-foreground">No channels found.</p>
                     ) : (
-                      <DndContext
-                        sensors={dndSensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleChannelDragEnd}
-                      >
-                        <div className="space-y-3">
-                          <p className="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                            Drag and drop works within a section and across sections of the same channel type. Drop on a section card to move to its end.
-                          </p>
-                          {channelGroups.map((group) => (
-                            <ChannelSectionDropZone key={group.key} id={channelSectionDropId(group.key)}>
-                              <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline">{group.kind}</Badge>
-                                  <span className="text-sm font-medium">{sectionLabel(group.section)}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="secondary">{group.channels.length}</Badge>
-                                  {canManageServerChannels ? (
-                                    <Button
-                                      type="button"
-                                      variant="destructive"
-                                      size="icon-sm"
-                                      onClick={() => void deleteChannelGroup(group)}
-                                      aria-label="Delete entire section"
-                                      title="Delete section and all channels"
-                                    >
-                                      <Trash2Icon className="size-3.5" />
-                                    </Button>
-                                  ) : null}
-                                </div>
+                      <div className="space-y-3">
+                        {channelGroups.map((group) => (
+                          <div key={group.key} className="rounded-lg border border-border/70 bg-muted/15">
+                            <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{sectionLabel(group.section)}</span>
                               </div>
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead className="w-[60px]">Order</TableHead>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Access</TableHead>
-                                    <TableHead className="w-[210px] text-right">Actions</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <SortableContext
-                                  items={group.channels.map((channel) => channel.id)}
-                                  strategy={verticalListSortingStrategy}
-                                >
-                                  <TableBody>
-                                    {group.channels.map((channel, index) => (
-                                      <SortableChannelRow
-                                        key={channel.id}
-                                        channel={channel}
-                                        canMoveUp={index > 0}
-                                        canMoveDown={index < group.channels.length - 1}
-                                        canManageServerChannels={canManageServerChannels}
-                                        isReordering={reorderingChannelId !== null}
-                                        onMoveChannel={(channelId, direction) => {
-                                          void moveChannel(channelId, direction)
-                                        }}
-                                        onDeleteChannel={deleteChannel}
-                                        onManageChannel={(nextChannel) => setEditingChannel(nextChannel)}
-                                      />
-                                    ))}
-                                  </TableBody>
-                                </SortableContext>
-                              </Table>
-                            </ChannelSectionDropZone>
-                          ))}
-                        </div>
-                      </DndContext>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary">{group.channels.length}</Badge>
+                                {canManageServerChannels ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon-sm"
+                                    onClick={() => openCreateChannelDialog(group.section)}
+                                    aria-label={`Create channel in ${sectionLabel(group.section)}`}
+                                    title={`Create channel in ${sectionLabel(group.section)}`}
+                                  >
+                                    <PlusIcon className="size-3.5" />
+                                  </Button>
+                                ) : null}
+                                {canManageServerChannels ? (
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="icon-sm"
+                                    onClick={() => void deleteChannelGroup(group)}
+                                    aria-label="Delete entire section"
+                                    title="Delete section and all channels"
+                                  >
+                                    <Trash2Icon className="size-3.5" />
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="w-[60px]">Order</TableHead>
+                                  <TableHead>Name</TableHead>
+                                  <TableHead>Access</TableHead>
+                                  <TableHead className="w-[210px] text-right">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {group.channels.map((channel, index) => {
+                                  return (
+                                    <SortableChannelRow
+                                      key={channel.id}
+                                      channel={channel}
+                                      orderLabel={index + 1}
+                                      canMoveUp={index > 0}
+                                      canMoveDown={index < group.channels.length - 1}
+                                      canManageServerChannels={canManageServerChannels}
+                                      isReordering={reorderingChannelId !== null}
+                                      onMoveChannel={(channelId, direction) => {
+                                        void moveChannel(channelId, direction)
+                                      }}
+                                      onDeleteChannel={deleteChannel}
+                                      onManageChannel={(nextChannel) => setEditingChannel(nextChannel)}
+                                    />
+                                  )
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </ScrollArea>
                 </CardContent>
@@ -1031,9 +842,22 @@ export function ServerManagePage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showCreateChannel} onOpenChange={setShowCreateChannel}>
+      <Dialog
+        open={showCreateChannel}
+        onOpenChange={(open) => {
+          setShowCreateChannel(open)
+          if (!open) {
+            setCreateChannelInitialSection(null)
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
-          <CreateChannelModal serverId={server.id} onClose={() => setShowCreateChannel(false)} />
+          <CreateChannelModal
+            key={`${createChannelDialogSeed}:${createChannelInitialSection ?? '__none__'}`}
+            serverId={server.id}
+            initialSection={createChannelInitialSection}
+            onClose={() => setShowCreateChannel(false)}
+          />
         </DialogContent>
       </Dialog>
 
@@ -1120,7 +944,7 @@ export function ServerManagePage() {
               {pendingDeleteAction?.kind === 'channel'
                 ? `Delete channel "${pendingDeleteAction.channel.name}"?`
                 : pendingDeleteAction?.kind === 'section'
-                  ? `Delete section "${sectionLabel(pendingDeleteAction.group.section)}" (${pendingDeleteAction.group.kind})?`
+                  ? `Delete section "${sectionLabel(pendingDeleteAction.group.section)}"?`
                   : 'Delete item?'}
             </DialogTitle>
             <DialogDescription>

@@ -33,7 +33,7 @@ export function ServerChannelPage() {
 
   if (!channelId && serverChannels.length > 0) {
     const remembered = activeChannelId !== null ? serverChannels.find((candidate) => candidate.id === activeChannelId) : null
-    const preferred = remembered ?? serverChannels.find((candidate) => candidate.kind === 'Text') ?? serverChannels[0]
+    const preferred = remembered ?? serverChannels.find((candidate) => candidate.kind !== 'Voice') ?? serverChannels[0]
     return <Navigate to={`/app/${serverNumericId}/${preferred.id}`} replace />
   }
 

@@ -71,6 +71,20 @@ function toU64Number(value: unknown): number {
   return Number(value)
 }
 
+function channelSectionSortValue(section: string | null): string {
+  return (section ?? '').trim().toLowerCase()
+}
+
+function compareChannelsByLayout(left: Channel, right: Channel): number {
+  const sectionDelta = channelSectionSortValue(left.section).localeCompare(channelSectionSortValue(right.section))
+  if (sectionDelta !== 0) return sectionDelta
+
+  const positionDelta = left.position - right.position
+  if (positionDelta !== 0) return positionDelta
+
+  return left.id - right.id
+}
+
 // ─── Unread state ─────────────────────────────────────────────────────────────
 
 export function recomputeUnreadStateFromReadCursors(): void {
@@ -188,7 +202,7 @@ export function syncChannels(conn: DbConnection): void {
   }
 
   for (const [serverId, rows] of grouped.entries()) {
-    rows.sort((a, b) => a.position - b.position)
+    rows.sort(compareChannelsByLayout)
     store.setServerChannels(serverId, rows)
   }
 }

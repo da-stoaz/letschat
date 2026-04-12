@@ -24,6 +24,77 @@ fn same_channel_section(left: &Option<String>, right: &Option<String>) -> bool {
     left.as_deref() == right.as_deref()
 }
 
+fn is_message_channel(kind: &ChannelKind) -> bool {
+    matches!(kind, ChannelKind::Text | ChannelKind::Announcement)
+}
+
+fn section_channels_sorted(
+    ctx: &ReducerContext,
+    server_id: u64,
+    section: &Option<String>,
+) -> Vec<Channel> {
+    let mut rows: Vec<Channel> = ctx
+        .db
+        .channel()
+        .iter()
+        .filter(|channel| {
+            channel.server_id == server_id && same_channel_section(&channel.section, section)
+        })
+        .collect();
+
+    rows.sort_by(|left, right| {
+        left.position
+            .cmp(&right.position)
+            .then(left.id.cmp(&right.id))
+    });
+    rows
+}
+
+fn normalize_section_positions(ctx: &ReducerContext, server_id: u64, section: &Option<String>) {
+    let mut rows = section_channels_sorted(ctx, server_id, section);
+    for (index, mut row) in rows.drain(..).enumerate() {
+        let expected = index as u32;
+        if row.position != expected {
+            row.position = expected;
+            ctx.db.channel().id().update(row);
+        }
+    }
+}
+
+fn move_channel_to_position(
+    ctx: &ReducerContext,
+    channel_row: Channel,
+    target_section: &Option<String>,
+    target_position: u32,
+) {
+    let server_id = channel_row.server_id;
+    let source_section = channel_row.section.clone();
+
+    let mut target_rows: Vec<Channel> = section_channels_sorted(ctx, channel_row.server_id, target_section)
+        .into_iter()
+        .filter(|row| row.id != channel_row.id)
+        .collect();
+
+    let insert_index = usize::min(target_position as usize, target_rows.len());
+    let mut moved_row = channel_row;
+    moved_row.section = target_section.clone();
+    target_rows.insert(insert_index, moved_row);
+
+    for (new_position, mut row) in target_rows.into_iter().enumerate() {
+        let expected = new_position as u32;
+        let section_changed = !same_channel_section(&row.section, target_section);
+        if row.position != expected || section_changed {
+            row.position = expected;
+            row.section = target_section.clone();
+            ctx.db.channel().id().update(row);
+        }
+    }
+
+    if !same_channel_section(&source_section, target_section) {
+        normalize_section_positions(ctx, server_id, &source_section);
+    }
+}
+
 fn delete_channel_with_dependencies(ctx: &ReducerContext, channel_id: u64) {
     let message_ids: Vec<u64> = ctx
         .db
@@ -68,28 +139,7 @@ pub fn create_channel(
     )?;
     let normalized_section = normalize_channel_section(section)?;
 
-    let max_position = ctx
-        .db
-        .channel()
-        .iter()
-        .filter(|c| {
-            c.server_id == server_id
-                && c.kind == kind
-                && same_channel_section(&c.section, &normalized_section)
-        })
-        .map(|c| c.position)
-        .max()
-        .unwrap_or(0);
-
-    let next_position = if ctx.db.channel().iter().any(|c| {
-        c.server_id == server_id
-            && c.kind == kind
-            && same_channel_section(&c.section, &normalized_section)
-    }) {
-        max_position.saturating_add(1)
-    } else {
-        0
-    };
+    let next_position = section_channels_sorted(ctx, server_id, &normalized_section).len() as u32;
 
     ctx.db.channel().insert(Channel {
         id: 0,
@@ -139,7 +189,7 @@ pub fn set_channel_section(
     channel_id: u64,
     section: Option<String>,
 ) -> Result<(), String> {
-    let mut channel_row = find_channel(ctx, channel_id)?;
+    let channel_row = find_channel(ctx, channel_id)?;
     require_mod_or_owner(ctx, channel_row.server_id, ctx.sender())?;
 
     let normalized_section = normalize_channel_section(section)?;
@@ -147,35 +197,12 @@ pub fn set_channel_section(
         return Ok(());
     }
 
-    let max_position = ctx
-        .db
-        .channel()
-        .iter()
-        .filter(|c| {
-            c.id != channel_row.id
-                && c.server_id == channel_row.server_id
-                && c.kind == channel_row.kind
-                && same_channel_section(&c.section, &normalized_section)
-        })
-        .map(|c| c.position)
-        .max()
-        .unwrap_or(0);
+    let next_position = section_channels_sorted(ctx, channel_row.server_id, &normalized_section)
+        .into_iter()
+        .filter(|row| row.id != channel_row.id)
+        .count() as u32;
 
-    let next_position = if ctx.db.channel().iter().any(|c| {
-        c.id != channel_row.id
-            && c.server_id == channel_row.server_id
-            && c.kind == channel_row.kind
-            && same_channel_section(&c.section, &normalized_section)
-    }) {
-        max_position.saturating_add(1)
-    } else {
-        0
-    };
-
-    channel_row.section = normalized_section;
-    channel_row.position = next_position;
-
-    ctx.db.channel().id().update(channel_row);
+    move_channel_to_position(ctx, channel_row, &normalized_section, next_position);
     Ok(())
 }
 
@@ -186,26 +213,10 @@ pub fn move_channel(ctx: &ReducerContext, channel_id: u64, direction: i32) -> Re
         "direction must be either -1 or 1",
     )?;
 
-    let mut channel_row = find_channel(ctx, channel_id)?;
+    let channel_row = find_channel(ctx, channel_id)?;
     require_mod_or_owner(ctx, channel_row.server_id, ctx.sender())?;
 
-    let mut siblings: Vec<Channel> = ctx
-        .db
-        .channel()
-        .iter()
-        .filter(|c| {
-            c.server_id == channel_row.server_id
-                && c.kind == channel_row.kind
-                && same_channel_section(&c.section, &channel_row.section)
-        })
-        .collect();
-
-    siblings.sort_by(|left, right| {
-        left.position
-            .cmp(&right.position)
-            .then(left.id.cmp(&right.id))
-    });
-
+    let siblings: Vec<Channel> = section_channels_sorted(ctx, channel_row.server_id, &channel_row.section);
     let index = siblings
         .iter()
         .position(|row| row.id == channel_row.id)
@@ -223,16 +234,62 @@ pub fn move_channel(ctx: &ReducerContext, channel_id: u64, direction: i32) -> Re
         index + 1
     };
 
-    let target_id = siblings[target_index].id;
-    let target_position = siblings[target_index].position;
-    let current_position = channel_row.position;
+    let target_section = channel_row.section.clone();
+    move_channel_to_position(ctx, channel_row, &target_section, target_index as u32);
+    Ok(())
+}
 
-    let mut target_row = find_channel(ctx, target_id)?;
-    channel_row.position = target_position;
-    target_row.position = current_position;
+#[spacetimedb::reducer]
+pub fn move_channel_to(
+    ctx: &ReducerContext,
+    channel_id: u64,
+    section: Option<String>,
+    position: u32,
+) -> Result<(), String> {
+    let channel_row = find_channel(ctx, channel_id)?;
+    require_mod_or_owner(ctx, channel_row.server_id, ctx.sender())?;
 
-    ctx.db.channel().id().update(channel_row);
-    ctx.db.channel().id().update(target_row);
+    let normalized_section = normalize_channel_section(section)?;
+    move_channel_to_position(ctx, channel_row, &normalized_section, position);
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn move_channel_relative(
+    ctx: &ReducerContext,
+    channel_id: u64,
+    target_channel_id: u64,
+    place_after: bool,
+) -> Result<(), String> {
+    assert_or_err(channel_id != target_channel_id, "source and target channel must differ")?;
+
+    let channel_row = find_channel(ctx, channel_id)?;
+    require_mod_or_owner(ctx, channel_row.server_id, ctx.sender())?;
+
+    let target_row = find_channel(ctx, target_channel_id)?;
+    assert_or_err(
+        channel_row.server_id == target_row.server_id,
+        "target channel must belong to the same server",
+    )?;
+
+    let target_section = target_row.section.clone();
+    let target_rows = section_channels_sorted(ctx, channel_row.server_id, &target_section)
+        .into_iter()
+        .filter(|row| row.id != channel_row.id)
+        .collect::<Vec<_>>();
+
+    let target_index = target_rows
+        .iter()
+        .position(|row| row.id == target_channel_id)
+        .ok_or_else(|| "target channel not found in destination section".to_string())?;
+
+    let insert_index = if place_after {
+        target_index + 1
+    } else {
+        target_index
+    };
+
+    move_channel_to_position(ctx, channel_row, &target_section, insert_index as u32);
     Ok(())
 }
 
@@ -241,14 +298,17 @@ pub fn delete_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), Strin
     let channel_row = find_channel(ctx, channel_id)?;
     require_mod_or_owner(ctx, channel_row.server_id, ctx.sender())?;
 
-    if channel_row.kind == ChannelKind::Text {
-        let text_count = ctx
+    if is_message_channel(&channel_row.kind) {
+        let message_channel_count = ctx
             .db
             .channel()
             .iter()
-            .filter(|c| c.server_id == channel_row.server_id && c.kind == ChannelKind::Text)
+            .filter(|c| c.server_id == channel_row.server_id && is_message_channel(&c.kind))
             .count();
-        assert_or_err(text_count > 1, "cannot delete the last text channel")?;
+        assert_or_err(
+            message_channel_count > 1,
+            "cannot delete the last message channel",
+        )?;
     }
 
     delete_channel_with_dependencies(ctx, channel_id);
@@ -259,36 +319,39 @@ pub fn delete_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), Strin
 pub fn delete_channel_section(
     ctx: &ReducerContext,
     server_id: u64,
-    kind: ChannelKind,
     section: Option<String>,
 ) -> Result<(), String> {
     require_mod_or_owner(ctx, server_id, ctx.sender())?;
 
     let normalized_section = normalize_channel_section(section)?;
-    let channel_ids: Vec<u64> = ctx
+    let section_channels: Vec<Channel> = ctx
         .db
         .channel()
         .iter()
         .filter(|channel| {
             channel.server_id == server_id
-                && channel.kind == kind
                 && same_channel_section(&channel.section, &normalized_section)
         })
-        .map(|channel| channel.id)
         .collect();
 
+    let channel_ids: Vec<u64> = section_channels.iter().map(|channel| channel.id).collect();
     assert_or_err(!channel_ids.is_empty(), "section has no channels")?;
 
-    if kind == ChannelKind::Text {
-        let total_text_channels = ctx
+    let message_channels_in_section = section_channels
+        .iter()
+        .filter(|channel| is_message_channel(&channel.kind))
+        .count();
+
+    if message_channels_in_section > 0 {
+        let total_message_channels = ctx
             .db
             .channel()
             .iter()
-            .filter(|channel| channel.server_id == server_id && channel.kind == ChannelKind::Text)
+            .filter(|channel| channel.server_id == server_id && is_message_channel(&channel.kind))
             .count();
         assert_or_err(
-            total_text_channels > channel_ids.len(),
-            "cannot delete all text channels in a server",
+            total_message_channels > message_channels_in_section,
+            "cannot delete all message channels in a server",
         )?;
     }
 
