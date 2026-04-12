@@ -43,8 +43,8 @@ export function ConnectionTab() {
   }
 
   return (
-    <div className="space-y-4 pt-4">
-      <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3">
+    <div className="space-y-3">
+      <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3">
         <div className="flex items-center gap-2">
           <ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
           <p className="text-sm font-medium">Current server</p>
@@ -69,7 +69,7 @@ export function ConnectionTab() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-border/70 p-3 space-y-2">
+      <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
         <div className="space-y-1">
           <p className="text-sm font-medium">Share join link</p>
           <p className="text-xs text-muted-foreground">
@@ -111,7 +111,7 @@ export function ConnectionTab() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+      <div className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
         <p className="text-sm font-medium">Change server</p>
         <p className="text-xs text-muted-foreground">
           Clears the current server connection and returns to setup. You will be signed out.
