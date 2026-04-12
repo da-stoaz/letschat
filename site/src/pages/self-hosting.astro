@@ -69,7 +69,11 @@ const GITHUB_REPO = "da-stoaz/letschat";
           <p class="font-medium">MinIO</p>
           <p class="text-muted-foreground">S3-compatible object storage. Required for uploads, attachments, and download URLs.</p>
         </article>
-        <article class="service-card rounded-xl p-4 space-y-1 md:col-span-2 lg:col-span-2">
+        <article class="service-card rounded-xl p-4 space-y-1">
+          <p class="font-medium">Module Init</p>
+          <p class="text-muted-foreground">One-shot container that publishes the SpacetimeDB WASM module on startup. Runs automatically and exits cleanly.</p>
+        </article>
+        <article class="service-card rounded-xl p-4 space-y-1 md:col-span-2 lg:col-span-1">
           <p class="font-medium">Discovery Endpoint (`/.well-known/letschat.json`)</p>
           <p class="text-muted-foreground">Lets app startup auto-discover your backend from one URL (for example `https://connect.example.com`).
           Without this, users must paste a full join link manually.</p>
@@ -103,16 +107,19 @@ const GITHUB_REPO = "da-stoaz/letschat";
       </div>
     </section>
 
-    <section class="frost rounded-2xl p-6 space-y-3">
+    <section class="frost rounded-2xl p-6 space-y-4">
       <h2 class="text-2xl font-semibold tracking-tight">Deployment Interface</h2>
-      <p class="text-sm text-muted-foreground">Production is split into one shared compose base plus one track overlay:</p>
+      <p class="text-sm text-muted-foreground">Production is split into one shared compose base plus one track overlay. All images are pre-built — no local compilation needed on your server.</p>
       <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`# Track A: Tunnel
 cp .env.production.tunnel.example .env
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --build
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
 
 # Track B: Caddy
 cp .env.production.caddy.example .env
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d --build`}</code></pre>
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d`}</code></pre>
+      <p class="text-xs text-muted-foreground">The `module-init` container publishes the SpacetimeDB module automatically on first start and after updates.</p>
     </section>
 
     <section id="track-tunnel" class="space-y-6">
@@ -173,18 +180,15 @@ keys:
 
       <article class="step-card rounded-xl p-6 space-y-3">
         <h3 class="text-xl font-medium">Step 4: Start Services</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --build
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml ps
 curl -i http://127.0.0.1:44305/.well-known/letschat.json`}</code></pre>
+        <p class="text-sm text-muted-foreground">The `module-init` container will publish the SpacetimeDB module automatically once SpacetimeDB is healthy. Check its logs with `docker logs letschat-module-init`.</p>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 5: Publish SpacetimeDB Module</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`spacetime publish --server http://127.0.0.1:44300 letschat --module-path server --yes`}</code></pre>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 6: Validate Public Endpoints</h3>
+        <h3 class="text-xl font-medium">Step 5: Validate Public Endpoints</h3>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
 curl -i https://files.example.com/minio/health/live
 curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
@@ -192,7 +196,7 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 7: Client Onboarding</h3>
+        <h3 class="text-xl font-medium">Step 6: Client Onboarding</h3>
         <p class="text-sm text-muted-foreground">Users can enter `https://connect.example.com` in startup and LetsChat will auto-discover backend URLs.</p>
         <p class="text-sm text-muted-foreground">Discovery JSON example:</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
@@ -252,24 +256,21 @@ openssl rand -base64 32`}</code></pre>
 
       <article class="step-card rounded-xl p-6 space-y-3">
         <h3 class="text-xl font-medium">Step 4: Start Services</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d --build
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`}</code></pre>
+        <p class="text-sm text-muted-foreground">The `module-init` container will publish the SpacetimeDB module automatically once SpacetimeDB is healthy. Check its logs with `docker logs letschat-module-init`.</p>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 5: Publish SpacetimeDB Module</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`spacetime publish --server http://127.0.0.1:44300 letschat --module-path server --yes`}</code></pre>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 6: Validate Public Endpoints</h3>
+        <h3 class="text-xl font-medium">Step 5: Validate Public Endpoints</h3>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
 curl -i https://files.example.com/minio/health/live
 curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 7: Client Onboarding</h3>
+        <h3 class="text-xl font-medium">Step 6: Client Onboarding</h3>
         <p class="text-sm text-muted-foreground">Users can enter `https://connect.example.com` in startup. Discovery JSON should point to your public endpoints:</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
   "spacetimedb": "wss://chat.example.com",
@@ -319,8 +320,8 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
             </tr>
             <tr>
               <td class="p-3">Spacetime connect timeout</td>
-              <td class="p-3">Module not published to production SpacetimeDB</td>
-              <td class="p-3">Run `spacetime publish --server http://127.0.0.1:44300 ...`</td>
+              <td class="p-3">`module-init` failed or SpacetimeDB not yet healthy</td>
+              <td class="p-3">Check `docker logs letschat-module-init`; it retries on failure automatically</td>
             </tr>
           </tbody>
         </table>
