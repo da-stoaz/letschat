@@ -69,7 +69,11 @@ const GITHUB_REPO = "da-stoaz/letschat";
           <p class="font-medium">MinIO</p>
           <p class="text-muted-foreground">S3-compatible object storage. Required for uploads, attachments, and download URLs.</p>
         </article>
-        <article class="service-card rounded-xl p-4 space-y-1 md:col-span-2 lg:col-span-2">
+        <article class="service-card rounded-xl p-4 space-y-1">
+          <p class="font-medium">Module Init</p>
+          <p class="text-muted-foreground">One-shot container that publishes the SpacetimeDB WASM module on startup. Runs automatically and exits cleanly.</p>
+        </article>
+        <article class="service-card rounded-xl p-4 space-y-1 md:col-span-2 lg:col-span-1">
           <p class="font-medium">Discovery Endpoint (`/.well-known/letschat.json`)</p>
           <p class="text-muted-foreground">Lets app startup auto-discover your backend from one URL (for example `https://connect.example.com`).
           Without this, users must paste a full join link manually.</p>
@@ -103,16 +107,17 @@ const GITHUB_REPO = "da-stoaz/letschat";
       </div>
     </section>
 
-    <section class="frost rounded-2xl p-6 space-y-3">
-      <h2 class="text-2xl font-semibold tracking-tight">Deployment Interface</h2>
-      <p class="text-sm text-muted-foreground">Production is split into one shared compose base plus one track overlay:</p>
-      <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`# Track A: Tunnel
-cp .env.production.tunnel.example .env
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --build
+    <section class="frost rounded-2xl p-6 space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">Step 0: Get the Deployment Files</h2>
+      <p class="text-sm text-muted-foreground">You only need a handful of config files — not the full source. Download the shared base and LiveKit config:</p>
+      <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`mkdir letschat && cd letschat
 
-# Track B: Caddy
-cp .env.production.caddy.example .env
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d --build`}</code></pre>
+wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
+
+mkdir livekit
+wget -O livekit/config.prod.yaml \\
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml`}</code></pre>
+      <p class="text-sm text-muted-foreground">Then continue to your chosen track below to download the overlay compose file and environment template. All images are pre-built — no Rust or Node toolchains needed on the server.</p>
     </section>
 
     <section id="track-tunnel" class="space-y-6">
@@ -138,49 +143,60 @@ curl -4 ifconfig.me`}</code></pre>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 1: DNS + Tunnel Ingress</h3>
-        <p class="text-sm text-muted-foreground">Create these hostnames in Cloudflare and configure tunnel ingress:</p>
+        <h3 class="text-xl font-medium">Step 1: Download Track A Files</h3>
+        <p class="text-sm text-muted-foreground">Inside the `letschat` directory you created in Step 0:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.tunnel.yml
+
+wget -O .env \\
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.tunnel.example`}</code></pre>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 2: DNS + Tunnel Ingress</h3>
+        <p class="text-sm text-muted-foreground">Create these hostnames in Cloudflare Zero Trust and configure tunnel ingress rules:</p>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li>`auth.example.com` -> `http://auth-service:44301`</li>
-          <li>`chat.example.com` -> `http://spacetimedb:3000` (WebSocket enabled)</li>
-          <li>`files.example.com` -> `http://minio:44390`</li>
-          <li>`connect.example.com` -> `http://discovery:80`</li>
-          <li>`lk.example.com` -> DNS to your host public IP (not tunnelled media)</li>
+          <li>`auth.example.com` → `http://auth-service:44301`</li>
+          <li>`chat.example.com` → `http://spacetimedb:3000` (enable WebSocket support)</li>
+          <li>`files.example.com` → `http://minio:44390`</li>
+          <li>`connect.example.com` → `http://discovery:80`</li>
+          <li>`lk.example.com` → A record pointing to your host public IP (media is not tunnelled)</li>
         </ul>
+        <p class="text-sm text-muted-foreground">Copy the tunnel token from the Zero Trust dashboard — you will need it in the next step.</p>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 2: Configure Secrets + Endpoints</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`cp .env.production.tunnel.example .env
-
-# generate secrets and paste into .env
-openssl rand -hex 32
-openssl rand -base64 32`}</code></pre>
-        <p class="text-sm text-muted-foreground">Set all required values, especially `CLOUDFLARE_TUNNEL_TOKEN` and `DISCOVERY_*` fields used by startup auto-discovery.</p>
+        <h3 class="text-xl font-medium">Step 3: Configure Secrets and Endpoints</h3>
+        <p class="text-sm text-muted-foreground">Open `.env` (downloaded in Step 1) and replace every placeholder. Generate secrets with:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
+openssl rand -base64 32   # for LIVEKIT_API_SECRET`}</code></pre>
+        <p class="text-sm text-muted-foreground">Key fields to fill in:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`AUTH_JWT_SECRET=          # generate with openssl
+LIVEKIT_API_KEY=letschat-prod
+LIVEKIT_API_SECRET=       # generate with openssl
+MINIO_ACCESS_KEY=         # any username you choose
+MINIO_SECRET_KEY=         # generate with openssl
+MINIO_PUBLIC_ENDPOINT=https://files.example.com
+DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
+DISCOVERY_AUTH_URL=https://auth.example.com
+DISCOVERY_LIVEKIT_URL=ws://lk.example.com:44380
+CLOUDFLARE_TUNNEL_TOKEN=  # from Zero Trust dashboard`}</code></pre>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 3: LiveKit Production Config</h3>
-        <p class="text-sm text-muted-foreground">In `livekit/config.prod.yaml`, match API keys with `.env` and keep media ports aligned.</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`port: 44380
-rtc:
-  use_external_ip: true
-  tcp_port: 44381
-  udp_port: 44382
-keys:
-  letschat-prod: <same as LIVEKIT_API_SECRET>`}</code></pre>
+        <h3 class="text-xl font-medium">Step 4: Configure LiveKit</h3>
+        <p class="text-sm text-muted-foreground">Open `livekit/config.prod.yaml` and replace the key/secret placeholder so it matches your `.env`:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`keys:
+  letschat-prod: <paste LIVEKIT_API_SECRET here>`}</code></pre>
+        <p class="text-xs text-muted-foreground">The rest of the file (ports, `use_external_ip: true`) can stay as-is for most home server setups.</p>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 4: Start Services</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --build
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml ps
-curl -i http://127.0.0.1:44305/.well-known/letschat.json`}</code></pre>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 5: Publish SpacetimeDB Module</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`spacetime publish --server http://127.0.0.1:44300 letschat --module-path server --yes`}</code></pre>
+        <h3 class="text-xl font-medium">Step 5: Pull Images and Start</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml ps`}</code></pre>
+        <p class="text-sm text-muted-foreground">`module-init` automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker logs letschat-module-init`}</code></pre>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
@@ -225,8 +241,21 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 1: DNS + Network Setup</h3>
-        <p class="text-sm text-muted-foreground">Point these DNS records to your host public IP:</p>
+        <h3 class="text-xl font-medium">Step 1: Download Track B Files</h3>
+        <p class="text-sm text-muted-foreground">Inside the `letschat` directory you created in Step 0:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.caddy.yml
+
+wget -O .env \\
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.caddy.example
+
+mkdir -p deploy/caddy
+wget -O deploy/caddy/Caddyfile \\
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/deploy/caddy/Caddyfile`}</code></pre>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h3 class="text-xl font-medium">Step 2: DNS + Network Setup</h3>
+        <p class="text-sm text-muted-foreground">Point these A records to your host public IP (DNS-only, no Cloudflare proxy):</p>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
           <li>`auth.example.com`</li>
           <li>`chat.example.com`</li>
@@ -234,31 +263,46 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
           <li>`lk.example.com`</li>
           <li>`connect.example.com`</li>
         </ul>
-        <p class="text-sm text-muted-foreground">Open ports: `80/tcp`, `443/tcp`, `44381/tcp+udp`, `44382/udp`.</p>
+        <p class="text-sm text-muted-foreground">Open on router/firewall: `80/tcp`, `443/tcp` (Caddy TLS), `44381/tcp+udp`, `44382/udp` (LiveKit media).</p>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 2: Configure Secrets + Domains</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`cp .env.production.caddy.example .env
-openssl rand -hex 32
-openssl rand -base64 32`}</code></pre>
-        <p class="text-sm text-muted-foreground">Set `*_DOMAIN` and `DISCOVERY_*` values. `CONNECT_DOMAIN` is required for startup auto-discovery route.</p>
+        <h3 class="text-xl font-medium">Step 3: Configure Secrets and Domains</h3>
+        <p class="text-sm text-muted-foreground">Open `.env` (downloaded in Step 1) and replace every placeholder. Generate secrets with:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
+openssl rand -base64 32   # for LIVEKIT_API_SECRET`}</code></pre>
+        <p class="text-sm text-muted-foreground">Key fields to fill in:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`AUTH_JWT_SECRET=          # generate with openssl
+LIVEKIT_API_KEY=letschat-prod
+LIVEKIT_API_SECRET=       # generate with openssl
+MINIO_ACCESS_KEY=         # any username you choose
+MINIO_SECRET_KEY=         # generate with openssl
+MINIO_PUBLIC_ENDPOINT=https://files.example.com
+DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
+DISCOVERY_AUTH_URL=https://auth.example.com
+DISCOVERY_LIVEKIT_URL=wss://lk.example.com
+AUTH_DOMAIN=auth.example.com
+CHAT_DOMAIN=chat.example.com
+FILES_DOMAIN=files.example.com
+LIVEKIT_DOMAIN=lk.example.com
+CONNECT_DOMAIN=connect.example.com`}</code></pre>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 3: LiveKit Production Config</h3>
-        <p class="text-sm text-muted-foreground">Same key/port alignment rules as Tunnel track.</p>
+        <h3 class="text-xl font-medium">Step 4: Configure LiveKit</h3>
+        <p class="text-sm text-muted-foreground">Open `livekit/config.prod.yaml` and replace the key/secret placeholder so it matches your `.env`:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`keys:
+  letschat-prod: <paste LIVEKIT_API_SECRET here>`}</code></pre>
+        <p class="text-xs text-muted-foreground">The rest of the file (ports, `use_external_ip: true`) can stay as-is for most home server setups.</p>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 4: Start Services</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d --build
+        <h3 class="text-xl font-medium">Step 5: Pull Images and Start</h3>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`}</code></pre>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 5: Publish SpacetimeDB Module</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`spacetime publish --server http://127.0.0.1:44300 letschat --module-path server --yes`}</code></pre>
+        <p class="text-sm text-muted-foreground">`module-init` automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker logs letschat-module-init`}</code></pre>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
@@ -319,8 +363,8 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
             </tr>
             <tr>
               <td class="p-3">Spacetime connect timeout</td>
-              <td class="p-3">Module not published to production SpacetimeDB</td>
-              <td class="p-3">Run `spacetime publish --server http://127.0.0.1:44300 ...`</td>
+              <td class="p-3">`module-init` failed or SpacetimeDB not yet healthy</td>
+              <td class="p-3">Check `docker logs letschat-module-init`; it retries on failure automatically</td>
             </tr>
           </tbody>
         </table>
