@@ -27,7 +27,20 @@ function sectionSelectionLabel(value: string): string {
   return decodeSectionValue(value) ?? 'Choose section'
 }
 
-export function CreateChannelModal({ serverId, onClose }: { serverId: number; onClose: () => void }) {
+function initialSectionSelectionValue(initialSection: string | null | undefined): string {
+  const normalized = initialSection?.trim()
+  return normalized && normalized.length > 0 ? encodeSectionValue(normalized) : SECTION_NONE_VALUE
+}
+
+export function CreateChannelModal({
+  serverId,
+  onClose,
+  initialSection = null,
+}: {
+  serverId: number
+  onClose: () => void
+  initialSection?: string | null
+}) {
   const serverChannels = useChannelsStore((s) => s.channelsByServer[serverId] ?? [])
   const existingSections = useMemo(() => {
     const unique = new Set<string>()
@@ -39,7 +52,7 @@ export function CreateChannelModal({ serverId, onClose }: { serverId: number; on
   }, [serverChannels])
 
   const [name, setName] = useState('')
-  const [sectionSelection, setSectionSelection] = useState<string>(SECTION_NONE_VALUE)
+  const [sectionSelection, setSectionSelection] = useState<string>(() => initialSectionSelectionValue(initialSection))
   const [newSectionName, setNewSectionName] = useState('')
   const [kind, setKind] = useState<ChannelKind>('Text')
   const [moderatorOnly, setModeratorOnly] = useState(false)
@@ -114,6 +127,7 @@ export function CreateChannelModal({ serverId, onClose }: { serverId: number; on
           <SelectContent>
             <SelectItem value="Text">Text</SelectItem>
             <SelectItem value="Voice">Voice</SelectItem>
+            <SelectItem value="Announcement">Announcement</SelectItem>
           </SelectContent>
         </Select>
       </div>

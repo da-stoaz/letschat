@@ -11,6 +11,7 @@ pub enum Role {
 pub enum ChannelKind {
     Text,
     Voice,
+    Announcement,
 }
 
 #[derive(SpacetimeType, Clone, PartialEq, Eq)]

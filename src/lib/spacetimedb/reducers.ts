@@ -35,6 +35,13 @@ function toOptionalU64(value: U64Input | null | undefined, fieldName: string): b
   return toU64(value, fieldName)
 }
 
+function toU32(value: number, fieldName: string): number {
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0 || value > 0xffff_ffff) {
+    throw new Error(`${fieldName} must be a non-negative 32-bit integer`)
+  }
+  return value
+}
+
 // ─── Typed reducer wrappers ───────────────────────────────────────────────────
 
 export const reducers = {
@@ -132,7 +139,7 @@ export const reducers = {
   createChannel: (
     serverId: number,
     name: string,
-    kind: 'Text' | 'Voice',
+    kind: 'Text' | 'Voice' | 'Announcement',
     moderatorOnly: boolean,
     section: string | null = null,
   ) =>
@@ -155,6 +162,18 @@ export const reducers = {
       channelId: toU64(channelId, 'channelId'),
       section: section === null ? null : section.trim(),
     }),
+  moveChannelTo: (channelId: number, section: string | null, position: number) =>
+    spacetimedbClient.call('moveChannelTo', {
+      channelId: toU64(channelId, 'channelId'),
+      section: section === null ? null : section.trim(),
+      position: toU32(position, 'position'),
+    }),
+  moveChannelRelative: (channelId: number, targetChannelId: number, placeAfter: boolean) =>
+    spacetimedbClient.call('moveChannelRelative', {
+      channelId: toU64(channelId, 'channelId'),
+      targetChannelId: toU64(targetChannelId, 'targetChannelId'),
+      placeAfter,
+    }),
   moveChannel: (channelId: number, direction: -1 | 1) =>
     spacetimedbClient.call('moveChannel', {
       channelId: toU64(channelId, 'channelId'),
@@ -164,12 +183,10 @@ export const reducers = {
     spacetimedbClient.call('deleteChannel', { channelId: toU64(channelId, 'channelId') }),
   deleteChannelSection: (
     serverId: number,
-    kind: 'Text' | 'Voice',
     section: string | null,
   ) =>
     spacetimedbClient.call('deleteChannelSection', {
       serverId: toU64(serverId, 'serverId'),
-      kind: reducerEnum(kind),
       section: section === null ? null : section.trim(),
     }),
   sendMessage: (channelId: number, content: string) =>
