@@ -18,7 +18,7 @@ import { toast } from '@/components/ui/sonner'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -84,6 +84,7 @@ const NOTIFICATION_TOGGLE_ROWS: NotificationToggleRow[] = [
 ]
 
 const MAX_AVATAR_SIZE_BYTES = 10 * 1024 * 1024
+const PRIORITY_NOTIFICATION_KEYS: NotificationToggleRow['key'][] = ['mentions', 'directMessages', 'incomingCalls']
 
 function normalizeTimeInput(value: string): string {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim())
@@ -194,224 +195,301 @@ export function SettingsPanel() {
     }
   }, [])
 
+  const profileDisplayName = displayName.trim() || user?.displayName || user?.username || 'No display name'
+  const priorityNotificationRows = NOTIFICATION_TOGGLE_ROWS.filter((row) => PRIORITY_NOTIFICATION_KEYS.includes(row.key))
+  const secondaryNotificationRows = NOTIFICATION_TOGGLE_ROWS.filter((row) => !PRIORITY_NOTIFICATION_KEYS.includes(row.key))
+  const enabledNotificationCount = NOTIFICATION_TOGGLE_ROWS.reduce((total, row) => {
+    return total + (notificationSettings.eventToggles[row.key] ? 1 : 0)
+  }, 0)
+
+  const renderNotificationToggleRow = (row: NotificationToggleRow) => (
+    <div key={row.event} className="flex items-center justify-between gap-3 py-1.5">
+      <div className="space-y-0.5">
+        <p className="text-sm font-medium">{row.label}</p>
+        <p className="text-xs text-muted-foreground">{row.description}</p>
+      </div>
+      <Switch
+        checked={notificationSettings.eventToggles[row.key]}
+        onCheckedChange={(checked) => setNotificationEventEnabled(row.key, Boolean(checked))}
+        disabled={!notificationSettings.enabled}
+      />
+    </div>
+  )
+
   return (
     <section className="space-y-4">
       <header className="space-y-1">
         <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">Manage your profile, account identity, and notification behavior.</p>
+        <p className="text-sm text-muted-foreground">
+          Update your identity, secure access, control notifications, and manage server connection details.
+        </p>
       </header>
 
-      <Tabs defaultValue="profile" className="space-y-3">
+      <Tabs defaultValue="identity" className="space-y-3">
         <TabsList className="w-full">
-          <TabsTrigger value="profile" className="flex-1">Profile</TabsTrigger>
-          <TabsTrigger value="account" className="flex-1">Account</TabsTrigger>
-          <TabsTrigger value="notifications" className="flex-1">Notifications</TabsTrigger>
-          <TabsTrigger value="connection" className="flex-1">
-            <PlugZapIcon className="size-3.5 mr-1.5" />
+          <TabsTrigger value="identity" className="flex-1 min-w-0">
+            <UserRoundIcon className="size-3.5" />
+            Identity
+          </TabsTrigger>
+          <TabsTrigger value="security" className="flex-1 min-w-0">
+            <ShieldCheckIcon className="size-3.5" />
+            Security
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="flex-1 min-w-0">
+            <BellIcon className="size-3.5" />
+            Notifications
+          </TabsTrigger>
+          <TabsTrigger value="connection" className="flex-1 min-w-0">
+            <PlugZapIcon className="size-3.5" />
             Connection
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile">
-          <Card className="border-border/70 bg-muted/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <UserRoundIcon className="size-4 text-muted-foreground" />
-                Profile
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form
-                className="space-y-4"
-                onSubmit={async (event) => {
-                  event.preventDefault()
-                  setIsSavingProfile(true)
-                  try {
-                    const normalizedAvatar = avatarUrl.trim()
-                    await reducers.updateProfile(displayName || null, normalizedAvatar)
-                    toast.success('Profile updated')
-                  } catch (error) {
-                    const message = error instanceof Error ? error.message : 'Could not save profile.'
-                    toast.error(message)
-                  } finally {
-                    setIsSavingProfile(false)
-                  }
-                }}
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="settings-display-name">Display name</Label>
-                  <Input
-                    id="settings-display-name"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Display name"
-                  />
+        <TabsContent value="identity">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.3fr)]">
+            <Card className="border-border/70 bg-muted/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Profile Preview</CardTitle>
+                <CardDescription>What other members recognize first in chat and member lists.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-card/70 p-3">
+                  <Avatar className="size-14 rounded-2xl">
+                    {avatarPreviewUrl || avatarUrl ? (
+                      <AvatarImage src={avatarPreviewUrl ?? avatarUrl} alt={profileDisplayName} />
+                    ) : null}
+                    <AvatarFallback className="rounded-2xl bg-primary/10 text-sm">
+                      {profileDisplayName.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{profileDisplayName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{user ? `@${user.username}` : 'No username set'}</p>
+                  </div>
                 </div>
-                <div className="space-y-3 rounded-lg border border-border/70 bg-card/70 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <Label className="text-sm">Profile picture</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Upload an image to use as your avatar across chats and calls.
-                      </p>
-                    </div>
-                    <Avatar className="size-16 rounded-2xl">
-                      {avatarPreviewUrl || avatarUrl ? (
-                        <AvatarImage src={avatarPreviewUrl ?? avatarUrl} alt={displayName || user?.username || 'Avatar'} />
-                      ) : null}
-                      <AvatarFallback className="rounded-2xl bg-primary/10 text-lg">
-                        {(displayName || user?.username || '?').slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                <div className="rounded-lg border border-border/70 bg-card/70 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Keep this updated so friends and teammates can identify you quickly.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 bg-muted/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Edit Identity</CardTitle>
+                <CardDescription>Update display name and avatar in one flow.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form
+                  className="space-y-4"
+                  onSubmit={async (event) => {
+                    event.preventDefault()
+                    setIsSavingProfile(true)
+                    try {
+                      const normalizedAvatar = avatarUrl.trim()
+                      await reducers.updateProfile(displayName || null, normalizedAvatar)
+                      toast.success('Profile updated')
+                    } catch (error) {
+                      const message = error instanceof Error ? error.message : 'Could not save profile.'
+                      toast.error(message)
+                    } finally {
+                      setIsSavingProfile(false)
+                    }
+                  }}
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="settings-display-name">Display name</Label>
+                    <Input
+                      id="settings-display-name"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="Display name"
+                    />
                   </div>
 
-                  <input
-                    ref={avatarInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null
-                      event.currentTarget.value = ''
-                      handleAvatarFilePicked(file)
-                    }}
-                  />
+                  <div className="space-y-3 rounded-lg border border-border/70 bg-card/70 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <Label className="text-sm">Profile picture</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Upload an image to use as your avatar across chats and calls.
+                        </p>
+                      </div>
+                      <Avatar className="size-16 rounded-2xl">
+                        {avatarPreviewUrl || avatarUrl ? (
+                          <AvatarImage src={avatarPreviewUrl ?? avatarUrl} alt={profileDisplayName} />
+                        ) : null}
+                        <AvatarFallback className="rounded-2xl bg-primary/10 text-lg">
+                          {profileDisplayName.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null
+                        event.currentTarget.value = ''
+                        handleAvatarFilePicked(file)
+                      }}
+                    />
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isUploadingAvatar}
+                        onClick={() => avatarInputRef.current?.click()}
+                      >
+                        {isUploadingAvatar ? <Loader2Icon className="size-4 animate-spin" /> : <CameraIcon className="size-4" />}
+                        {isUploadingAvatar ? 'Uploading…' : 'Change Photo'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={isUploadingAvatar || (!avatarPreviewUrl && !avatarUrl)}
+                        onClick={() => {
+                          clearAvatarPreview()
+                          setAvatarUrl('')
+                          toast.message('Profile picture will be removed after saving.')
+                        }}
+                      >
+                        <Trash2Icon className="size-4" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button type="submit" disabled={isSavingProfile || isUploadingAvatar}>
+                      {isSavingProfile ? 'Saving…' : 'Save Profile'}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="security">
+          <div className="space-y-3">
+            <Card className="border-border/70 bg-muted/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Identity Binding</CardTitle>
+                <CardDescription>Confirm which account identity this client is operating as.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-3 rounded-lg border border-border/70 bg-card/70 p-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Username</p>
+                    <Badge variant="secondary">{user ? `@${user.username}` : 'Unregistered identity'}</Badge>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Identity</p>
+                    <p className="break-all text-xs text-muted-foreground">{identity ?? 'No identity available'}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 bg-muted/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Password Login</CardTitle>
+                <CardDescription>Set a password so you can sign in from another device with your username.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-2 rounded-lg border border-border/70 bg-card/70 p-3">
+                  <Label htmlFor="settings-password">Password</Label>
+                  <Input
+                    id="settings-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                  />
+                  <Input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm password"
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">Links this identity to username/password sign in.</p>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={isUploadingAvatar}
-                      onClick={() => avatarInputRef.current?.click()}
-                    >
-                      {isUploadingAvatar ? <Loader2Icon className="size-4 animate-spin" /> : <CameraIcon className="size-4" />}
-                      {isUploadingAvatar ? 'Uploading…' : 'Change Photo'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={isUploadingAvatar || (!avatarPreviewUrl && !avatarUrl)}
-                      onClick={() => {
-                        clearAvatarPreview()
-                        setAvatarUrl('')
-                        toast.message('Profile picture will be removed after saving.')
+                      disabled={isSavingPassword}
+                      onClick={async () => {
+                        setAccountMessage(null)
+                        if (!user) {
+                          setAccountMessage('Register a user first.')
+                          return
+                        }
+                        if (!identity) {
+                          setAccountMessage('No active identity found.')
+                          return
+                        }
+                        const sessionToken = getCurrentSessionToken()
+                        if (!sessionToken) {
+                          setAccountMessage('No active Spacetime session token found.')
+                          return
+                        }
+                        if (password.length < 8) {
+                          setAccountMessage('Password must be at least 8 characters.')
+                          return
+                        }
+                        if (password !== confirmPassword) {
+                          setAccountMessage('Passwords do not match.')
+                          return
+                        }
+
+                        setIsSavingPassword(true)
+                        try {
+                          await authServiceLink({
+                            username: user.username,
+                            displayName: user.displayName,
+                            password,
+                            spacetimeToken: sessionToken,
+                            spacetimeIdentity: identity,
+                          })
+                          setPassword('')
+                          setConfirmPassword('')
+                          setAccountMessage('Password login updated successfully.')
+                          toast.success('Password login updated')
+                        } catch (error) {
+                          const message = error instanceof Error ? error.message : 'Could not update password login.'
+                          setAccountMessage(message)
+                          toast.error(message)
+                        } finally {
+                          setIsSavingPassword(false)
+                        }
                       }}
                     >
-                      <Trash2Icon className="size-4" />
-                      Remove
+                      {isSavingPassword ? 'Saving…' : 'Save Password Login'}
                     </Button>
                   </div>
                 </div>
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={isSavingProfile || isUploadingAvatar}>
-                    {isSavingProfile ? 'Saving…' : 'Save Profile'}
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
-        <TabsContent value="account">
-          <Card className="border-border/70 bg-muted/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ShieldCheckIcon className="size-4 text-muted-foreground" />
-                Account & Security
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 rounded-lg border border-border/70 bg-card/70 p-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Username</p>
-                  <Badge variant="secondary">{user ? `@${user.username}` : 'Unregistered identity'}</Badge>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Identity</p>
-                  <p className="break-all text-xs text-muted-foreground">{identity ?? 'No identity available'}</p>
-                </div>
-              </div>
+                {accountMessage ? <p className="text-xs text-muted-foreground">{accountMessage}</p> : null}
+              </CardContent>
+            </Card>
 
-              <div className="space-y-2 rounded-lg border border-border/70 bg-card/70 p-3">
-                <Label htmlFor="settings-password">Password Login</Label>
-                <Input
-                  id="settings-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 8 characters"
-                />
-                <Input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm password"
-                />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">Link this identity to username/password sign in.</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={isSavingPassword}
-                    onClick={async () => {
-                      setAccountMessage(null)
-                      if (!user) {
-                        setAccountMessage('Register a user first.')
-                        return
-                      }
-                      if (!identity) {
-                        setAccountMessage('No active identity found.')
-                        return
-                      }
-                      const sessionToken = getCurrentSessionToken()
-                      if (!sessionToken) {
-                        setAccountMessage('No active Spacetime session token found.')
-                        return
-                      }
-                      if (password.length < 8) {
-                        setAccountMessage('Password must be at least 8 characters.')
-                        return
-                      }
-                      if (password !== confirmPassword) {
-                        setAccountMessage('Passwords do not match.')
-                        return
-                      }
-
-                      setIsSavingPassword(true)
-                      try {
-                        await authServiceLink({
-                          username: user.username,
-                          displayName: user.displayName,
-                          password,
-                          spacetimeToken: sessionToken,
-                          spacetimeIdentity: identity,
-                        })
-                        setPassword('')
-                        setConfirmPassword('')
-                        setAccountMessage('Password login updated successfully.')
-                        toast.success('Password login updated')
-                      } catch (error) {
-                        const message = error instanceof Error ? error.message : 'Could not update password login.'
-                        setAccountMessage(message)
-                        toast.error(message)
-                      } finally {
-                        setIsSavingPassword(false)
-                      }
-                    }}
-                  >
-                    {isSavingPassword ? 'Saving…' : 'Save Password Login'}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-destructive">Sign out</p>
-                  <p className="text-xs text-muted-foreground">Disconnect this client and clear authenticated session tokens.</p>
-                </div>
+            <Card className="border-destructive/30 bg-destructive/5">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base text-destructive">Session Actions</CardTitle>
+                <CardDescription>Use this when you want to sign out from this device immediately.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Disconnect this client and clear authenticated session tokens.
+                </p>
                 <Button
                   type="button"
                   variant="destructive"
@@ -432,171 +510,196 @@ export function SettingsPanel() {
                   <LogOutIcon className="size-4" />
                   {isSigningOut ? 'Signing out…' : 'Sign Out'}
                 </Button>
-              </div>
-
-              {accountMessage ? <p className="text-xs text-muted-foreground">{accountMessage}</p> : null}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="notifications">
-          <Card className="border-border/70 bg-muted/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <BellIcon className="size-4 text-muted-foreground" />
-                Notifications
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/70 p-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Enable notifications</p>
-                  <p className="text-xs text-muted-foreground">Master switch for all desktop/browser notifications.</p>
-                </div>
-                <Switch
-                  checked={notificationSettings.enabled}
-                  onCheckedChange={(checked) => setNotificationsEnabled(Boolean(checked))}
-                />
-              </div>
-
-              <div className="space-y-2 rounded-lg border border-border/70 bg-card/70 p-3">
-                {NOTIFICATION_TOGGLE_ROWS.map((row) => (
-                  <div key={row.event} className="flex items-center justify-between gap-3 py-1">
-                    <div className="space-y-0.5">
-                      <p className="text-sm font-medium">{row.label}</p>
-                      <p className="text-xs text-muted-foreground">{row.description}</p>
-                    </div>
-                    <Switch
-                      checked={notificationSettings.eventToggles[row.key]}
-                      onCheckedChange={(checked) => setNotificationEventEnabled(row.key, Boolean(checked))}
-                      disabled={!notificationSettings.enabled}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/70 p-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Show message previews</p>
-                  <p className="text-xs text-muted-foreground">Hide content in notification bodies when disabled.</p>
-                </div>
-                <Switch
-                  checked={notificationSettings.showPreviews}
-                  onCheckedChange={(checked) => setNotificationPreviewsEnabled(Boolean(checked))}
-                  disabled={!notificationSettings.enabled}
-                />
-              </div>
-
-              <div className="space-y-3 rounded-lg border border-border/70 bg-card/70 p-3">
-                <div className="flex items-center justify-between">
+          <div className="space-y-3">
+            <Card className="border-border/70 bg-muted/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Notification Master Control</CardTitle>
+                <CardDescription>
+                  Choose between quiet mode and full awareness in one place.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/70 p-3">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Quiet hours</p>
-                    <p className="text-xs text-muted-foreground">Suppress all notifications during this time range.</p>
+                    <p className="text-sm font-medium">Enable notifications</p>
+                    <p className="text-xs text-muted-foreground">Master switch for all desktop/browser notifications.</p>
                   </div>
                   <Switch
-                    checked={notificationSettings.quietHoursEnabled}
-                    onCheckedChange={(checked) => setNotificationQuietHoursEnabled(Boolean(checked))}
+                    checked={notificationSettings.enabled}
+                    onCheckedChange={(checked) => setNotificationsEnabled(Boolean(checked))}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {notificationSettings.enabled
+                    ? `Enabled for ${enabledNotificationCount} of ${NOTIFICATION_TOGGLE_ROWS.length} event types.`
+                    : 'Notifications are currently disabled globally.'}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 bg-muted/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Priority Alerts</CardTitle>
+                <CardDescription>Keep these on if you never want to miss direct attention.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-1 rounded-lg border border-border/70 bg-card/70 p-3">
+                {priorityNotificationRows.map((row) => renderNotificationToggleRow(row))}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 bg-muted/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Everything Else</CardTitle>
+                <CardDescription>Lower-priority updates you can tune based on preference.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-1 rounded-lg border border-border/70 bg-card/70 p-3">
+                {secondaryNotificationRows.map((row) => renderNotificationToggleRow(row))}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 bg-muted/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Privacy & Schedule</CardTitle>
+                <CardDescription>Control what is shown and when alerts are suppressed.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/70 p-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Show message previews</p>
+                    <p className="text-xs text-muted-foreground">Hide content in notification bodies when disabled.</p>
+                  </div>
+                  <Switch
+                    checked={notificationSettings.showPreviews}
+                    onCheckedChange={(checked) => setNotificationPreviewsEnabled(Boolean(checked))}
                     disabled={!notificationSettings.enabled}
                   />
                 </div>
 
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="quiet-hours-start">Start</Label>
-                    <Input
-                      id="quiet-hours-start"
-                      type="time"
-                      value={quietHoursStart}
-                      disabled={!notificationSettings.enabled || !notificationSettings.quietHoursEnabled}
-                      onChange={(event) => setQuietHoursStart(event.target.value)}
-                      onBlur={() =>
-                        setNotificationQuietHoursRange(normalizeTimeInput(quietHoursStart), normalizeTimeInput(quietHoursEnd))
-                      }
+                <div className="space-y-3 rounded-lg border border-border/70 bg-card/70 p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Quiet hours</p>
+                      <p className="text-xs text-muted-foreground">Suppress all notifications during this time range.</p>
+                    </div>
+                    <Switch
+                      checked={notificationSettings.quietHoursEnabled}
+                      onCheckedChange={(checked) => setNotificationQuietHoursEnabled(Boolean(checked))}
+                      disabled={!notificationSettings.enabled}
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="quiet-hours-end">End</Label>
-                    <Input
-                      id="quiet-hours-end"
-                      type="time"
-                      value={quietHoursEnd}
-                      disabled={!notificationSettings.enabled || !notificationSettings.quietHoursEnabled}
-                      onChange={(event) => setQuietHoursEnd(event.target.value)}
-                      onBlur={() =>
-                        setNotificationQuietHoursRange(normalizeTimeInput(quietHoursStart), normalizeTimeInput(quietHoursEnd))
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-card/70 p-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Permission state</p>
-                  <p className="text-xs text-muted-foreground">Current runtime notification permission: {permissionState}</p>
-                  {isTauri ? (
-                    <p className="text-xs text-muted-foreground">
-                      Desktop permission is managed by macOS/Windows system settings for LetsChat.
-                    </p>
-                  ) : null}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="quiet-hours-start">Start</Label>
+                      <Input
+                        id="quiet-hours-start"
+                        type="time"
+                        value={quietHoursStart}
+                        disabled={!notificationSettings.enabled || !notificationSettings.quietHoursEnabled}
+                        onChange={(event) => setQuietHoursStart(event.target.value)}
+                        onBlur={() =>
+                          setNotificationQuietHoursRange(normalizeTimeInput(quietHoursStart), normalizeTimeInput(quietHoursEnd))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="quiet-hours-end">End</Label>
+                      <Input
+                        id="quiet-hours-end"
+                        type="time"
+                        value={quietHoursEnd}
+                        disabled={!notificationSettings.enabled || !notificationSettings.quietHoursEnabled}
+                        onChange={(event) => setQuietHoursEnd(event.target.value)}
+                        onBlur={() =>
+                          setNotificationQuietHoursRange(normalizeTimeInput(quietHoursStart), normalizeTimeInput(quietHoursEnd))
+                        }
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={isRequestingPermission}
-                    onClick={async () => {
-                      setIsRequestingPermission(true)
-                      try {
-                        if (isTauri) {
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 bg-muted/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Permission & Test</CardTitle>
+                <CardDescription>Verify runtime permission and test delivery quickly.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-card/70 p-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Permission state</p>
+                    <p className="text-xs text-muted-foreground">Current runtime notification permission: {permissionState}</p>
+                    {isTauri ? (
+                      <p className="text-xs text-muted-foreground">
+                        Desktop permission is managed by macOS/Windows system settings for LetsChat.
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isRequestingPermission}
+                      onClick={async () => {
+                        setIsRequestingPermission(true)
+                        try {
+                          if (isTauri) {
+                            const permission = await getNotificationPermission()
+                            setPermissionState(permission)
+                            toast.message('Notification permission is managed by your OS settings for LetsChat.')
+                            return
+                          }
+                          const permission = await ensureNotificationPermission({ prompt: true })
+                          setPermissionState(permission)
+                          if (permission === 'granted') {
+                            toast.success('Notification permission granted')
+                          } else if (permission === 'denied') {
+                            toast.error('Notification permission denied')
+                          } else if (permission === 'unsupported') {
+                            toast.error('Notifications are not supported in this runtime')
+                          }
+                        } finally {
+                          setIsRequestingPermission(false)
+                        }
+                      }}
+                    >
+                      {isRequestingPermission ? 'Requesting…' : 'Request Permission'}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isSendingTest}
+                      onClick={async () => {
+                        setIsSendingTest(true)
+                        try {
+                          const shown = await sendTestNotification()
                           const permission = await getNotificationPermission()
                           setPermissionState(permission)
-                          toast.message('Notification permission is managed by your OS settings for LetsChat.')
-                          return
+                          if (shown) {
+                            toast.success('Test notification sent')
+                          } else {
+                            toast.error('Could not send test notification. Check permission/settings.')
+                          }
+                        } finally {
+                          setIsSendingTest(false)
                         }
-                        const permission = await ensureNotificationPermission({ prompt: true })
-                        setPermissionState(permission)
-                        if (permission === 'granted') {
-                          toast.success('Notification permission granted')
-                        } else if (permission === 'denied') {
-                          toast.error('Notification permission denied')
-                        } else if (permission === 'unsupported') {
-                          toast.error('Notifications are not supported in this runtime')
-                        }
-                      } finally {
-                        setIsRequestingPermission(false)
-                      }
-                    }}
-                  >
-                    {isRequestingPermission ? 'Requesting…' : 'Request Permission'}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={isSendingTest}
-                    onClick={async () => {
-                      setIsSendingTest(true)
-                      try {
-                        const shown = await sendTestNotification()
-                        const permission = await getNotificationPermission()
-                        setPermissionState(permission)
-                        if (shown) {
-                          toast.success('Test notification sent')
-                        } else {
-                          toast.error('Could not send test notification. Check permission/settings.')
-                        }
-                      } finally {
-                        setIsSendingTest(false)
-                      }
-                    }}
-                  >
-                    {isSendingTest ? 'Sending…' : 'Test notification'}
-                  </Button>
+                      }}
+                    >
+                      {isSendingTest ? 'Sending…' : 'Test notification'}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="connection">
