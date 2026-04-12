@@ -202,11 +202,11 @@ export function SettingsPanel() {
       </header>
 
       <Tabs defaultValue="profile" className="space-y-3">
-        <TabsList variant="line" className="w-full justify-start rounded-lg border border-border/70 bg-muted/20 p-1">
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="connection">
+        <TabsList className="w-full">
+          <TabsTrigger value="profile" className="flex-1">Profile</TabsTrigger>
+          <TabsTrigger value="account" className="flex-1">Account</TabsTrigger>
+          <TabsTrigger value="notifications" className="flex-1">Notifications</TabsTrigger>
+          <TabsTrigger value="connection" className="flex-1">
             <PlugZapIcon className="size-3.5 mr-1.5" />
             Connection
           </TabsTrigger>
