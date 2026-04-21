@@ -1,12 +1,12 @@
 # Graph Report - /Users/stoaz/Source/Space/letschat  (2026-04-21)
 
 ## Corpus Check
-- 254 files · ~197,946 words
+- 255 files · ~198,248 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 940 nodes · 1335 edges · 207 communities detected
-- Extraction: 75% EXTRACTED · 25% INFERRED · 0% AMBIGUOUS · INFERRED: 339 edges (avg confidence: 0.8)
+- 943 nodes · 1340 edges · 207 communities detected
+- Extraction: 74% EXTRACTED · 26% INFERRED · 0% AMBIGUOUS · INFERRED: 342 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -219,7 +219,7 @@
 - [[_COMMUNITY_Community 206|Community 206]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `assert_or_err()` - 36 edges
+1. `assert_or_err()` - 37 edges
 2. `require_mod_or_owner()` - 16 edges
 3. `Channel` - 16 edges
 4. `toIsoString()` - 16 edges
@@ -231,8 +231,8 @@
 10. `link()` - 12 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `main()` --calls--> `delete_expired_pending_uploads()`  [INFERRED]
-  /Users/stoaz/Source/Space/letschat/auth-service/src/main.rs → /Users/stoaz/Source/Space/letschat/auth-service/src/db/uploads.rs
+- `edit_direct_message()` --calls--> `assert_or_err()`  [INFERRED]
+  /Users/stoaz/Source/Space/letschat/server/src/reducers/direct_messages.rs → /Users/stoaz/Source/Space/letschat/server/src/helpers.rs
 - `disconnect()` --calls--> `resetClientState()`  [INFERRED]
   /Users/stoaz/Source/Space/letschat/src/lib/spacetimedb/connection.ts → /Users/stoaz/Source/Space/letschat/src/lib/spacetimedb/sync.ts
 - `assert_or_err()` --calls--> `ensure_scope_allowed()`  [INFERRED]
@@ -246,27 +246,27 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
-Nodes (61): AccountRow, admin_rebind_identity(), find_by_identity(), find_by_token_and_identity(), find_by_username(), insert_account(), NewAccount, normalize_identity() (+53 more)
+Nodes (60): AccountRow, admin_rebind_identity(), find_by_identity(), find_by_token_and_identity(), find_by_username(), insert_account(), NewAccount, normalize_identity() (+52 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.05
-Nodes (55): createDownloadOperationId(), downloadAttachment(), downloadForTauri(), downloadForWeb(), triggerBrowserDownload(), ensureAuthenticatedUserRow(), initializeSpacetime(), loginWithPassword() (+47 more)
+Cohesion: 0.09
+Nodes (62): create_channel(), delete_channel(), delete_channel_section(), delete_channel_with_dependencies(), is_message_channel(), move_channel(), move_channel_relative(), move_channel_to() (+54 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.1
-Nodes (58): create_channel(), delete_channel(), delete_channel_section(), delete_channel_with_dependencies(), is_message_channel(), move_channel(), move_channel_relative(), move_channel_to() (+50 more)
-
-### Community 3 - "Community 3"
 Cohesion: 0.07
 Nodes (46): applyDeviceSelection(), isUserAgentPermissionContextError(), loadDevices(), selectInitialDevice(), setCurrentError(), setSelectedDeviceId(), disconnect(), buildLiveKitUrls() (+38 more)
 
-### Community 4 - "Community 4"
+### Community 3 - "Community 3"
 Cohesion: 0.1
-Nodes (32): send_direct_message(), join_dm_voice(), leave_dm_voice(), update_dm_voice_state(), block_key(), dm_room_key(), dm_voice_key(), find_friend_row() (+24 more)
+Nodes (33): edit_direct_message(), send_direct_message(), join_dm_voice(), leave_dm_voice(), update_dm_voice_state(), block_key(), dm_room_key(), dm_voice_key() (+25 more)
+
+### Community 4 - "Community 4"
+Cohesion: 0.07
+Nodes (26): ensure_schema_invariants(), ensure_sqlite_parent_exists(), load_env_file(), ServiceConfig, livekit_token(), LivekitClaims, LivekitTokenRequest, LivekitTokenResponse (+18 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.07
-Nodes (25): ensure_schema_invariants(), ensure_sqlite_parent_exists(), load_env_file(), ServiceConfig, livekit_token(), LivekitClaims, LivekitTokenRequest, LivekitTokenResponse (+17 more)
+Cohesion: 0.08
+Nodes (27): ensureAuthenticatedUserRow(), initializeSpacetime(), loginWithPassword(), resolveIdentityFromUsername(), rotateIdentityForRegistration(), async(), authServiceRefreshSpacetimeToken(), call() (+19 more)
 
 ### Community 6 - "Community 6"
 Cohesion: 0.11
@@ -274,91 +274,91 @@ Nodes (30): findChannelNameById(), findDisplayNameByIdentity(), findServerIdByCh
 
 ### Community 7 - "Community 7"
 Cohesion: 0.11
-Nodes (19): tryQueueFiles(), canProbeBatchEndpoint(), getSignedDownloadUrls(), isBatchEndpointUnavailableError(), markBatchEndpointUnavailable(), requestDownloadUrlBatch(), requestDownloadUrlSingle(), toDownloadCacheEntry() (+11 more)
+Nodes (28): createDownloadOperationId(), downloadAttachment(), downloadForTauri(), downloadForWeb(), triggerBrowserDownload(), signOut(), authServiceDownloadUrl(), authServiceDownloadUrls() (+20 more)
 
 ### Community 8 - "Community 8"
+Cohesion: 0.11
+Nodes (19): tryQueueFiles(), canProbeBatchEndpoint(), getSignedDownloadUrls(), isBatchEndpointUnavailableError(), markBatchEndpointUnavailable(), requestDownloadUrlBatch(), requestDownloadUrlSingle(), toDownloadCacheEntry() (+11 more)
+
+### Community 9 - "Community 9"
 Cohesion: 0.28
 Nodes (21): enumTag(), mapBlock(), mapChannel(), mapDirectMessage(), mapDmServerInvite(), mapDmVoiceParticipant(), mapFriend(), mapInvite() (+13 more)
 
-### Community 9 - "Community 9"
+### Community 10 - "Community 10"
 Cohesion: 0.18
 Nodes (21): channelSectionSortValue(), compareChannelsByLayout(), joinedServerIds(), resetClientState(), syncAll(), syncChannels(), syncDirectMessages(), syncDmServerInvites() (+13 more)
-
-### Community 10 - "Community 10"
-Cohesion: 0.11
-Nodes (18): is_valid_username(), AuthCredential, ChannelKind, DirectMessage, DmInviteStatus, DmServerInvite, DmVoiceParticipant, FriendStatus (+10 more)
 
 ### Community 11 - "Community 11"
 Cohesion: 0.2
 Nodes (12): onPrimaryCallAction(), encodeDmSystemMessage(), formatDmPreview(), formatDmSystemMessageForBubble(), formatDmSystemPrimaryText(), formatDuration(), formatSentTime(), getCallDurationSeconds() (+4 more)
 
 ### Community 12 - "Community 12"
-Cohesion: 0.18
-Nodes (3): sectionLabel(), confirmDeleteAction(), deleteChannel()
+Cohesion: 0.13
+Nodes (14): AuthCredential, ChannelKind, DirectMessage, DmInviteStatus, DmServerInvite, DmVoiceParticipant, FriendStatus, InvitePolicy (+6 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.25
-Nodes (8): getOtherIdentity(), IdentityLabel(), normalizeIdentity(), sameIdentity(), shortIdentity(), normalizeIdentity(), resolveUser(), useUserPresentation()
+Cohesion: 0.21
+Nodes (6): composeMessageWithAttachments(), decodeBase64Url(), encodeAttachmentPayload(), encodeBase64Url(), parseMessageAttachments(), submitEdit()
 
 ### Community 14 - "Community 14"
 Cohesion: 0.18
-Nodes (5): BanMemberModal(), KickMemberModal(), SetRoleModal(), memberUsername(), TransferOwnershipModal()
+Nodes (3): sectionLabel(), confirmDeleteAction(), deleteChannel()
 
 ### Community 15 - "Community 15"
+Cohesion: 0.25
+Nodes (8): getOtherIdentity(), IdentityLabel(), normalizeIdentity(), sameIdentity(), shortIdentity(), normalizeIdentity(), resolveUser(), useUserPresentation()
+
+### Community 16 - "Community 16"
+Cohesion: 0.18
+Nodes (5): BanMemberModal(), KickMemberModal(), SetRoleModal(), memberUsername(), TransferOwnershipModal()
+
+### Community 17 - "Community 17"
 Cohesion: 0.22
 Nodes (2): channelGroupKey(), sectionKey()
 
-### Community 16 - "Community 16"
+### Community 18 - "Community 18"
 Cohesion: 0.2
 Nodes (0): 
 
-### Community 17 - "Community 17"
+### Community 19 - "Community 19"
 Cohesion: 0.44
 Nodes (8): ensure_scope_allowed(), normalize_identity(), parse_channel_scope(), parse_dm_scope(), set_presence_offline(), set_typing_state(), touch_presence(), upsert_presence()
 
-### Community 18 - "Community 18"
+### Community 20 - "Community 20"
 Cohesion: 0.25
 Nodes (2): updateHeight(), viewportCap()
 
-### Community 19 - "Community 19"
+### Community 21 - "Community 21"
 Cohesion: 0.36
 Nodes (4): dayKey(), isSameGroup(), normalizeIdentity(), sameIdentity()
-
-### Community 20 - "Community 20"
-Cohesion: 0.25
-Nodes (0): 
-
-### Community 21 - "Community 21"
-Cohesion: 0.29
-Nodes (2): openChannel(), openServer()
 
 ### Community 22 - "Community 22"
 Cohesion: 0.25
 Nodes (0): 
 
 ### Community 23 - "Community 23"
-Cohesion: 0.43
-Nodes (5): composeMessageWithAttachments(), decodeBase64Url(), encodeAttachmentPayload(), encodeBase64Url(), parseMessageAttachments()
+Cohesion: 0.29
+Nodes (2): openChannel(), openServer()
 
 ### Community 24 - "Community 24"
-Cohesion: 0.33
-Nodes (3): tileClassName(), Badge(), cn()
+Cohesion: 0.25
+Nodes (0): 
 
 ### Community 25 - "Community 25"
 Cohesion: 0.33
-Nodes (0): 
+Nodes (3): tileClassName(), Badge(), cn()
 
 ### Community 26 - "Community 26"
+Cohesion: 0.33
+Nodes (0): 
+
+### Community 27 - "Community 27"
 Cohesion: 0.4
 Nodes (2): normalizeIdentityKey(), sameIdentity()
 
-### Community 27 - "Community 27"
+### Community 28 - "Community 28"
 Cohesion: 0.47
 Nodes (3): findIncomingDmCall(), normalizeIdentity(), sameIdentity()
-
-### Community 28 - "Community 28"
-Cohesion: 0.33
-Nodes (0): 
 
 ### Community 29 - "Community 29"
 Cohesion: 0.33
@@ -369,68 +369,68 @@ Cohesion: 0.33
 Nodes (0): 
 
 ### Community 31 - "Community 31"
+Cohesion: 0.33
+Nodes (0): 
+
+### Community 32 - "Community 32"
 Cohesion: 0.5
 Nodes (2): normalizeIdentityKey(), sameIdentity()
 
-### Community 32 - "Community 32"
-Cohesion: 0.6
-Nodes (4): decodeSectionValue(), encodeSectionValue(), initialSectionSelectionValue(), sectionSelectionLabel()
-
 ### Community 33 - "Community 33"
-Cohesion: 0.5
-Nodes (2): decodeSectionValue(), sectionSelectionLabel()
-
-### Community 34 - "Community 34"
-Cohesion: 0.4
-Nodes (1): AppErrorBoundary
-
-### Community 35 - "Community 35"
-Cohesion: 0.5
-Nodes (2): cn(), SidebarMenuSubButton()
-
-### Community 36 - "Community 36"
-Cohesion: 0.4
-Nodes (0): 
-
-### Community 37 - "Community 37"
-Cohesion: 0.5
-Nodes (2): toOptionalU64(), toU64()
-
-### Community 38 - "Community 38"
 Cohesion: 0.4
 Nodes (2): JoinLinkTab(), parseJoinLink()
 
+### Community 34 - "Community 34"
+Cohesion: 0.6
+Nodes (4): decodeSectionValue(), encodeSectionValue(), initialSectionSelectionValue(), sectionSelectionLabel()
+
+### Community 35 - "Community 35"
+Cohesion: 0.5
+Nodes (2): decodeSectionValue(), sectionSelectionLabel()
+
+### Community 36 - "Community 36"
+Cohesion: 0.4
+Nodes (1): AppErrorBoundary
+
+### Community 37 - "Community 37"
+Cohesion: 0.5
+Nodes (2): cn(), SidebarMenuSubButton()
+
+### Community 38 - "Community 38"
+Cohesion: 0.4
+Nodes (0): 
+
 ### Community 39 - "Community 39"
+Cohesion: 0.5
+Nodes (2): toOptionalU64(), toU64()
+
+### Community 40 - "Community 40"
 Cohesion: 0.5
 Nodes (0): 
 
-### Community 40 - "Community 40"
+### Community 41 - "Community 41"
 Cohesion: 1.0
 Nodes (3): buildVoiceMediaTiles(), normalizeIdentityKey(), sameIdentity()
 
-### Community 41 - "Community 41"
+### Community 42 - "Community 42"
 Cohesion: 0.5
 Nodes (0): 
 
-### Community 42 - "Community 42"
+### Community 43 - "Community 43"
 Cohesion: 0.67
 Nodes (2): channelSectionSortValue(), compareChannelsByLayout()
 
-### Community 43 - "Community 43"
+### Community 44 - "Community 44"
 Cohesion: 0.5
 Nodes (0): 
 
-### Community 44 - "Community 44"
-Cohesion: 0.67
-Nodes (1): HealthResponse
-
 ### Community 45 - "Community 45"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (2): TextChannelView(), useServerRole()
 
 ### Community 46 - "Community 46"
 Cohesion: 0.67
-Nodes (0): 
+Nodes (1): HealthResponse
 
 ### Community 47 - "Community 47"
 Cohesion: 0.67
@@ -1161,115 +1161,115 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 98`** (2 nodes): `useIsMobile()`, `use-mobile.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 99`** (2 nodes): `useServerRole.ts`, `useServerRole()`
+- **Thin community `Community 99`** (2 nodes): `usePresenceLifecycle()`, `usePresenceLifecycle.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 100`** (2 nodes): `usePresenceLifecycle()`, `usePresenceLifecycle.ts`
+- **Thin community `Community 100`** (2 nodes): `warnOnce()`, `devWarnings.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 101`** (2 nodes): `warnOnce()`, `devWarnings.ts`
+- **Thin community `Community 101`** (2 nodes): `ServerChannelPage()`, `ServerChannelPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 102`** (2 nodes): `ServerChannelPage()`, `ServerChannelPage.tsx`
+- **Thin community `Community 102`** (2 nodes): `AppIndexPage()`, `AppIndexPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 103`** (2 nodes): `AppIndexPage()`, `AppIndexPage.tsx`
+- **Thin community `Community 103`** (2 nodes): `SettingsPage()`, `SettingsPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 104`** (2 nodes): `SettingsPage()`, `SettingsPage.tsx`
+- **Thin community `Community 104`** (2 nodes): `DMPage()`, `DMPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 105`** (2 nodes): `DMPage()`, `DMPage.tsx`
+- **Thin community `Community 105`** (2 nodes): `SetupPage()`, `SetupPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 106`** (2 nodes): `SetupPage()`, `SetupPage.tsx`
+- **Thin community `Community 106`** (2 nodes): `handleJoin()`, `InvitePage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 107`** (2 nodes): `handleJoin()`, `InvitePage.tsx`
+- **Thin community `Community 107`** (2 nodes): `ConfigPreview()`, `ConfigPreview.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 108`** (2 nodes): `ConfigPreview()`, `ConfigPreview.tsx`
+- **Thin community `Community 108`** (1 nodes): `eslint.config.js`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 109`** (1 nodes): `eslint.config.js`
+- **Thin community `Community 109`** (1 nodes): `vite.config.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 110`** (1 nodes): `vite.config.ts`
+- **Thin community `Community 110`** (1 nodes): `lib.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 111`** (1 nodes): `lib.rs`
+- **Thin community `Community 111`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 112`** (1 nodes): `mod.rs`
+- **Thin community `Community 112`** (1 nodes): `astro.config.mjs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 113`** (1 nodes): `astro.config.mjs`
+- **Thin community `Community 113`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 114`** (1 nodes): `mod.rs`
+- **Thin community `Community 114`** (1 nodes): `App.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 115`** (1 nodes): `App.tsx`
+- **Thin community `Community 115`** (1 nodes): `transfer_ownership_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 116`** (1 nodes): `transfer_ownership_reducer.ts`
+- **Thin community `Community 116`** (1 nodes): `decline_friend_request_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 117`** (1 nodes): `decline_friend_request_reducer.ts`
+- **Thin community `Community 117`** (1 nodes): `edit_message_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 118`** (1 nodes): `edit_message_reducer.ts`
+- **Thin community `Community 118`** (1 nodes): `set_typing_state_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 119`** (1 nodes): `set_typing_state_reducer.ts`
+- **Thin community `Community 119`** (1 nodes): `send_message_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 120`** (1 nodes): `send_message_reducer.ts`
+- **Thin community `Community 120`** (1 nodes): `touch_presence_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 121`** (1 nodes): `touch_presence_reducer.ts`
+- **Thin community `Community 121`** (1 nodes): `set_presence_offline_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 122`** (1 nodes): `set_presence_offline_reducer.ts`
+- **Thin community `Community 122`** (1 nodes): `delete_channel_section_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 123`** (1 nodes): `delete_channel_section_reducer.ts`
+- **Thin community `Community 123`** (1 nodes): `kick_member_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 124`** (1 nodes): `kick_member_reducer.ts`
+- **Thin community `Community 124`** (1 nodes): `update_voice_state_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 125`** (1 nodes): `update_voice_state_reducer.ts`
+- **Thin community `Community 125`** (1 nodes): `create_invite_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 126`** (1 nodes): `create_invite_reducer.ts`
+- **Thin community `Community 126`** (1 nodes): `leave_voice_channel_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 127`** (1 nodes): `leave_voice_channel_reducer.ts`
+- **Thin community `Community 127`** (1 nodes): `move_channel_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 128`** (1 nodes): `move_channel_reducer.ts`
+- **Thin community `Community 128`** (1 nodes): `join_dm_voice_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 129`** (1 nodes): `join_dm_voice_reducer.ts`
+- **Thin community `Community 129`** (1 nodes): `move_channel_to_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 130`** (1 nodes): `move_channel_to_reducer.ts`
+- **Thin community `Community 130`** (1 nodes): `set_server_icon_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 131`** (1 nodes): `set_server_icon_reducer.ts`
+- **Thin community `Community 131`** (1 nodes): `delete_direct_message_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 132`** (1 nodes): `delete_direct_message_reducer.ts`
+- **Thin community `Community 132`** (1 nodes): `move_channel_relative_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 133`** (1 nodes): `move_channel_relative_reducer.ts`
+- **Thin community `Community 133`** (1 nodes): `my_read_states_table.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 134`** (1 nodes): `my_read_states_table.ts`
+- **Thin community `Community 134`** (1 nodes): `create_server_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 135`** (1 nodes): `create_server_reducer.ts`
+- **Thin community `Community 135`** (1 nodes): `send_dm_server_invite_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 136`** (1 nodes): `send_dm_server_invite_reducer.ts`
+- **Thin community `Community 136`** (1 nodes): `ban_table.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 137`** (1 nodes): `ban_table.ts`
+- **Thin community `Community 137`** (1 nodes): `respond_dm_server_invite_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 138`** (1 nodes): `respond_dm_server_invite_reducer.ts`
+- **Thin community `Community 138`** (1 nodes): `mark_dm_read_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 139`** (1 nodes): `mark_dm_read_reducer.ts`
+- **Thin community `Community 139`** (1 nodes): `my_blocks_table.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 140`** (1 nodes): `my_blocks_table.ts`
+- **Thin community `Community 140`** (1 nodes): `my_typing_states_table.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 141`** (1 nodes): `my_typing_states_table.ts`
+- **Thin community `Community 141`** (1 nodes): `update_channel_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 142`** (1 nodes): `update_channel_reducer.ts`
+- **Thin community `Community 142`** (1 nodes): `user_table.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 143`** (1 nodes): `user_table.ts`
+- **Thin community `Community 143`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 144`** (1 nodes): `types.ts`
+- **Thin community `Community 144`** (1 nodes): `direct_message_table.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 145`** (1 nodes): `direct_message_table.ts`
+- **Thin community `Community 145`** (1 nodes): `rename_server_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 146`** (1 nodes): `rename_server_reducer.ts`
+- **Thin community `Community 146`** (1 nodes): `voice_participant_table.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 147`** (1 nodes): `voice_participant_table.ts`
+- **Thin community `Community 147`** (1 nodes): `register_user_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 148`** (1 nodes): `register_user_reducer.ts`
+- **Thin community `Community 148`** (1 nodes): `block_user_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 149`** (1 nodes): `block_user_reducer.ts`
+- **Thin community `Community 149`** (1 nodes): `update_profile_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 150`** (1 nodes): `update_profile_reducer.ts`
+- **Thin community `Community 150`** (1 nodes): `ban_member_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 151`** (1 nodes): `ban_member_reducer.ts`
+- **Thin community `Community 151`** (1 nodes): `join_voice_channel_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 152`** (1 nodes): `join_voice_channel_reducer.ts`
+- **Thin community `Community 152`** (1 nodes): `remove_friend_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 153`** (1 nodes): `remove_friend_reducer.ts`
+- **Thin community `Community 153`** (1 nodes): `edit_direct_message_reducer.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 154`** (1 nodes): `my_dm_voice_participants_table.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1381,14 +1381,14 @@ Nodes (0):
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `disconnect()` connect `Community 3` to `Community 1`, `Community 9`?**
+- **Why does `disconnect()` connect `Community 2` to `Community 10`, `Community 5`, `Community 7`?**
   _High betweenness centrality (0.027) - this node is a cross-community bridge._
-- **Why does `assert_or_err()` connect `Community 2` to `Community 17`, `Community 10`, `Community 4`?**
+- **Why does `assert_or_err()` connect `Community 1` to `Community 19`, `Community 3`?**
   _High betweenness centrality (0.021) - this node is a cross-community bridge._
-- **Why does `signOut()` connect `Community 1` to `Community 3`, `Community 6`?**
+- **Why does `signOut()` connect `Community 7` to `Community 2`, `Community 5`, `Community 6`?**
   _High betweenness centrality (0.020) - this node is a cross-community bridge._
-- **Are the 33 inferred relationships involving `assert_or_err()` (e.g. with `create_server()` and `rename_server()`) actually correct?**
-  _`assert_or_err()` has 33 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 34 inferred relationships involving `assert_or_err()` (e.g. with `create_server()` and `rename_server()`) actually correct?**
+  _`assert_or_err()` has 34 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 14 inferred relationships involving `require_mod_or_owner()` (e.g. with `kick_member()` and `ban_member()`) actually correct?**
   _`require_mod_or_owner()` has 14 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 15 inferred relationships involving `Channel` (e.g. with `find_channel()` and `my_typing_states()`) actually correct?**
