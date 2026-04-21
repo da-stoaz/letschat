@@ -64,7 +64,7 @@ export function AppRail({
   const dmHomeActive = !isSettingsActive && !activeServerId && !activeDmIdentity
 
   return (
-    <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur">
+    <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur py-0">
       <CardContent className="flex min-h-0 flex-1 flex-col items-center gap-1 px-0 py-1">
         <Tooltip>
           <TooltipTrigger
