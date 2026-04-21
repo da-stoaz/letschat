@@ -194,7 +194,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           senderIdentity: message.senderIdentity,
           content: systemLabel ?? message.content,
           sentAt: message.sentAt,
-          editedAt: null,
+          editedAt: message.editedAt,
           deleted: isDeletedForViewer(message, selfIdentity),
           systemKind: systemMessage?.kind ?? null,
           systemMeta: systemMessage ? formatDmSystemMetadata(message.sentAt) : null,
@@ -374,7 +374,17 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         messages={renderMessages}
         selfIdentity={selfIdentity}
         canDeleteAny
-        allowEditOwn={false}
+        allowEditOwn
+        onEditMessage={async (message, newContent) => {
+          setError(null)
+          try {
+            await reducers.editDirectMessage(message.id, newContent)
+          } catch (e) {
+            const messageText = e instanceof Error ? e.message : 'Could not edit message.'
+            setError(messageText)
+            throw e
+          }
+        }}
         onDeleteMessage={async (message) => {
           setError(null)
           try {

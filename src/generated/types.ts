@@ -67,6 +67,7 @@ export const DirectMessage = __t.object("DirectMessage", {
   recipientIdentity: __t.identity(),
   content: __t.string(),
   sentAt: __t.timestamp(),
+  editedAt: __t.option(__t.timestamp()),
   deletedBySender: __t.bool(),
   deletedByRecipient: __t.bool(),
 });

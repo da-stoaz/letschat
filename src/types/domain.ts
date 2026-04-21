@@ -111,6 +111,7 @@ export interface DirectMessage {
   recipientIdentity: Identity
   content: string
   sentAt: string
+  editedAt: string | null
   deletedBySender: boolean
   deletedByRecipient: boolean
 }

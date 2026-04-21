@@ -62,7 +62,7 @@ export function ChatMessageFeed({
   unreadCount?: number
   canDeleteAny?: boolean
   allowEditOwn?: boolean
-  onEditMessage?: (message: RenderableMessage) => Promise<void> | void
+  onEditMessage?: (message: RenderableMessage, newContent: string) => Promise<void> | void
   onDeleteMessage: (message: RenderableMessage) => Promise<void> | void
   scrollToBottomToken?: number
 }) {
@@ -204,9 +204,9 @@ export function ChatMessageFeed({
                     canModerate={canDeleteAny}
                     allowEditOwn={allowEditOwn}
                     selfIdentity={selfIdentity}
-                    onEditMessage={(message) => {
+                    onEditMessage={(message, newContent) => {
                       if (!onEditMessage) return
-                      void onEditMessage(message)
+                      void onEditMessage(message, newContent)
                     }}
                     onDeleteMessage={(message) => {
                       void onDeleteMessage(message)

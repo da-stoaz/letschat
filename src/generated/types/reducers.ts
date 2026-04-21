@@ -20,6 +20,7 @@ import DeleteDirectMessageReducer from "../delete_direct_message_reducer";
 import DeleteInviteReducer from "../delete_invite_reducer";
 import DeleteMessageReducer from "../delete_message_reducer";
 import DeleteServerReducer from "../delete_server_reducer";
+import EditDirectMessageReducer from "../edit_direct_message_reducer";
 import EditMessageReducer from "../edit_message_reducer";
 import JoinDmVoiceReducer from "../join_dm_voice_reducer";
 import JoinVoiceChannelReducer from "../join_voice_channel_reducer";
@@ -72,6 +73,7 @@ export type DeleteDirectMessageParams = __Infer<typeof DeleteDirectMessageReduce
 export type DeleteInviteParams = __Infer<typeof DeleteInviteReducer>;
 export type DeleteMessageParams = __Infer<typeof DeleteMessageReducer>;
 export type DeleteServerParams = __Infer<typeof DeleteServerReducer>;
+export type EditDirectMessageParams = __Infer<typeof EditDirectMessageReducer>;
 export type EditMessageParams = __Infer<typeof EditMessageReducer>;
 export type JoinDmVoiceParams = __Infer<typeof JoinDmVoiceReducer>;
 export type JoinVoiceChannelParams = __Infer<typeof JoinVoiceChannelReducer>;

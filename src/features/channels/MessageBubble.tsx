@@ -1,14 +1,15 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { PhoneCallIcon, PhoneMissedIcon, PhoneOffIcon, PencilIcon, Trash2Icon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { PresenceDot } from '@/components/user/PresenceDot'
 import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { userInitials } from '../../layouts/app-layout/helpers'
 import { MessageAttachmentList } from '../chat/MessageAttachmentList'
-import { parseMessageAttachments } from '../chat/attachmentPayload'
+import { composeMessageWithAttachments, parseMessageAttachments } from '../chat/attachmentPayload'
 
 export interface RenderableMessage {
   id: number
@@ -33,7 +34,7 @@ interface MessageBubbleProps {
   canModerate: boolean
   allowEditOwn?: boolean
   selfIdentity: string | null
-  onEditMessage: (message: RenderableMessage) => void
+  onEditMessage: (message: RenderableMessage, newContent: string) => void
   onDeleteMessage: (message: RenderableMessage) => void
 }
 
@@ -56,6 +57,8 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const sender = useUserPresentation(group.senderIdentity)
   const firstMessage = group.messages[0]
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editDraft, setEditDraft] = useState('')
   const isSystemGroup =
     group.messages.length > 0 &&
     group.messages.every((message) => Boolean(message.systemKind))
@@ -117,10 +120,42 @@ export function MessageBubble({
               const parsed = parseMessageAttachments(message.content)
               const hasText = parsed.text.trim().length > 0
 
+              const isEditing = editingId === message.id
+
+              const submitEdit = () => {
+                const trimmed = editDraft.trim()
+                if (!trimmed && parsed.attachments.length === 0) return
+                onEditMessage(message, composeMessageWithAttachments(trimmed, parsed.attachments))
+                setEditingId(null)
+                setEditDraft('')
+              }
+
+              const cancelEdit = () => {
+                setEditingId(null)
+                setEditDraft('')
+              }
+
               return (
-                <div key={message.id} className="group/message relative rounded-md pr-16">
+                <div key={message.id} className={`group/message relative rounded-md ${isEditing ? '' : 'pr-16'}`}>
                   {message.deleted ? (
                     <p className="text-sm italic text-muted-foreground">[message deleted]</p>
+                  ) : isEditing ? (
+                    <div className="space-y-1.5 py-0.5">
+                      <Textarea
+                        value={editDraft}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit() }
+                          if (e.key === 'Escape') cancelEdit()
+                        }}
+                        className="min-h-0 text-sm"
+                        autoFocus
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        <kbd className="rounded border border-border px-1 py-0.5 font-mono text-[10px]">Enter</kbd> to save ·{' '}
+                        <kbd className="rounded border border-border px-1 py-0.5 font-mono text-[10px]">Esc</kbd> to cancel
+                      </p>
+                    </div>
                   ) : (
                     <div className="space-y-1.5">
                       <MessageAttachmentList attachments={parsed.attachments} />
@@ -138,12 +173,15 @@ export function MessageBubble({
                       ) : null}
                     </div>
                   )}
-                  {message.editedAt ? <span className="ml-1 text-xs text-muted-foreground">[edited]</span> : null}
+                  {!isEditing && message.editedAt ? <span className="ml-1 text-xs text-muted-foreground">[edited]</span> : null}
 
-                  {(canEdit || canDelete) ? (
+                  {!isEditing && (canEdit || canDelete) ? (
                     <div className="absolute right-0 top-0 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100">
                       {canEdit ? (
-                        <Button size="icon-xs" variant="ghost" onClick={() => onEditMessage(message)}>
+                        <Button size="icon-xs" variant="ghost" onClick={() => {
+                          setEditingId(message.id)
+                          setEditDraft(parsed.text)
+                        }}>
                           <PencilIcon className="size-3.5" />
                         </Button>
                       ) : null}

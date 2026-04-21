@@ -1,7 +1,7 @@
 # Graph Report - /Users/stoaz/Source/Space/letschat  (2026-04-21)
 
 ## Corpus Check
-- 254 files · ~131,877 words
+- 254 files · ~197,946 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -233,14 +233,14 @@
 ## Surprising Connections (you probably didn't know these)
 - `main()` --calls--> `delete_expired_pending_uploads()`  [INFERRED]
   /Users/stoaz/Source/Space/letschat/auth-service/src/main.rs → /Users/stoaz/Source/Space/letschat/auth-service/src/db/uploads.rs
-- `resetClientState()` --calls--> `disconnect()`  [INFERRED]
-  /Users/stoaz/Source/Space/letschat/src/lib/spacetimedb/sync.ts → /Users/stoaz/Source/Space/letschat/src/lib/spacetimedb/connection.ts
-- `ensure_scope_allowed()` --calls--> `assert_or_err()`  [INFERRED]
-  /Users/stoaz/Source/Space/letschat/server/src/reducers/presence.rs → /Users/stoaz/Source/Space/letschat/server/src/helpers.rs
-- `set_typing_state()` --calls--> `assert_or_err()`  [INFERRED]
-  /Users/stoaz/Source/Space/letschat/server/src/reducers/presence.rs → /Users/stoaz/Source/Space/letschat/server/src/helpers.rs
-- `send_friend_request()` --calls--> `assert_or_err()`  [INFERRED]
-  /Users/stoaz/Source/Space/letschat/server/src/reducers/social.rs → /Users/stoaz/Source/Space/letschat/server/src/helpers.rs
+- `disconnect()` --calls--> `resetClientState()`  [INFERRED]
+  /Users/stoaz/Source/Space/letschat/src/lib/spacetimedb/connection.ts → /Users/stoaz/Source/Space/letschat/src/lib/spacetimedb/sync.ts
+- `assert_or_err()` --calls--> `ensure_scope_allowed()`  [INFERRED]
+  /Users/stoaz/Source/Space/letschat/server/src/helpers.rs → /Users/stoaz/Source/Space/letschat/server/src/reducers/presence.rs
+- `assert_or_err()` --calls--> `set_typing_state()`  [INFERRED]
+  /Users/stoaz/Source/Space/letschat/server/src/helpers.rs → /Users/stoaz/Source/Space/letschat/server/src/reducers/presence.rs
+- `assert_or_err()` --calls--> `send_friend_request()`  [INFERRED]
+  /Users/stoaz/Source/Space/letschat/server/src/helpers.rs → /Users/stoaz/Source/Space/letschat/server/src/reducers/social.rs
 
 ## Communities
 

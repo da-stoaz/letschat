@@ -16,6 +16,7 @@ export default __t.row({
   recipientIdentity: __t.identity().name("recipient_identity"),
   content: __t.string(),
   sentAt: __t.timestamp().name("sent_at"),
+  editedAt: __t.option(__t.timestamp()).name("edited_at"),
   deletedBySender: __t.bool().name("deleted_by_sender"),
   deletedByRecipient: __t.bool().name("deleted_by_recipient"),
 });
