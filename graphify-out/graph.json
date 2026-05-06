@@ -9111,8 +9111,8 @@
       "source_file": "/Users/stoaz/Source/Space/letschat/server/src/reducers/direct_messages.rs",
       "source_location": "L48",
       "weight": 1.0,
-      "_src": "direct_messages_edit_direct_message",
-      "_tgt": "helpers_assert_or_err",
+      "_src": "helpers_assert_or_err",
+      "_tgt": "direct_messages_edit_direct_message",
       "source": "helpers_assert_or_err",
       "target": "direct_messages_edit_direct_message"
     },
@@ -15603,8 +15603,8 @@
       "source_file": "/Users/stoaz/Source/Space/letschat/src/features/channels/MessageBubble.tsx",
       "source_location": "L128",
       "weight": 1.0,
-      "_src": "messagebubble_submitedit",
-      "_tgt": "attachmentpayload_composemessagewithattachments",
+      "_src": "attachmentpayload_composemessagewithattachments",
+      "_tgt": "messagebubble_submitedit",
       "source": "attachmentpayload_composemessagewithattachments",
       "target": "messagebubble_submitedit"
     },

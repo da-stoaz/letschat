@@ -1,7 +1,7 @@
 # Graph Report - /Users/stoaz/Source/Space/letschat  (2026-04-21)
 
 ## Corpus Check
-- 255 files · ~198,248 words
+- 255 files · ~198,454 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -231,8 +231,8 @@
 10. `link()` - 12 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `edit_direct_message()` --calls--> `assert_or_err()`  [INFERRED]
-  /Users/stoaz/Source/Space/letschat/server/src/reducers/direct_messages.rs → /Users/stoaz/Source/Space/letschat/server/src/helpers.rs
+- `assert_or_err()` --calls--> `edit_direct_message()`  [INFERRED]
+  /Users/stoaz/Source/Space/letschat/server/src/helpers.rs → /Users/stoaz/Source/Space/letschat/server/src/reducers/direct_messages.rs
 - `disconnect()` --calls--> `resetClientState()`  [INFERRED]
   /Users/stoaz/Source/Space/letschat/src/lib/spacetimedb/connection.ts → /Users/stoaz/Source/Space/letschat/src/lib/spacetimedb/sync.ts
 - `assert_or_err()` --calls--> `ensure_scope_allowed()`  [INFERRED]
