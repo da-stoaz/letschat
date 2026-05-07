@@ -74,6 +74,7 @@ cargo build --manifest-path server/Cargo.toml --target wasm32-unknown-unknown --
 - Logic lives in `server/src/reducers/` — each file handles a domain (messages, voice, dm, etc.)
 - Client TypeScript bindings are **auto-generated** into `src/generated/` — never edit these manually; regenerate with `npm run spacetime:generate`
 - Compiles to WASM (`wasm32-unknown-unknown`) and gets published to the running SpacetimeDB instance
+- **Schema migration safety:** `npm run spacetime:publish` is the safe command — it has NO `--yes` flag, so SpacetimeDB will prompt before destructive migrations instead of silently wiping data. If a publish stops on a "requires deleting data" prompt, the schema change is incompatible: fix it by making new fields `Option<T>` or adding `#[default(...)]`, do not bypass the prompt. `npm run spacetime:reset` is the explicit nuke (uses `--delete-data --yes`) for intentional clean slates only.
 
 ### Auth Service (`/auth-service`)
 - Axum HTTP API: register, login, token refresh, LiveKit token generation, admin endpoints

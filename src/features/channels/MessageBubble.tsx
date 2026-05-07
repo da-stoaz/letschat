@@ -100,9 +100,9 @@ export function MessageBubble({
   return (
     <article className="group/bubble rounded-lg px-3 py-1 transition-colors hover:bg-muted/35">
       <div className="flex items-start gap-3.5">
-        <Avatar className="mt-0.5 size-9 rounded-lg">
+        <Avatar className="mt-0.5 size-9 rounded-full">
           {sender.avatarUrl ? <AvatarImage src={sender.avatarUrl} alt={sender.displayName} /> : null}
-          <AvatarFallback className="rounded-lg bg-primary/10 text-xs">{userInitials(sender.displayName)}</AvatarFallback>
+          <AvatarFallback className="rounded-full bg-primary/10 text-xs">{userInitials(sender.displayName)}</AvatarFallback>
         </Avatar>
 
         <div className="min-w-0 flex-1">
