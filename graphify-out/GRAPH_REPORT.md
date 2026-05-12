@@ -1,7 +1,7 @@
-# Graph Report - /Users/stoaz/Source/Space/letschat  (2026-05-06)
+# Graph Report - /Users/stoaz/Source/Space/letschat  (2026-05-12)
 
 ## Corpus Check
-- 255 files · ~198,454 words
+- 255 files · ~199,036 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -262,11 +262,11 @@ Nodes (33): edit_direct_message(), send_direct_message(), join_dm_voice(), leave
 
 ### Community 4 - "Community 4"
 Cohesion: 0.07
-Nodes (26): ensure_schema_invariants(), ensure_sqlite_parent_exists(), load_env_file(), ServiceConfig, livekit_token(), LivekitClaims, LivekitTokenRequest, LivekitTokenResponse (+18 more)
+Nodes (32): ensureAuthenticatedUserRow(), initializeSpacetime(), loginWithPassword(), resolveIdentityFromUsername(), rotateIdentityForRegistration(), async(), authServiceRefreshSpacetimeToken(), call() (+24 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.08
-Nodes (27): ensureAuthenticatedUserRow(), initializeSpacetime(), loginWithPassword(), resolveIdentityFromUsername(), rotateIdentityForRegistration(), async(), authServiceRefreshSpacetimeToken(), call() (+19 more)
+Cohesion: 0.07
+Nodes (26): ensure_schema_invariants(), ensure_sqlite_parent_exists(), load_env_file(), ServiceConfig, livekit_token(), LivekitClaims, LivekitTokenRequest, LivekitTokenResponse (+18 more)
 
 ### Community 6 - "Community 6"
 Cohesion: 0.11
@@ -305,60 +305,60 @@ Cohesion: 0.18
 Nodes (3): sectionLabel(), confirmDeleteAction(), deleteChannel()
 
 ### Community 15 - "Community 15"
-Cohesion: 0.25
-Nodes (8): getOtherIdentity(), IdentityLabel(), normalizeIdentity(), sameIdentity(), shortIdentity(), normalizeIdentity(), resolveUser(), useUserPresentation()
-
-### Community 16 - "Community 16"
 Cohesion: 0.18
 Nodes (5): BanMemberModal(), KickMemberModal(), SetRoleModal(), memberUsername(), TransferOwnershipModal()
 
-### Community 17 - "Community 17"
+### Community 16 - "Community 16"
 Cohesion: 0.22
 Nodes (2): channelGroupKey(), sectionKey()
 
-### Community 18 - "Community 18"
+### Community 17 - "Community 17"
 Cohesion: 0.2
 Nodes (0): 
 
-### Community 19 - "Community 19"
+### Community 18 - "Community 18"
 Cohesion: 0.44
 Nodes (8): ensure_scope_allowed(), normalize_identity(), parse_channel_scope(), parse_dm_scope(), set_presence_offline(), set_typing_state(), touch_presence(), upsert_presence()
 
-### Community 20 - "Community 20"
+### Community 19 - "Community 19"
 Cohesion: 0.25
 Nodes (2): updateHeight(), viewportCap()
 
-### Community 21 - "Community 21"
+### Community 20 - "Community 20"
 Cohesion: 0.36
 Nodes (4): dayKey(), isSameGroup(), normalizeIdentity(), sameIdentity()
 
-### Community 22 - "Community 22"
+### Community 21 - "Community 21"
 Cohesion: 0.25
 Nodes (0): 
 
-### Community 23 - "Community 23"
+### Community 22 - "Community 22"
 Cohesion: 0.29
 Nodes (2): openChannel(), openServer()
 
-### Community 24 - "Community 24"
+### Community 23 - "Community 23"
 Cohesion: 0.25
 Nodes (0): 
 
-### Community 25 - "Community 25"
+### Community 24 - "Community 24"
 Cohesion: 0.33
 Nodes (3): tileClassName(), Badge(), cn()
 
-### Community 26 - "Community 26"
+### Community 25 - "Community 25"
 Cohesion: 0.33
 Nodes (0): 
 
-### Community 27 - "Community 27"
+### Community 26 - "Community 26"
 Cohesion: 0.4
 Nodes (2): normalizeIdentityKey(), sameIdentity()
 
-### Community 28 - "Community 28"
+### Community 27 - "Community 27"
 Cohesion: 0.47
 Nodes (3): findIncomingDmCall(), normalizeIdentity(), sameIdentity()
+
+### Community 28 - "Community 28"
+Cohesion: 0.33
+Nodes (0): 
 
 ### Community 29 - "Community 29"
 Cohesion: 0.33
@@ -369,60 +369,60 @@ Cohesion: 0.33
 Nodes (0): 
 
 ### Community 31 - "Community 31"
-Cohesion: 0.33
-Nodes (0): 
-
-### Community 32 - "Community 32"
 Cohesion: 0.5
 Nodes (2): normalizeIdentityKey(), sameIdentity()
 
-### Community 33 - "Community 33"
+### Community 32 - "Community 32"
 Cohesion: 0.4
 Nodes (2): JoinLinkTab(), parseJoinLink()
 
-### Community 34 - "Community 34"
+### Community 33 - "Community 33"
 Cohesion: 0.6
 Nodes (4): decodeSectionValue(), encodeSectionValue(), initialSectionSelectionValue(), sectionSelectionLabel()
 
-### Community 35 - "Community 35"
+### Community 34 - "Community 34"
 Cohesion: 0.5
 Nodes (2): decodeSectionValue(), sectionSelectionLabel()
 
-### Community 36 - "Community 36"
+### Community 35 - "Community 35"
 Cohesion: 0.4
 Nodes (1): AppErrorBoundary
 
-### Community 37 - "Community 37"
+### Community 36 - "Community 36"
 Cohesion: 0.5
 Nodes (2): cn(), SidebarMenuSubButton()
 
-### Community 38 - "Community 38"
+### Community 37 - "Community 37"
 Cohesion: 0.4
 Nodes (0): 
 
-### Community 39 - "Community 39"
+### Community 38 - "Community 38"
 Cohesion: 0.5
 Nodes (2): toOptionalU64(), toU64()
 
-### Community 40 - "Community 40"
+### Community 39 - "Community 39"
 Cohesion: 0.5
 Nodes (0): 
 
-### Community 41 - "Community 41"
+### Community 40 - "Community 40"
 Cohesion: 1.0
 Nodes (3): buildVoiceMediaTiles(), normalizeIdentityKey(), sameIdentity()
 
-### Community 42 - "Community 42"
+### Community 41 - "Community 41"
 Cohesion: 0.5
 Nodes (0): 
 
-### Community 43 - "Community 43"
+### Community 42 - "Community 42"
 Cohesion: 0.67
 Nodes (2): channelSectionSortValue(), compareChannelsByLayout()
 
-### Community 44 - "Community 44"
+### Community 43 - "Community 43"
 Cohesion: 0.5
 Nodes (0): 
+
+### Community 44 - "Community 44"
+Cohesion: 0.67
+Nodes (2): normalizeIdentity(), resolveUser()
 
 ### Community 45 - "Community 45"
 Cohesion: 0.5
@@ -1381,12 +1381,12 @@ Nodes (0):
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `disconnect()` connect `Community 2` to `Community 10`, `Community 5`, `Community 7`?**
+- **Why does `disconnect()` connect `Community 2` to `Community 10`, `Community 4`, `Community 7`?**
   _High betweenness centrality (0.027) - this node is a cross-community bridge._
-- **Why does `assert_or_err()` connect `Community 1` to `Community 19`, `Community 3`?**
+- **Why does `assert_or_err()` connect `Community 1` to `Community 18`, `Community 3`?**
   _High betweenness centrality (0.021) - this node is a cross-community bridge._
-- **Why does `signOut()` connect `Community 7` to `Community 2`, `Community 5`, `Community 6`?**
-  _High betweenness centrality (0.020) - this node is a cross-community bridge._
+- **Why does `signOut()` connect `Community 7` to `Community 2`, `Community 4`, `Community 6`?**
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._
 - **Are the 34 inferred relationships involving `assert_or_err()` (e.g. with `create_server()` and `rename_server()`) actually correct?**
   _`assert_or_err()` has 34 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 14 inferred relationships involving `require_mod_or_owner()` (e.g. with `kick_member()` and `ban_member()`) actually correct?**
