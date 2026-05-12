@@ -4,8 +4,8 @@
   "version": "0.2.3",
   "identifier": "net.stoaz.letschat",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "bun run dev",
+    "beforeBuildCommand": "bun run build",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },

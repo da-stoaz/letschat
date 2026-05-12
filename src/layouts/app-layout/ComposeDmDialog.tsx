@@ -69,9 +69,9 @@ export function ComposeDmDialog({ open, onOpenChange, friends, onSelectFriend }:
                     setQuery('')
                   }}
                 >
-                  <Avatar className="size-8 rounded-lg">
+                  <Avatar className="size-8 rounded-full">
                     {friend.avatarUrl ? <AvatarImage src={friend.avatarUrl} alt={friend.label} /> : null}
-                    <AvatarFallback className="rounded-lg bg-primary/10 text-[10px]">{userInitials(friend.label)}</AvatarFallback>
+                    <AvatarFallback className="rounded-full bg-primary/10 text-[10px]">{userInitials(friend.label)}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 text-left">
                     <p className="truncate text-sm">{friend.label}</p>

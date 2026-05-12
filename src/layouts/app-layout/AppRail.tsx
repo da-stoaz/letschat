@@ -64,7 +64,7 @@ export function AppRail({
   const dmHomeActive = !isSettingsActive && !activeServerId && !activeDmIdentity
 
   return (
-    <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur">
+    <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur py-0">
       <CardContent className="flex min-h-0 flex-1 flex-col items-center gap-1 px-0 py-1">
         <Tooltip>
           <TooltipTrigger
@@ -96,9 +96,9 @@ export function AppRail({
                       />
                     }
                   >
-                    <Avatar className="h-7 w-7 rounded-md">
+                    <Avatar className="size-9 rounded-lg">
                       {server.iconUrl ? <AvatarImage src={server.iconUrl} alt={server.name} /> : null}
-                      <AvatarFallback className="rounded-xl bg-primary/10 text-xs">{serverInitials(server.name)}</AvatarFallback>
+                      <AvatarFallback className="rounded-lg bg-primary/10 text-xs">{serverInitials(server.name)}</AvatarFallback>
                     </Avatar>
                     {hasUnreadInServer(server.id) ? (
                       <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
@@ -185,9 +185,9 @@ export function AppRail({
                       />
                     }
                   >
-                    <Avatar size="sm" className="rounded-lg">
+                    <Avatar size="sm" className="rounded-full">
                       {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
-                      <AvatarFallback className="rounded-lg bg-primary/10 text-[10px]">{userInitials(contact.label)}</AvatarFallback>
+                      <AvatarFallback className="rounded-full bg-primary/10 text-[10px]">{userInitials(contact.label)}</AvatarFallback>
                     </Avatar>
                     {unread > 0 ? (
                       <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">

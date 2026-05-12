@@ -256,6 +256,8 @@ export const reducers = {
       recipientIdentity: toReducerIdentity(recipientIdentity),
       content,
     }),
+  editDirectMessage: (messageId: number, newContent: string) =>
+    spacetimedbClient.call('editDirectMessage', { messageId: toU64(messageId, 'messageId'), newContent }),
   deleteDirectMessage: (messageId: number) =>
     spacetimedbClient.call('deleteDirectMessage', { messageId: toU64(messageId, 'messageId') }),
 }

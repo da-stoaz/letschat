@@ -56,7 +56,7 @@ function DmServerInviteCard({ invite }: { invite: DmServerInvite }) {
   }
 
   return (
-    <div className="mx-2 my-1 rounded-lg border border-border/60 bg-muted/30 p-3">
+    <div className="border-b border-border/60 bg-muted/20 px-4 py-3 last:border-b-0">
       <div className="flex items-center gap-2 mb-2">
         <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
           <ServerIcon className="size-4 text-primary" />
@@ -194,7 +194,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           senderIdentity: message.senderIdentity,
           content: systemLabel ?? message.content,
           sentAt: message.sentAt,
-          editedAt: null,
+          editedAt: message.editedAt,
           deleted: isDeletedForViewer(message, selfIdentity),
           systemKind: systemMessage?.kind ?? null,
           systemMeta: systemMessage ? formatDmSystemMetadata(message.sentAt) : null,
@@ -220,6 +220,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   const { connectionState } = useLiveKitRoom(roomForPartner)
   const joined = roomForPartner !== null && connectionState === ConnectionState.Connected
   const connecting = dmJoining || (roomForPartner !== null && connectionState === ConnectionState.Connecting)
+  const hasActiveCall = joined || connecting || voiceParticipants.length > 0
   const statusBadge = connecting ? 'Joining...' : joined ? 'Joined' : voiceParticipants.length > 0 ? 'Syncing...' : 'Not joined'
   const statusVariant = connecting ? 'outline' : joined ? 'default' : voiceParticipants.length > 0 ? 'outline' : 'secondary'
   const selfVoiceParticipant = useMemo(
@@ -320,12 +321,12 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   }, [clearDmUnread, partnerIdentity, lastMessageId])
 
   return (
-    <section className="flex h-full min-h-0 flex-col rounded-xl border border-border/70 bg-card/60">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card/60">
       <header className="flex items-center gap-2 border-b border-border/70 px-4 py-2">
         <div className="min-w-0 flex flex-1 items-center gap-2">
-          <Avatar className="size-8 rounded-lg">
+          <Avatar className="size-8 rounded-full">
             {partner.avatarUrl ? <AvatarImage src={partner.avatarUrl} alt={partner.displayName} /> : null}
-            <AvatarFallback className="rounded-lg bg-primary/15 text-xs">{toInitials(partnerIdentity)}</AvatarFallback>
+            <AvatarFallback className="rounded-full bg-primary/15 text-xs">{toInitials(partnerIdentity)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
@@ -339,7 +340,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Badge variant={statusVariant}>{statusBadge}</Badge>
+          {hasActiveCall ? <Badge variant={statusVariant}>{statusBadge}</Badge> : null}
           <Button
             size="sm"
             variant={joined ? 'destructive' : 'default'}
@@ -351,19 +352,21 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
             {joined ? <PhoneOffIcon className="size-4" /> : <PhoneCallIcon className="size-4" />}
             {connecting ? 'Joining...' : joined ? 'Leave Call' : 'Call User'}
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => setCallPanelMinimized((value) => !value)}
-          >
-            {callPanelMinimized ? <PanelBottomOpenIcon className="size-4" /> : <PanelBottomCloseIcon className="size-4" />}
-            {callPanelMinimized ? 'Show Call' : 'Minimize'}
-          </Button>
+          {hasActiveCall ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setCallPanelMinimized((value) => !value)}
+            >
+              {callPanelMinimized ? <PanelBottomOpenIcon className="size-4" /> : <PanelBottomCloseIcon className="size-4" />}
+              {callPanelMinimized ? 'Show Call' : 'Minimize'}
+            </Button>
+          ) : null}
         </div>
       </header>
 
-      {!callPanelMinimized ? (
+      {hasActiveCall && !callPanelMinimized ? (
         <div className="border-b border-border/70 p-2">
           <DmVoicePanel partnerIdentity={partnerIdentity} showHeader={false} />
         </div>
@@ -374,7 +377,17 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         messages={renderMessages}
         selfIdentity={selfIdentity}
         canDeleteAny
-        allowEditOwn={false}
+        allowEditOwn
+        onEditMessage={async (message, newContent) => {
+          setError(null)
+          try {
+            await reducers.editDirectMessage(message.id, newContent)
+          } catch (e) {
+            const messageText = e instanceof Error ? e.message : 'Could not edit message.'
+            setError(messageText)
+            throw e
+          }
+        }}
         onDeleteMessage={async (message) => {
           setError(null)
           try {
@@ -388,7 +401,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
       />
 
       {dmInvites.length > 0 && (
-        <div className="space-y-1 border-t border-border/60 pt-1">
+        <div className="border-t border-border/60">
           {dmInvites.map((inv) => (
             <DmServerInviteCard key={inv.id} invite={inv} />
           ))}

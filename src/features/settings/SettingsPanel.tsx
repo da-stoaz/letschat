@@ -254,11 +254,11 @@ export function SettingsPanel() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-card/70 p-3">
-                  <Avatar className="size-14 rounded-2xl">
+                  <Avatar className="size-14 rounded-full">
                     {avatarPreviewUrl || avatarUrl ? (
                       <AvatarImage src={avatarPreviewUrl ?? avatarUrl} alt={profileDisplayName} />
                     ) : null}
-                    <AvatarFallback className="rounded-2xl bg-primary/10 text-sm">
+                    <AvatarFallback className="rounded-full bg-primary/10 text-sm">
                       {profileDisplayName.slice(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
@@ -316,11 +316,11 @@ export function SettingsPanel() {
                           Upload an image to use as your avatar across chats and calls.
                         </p>
                       </div>
-                      <Avatar className="size-16 rounded-2xl">
+                      <Avatar className="size-16 rounded-full">
                         {avatarPreviewUrl || avatarUrl ? (
                           <AvatarImage src={avatarPreviewUrl ?? avatarUrl} alt={profileDisplayName} />
                         ) : null}
-                        <AvatarFallback className="rounded-2xl bg-primary/10 text-lg">
+                        <AvatarFallback className="rounded-full bg-primary/10 text-lg">
                           {profileDisplayName.slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>

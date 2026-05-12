@@ -48,6 +48,7 @@ import DeleteDirectMessageReducer from "./delete_direct_message_reducer";
 import DeleteInviteReducer from "./delete_invite_reducer";
 import DeleteMessageReducer from "./delete_message_reducer";
 import DeleteServerReducer from "./delete_server_reducer";
+import EditDirectMessageReducer from "./edit_direct_message_reducer";
 import EditMessageReducer from "./edit_message_reducer";
 import JoinDmVoiceReducer from "./join_dm_voice_reducer";
 import JoinVoiceChannelReducer from "./join_voice_channel_reducer";
@@ -345,6 +346,7 @@ const reducersSchema = __reducers(
   __reducerSchema("delete_invite", DeleteInviteReducer),
   __reducerSchema("delete_message", DeleteMessageReducer),
   __reducerSchema("delete_server", DeleteServerReducer),
+  __reducerSchema("edit_direct_message", EditDirectMessageReducer),
   __reducerSchema("edit_message", EditMessageReducer),
   __reducerSchema("join_dm_voice", JoinDmVoiceReducer),
   __reducerSchema("join_voice_channel", JoinVoiceChannelReducer),

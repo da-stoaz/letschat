@@ -28,35 +28,35 @@ Auto-discovery via `/.well-known/letschat.json` on the `connect.<domain>` subdom
 ## Local Development
 
 ### Prerequisites
-- Node.js 22+, Rust 1.88+, Docker + Docker Compose
-- SpacetimeDB CLI: `npm install -g @clockworklabs/spacetime`
+- Bun 1.3+, Rust 1.88+, Docker + Docker Compose
+- SpacetimeDB CLI: `bun install -g @clockworklabs/spacetime`
 
 ### Start everything
 ```bash
-npm run services:up       # Start SpacetimeDB (4300), LiveKit (7880), MinIO (4390)
-npm run spacetime:publish # Publish WASM module to SpacetimeDB (run once, or after server/ changes)
-npm run auth:dev          # Start auth service (127.0.0.1:8787), loads .env.development
-npm run tauri dev         # Start Tauri dev window with Vite hot-reload
+bun run services:up       # Start SpacetimeDB (4300), LiveKit (7880), MinIO (4390)
+bun run spacetime:publish # Publish WASM module to SpacetimeDB (run once, or after server/ changes)
+bun run auth:dev          # Start auth service (127.0.0.1:8787), loads .env.development
+bun run tauri dev         # Start Tauri dev window with Vite hot-reload
 ```
 
 ### Reset state
 ```bash
-npm run services:reset    # Stop containers and remove volumes (fresh state)
+bun run services:reset    # Stop containers and remove volumes (fresh state)
 ```
 
 ## Commands
 
 | Task | Command |
 |------|---------|
-| Start dev services | `npm run services:up` |
-| Start auth service | `npm run auth:dev` |
-| Start desktop app | `npm run tauri dev` |
-| Build frontend | `npm run build` |
-| Build Tauri binary | `npm run tauri:build:local` |
-| Lint frontend | `npm run lint` |
-| Publish SpacetimeDB module | `npm run spacetime:publish` |
-| Regenerate TS bindings | `npm run spacetime:generate` |
-| View service logs | `npm run services:logs` |
+| Start dev services | `bun run services:up` |
+| Start auth service | `bun run auth:dev` |
+| Start desktop app | `bun run tauri dev` |
+| Build frontend | `bun run build` |
+| Build Tauri binary | `bun run tauri:build:local` |
+| Lint frontend | `bun run lint` |
+| Publish SpacetimeDB module | `bun run spacetime:publish` |
+| Regenerate TS bindings | `bun run spacetime:generate` |
+| View service logs | `bun run services:logs` |
 
 ### Building individual services
 ```bash
@@ -72,8 +72,9 @@ cargo build --manifest-path server/Cargo.toml --target wasm32-unknown-unknown --
 ### SpacetimeDB Module (`/server`)
 - Schema defined in `server/src/schema.rs` — 13 tables: User, AuthCredential, Server, ServerMember, Channel, Message, Friend, Block, DirectMessage, VoiceParticipant, DmVoiceParticipant, PresenceState, TypingState
 - Logic lives in `server/src/reducers/` — each file handles a domain (messages, voice, dm, etc.)
-- Client TypeScript bindings are **auto-generated** into `src/generated/` — never edit these manually; regenerate with `npm run spacetime:generate`
+- Client TypeScript bindings are **auto-generated** into `src/generated/` — never edit these manually; regenerate with `bun run spacetime:generate`
 - Compiles to WASM (`wasm32-unknown-unknown`) and gets published to the running SpacetimeDB instance
+- **Schema migration safety:** `bun run spacetime:publish` is the safe command — it has NO `--yes` flag, so SpacetimeDB will prompt before destructive migrations instead of silently wiping data. If a publish stops on a "requires deleting data" prompt, the schema change is incompatible: fix it by making new fields `Option<T>` or adding `#[default(...)]`, do not bypass the prompt. `bun run spacetime:reset` is the explicit nuke (uses `--delete-data --yes`) for intentional clean slates only.
 
 ### Auth Service (`/auth-service`)
 - Axum HTTP API: register, login, token refresh, LiveKit token generation, admin endpoints

@@ -31,9 +31,40 @@ pub fn send_direct_message(
         recipient_identity,
         content,
         sent_at: ctx.timestamp,
+        edited_at: None,
         deleted_by_sender: false,
         deleted_by_recipient: false,
     });
+
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn edit_direct_message(
+    ctx: &ReducerContext,
+    message_id: u64,
+    new_content: String,
+) -> Result<(), String> {
+    assert_or_err(
+        (1..=4000).contains(&new_content.len()),
+        "message must be 1-4000 chars",
+    )?;
+
+    let mut dm_row = ctx
+        .db
+        .direct_message()
+        .id()
+        .find(message_id)
+        .ok_or_else(|| "direct message not found".to_string())?;
+
+    assert_or_err(
+        dm_row.sender_identity == ctx.sender(),
+        "only sender can edit message",
+    )?;
+
+    dm_row.content = new_content;
+    dm_row.edited_at = Some(ctx.timestamp);
+    ctx.db.direct_message().id().update(dm_row);
 
     Ok(())
 }

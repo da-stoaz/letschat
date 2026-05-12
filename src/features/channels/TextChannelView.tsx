@@ -10,7 +10,7 @@ import { useServerRole } from '../../hooks/useServerRole'
 import { warnOnce } from '../../lib/devWarnings'
 import { ChatMessageFeed } from '../chat/ChatMessageFeed'
 import { ChatComposer } from '../chat/ChatComposer'
-import { composeMessageWithAttachments, parseMessageAttachments } from '../chat/attachmentPayload'
+import { composeMessageWithAttachments } from '../chat/attachmentPayload'
 import type { Message, u64 } from '../../types/domain'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -104,16 +104,10 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         selfIdentity={selfIdentity}
         unreadCount={unreadCount}
         canDeleteAny={canModerate}
-        onEditMessage={async (message) => {
-          const parsed = parseMessageAttachments(message.content)
-          const next = window.prompt('Edit message', parsed.text)
-          if (next === null) return
-          const trimmed = next.trim()
-          if (!trimmed && parsed.attachments.length === 0) return
+        onEditMessage={async (message, newContent) => {
           setError(null)
           try {
-            const nextContent = composeMessageWithAttachments(trimmed, parsed.attachments)
-            await reducers.editMessage(message.id, nextContent)
+            await reducers.editMessage(message.id, newContent)
           } catch (e) {
             const messageText = e instanceof Error ? e.message : 'Could not edit message.'
             setError(messageText)

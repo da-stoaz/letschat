@@ -224,14 +224,20 @@ export function DmVoicePanel({
   ])
 
   return (
-    <Card className="border-border/70 bg-background/40 py-0">
+    <Card
+      className={
+        showHeader
+          ? 'border-border/70 bg-background/40 py-0'
+          : 'border-0 bg-transparent py-0 shadow-none'
+      }
+    >
       {showHeader ? (
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-sm">DM Voice Call</CardTitle>
           <Badge variant={statusVariant}>{statusBadge}</Badge>
         </CardHeader>
       ) : null}
-      <CardContent className="space-y-2">
+      <CardContent className={showHeader ? 'space-y-2' : 'space-y-2 px-0'}>
         <VoiceMediaStage
           tiles={mediaTiles}
           className="min-h-[260px]"

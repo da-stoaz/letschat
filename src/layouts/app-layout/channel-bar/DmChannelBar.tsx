@@ -55,9 +55,9 @@ export function DmChannelBar({
                       variant={activeDmIdentity === contact.identity ? 'secondary' : 'ghost'}
                       onClick={() => onOpenDmContact(contact.identity)}
                     >
-                      <Avatar className="size-8 rounded-lg">
+                      <Avatar className="size-8 rounded-full">
                         {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
-                        <AvatarFallback className="rounded-lg bg-primary/10 text-[10px]">
+                        <AvatarFallback className="rounded-full bg-primary/10 text-[10px]">
                           {userInitials(contact.label)}
                         </AvatarFallback>
                       </Avatar>

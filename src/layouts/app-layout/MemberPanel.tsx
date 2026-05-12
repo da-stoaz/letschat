@@ -88,9 +88,9 @@ function MemberRow({
       className={`flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/40 group ${timedOut ? 'opacity-60' : ''}`}
     >
       <div className="relative">
-        <Avatar size="sm" className="rounded-lg">
+        <Avatar size="sm" className="rounded-full">
           {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
-          <AvatarFallback className="rounded-lg bg-primary/10 text-[10px]">{userInitials(displayName)}</AvatarFallback>
+          <AvatarFallback className="rounded-full bg-primary/10 text-[10px]">{userInitials(displayName)}</AvatarFallback>
         </Avatar>
         {timedOut && (
           <ClockIcon className="absolute -bottom-0.5 -right-0.5 size-3 text-yellow-500 bg-card rounded-full" />

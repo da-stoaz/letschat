@@ -96,9 +96,9 @@ export function BanListModal({ serverId, onClose }: BanListModalProps) {
               const username = user?.username ?? ban.identity.slice(0, 12)
               return (
                 <div key={ban.identity} className="flex items-center gap-2 rounded-lg border border-border/60 p-2">
-                  <Avatar size="sm" className="rounded-lg">
+                  <Avatar size="sm" className="rounded-full">
                     {user?.avatarUrl ? <AvatarImage src={user.avatarUrl} alt={label} /> : null}
-                    <AvatarFallback className="rounded-lg bg-destructive/10 text-[10px]">
+                    <AvatarFallback className="rounded-full bg-destructive/10 text-[10px]">
                       {label.slice(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>

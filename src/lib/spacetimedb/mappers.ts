@@ -224,6 +224,7 @@ export function mapDirectMessage(row: DbRow): DirectMessage {
     recipientIdentity: toIdentityString(row.recipientIdentity),
     content: rowString(row, 'content'),
     sentAt: toIsoString(row.sentAt),
+    editedAt: row.editedAt ? toIsoString(row.editedAt) : null,
     deletedBySender: Boolean(row.deletedBySender),
     deletedByRecipient: Boolean(row.deletedByRecipient),
   }

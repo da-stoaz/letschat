@@ -32,3 +32,7 @@ auth-service/*.db
 .env
 .env.development
 .env.prod
+
+# graphify
+
+graphify-out

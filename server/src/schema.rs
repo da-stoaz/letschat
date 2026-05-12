@@ -229,6 +229,7 @@ pub struct DirectMessage {
     pub recipient_identity: Identity,
     pub content: String,
     pub sent_at: Timestamp,
+    pub edited_at: Option<Timestamp>,
     pub deleted_by_sender: bool,
     pub deleted_by_recipient: bool,
 }
