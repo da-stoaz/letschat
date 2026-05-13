@@ -469,8 +469,8 @@ export function AppRail({
     const halfHeight = overRect.height / 2
     const distFromCenter = Math.abs(pointerY - itemCenter) / halfHeight
 
-    // Center 60% of item → group intent
-    if (distFromCenter < 0.5) {
+    // Center 75% of item → group intent
+    if (distFromCenter < 0.75) {
       setDragIntent('group')
       setDragOverId(overId)
     } else {
