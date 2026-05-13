@@ -29,7 +29,8 @@ const GITHUB_REPO = "da-stoaz/letschat";
         <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Self-host the LetsChat backend</h1>
         <p class="text-muted-foreground max-w-3xl leading-relaxed">
           LetsChat is not a single server. It is a small backend stack: chat state, auth, voice signaling, file storage,
-          and startup discovery. This guide explains what each part does, why it matters, and how to deploy it in production.
+          and startup discovery. This guide explains what each part does, why it matters, and then walks you through one
+          of two deployment paths.
         </p>
         <div class="flex flex-wrap gap-2 text-xs">
           <span class="pill">SpacetimeDB</span>
@@ -74,258 +75,44 @@ const GITHUB_REPO = "da-stoaz/letschat";
           <p class="text-muted-foreground">One-shot container that publishes the SpacetimeDB WASM module on startup. Runs automatically and exits cleanly.</p>
         </article>
         <article class="service-card rounded-xl p-4 space-y-1 md:col-span-2 lg:col-span-1">
-          <p class="font-medium">Discovery Endpoint (`/.well-known/letschat.json`)</p>
-          <p class="text-muted-foreground">Lets app startup auto-discover your backend from one URL (for example `https://connect.example.com`).
+          <p class="font-medium">Discovery Endpoint (<code class="text-xs">/.well-known/letschat.json</code>)</p>
+          <p class="text-muted-foreground">Lets app startup auto-discover your backend from one URL (for example <code class="text-xs">https://connect.example.com</code>).
           Without this, users must paste a full join link manually.</p>
         </article>
       </div>
     </section>
 
-    <section class="frost rounded-2xl p-6 space-y-4">
-      <h2 class="text-2xl font-semibold tracking-tight">Choose Your Deployment Track</h2>
+    <section class="space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">Choose Your Deployment Path</h2>
+      <p class="text-sm text-muted-foreground max-w-2xl">Both paths deploy the same backend stack. The difference is how HTTPS traffic reaches your server.</p>
       <div class="grid md:grid-cols-2 gap-4">
-        <a href="#track-tunnel" class="track-card tunnel rounded-xl p-5 space-y-2">
-          <p class="text-lg font-medium">Track A: Cloudflare Tunnel</p>
-          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Routes `auth/chat/files/connect` over Cloudflare Tunnel; LiveKit media remains direct via forwarded ports.</p>
+        <a href="/self-hosting/cloudflare-tunnel" class="track-card tunnel rounded-xl p-5 space-y-2">
+          <p class="text-lg font-medium">Path A: Cloudflare Tunnel</p>
+          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Routes <code class="text-xs">auth/chat/files/connect</code> over Cloudflare Tunnel; LiveKit media remains direct via forwarded ports.</p>
           <p class="text-sm text-muted-foreground"><strong class="text-foreground">Why:</strong> Keeps web services off direct public IP while still supporting voice traffic.</p>
           <p class="text-sm text-muted-foreground"><strong class="text-foreground">Best for:</strong> Home servers where you want Cloudflare ingress control without exposing 80/443 directly.</p>
           <div class="flex flex-wrap gap-2 pt-1">
             <span class="mini-pill">Zero Trust Ingress</span>
             <span class="mini-pill">Lower Host Exposure</span>
           </div>
+          <p class="text-xs text-accent-blue font-medium pt-1">Read the guide →</p>
         </a>
-        <a href="#track-caddy" class="track-card caddy rounded-xl p-5 space-y-2">
-          <p class="text-lg font-medium">Track B: Caddy Reverse Proxy</p>
-          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Caddy terminates TLS on your host and proxies `auth/chat/files/lk/connect` locally.</p>
+        <a href="/self-hosting/caddy" class="track-card caddy rounded-xl p-5 space-y-2">
+          <p class="text-lg font-medium">Path B: Caddy Reverse Proxy</p>
+          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Caddy terminates TLS on your host and proxies <code class="text-xs">auth/chat/files/lk/connect</code> locally.</p>
           <p class="text-sm text-muted-foreground"><strong class="text-foreground">Why:</strong> Simple standard architecture with fewer external moving parts.</p>
           <p class="text-sm text-muted-foreground"><strong class="text-foreground">Best for:</strong> Operators comfortable exposing 80/443 and managing direct DNS to host IP.</p>
           <div class="flex flex-wrap gap-2 pt-1">
             <span class="mini-pill">Direct HTTPS</span>
             <span class="mini-pill">Classic Reverse Proxy</span>
           </div>
+          <p class="text-xs text-accent-blue font-medium pt-1">Read the guide →</p>
         </a>
       </div>
     </section>
 
-    <section class="frost rounded-2xl p-6 space-y-4">
-      <h2 class="text-2xl font-semibold tracking-tight">Step 0: Get the Deployment Files</h2>
-      <p class="text-sm text-muted-foreground">You only need a handful of config files — not the full source. Download the shared base and LiveKit config:</p>
-      <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`mkdir letschat && cd letschat
-
-wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
-
-mkdir livekit
-wget -O livekit/config.prod.yaml \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml`}</code></pre>
-      <p class="text-sm text-muted-foreground">Then continue to your chosen track below to download the overlay compose file and environment template. All images are pre-built — no Rust or Node toolchains needed on the server.</p>
-    </section>
-
-    <section id="track-tunnel" class="space-y-6">
-      <h2 class="text-3xl font-semibold tracking-tight">Track A: Cloudflare Tunnel</h2>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Requirements (Read First)</h3>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li>Ubuntu host with Docker Engine + Compose plugin.</li>
-          <li>Cloudflare-managed domain plus Zero Trust access (to create a tunnel token).</li>
-          <li>Router access for LiveKit media port forwarding (`44381/tcp+udp`, `44382/udp`).</li>
-          <li>Public IPv4 (or ISP config) for reliable media. CGNAT can break voice.</li>
-        </ul>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker --version
-docker compose version
-curl -4 ifconfig.me`}</code></pre>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">How This Track Works</h3>
-        <p class="text-sm text-muted-foreground">Cloudflare Tunnel proxies HTTP/WebSocket services (`auth/chat/files/connect`) from Cloudflare to your Docker network.</p>
-        <p class="text-sm text-muted-foreground">LiveKit media is different: raw UDP/TCP media must still be reachable directly on your host via router forwarding.</p>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 1: Download Track A Files</h3>
-        <p class="text-sm text-muted-foreground">Inside the `letschat` directory you created in Step 0:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.tunnel.yml
-
-wget -O .env \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.tunnel.example`}</code></pre>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 2: DNS + Tunnel Ingress</h3>
-        <p class="text-sm text-muted-foreground">Create these hostnames in Cloudflare Zero Trust and configure tunnel ingress rules:</p>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li>`auth.example.com` → `http://auth-service:44301`</li>
-          <li>`chat.example.com` → `http://spacetimedb:3000` (enable WebSocket support)</li>
-          <li>`files.example.com` → `http://minio:44390`</li>
-          <li>`connect.example.com` → `http://discovery:80`</li>
-          <li>`lk.example.com` → A record pointing to your host public IP (media is not tunnelled)</li>
-        </ul>
-        <p class="text-sm text-muted-foreground">Copy the tunnel token from the Zero Trust dashboard — you will need it in the next step.</p>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 3: Configure Secrets and Endpoints</h3>
-        <p class="text-sm text-muted-foreground">Open `.env` (downloaded in Step 1) and replace every placeholder. Generate secrets with:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
-openssl rand -base64 32   # for LIVEKIT_API_SECRET`}</code></pre>
-        <p class="text-sm text-muted-foreground">Key fields to fill in:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`AUTH_JWT_SECRET=          # generate with openssl
-LIVEKIT_API_KEY=letschat-prod
-LIVEKIT_API_SECRET=       # generate with openssl
-MINIO_ACCESS_KEY=         # any username you choose
-MINIO_SECRET_KEY=         # generate with openssl
-MINIO_PUBLIC_ENDPOINT=https://files.example.com
-DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
-DISCOVERY_AUTH_URL=https://auth.example.com
-DISCOVERY_LIVEKIT_URL=ws://lk.example.com:44380
-CLOUDFLARE_TUNNEL_TOKEN=  # from Zero Trust dashboard`}</code></pre>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 4: Configure LiveKit</h3>
-        <p class="text-sm text-muted-foreground">Open `livekit/config.prod.yaml` and replace the key/secret placeholder so it matches your `.env`:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`keys:
-  letschat-prod: <paste LIVEKIT_API_SECRET here>`}</code></pre>
-        <p class="text-xs text-muted-foreground">The rest of the file (ports, `use_external_ip: true`) can stay as-is for most home server setups.</p>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 5: Pull Images and Start</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml ps`}</code></pre>
-        <p class="text-sm text-muted-foreground">`module-init` automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker logs letschat-module-init`}</code></pre>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 6: Validate Public Endpoints</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
-curl -i https://files.example.com/minio/health/live
-curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
-        <p class="text-sm text-muted-foreground">Confirm router forwarding to host: `44381/tcp`, `44381/udp`, `44382/udp`.</p>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 7: Client Onboarding</h3>
-        <p class="text-sm text-muted-foreground">Users can enter `https://connect.example.com` in startup and LetsChat will auto-discover backend URLs.</p>
-        <p class="text-sm text-muted-foreground">Discovery JSON example:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
-  "spacetimedb": "wss://chat.example.com",
-  "auth": "https://auth.example.com",
-  "livekit": "ws://lk.example.com:44380",
-  "database": "letschat"
-}`}</code></pre>
-        <p class="text-sm text-muted-foreground">Use `wss://lk...` only if you add TLS in front of LiveKit signaling.</p>
-      </article>
-    </section>
-
-    <section id="track-caddy" class="space-y-6">
-      <h2 class="text-3xl font-semibold tracking-tight">Track B: Caddy Reverse Proxy</h2>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Requirements (Read First)</h3>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li>Ubuntu host with Docker Engine + Compose plugin.</li>
-          <li>Cloudflare DNS records set to your host public IP (DNS-only mode for ACME issuance).</li>
-          <li>Router/firewall allows `80/tcp` and `443/tcp` to host (for Caddy TLS/HTTP).</li>
-          <li>LiveKit media forwarding still required: `44381/tcp+udp`, `44382/udp`.</li>
-        </ul>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">How This Track Works</h3>
-        <p class="text-sm text-muted-foreground">Caddy runs on your host, terminates HTTPS, and routes by hostname to internal Docker services.</p>
-        <p class="text-sm text-muted-foreground">This removes Cloudflare Tunnel complexity, but your host directly exposes `80/443` to the internet.</p>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 1: Download Track B Files</h3>
-        <p class="text-sm text-muted-foreground">Inside the `letschat` directory you created in Step 0:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.caddy.yml
-
-wget -O .env \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.caddy.example
-
-mkdir -p deploy/caddy
-wget -O deploy/caddy/Caddyfile \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/deploy/caddy/Caddyfile`}</code></pre>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 2: DNS + Network Setup</h3>
-        <p class="text-sm text-muted-foreground">Point these A records to your host public IP (DNS-only, no Cloudflare proxy):</p>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li>`auth.example.com`</li>
-          <li>`chat.example.com`</li>
-          <li>`files.example.com`</li>
-          <li>`lk.example.com`</li>
-          <li>`connect.example.com`</li>
-        </ul>
-        <p class="text-sm text-muted-foreground">Open on router/firewall: `80/tcp`, `443/tcp` (Caddy TLS), `44381/tcp+udp`, `44382/udp` (LiveKit media).</p>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 3: Configure Secrets and Domains</h3>
-        <p class="text-sm text-muted-foreground">Open `.env` (downloaded in Step 1) and replace every placeholder. Generate secrets with:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
-openssl rand -base64 32   # for LIVEKIT_API_SECRET`}</code></pre>
-        <p class="text-sm text-muted-foreground">Key fields to fill in:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`AUTH_JWT_SECRET=          # generate with openssl
-LIVEKIT_API_KEY=letschat-prod
-LIVEKIT_API_SECRET=       # generate with openssl
-MINIO_ACCESS_KEY=         # any username you choose
-MINIO_SECRET_KEY=         # generate with openssl
-MINIO_PUBLIC_ENDPOINT=https://files.example.com
-DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
-DISCOVERY_AUTH_URL=https://auth.example.com
-DISCOVERY_LIVEKIT_URL=wss://lk.example.com
-AUTH_DOMAIN=auth.example.com
-CHAT_DOMAIN=chat.example.com
-FILES_DOMAIN=files.example.com
-LIVEKIT_DOMAIN=lk.example.com
-CONNECT_DOMAIN=connect.example.com`}</code></pre>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 4: Configure LiveKit</h3>
-        <p class="text-sm text-muted-foreground">Open `livekit/config.prod.yaml` and replace the key/secret placeholder so it matches your `.env`:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`keys:
-  letschat-prod: <paste LIVEKIT_API_SECRET here>`}</code></pre>
-        <p class="text-xs text-muted-foreground">The rest of the file (ports, `use_external_ip: true`) can stay as-is for most home server setups.</p>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 5: Pull Images and Start</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`}</code></pre>
-        <p class="text-sm text-muted-foreground">`module-init` automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker logs letschat-module-init`}</code></pre>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 6: Validate Public Endpoints</h3>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
-curl -i https://files.example.com/minio/health/live
-curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h3 class="text-xl font-medium">Step 7: Client Onboarding</h3>
-        <p class="text-sm text-muted-foreground">Users can enter `https://connect.example.com` in startup. Discovery JSON should point to your public endpoints:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
-  "spacetimedb": "wss://chat.example.com",
-  "auth": "https://auth.example.com",
-  "livekit": "wss://lk.example.com",
-  "database": "letschat"
-}`}</code></pre>
-      </article>
-    </section>
-
     <section class="space-y-4">
-      <h2 class="text-3xl font-semibold tracking-tight">Common Mistakes</h2>
+      <h2 class="text-2xl font-semibold tracking-tight">Common Mistakes</h2>
       <div class="overflow-x-auto rounded-2xl border border-border/70 bg-card/60 backdrop-blur-sm">
         <table class="w-full text-sm">
           <thead class="bg-card text-left">
@@ -339,32 +126,32 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
             <tr>
               <td class="p-3">Voice joins but no audio</td>
               <td class="p-3">LiveKit media ports not forwarded</td>
-              <td class="p-3">Forward `44381/tcp+udp` and `44382/udp` to host</td>
+              <td class="p-3">Forward <code class="text-xs">44381/tcp+udp</code> and <code class="text-xs">44382/udp</code> to host</td>
             </tr>
             <tr>
               <td class="p-3">Setup discovery fails</td>
-              <td class="p-3">`connect.<domain>` not routed to discovery container</td>
-              <td class="p-3">Tunnel: `connect -> discovery:80`; Caddy: set `CONNECT_DOMAIN` correctly</td>
+              <td class="p-3"><code class="text-xs">connect.&lt;domain&gt;</code> not routed to discovery container</td>
+              <td class="p-3">Tunnel: <code class="text-xs">connect → discovery:80</code>; Caddy: set <code class="text-xs">CONNECT_DOMAIN</code> correctly</td>
             </tr>
             <tr>
               <td class="p-3">Upload/download errors</td>
-              <td class="p-3">Wrong `MINIO_PUBLIC_ENDPOINT`</td>
-              <td class="p-3">Set to public `https://files...` endpoint clients can reach</td>
+              <td class="p-3">Wrong <code class="text-xs">MINIO_PUBLIC_ENDPOINT</code></td>
+              <td class="p-3">Set to public <code class="text-xs">https://files...</code> endpoint clients can reach</td>
             </tr>
             <tr>
               <td class="p-3">Caddy cert issuance fails</td>
               <td class="p-3">Cloudflare proxy enabled or closed 80/443</td>
-              <td class="p-3">Use DNS-only records and open `80/tcp`, `443/tcp`</td>
+              <td class="p-3">Use DNS-only records and open <code class="text-xs">80/tcp</code>, <code class="text-xs">443/tcp</code></td>
             </tr>
             <tr>
               <td class="p-3">LiveKit setup fails immediately</td>
-              <td class="p-3">Wrong signaling scheme (`ws://` vs `wss://`)</td>
-              <td class="p-3">Tunnel often uses `ws://lk...:44380`; Caddy usually uses `wss://lk...`</td>
+              <td class="p-3">Wrong signaling scheme (<code class="text-xs">ws://</code> vs <code class="text-xs">wss://</code>)</td>
+              <td class="p-3">Tunnel often uses <code class="text-xs">ws://lk...:44380</code>; Caddy usually uses <code class="text-xs">wss://lk...</code></td>
             </tr>
             <tr>
               <td class="p-3">Spacetime connect timeout</td>
-              <td class="p-3">`module-init` failed or SpacetimeDB not yet healthy</td>
-              <td class="p-3">Check `docker logs letschat-module-init`; it retries on failure automatically</td>
+              <td class="p-3"><code class="text-xs">module-init</code> failed or SpacetimeDB not yet healthy</td>
+              <td class="p-3">Check <code class="text-xs">docker logs letschat-module-init</code>; it retries on failure automatically</td>
             </tr>
           </tbody>
         </table>
@@ -466,6 +253,7 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
     box-shadow: 0 14px 32px oklch(0 0 0 / 0.2);
     overflow: hidden;
     transition: transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+    display: block;
   }
 
   .track-card::before {
@@ -504,14 +292,6 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
     font-size: 0.68rem;
     color: var(--color-muted-foreground);
     background: oklch(0.16 0 0 / 0.6);
-  }
-
-  .step-card {
-    border: 1px solid oklch(1 0 0 / 0.12);
-    background:
-      linear-gradient(180deg, oklch(0.22 0 0 / 0.82), oklch(0.185 0 0 / 0.8)),
-      linear-gradient(90deg, oklch(0.49 0.23 264.3 / 0.2) 0 4px, transparent 4px 100%);
-    box-shadow: 0 14px 34px oklch(0 0 0 / 0.2);
   }
 
   @keyframes drift {

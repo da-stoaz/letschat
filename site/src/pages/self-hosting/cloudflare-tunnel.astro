@@ -1,0 +1,218 @@
+---
+import Layout from "@/layouts/Layout.astro";
+
+const GITHUB_REPO = "da-stoaz/letschat";
+---
+
+<Layout
+  title="Path A: Cloudflare Tunnel — LetsChat Self-Hosting"
+  description="Deploy LetsChat using Cloudflare Tunnel for zero-trust HTTP ingress with LiveKit media via direct port forwarding."
+>
+  <header class="border-b border-border sticky top-0 z-50 backdrop-blur-sm bg-background-translucent">
+    <nav class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
+      <a href="/" class="font-semibold text-foreground tracking-tight hover:opacity-80 transition-opacity">LetsChat</a>
+      <div class="flex items-center gap-4 text-sm">
+        <a href="/download" class="text-muted-foreground hover:text-foreground transition-colors">Download</a>
+        <a href="/self-hosting" class="text-foreground">Self-Hosting</a>
+        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="text-muted-foreground hover:text-foreground transition-colors">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="relative max-w-6xl mx-auto px-6 py-16 space-y-10 overflow-hidden">
+    <div class="hero-glow hero-glow-a"></div>
+
+    <div class="relative z-10 space-y-2">
+      <nav class="flex items-center gap-2 text-xs text-muted-foreground">
+        <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
+        <span>/</span>
+        <span class="text-foreground">Path A: Cloudflare Tunnel</span>
+      </nav>
+      <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Path A: Cloudflare Tunnel</h1>
+      <p class="text-muted-foreground max-w-2xl leading-relaxed pt-1">
+        Routes <code class="text-xs">auth/chat/files/connect</code> services over Cloudflare Tunnel so your host is never directly exposed on ports 80/443.
+        LiveKit media still requires direct port forwarding for UDP voice traffic.
+      </p>
+      <div class="flex flex-wrap gap-2 text-xs pt-2">
+        <span class="mini-pill">Zero Trust Ingress</span>
+        <span class="mini-pill">Lower Host Exposure</span>
+        <span class="mini-pill">Cloudflare-managed domain required</span>
+      </div>
+    </div>
+
+    <section class="space-y-6">
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Requirements (Read First)</h2>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li>Ubuntu host with Docker Engine + Compose plugin.</li>
+          <li>Cloudflare-managed domain plus Zero Trust access (to create a tunnel token).</li>
+          <li>Router access for LiveKit media port forwarding (<code class="text-xs">44381/tcp+udp</code>, <code class="text-xs">44382/udp</code>).</li>
+          <li>Public IPv4 (or ISP config) for reliable media. CGNAT can break voice.</li>
+        </ul>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker --version
+docker compose version
+curl -4 ifconfig.me`}</code></pre>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">How This Path Works</h2>
+        <p class="text-sm text-muted-foreground">Cloudflare Tunnel proxies HTTP/WebSocket services (<code class="text-xs">auth/chat/files/connect</code>) from Cloudflare to your Docker network.</p>
+        <p class="text-sm text-muted-foreground">LiveKit media is different: raw UDP/TCP media must still be reachable directly on your host via router forwarding.</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 0: Get Shared Files</h2>
+        <p class="text-sm text-muted-foreground">Download the shared base compose file and LiveKit config:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`mkdir letschat && cd letschat
+
+wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
+
+mkdir livekit
+wget -O livekit/config.prod.yaml \\
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml`}</code></pre>
+        <p class="text-sm text-muted-foreground">All images are pre-built — no Rust or Node toolchains needed on the server.</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 1: Download Path A Files</h2>
+        <p class="text-sm text-muted-foreground">Inside the <code class="text-xs">letschat</code> directory:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.tunnel.yml
+
+wget -O .env \\
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.tunnel.example`}</code></pre>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 2: DNS + Tunnel Ingress</h2>
+        <p class="text-sm text-muted-foreground">Create these hostnames in Cloudflare Zero Trust and configure tunnel ingress rules:</p>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li><code class="text-xs">auth.example.com</code> → <code class="text-xs">http://auth-service:44301</code></li>
+          <li><code class="text-xs">chat.example.com</code> → <code class="text-xs">http://spacetimedb:3000</code> (enable WebSocket support)</li>
+          <li><code class="text-xs">files.example.com</code> → <code class="text-xs">http://minio:44390</code></li>
+          <li><code class="text-xs">connect.example.com</code> → <code class="text-xs">http://discovery:80</code></li>
+          <li><code class="text-xs">lk.example.com</code> → A record pointing to your host public IP (media is not tunnelled)</li>
+        </ul>
+        <p class="text-sm text-muted-foreground">Copy the tunnel token from the Zero Trust dashboard — you will need it in the next step.</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 3: Configure Secrets and Endpoints</h2>
+        <p class="text-sm text-muted-foreground">Open <code class="text-xs">.env</code> and replace every placeholder. Generate secrets with:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
+openssl rand -base64 32   # for LIVEKIT_API_SECRET`}</code></pre>
+        <p class="text-sm text-muted-foreground">Key fields to fill in:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`AUTH_JWT_SECRET=          # generate with openssl
+LIVEKIT_API_KEY=letschat-prod
+LIVEKIT_API_SECRET=       # generate with openssl
+MINIO_ACCESS_KEY=         # any username you choose
+MINIO_SECRET_KEY=         # generate with openssl
+MINIO_PUBLIC_ENDPOINT=https://files.example.com
+DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
+DISCOVERY_AUTH_URL=https://auth.example.com
+DISCOVERY_LIVEKIT_URL=ws://lk.example.com:44380
+CLOUDFLARE_TUNNEL_TOKEN=  # from Zero Trust dashboard`}</code></pre>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 4: Configure LiveKit</h2>
+        <p class="text-sm text-muted-foreground">Open <code class="text-xs">livekit/config.prod.yaml</code> and replace the key/secret placeholder so it matches your <code class="text-xs">.env</code>:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`keys:
+  letschat-prod: <paste LIVEKIT_API_SECRET here>`}</code></pre>
+        <p class="text-xs text-muted-foreground">The rest of the file (ports, <code class="text-xs">use_external_ip: true</code>) can stay as-is for most home server setups.</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 5: Pull Images and Start</h2>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml ps`}</code></pre>
+        <p class="text-sm text-muted-foreground"><code class="text-xs">module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker logs letschat-module-init`}</code></pre>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 6: Validate Public Endpoints</h2>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
+curl -i https://files.example.com/minio/health/live
+curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
+        <p class="text-sm text-muted-foreground">Confirm router forwarding to host: <code class="text-xs">44381/tcp</code>, <code class="text-xs">44381/udp</code>, <code class="text-xs">44382/udp</code>.</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 7: Client Onboarding</h2>
+        <p class="text-sm text-muted-foreground">Users enter <code class="text-xs">https://connect.example.com</code> in startup and LetsChat will auto-discover backend URLs.</p>
+        <p class="text-sm text-muted-foreground">Discovery JSON example:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
+  "spacetimedb": "wss://chat.example.com",
+  "auth": "https://auth.example.com",
+  "livekit": "ws://lk.example.com:44380",
+  "database": "letschat"
+}`}</code></pre>
+        <p class="text-sm text-muted-foreground">Use <code class="text-xs">wss://lk...</code> only if you add TLS in front of LiveKit signaling.</p>
+      </article>
+
+    </section>
+
+    <div class="flex items-center justify-between pt-4 border-t border-border text-sm">
+      <a href="/self-hosting" class="text-muted-foreground hover:text-foreground transition-colors">← Back to overview</a>
+      <a href="/self-hosting/caddy" class="text-muted-foreground hover:text-foreground transition-colors">Path B: Caddy →</a>
+    </div>
+  </main>
+
+  <footer class="border-t border-border">
+    <div class="max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
+      <span>© {new Date().getFullYear()} Felix Steinberger</span>
+      <div class="flex items-center gap-4">
+        <a href="/" class="hover:text-foreground transition-colors">Home</a>
+        <a href="/download" class="hover:text-foreground transition-colors">Download</a>
+        <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
+        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="hover:text-foreground transition-colors">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</Layout>
+
+<style>
+  .hero-glow {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 9999px;
+    filter: blur(56px);
+    opacity: 0.22;
+  }
+
+  .hero-glow-a {
+    width: 360px;
+    height: 260px;
+    top: -80px;
+    left: -80px;
+    background: radial-gradient(circle at 40% 40%, color-mix(in oklch, var(--accent-blue) 80%, white 20%), transparent 70%);
+    animation: drift 12s ease-in-out infinite;
+  }
+
+  .mini-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    padding: 0.28rem 0.55rem;
+    border: 1px solid oklch(1 0 0 / 0.16);
+    font-size: 0.68rem;
+    color: var(--color-muted-foreground);
+    background: oklch(0.16 0 0 / 0.6);
+  }
+
+  .step-card {
+    border: 1px solid oklch(1 0 0 / 0.12);
+    background:
+      linear-gradient(180deg, oklch(0.22 0 0 / 0.82), oklch(0.185 0 0 / 0.8)),
+      linear-gradient(90deg, oklch(0.49 0.23 264.3 / 0.2) 0 4px, transparent 4px 100%);
+    box-shadow: 0 14px 34px oklch(0 0 0 / 0.2);
+  }
+
+  @keyframes drift {
+    0% { transform: translate3d(0, 0, 0) scale(1); }
+    50% { transform: translate3d(8px, -12px, 0) scale(1.04); }
+    100% { transform: translate3d(0, 0, 0) scale(1); }
+  }
+</style>

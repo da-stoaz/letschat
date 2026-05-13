@@ -1,0 +1,220 @@
+---
+import Layout from "@/layouts/Layout.astro";
+
+const GITHUB_REPO = "da-stoaz/letschat";
+---
+
+<Layout
+  title="Path B: Caddy Reverse Proxy — LetsChat Self-Hosting"
+  description="Deploy LetsChat using Caddy as a reverse proxy with automatic HTTPS and direct DNS to your host."
+>
+  <header class="border-b border-border sticky top-0 z-50 backdrop-blur-sm bg-background-translucent">
+    <nav class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
+      <a href="/" class="font-semibold text-foreground tracking-tight hover:opacity-80 transition-opacity">LetsChat</a>
+      <div class="flex items-center gap-4 text-sm">
+        <a href="/download" class="text-muted-foreground hover:text-foreground transition-colors">Download</a>
+        <a href="/self-hosting" class="text-foreground">Self-Hosting</a>
+        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="text-muted-foreground hover:text-foreground transition-colors">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="relative max-w-6xl mx-auto px-6 py-16 space-y-10 overflow-hidden">
+    <div class="hero-glow hero-glow-b"></div>
+
+    <div class="relative z-10 space-y-2">
+      <nav class="flex items-center gap-2 text-xs text-muted-foreground">
+        <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
+        <span>/</span>
+        <span class="text-foreground">Path B: Caddy</span>
+      </nav>
+      <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Path B: Caddy Reverse Proxy</h1>
+      <p class="text-muted-foreground max-w-2xl leading-relaxed pt-1">
+        Caddy runs on your host, terminates HTTPS automatically, and routes by hostname to internal Docker services.
+        Simpler moving parts than a tunnel — but your host directly exposes ports 80 and 443.
+      </p>
+      <div class="flex flex-wrap gap-2 text-xs pt-2">
+        <span class="mini-pill">Direct HTTPS</span>
+        <span class="mini-pill">Classic Reverse Proxy</span>
+        <span class="mini-pill">Auto TLS via ACME</span>
+      </div>
+    </div>
+
+    <section class="space-y-6">
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Requirements (Read First)</h2>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li>Ubuntu host with Docker Engine + Compose plugin.</li>
+          <li>Cloudflare DNS records set to your host public IP (DNS-only mode for ACME issuance).</li>
+          <li>Router/firewall allows <code class="text-xs">80/tcp</code> and <code class="text-xs">443/tcp</code> to host (for Caddy TLS/HTTP).</li>
+          <li>LiveKit media forwarding still required: <code class="text-xs">44381/tcp+udp</code>, <code class="text-xs">44382/udp</code>.</li>
+        </ul>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">How This Path Works</h2>
+        <p class="text-sm text-muted-foreground">Caddy runs on your host, terminates HTTPS, and routes by hostname to internal Docker services.</p>
+        <p class="text-sm text-muted-foreground">This removes Cloudflare Tunnel complexity, but your host directly exposes <code class="text-xs">80/443</code> to the internet.</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 0: Get Shared Files</h2>
+        <p class="text-sm text-muted-foreground">Download the shared base compose file and LiveKit config:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`mkdir letschat && cd letschat
+
+wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
+
+mkdir livekit
+wget -O livekit/config.prod.yaml \\
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml`}</code></pre>
+        <p class="text-sm text-muted-foreground">All images are pre-built — no Rust or Node toolchains needed on the server.</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 1: Download Path B Files</h2>
+        <p class="text-sm text-muted-foreground">Inside the <code class="text-xs">letschat</code> directory:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.caddy.yml
+
+wget -O .env \\
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.caddy.example
+
+mkdir -p deploy/caddy
+wget -O deploy/caddy/Caddyfile \\
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/deploy/caddy/Caddyfile`}</code></pre>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 2: DNS + Network Setup</h2>
+        <p class="text-sm text-muted-foreground">Point these A records to your host public IP (DNS-only, no Cloudflare proxy):</p>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li><code class="text-xs">auth.example.com</code></li>
+          <li><code class="text-xs">chat.example.com</code></li>
+          <li><code class="text-xs">files.example.com</code></li>
+          <li><code class="text-xs">lk.example.com</code></li>
+          <li><code class="text-xs">connect.example.com</code></li>
+        </ul>
+        <p class="text-sm text-muted-foreground">Open on router/firewall: <code class="text-xs">80/tcp</code>, <code class="text-xs">443/tcp</code> (Caddy TLS), <code class="text-xs">44381/tcp+udp</code>, <code class="text-xs">44382/udp</code> (LiveKit media).</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 3: Configure Secrets and Domains</h2>
+        <p class="text-sm text-muted-foreground">Open <code class="text-xs">.env</code> and replace every placeholder. Generate secrets with:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
+openssl rand -base64 32   # for LIVEKIT_API_SECRET`}</code></pre>
+        <p class="text-sm text-muted-foreground">Key fields to fill in:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`AUTH_JWT_SECRET=          # generate with openssl
+LIVEKIT_API_KEY=letschat-prod
+LIVEKIT_API_SECRET=       # generate with openssl
+MINIO_ACCESS_KEY=         # any username you choose
+MINIO_SECRET_KEY=         # generate with openssl
+MINIO_PUBLIC_ENDPOINT=https://files.example.com
+DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
+DISCOVERY_AUTH_URL=https://auth.example.com
+DISCOVERY_LIVEKIT_URL=wss://lk.example.com
+AUTH_DOMAIN=auth.example.com
+CHAT_DOMAIN=chat.example.com
+FILES_DOMAIN=files.example.com
+LIVEKIT_DOMAIN=lk.example.com
+CONNECT_DOMAIN=connect.example.com`}</code></pre>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 4: Configure LiveKit</h2>
+        <p class="text-sm text-muted-foreground">Open <code class="text-xs">livekit/config.prod.yaml</code> and replace the key/secret placeholder so it matches your <code class="text-xs">.env</code>:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`keys:
+  letschat-prod: <paste LIVEKIT_API_SECRET here>`}</code></pre>
+        <p class="text-xs text-muted-foreground">The rest of the file (ports, <code class="text-xs">use_external_ip: true</code>) can stay as-is for most home server setups.</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 5: Pull Images and Start</h2>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`}</code></pre>
+        <p class="text-sm text-muted-foreground"><code class="text-xs">module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker logs letschat-module-init`}</code></pre>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 6: Validate Public Endpoints</h2>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
+curl -i https://files.example.com/minio/health/live
+curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 7: Client Onboarding</h2>
+        <p class="text-sm text-muted-foreground">Users enter <code class="text-xs">https://connect.example.com</code> in startup. Discovery JSON should point to your public endpoints:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
+  "spacetimedb": "wss://chat.example.com",
+  "auth": "https://auth.example.com",
+  "livekit": "wss://lk.example.com",
+  "database": "letschat"
+}`}</code></pre>
+      </article>
+
+    </section>
+
+    <div class="flex items-center justify-between pt-4 border-t border-border text-sm">
+      <a href="/self-hosting/cloudflare-tunnel" class="text-muted-foreground hover:text-foreground transition-colors">← Path A: Cloudflare Tunnel</a>
+      <a href="/self-hosting" class="text-muted-foreground hover:text-foreground transition-colors">Back to overview →</a>
+    </div>
+  </main>
+
+  <footer class="border-t border-border">
+    <div class="max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
+      <span>© {new Date().getFullYear()} Felix Steinberger</span>
+      <div class="flex items-center gap-4">
+        <a href="/" class="hover:text-foreground transition-colors">Home</a>
+        <a href="/download" class="hover:text-foreground transition-colors">Download</a>
+        <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
+        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="hover:text-foreground transition-colors">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</Layout>
+
+<style>
+  .hero-glow {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 9999px;
+    filter: blur(56px);
+    opacity: 0.22;
+  }
+
+  .hero-glow-b {
+    width: 340px;
+    height: 240px;
+    top: -60px;
+    right: -80px;
+    background: radial-gradient(circle at 60% 50%, color-mix(in oklch, var(--accent-blue) 70%, cyan 30%), transparent 72%);
+    animation: drift 15s ease-in-out infinite reverse;
+  }
+
+  .mini-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    padding: 0.28rem 0.55rem;
+    border: 1px solid oklch(1 0 0 / 0.16);
+    font-size: 0.68rem;
+    color: var(--color-muted-foreground);
+    background: oklch(0.16 0 0 / 0.6);
+  }
+
+  .step-card {
+    border: 1px solid oklch(1 0 0 / 0.12);
+    background:
+      linear-gradient(180deg, oklch(0.22 0 0 / 0.82), oklch(0.185 0 0 / 0.8)),
+      linear-gradient(90deg, oklch(0.74 0.16 190 / 0.18) 0 4px, transparent 4px 100%);
+    box-shadow: 0 14px 34px oklch(0 0 0 / 0.2);
+  }
+
+  @keyframes drift {
+    0% { transform: translate3d(0, 0, 0) scale(1); }
+    50% { transform: translate3d(8px, -12px, 0) scale(1.04); }
+    100% { transform: translate3d(0, 0, 0) scale(1); }
+  }
+</style>
