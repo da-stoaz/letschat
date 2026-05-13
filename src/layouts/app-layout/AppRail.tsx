@@ -80,8 +80,11 @@ export function AppRail({
 
         <Separator className="my-0.5" />
 
-        <div className="app-scrollbar w-full min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto pr-1.5">
-          <div className="mx-auto flex w-9 min-w-0 flex-col items-center gap-2 py-1">
+        <div className="relative min-h-0 flex-1 w-full">
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-3 bg-linear-to-b from-card/90 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-3 bg-linear-to-t from-card/90 to-transparent" />
+          <div className="h-full overflow-y-auto scrollbar-none">
+            <div className="flex flex-col items-center gap-2 px-1.5 pt-2 pb-1.5">
             {servers.map((server) => {
               const serverUnread = countUnreadInServer(server.id)
               return (
@@ -126,6 +129,7 @@ export function AppRail({
               </TooltipTrigger>
               <TooltipContent side="right">Create Server</TooltipContent>
             </Tooltip>
+          </div>
           </div>
         </div>
 
