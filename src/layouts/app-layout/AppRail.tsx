@@ -18,7 +18,7 @@ import {
   type SortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ChevronRightIcon, MessageCircleIcon, PlusIcon, SettingsIcon, Volume2Icon } from 'lucide-react'
+import { MessageCircleIcon, PlusIcon, SettingsIcon, Volume2Icon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -67,10 +67,6 @@ const noopStrategy: SortingStrategy = () => null
 
 // ─── Flat list helpers ────────────────────────────────────────────────────────
 
-/**
- * Produces the flat sortable ID list from the hierarchical order.
- * Groups that are collapsed (or currently being dragged) only contribute their header.
- */
 function buildFlatIds(
   order: RailItem[],
   groups: Record<string, ServerGroup>,
@@ -91,11 +87,6 @@ function buildFlatIds(
   return flat
 }
 
-/**
- * Converts a flat ID list back into a hierarchical order + groups.
- * Only updates serverIds for groups whose members appeared in the flat list
- * (i.e. were "expanded" during the drag). Collapsed groups keep their existing serverIds.
- */
 function flatToHierarchical(
   flatItems: string[],
   existingGroups: Record<string, ServerGroup>,
@@ -130,11 +121,10 @@ function flatToHierarchical(
 
   const groups: Record<string, ServerGroup> = {}
   for (const [gid, g] of Object.entries(existingGroups)) {
-    if (!order.includes(gid)) continue // group was removed from order entirely
+    if (!order.includes(gid)) continue
 
     if (!(gid in newGroupServerIds)) {
-      // Collapsed or excluded — keep existing
-      groups[gid] = g
+      groups[gid] = g // collapsed or excluded — keep as-is
       continue
     }
 
@@ -142,11 +132,9 @@ function flatToHierarchical(
     if (sids.length >= 2) {
       groups[gid] = { ...g, serverIds: sids }
     } else if (sids.length === 1) {
-      // Dissolve: replace group header with lone survivor
       const idx = order.indexOf(gid)
       if (idx !== -1) order.splice(idx, 1, sids[0])
     } else {
-      // All members moved out → remove group header from order
       const idx = order.indexOf(gid)
       if (idx !== -1) order.splice(idx, 1)
     }
@@ -155,14 +143,9 @@ function flatToHierarchical(
   return { order, groups }
 }
 
-// ─── Sortable items ───────────────────────────────────────────────────────────
+// ─── Shared avatar ────────────────────────────────────────────────────────────
 
-interface ServerAvatarProps {
-  server: Server
-  size?: 'sm' | 'md'
-}
-
-function ServerAvatar({ server, size = 'md' }: ServerAvatarProps) {
+function ServerAvatar({ server, size = 'md' }: { server: Server; size?: 'sm' | 'md' }) {
   const cls = size === 'sm' ? 'size-8 rounded-md' : 'size-9 rounded-lg'
   return (
     <Avatar className={cls}>
@@ -173,6 +156,17 @@ function ServerAvatar({ server, size = 'md' }: ServerAvatarProps) {
     </Avatar>
   )
 }
+
+// ─── Border class helpers ─────────────────────────────────────────────────────
+// Group items share a continuous border. Each item contributes its portion.
+// Items are stacked with zero gap so borders connect seamlessly.
+
+const GROUP_HEADER_OPEN = 'border border-b-0 rounded-t-xl bg-muted/10 pt-1.5 pb-1'
+const GROUP_HEADER_CLOSED = 'mb-1.5' // standalone collapsed group
+const GROUP_CHILD_MIDDLE = 'border-x bg-muted/10 py-0.5'
+const GROUP_CHILD_LAST = 'border border-t-0 rounded-b-xl bg-muted/10 py-0.5 mb-1.5'
+
+// ─── Sortable top-level server ────────────────────────────────────────────────
 
 interface TopServerProps {
   dndId: string
@@ -190,8 +184,8 @@ function SortableTopServer({ dndId, server, isActive, unreadCount, hasUnread, ha
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className="flex items-center justify-center"
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0 : 1 }}
+      className="flex items-center justify-center mb-1.5"
     >
       <Tooltip>
         <TooltipTrigger
@@ -200,8 +194,7 @@ function SortableTopServer({ dndId, server, isActive, unreadCount, hasUnread, ha
               variant={isActive ? 'secondary' : 'ghost'}
               size="icon"
               className={[
-                'relative h-9 w-9 rounded-lg transition-[opacity,ring] duration-150',
-                isDragging ? 'opacity-0' : 'opacity-100',
+                'relative h-9 w-9 rounded-lg transition-[ring,transform] duration-150',
                 isActive ? 'ring-1 ring-primary/70' : '',
                 isGroupTarget ? 'ring-2 ring-cyan-400 scale-110' : '',
               ].join(' ')}
@@ -229,6 +222,8 @@ function SortableTopServer({ dndId, server, isActive, unreadCount, hasUnread, ha
   )
 }
 
+// ─── Sortable group header ────────────────────────────────────────────────────
+
 interface GroupHeaderProps {
   dndId: string
   group: ServerGroup
@@ -238,6 +233,7 @@ interface GroupHeaderProps {
   hasAnyVoice: boolean
   hasActiveServer: boolean
   isGroupTarget: boolean
+  isExpanded: boolean
   onToggleCollapse: () => void
 }
 
@@ -250,6 +246,7 @@ function SortableGroupHeader({
   hasAnyVoice,
   hasActiveServer,
   isGroupTarget,
+  isExpanded,
   onToggleCollapse,
 }: GroupHeaderProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId })
@@ -258,8 +255,8 @@ function SortableGroupHeader({
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className="flex flex-col items-center gap-0.5"
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0 : 1 }}
+      className={`w-full flex items-center justify-center border-border/50 ${isExpanded ? GROUP_HEADER_OPEN : GROUP_HEADER_CLOSED}`}
     >
       <Tooltip>
         <TooltipTrigger
@@ -268,8 +265,7 @@ function SortableGroupHeader({
               variant={hasActiveServer ? 'secondary' : 'ghost'}
               size="icon"
               className={[
-                'relative h-9 w-9 rounded-lg transition-[opacity,ring] duration-150',
-                isDragging ? 'opacity-0' : 'opacity-100',
+                'relative h-9 w-9 rounded-lg transition-[ring,transform] duration-150',
                 hasActiveServer ? 'ring-1 ring-primary/70' : '',
                 isGroupTarget ? 'ring-2 ring-cyan-400 scale-110' : '',
               ].join(' ')}
@@ -279,7 +275,6 @@ function SortableGroupHeader({
             />
           }
         >
-          {/* 2×2 avatar grid */}
           <div className="grid grid-cols-2 gap-px p-0.5 w-full h-full">
             {groupServers.slice(0, 4).map((s) => (
               <div key={s.id} className="overflow-hidden rounded-sm">
@@ -306,12 +301,11 @@ function SortableGroupHeader({
         </TooltipTrigger>
         <TooltipContent side="right">{group.label}</TooltipContent>
       </Tooltip>
-      <ChevronRightIcon
-        className={`size-2.5 text-muted-foreground/40 transition-transform duration-150 ${group.collapsed ? '' : 'rotate-90'}`}
-      />
     </div>
   )
 }
+
+// ─── Sortable grouped server (inside an expanded group) ───────────────────────
 
 interface GroupedServerProps {
   dndId: string
@@ -321,18 +315,18 @@ interface GroupedServerProps {
   hasUnread: boolean
   hasVoice: boolean
   isGroupTarget: boolean
+  isLast: boolean
   onClick: () => void
 }
 
-function SortableGroupedServer({ dndId, server, isActive, unreadCount, hasUnread, hasVoice, isGroupTarget, onClick }: GroupedServerProps) {
+function SortableGroupedServer({ dndId, server, isActive, unreadCount, hasUnread, hasVoice, isGroupTarget, isLast, onClick }: GroupedServerProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId })
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className="flex items-center justify-center pl-1"
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0 : 1 }}
+      className={`w-full flex items-center justify-center border-border/50 ${isLast ? GROUP_CHILD_LAST : GROUP_CHILD_MIDDLE}`}
     >
-      <div className="mr-0.5 h-5 w-0.5 self-center rounded-full bg-border/50 shrink-0" />
       <Tooltip>
         <TooltipTrigger
           render={
@@ -340,8 +334,7 @@ function SortableGroupedServer({ dndId, server, isActive, unreadCount, hasUnread
               variant={isActive ? 'secondary' : 'ghost'}
               size="icon"
               className={[
-                'relative h-8 w-8 rounded-md transition-[opacity,ring] duration-150',
-                isDragging ? 'opacity-0' : 'opacity-100',
+                'relative h-8 w-8 rounded-md transition-[ring,transform] duration-150',
                 isActive ? 'ring-1 ring-primary/70' : '',
                 isGroupTarget ? 'ring-2 ring-cyan-400 scale-110' : '',
               ].join(' ')}
@@ -400,14 +393,11 @@ export function AppRail({
   const dmUnreadTotal = countUnreadInDm()
   const dmHomeActive = !isSettingsActive && !activeServerId && !activeDmIdentity
 
-  // Track intent (sort vs group) and which item is the group drop target
   const [dragIntent, setDragIntent] = useState<'sort' | 'group'>('sort')
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
-  // When dragging a group header, temporarily collapse it so members don't appear in flat list
   const [tempCollapsedGroupId, setTempCollapsedGroupId] = useState<string | null>(null)
 
-  // Track pointer Y via window listener for accurate center-zone detection
   const pointerYRef = useRef<number>(0)
   useEffect(() => {
     const handler = (e: PointerEvent) => { pointerYRef.current = e.clientY }
@@ -415,7 +405,6 @@ export function AppRail({
     return () => window.removeEventListener('pointermove', handler)
   }, [])
 
-  // Which group IDs are currently expanded in the flat list
   const expandedGroupIds = useMemo(() => {
     const set = new Set<string>()
     for (const [gid, g] of Object.entries(groups)) {
@@ -430,7 +419,6 @@ export function AppRail({
   )
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
-
   const strategy: SortingStrategy = dragIntent === 'group' ? noopStrategy : verticalListSortingStrategy
 
   const handleDragStart = useCallback((e: DragStartEvent) => {
@@ -442,34 +430,23 @@ export function AppRail({
   }, [])
 
   const handleDragMove = useCallback((e: DragMoveEvent) => {
-    if (!e.over) {
-      setDragIntent('sort')
-      setDragOverId(null)
-      return
-    }
+    if (!e.over) { setDragIntent('sort'); setDragOverId(null); return }
 
     const overId = String(e.over.id)
     const activeId = String(e.active.id)
 
-    // Only allow group intent when dragging a server (not a group header) onto another server or group
     const canGroup =
       overId !== activeId &&
       (activeId.startsWith('s:') || activeId.startsWith('sg:')) &&
       (overId.startsWith('s:') || overId.startsWith('g:') || overId.startsWith('sg:'))
 
-    if (!canGroup) {
-      setDragIntent('sort')
-      setDragOverId(null)
-      return
-    }
+    if (!canGroup) { setDragIntent('sort'); setDragOverId(null); return }
 
     const overRect = e.over.rect
-    const pointerY = pointerYRef.current
     const itemCenter = overRect.top + overRect.height / 2
     const halfHeight = overRect.height / 2
-    const distFromCenter = Math.abs(pointerY - itemCenter) / halfHeight
+    const distFromCenter = Math.abs(pointerYRef.current - itemCenter) / halfHeight
 
-    // Center 75% of item → group intent
     if (distFromCenter < 0.75) {
       setDragIntent('group')
       setDragOverId(overId)
@@ -495,7 +472,6 @@ export function AppRail({
     const state = useServerRailStore.getState()
 
     if (intent === 'group') {
-      // Determine source server
       let sourceServerId: number | null = null
       let sourceGroupId: string | null = null
       if (activeId.startsWith('s:')) {
@@ -505,35 +481,24 @@ export function AppRail({
         sourceGroupId = parts[1]
         sourceServerId = Number(parts[2])
       }
-
       if (sourceServerId === null) return
 
-      // Remove from source group first (if coming from one)
       if (sourceGroupId) {
         state.removeFromGroup(sourceServerId, sourceGroupId)
-        // Re-read state after removal
         const fresh = useServerRailStore.getState()
-        if (overId.startsWith('g:')) {
-          fresh.addToGroup(sourceServerId, overId.slice(2))
-        } else if (overId.startsWith('sg:')) {
-          fresh.addToGroup(sourceServerId, overId.split(':')[1])
-        } else if (overId.startsWith('s:')) {
-          fresh.createGroup(sourceServerId, Number(overId.slice(2)))
-        }
+        if (overId.startsWith('g:')) fresh.addToGroup(sourceServerId, overId.slice(2))
+        else if (overId.startsWith('sg:')) fresh.addToGroup(sourceServerId, overId.split(':')[1])
+        else if (overId.startsWith('s:')) fresh.createGroup(sourceServerId, Number(overId.slice(2)))
         return
       }
 
-      if (overId.startsWith('g:')) {
-        state.addToGroup(sourceServerId, overId.slice(2))
-      } else if (overId.startsWith('sg:')) {
-        state.addToGroup(sourceServerId, overId.split(':')[1])
-      } else if (overId.startsWith('s:')) {
-        state.createGroup(sourceServerId, Number(overId.slice(2)))
-      }
+      if (overId.startsWith('g:')) state.addToGroup(sourceServerId, overId.slice(2))
+      else if (overId.startsWith('sg:')) state.addToGroup(sourceServerId, overId.split(':')[1])
+      else if (overId.startsWith('s:')) state.createGroup(sourceServerId, Number(overId.slice(2)))
       return
     }
 
-    // Sort intent: reorder via flat list
+    // Sort intent — reorder via flat list
     const currentFlatIds = buildFlatIds(state.order, state.groups, expandedGroupIds)
     const oldIndex = currentFlatIds.indexOf(activeId)
     const newIndex = currentFlatIds.indexOf(overId)
@@ -544,7 +509,6 @@ export function AppRail({
     state.setOrderAndGroups(newOrder, newGroups)
   }, [dragIntent, expandedGroupIds])
 
-  // Find active drag item for overlay
   const activeDragServer = useMemo(() => {
     if (!activeDragId) return null
     if (activeDragId.startsWith('s:')) return servers.find((s) => s.id === Number(activeDragId.slice(2))) ?? null
@@ -556,6 +520,83 @@ export function AppRail({
     if (!activeDragId?.startsWith('g:')) return null
     return groups[activeDragId.slice(2)] ?? null
   }, [activeDragId, groups])
+
+  // Build flat render list — group header + children share border styling
+  const renderList = () => {
+    const elements: React.ReactNode[] = []
+    for (let i = 0; i < flatIds.length; i++) {
+      const flatId = flatIds[i]
+
+      if (flatId.startsWith('s:')) {
+        const serverId = Number(flatId.slice(2))
+        const server = servers.find((s) => s.id === serverId)
+        if (!server) continue
+        elements.push(
+          <SortableTopServer
+            key={flatId}
+            dndId={flatId}
+            server={server}
+            isActive={activeServerId === serverId}
+            unreadCount={countUnreadInServer(serverId)}
+            hasUnread={hasUnreadInServer(serverId)}
+            hasVoice={hasVoiceActivityInServer(serverId)}
+            isGroupTarget={dragOverId === flatId}
+            onClick={() => onOpenServer(serverId)}
+          />
+        )
+        continue
+      }
+
+      if (flatId.startsWith('g:')) {
+        const groupId = flatId.slice(2)
+        const group = groups[groupId]
+        if (!group) continue
+        const isExpanded = flatIds[i + 1]?.startsWith(`sg:${groupId}:`) ?? false
+        const groupServers = group.serverIds.map((id) => servers.find((s) => s.id === id)).filter(Boolean) as Server[]
+        elements.push(
+          <SortableGroupHeader
+            key={flatId}
+            dndId={flatId}
+            group={group}
+            servers={servers}
+            hasAnyUnread={groupServers.some((s) => hasUnreadInServer(s.id))}
+            totalUnread={groupServers.reduce((acc, s) => acc + countUnreadInServer(s.id), 0)}
+            hasAnyVoice={groupServers.some((s) => hasVoiceActivityInServer(s.id))}
+            hasActiveServer={groupServers.some((s) => s.id === activeServerId)}
+            isGroupTarget={dragOverId === flatId}
+            isExpanded={isExpanded}
+            onToggleCollapse={() => toggleGroupCollapsed(groupId)}
+          />
+        )
+        continue
+      }
+
+      if (flatId.startsWith('sg:')) {
+        const parts = flatId.split(':')
+        const groupId = parts[1]
+        const serverId = Number(parts[2])
+        const server = servers.find((s) => s.id === serverId)
+        if (!server) continue
+        const isLast = !(flatIds[i + 1]?.startsWith(`sg:${groupId}:`))
+        elements.push(
+          <SortableGroupedServer
+            key={flatId}
+            dndId={flatId}
+            server={server}
+            isActive={activeServerId === serverId}
+            unreadCount={countUnreadInServer(serverId)}
+            hasUnread={hasUnreadInServer(serverId)}
+            hasVoice={hasVoiceActivityInServer(serverId)}
+            isGroupTarget={dragOverId === flatId}
+            isLast={isLast}
+            onClick={() => onOpenServer(serverId)}
+          />
+        )
+        continue
+      }
+    }
+    return elements
+  }
 
   return (
     <Card className="flex h-full min-h-0 flex-col border-border/60 bg-card/80 backdrop-blur py-0">
@@ -576,7 +617,8 @@ export function AppRail({
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-3 bg-linear-to-b from-card/90 to-transparent" />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-3 bg-linear-to-t from-card/90 to-transparent" />
           <div className="h-full overflow-y-auto scrollbar-none">
-            <div className="flex flex-col items-center gap-1.5 px-1.5 pt-2 pb-1.5">
+            {/* gap-0 here — items control their own bottom margin */}
+            <div className="flex flex-col items-center gap-0 px-1.5 pt-2 pb-1.5">
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
@@ -585,73 +627,7 @@ export function AppRail({
                 onDragEnd={handleDragEnd}
               >
                 <SortableContext items={flatIds} strategy={strategy}>
-                  {flatIds.map((flatId) => {
-                    if (flatId.startsWith('s:')) {
-                      const serverId = Number(flatId.slice(2))
-                      const server = servers.find((s) => s.id === serverId)
-                      if (!server) return null
-                      return (
-                        <SortableTopServer
-                          key={flatId}
-                          dndId={flatId}
-                          server={server}
-                          isActive={activeServerId === serverId}
-                          unreadCount={countUnreadInServer(serverId)}
-                          hasUnread={hasUnreadInServer(serverId)}
-                          hasVoice={hasVoiceActivityInServer(serverId)}
-                          isGroupTarget={dragOverId === flatId}
-                          onClick={() => onOpenServer(serverId)}
-                        />
-                      )
-                    }
-
-                    if (flatId.startsWith('g:')) {
-                      const groupId = flatId.slice(2)
-                      const group = groups[groupId]
-                      if (!group) return null
-                      const groupServers = group.serverIds.map((id) => servers.find((s) => s.id === id)).filter(Boolean) as Server[]
-                      const hasAnyUnread = groupServers.some((s) => hasUnreadInServer(s.id))
-                      const totalUnread = groupServers.reduce((acc, s) => acc + countUnreadInServer(s.id), 0)
-                      const hasAnyVoice = groupServers.some((s) => hasVoiceActivityInServer(s.id))
-                      const hasActiveServer = groupServers.some((s) => s.id === activeServerId)
-                      return (
-                        <SortableGroupHeader
-                          key={flatId}
-                          dndId={flatId}
-                          group={group}
-                          servers={servers}
-                          hasAnyUnread={hasAnyUnread}
-                          totalUnread={totalUnread}
-                          hasAnyVoice={hasAnyVoice}
-                          hasActiveServer={hasActiveServer}
-                          isGroupTarget={dragOverId === flatId}
-                          onToggleCollapse={() => toggleGroupCollapsed(groupId)}
-                        />
-                      )
-                    }
-
-                    if (flatId.startsWith('sg:')) {
-                      const parts = flatId.split(':')
-                      const serverId = Number(parts[2])
-                      const server = servers.find((s) => s.id === serverId)
-                      if (!server) return null
-                      return (
-                        <SortableGroupedServer
-                          key={flatId}
-                          dndId={flatId}
-                          server={server}
-                          isActive={activeServerId === serverId}
-                          unreadCount={countUnreadInServer(serverId)}
-                          hasUnread={hasUnreadInServer(serverId)}
-                          hasVoice={hasVoiceActivityInServer(serverId)}
-                          isGroupTarget={dragOverId === flatId}
-                          onClick={() => onOpenServer(serverId)}
-                        />
-                      )
-                    }
-
-                    return null
-                  })}
+                  {renderList()}
                 </SortableContext>
 
                 <DragOverlay dropAnimation={null}>
@@ -677,16 +653,18 @@ export function AppRail({
                 </DragOverlay>
               </DndContext>
 
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg border border-dashed border-border/70" onClick={onOpenCreateServer} />
-                  }
-                >
-                  <PlusIcon className="size-4" />
-                </TooltipTrigger>
-                <TooltipContent side="right">Create Server</TooltipContent>
-              </Tooltip>
+              <div className="flex items-center justify-center mb-0.5">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg border border-dashed border-border/70" onClick={onOpenCreateServer} />
+                    }
+                  >
+                    <PlusIcon className="size-4" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Create Server</TooltipContent>
+                </Tooltip>
+              </div>
             </div>
           </div>
         </div>
