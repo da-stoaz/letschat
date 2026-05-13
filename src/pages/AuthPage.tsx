@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LogInIcon, UserRoundPlusIcon } from 'lucide-react'
+import { LogInIcon, PlugZapIcon, UserRoundPlusIcon } from 'lucide-react'
 import {
   getCurrentSessionToken,
   loginWithPassword,
@@ -11,11 +11,13 @@ import {
 import { authServiceRegister } from '../lib/authService'
 import { useSelfStore } from '../stores/selfStore'
 import { useConnectionStore } from '../stores/connectionStore'
+import { ConnectionTab } from '../features/settings/ConnectionTab'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
 export function AuthPage() {
   const navigate = useNavigate()
@@ -23,6 +25,7 @@ export function AuthPage() {
   const setUser = useSelfStore((s) => s.setUser)
   const identity = useConnectionStore((s) => s.identity)
   const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [connectionSheetOpen, setConnectionSheetOpen] = useState(false)
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
@@ -35,7 +38,27 @@ export function AuthPage() {
   }, [navigate, user])
 
   return (
-    <section className="grid min-h-screen place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-4">
+    <section className="relative grid min-h-screen place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-4">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
+        title="Connection settings"
+        onClick={() => setConnectionSheetOpen(true)}
+      >
+        <PlugZapIcon className="size-4" />
+      </Button>
+      <Sheet open={connectionSheetOpen} onOpenChange={setConnectionSheetOpen}>
+        <SheetContent side="right" className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Connection</SheetTitle>
+          </SheetHeader>
+          <div className="px-4 pb-4">
+            <ConnectionTab />
+          </div>
+        </SheetContent>
+      </Sheet>
       <Card className="w-full max-w-md border-border/70 bg-card/90 backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="text-2xl">LetsChat</CardTitle>

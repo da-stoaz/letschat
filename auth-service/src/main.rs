@@ -88,9 +88,14 @@ async fn main() -> anyhow::Result<()> {
         auth: Arc::new(RwLock::new(auth)),
         uploads: upload_config,
         admin_api_key: config.admin_api_key,
+        discovery_spacetimedb_uri: config.discovery_spacetimedb_uri,
+        discovery_auth_url: config.discovery_auth_url,
+        discovery_livekit_url: config.discovery_livekit_url,
+        discovery_database: config.discovery_database,
     };
 
     let app = Router::new()
+        .route("/.well-known/letschat.json", get(handlers::discovery::well_known))
         .route("/health", get(handlers::health::health))
         .route("/auth/register", post(handlers::auth::register))
         .route("/auth/link", post(handlers::auth::link))

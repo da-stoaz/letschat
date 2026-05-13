@@ -33,11 +33,10 @@ const BLOCKED_MIME_PREFIXES: &[&str] = &[
 ///   `HEAD` object verification; never leaves the server).
 /// - `presign` is pointed at the *public* MinIO address (the URL baked into
 ///   presigned PUT/GET links that clients use directly).
-// rust-s3 0.34: with_path_style() returns Bucket, not Box<Bucket>.
 #[derive(Clone)]
 pub struct UploadConfig {
-    pub bucket_internal: Bucket,
-    pub bucket_presign: Bucket,
+    pub bucket_internal: Box<Bucket>,
+    pub bucket_presign: Box<Bucket>,
 }
 
 impl UploadConfig {
@@ -240,7 +239,7 @@ pub async fn upload_request(
     let upload_url = state
         .uploads
         .bucket_presign
-        .presign_put(&s3_path, PRESIGN_UPLOAD_SECS, None)
+        .presign_put(&s3_path, PRESIGN_UPLOAD_SECS, None, None)
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to generate upload URL: {e}")))?;
 

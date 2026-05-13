@@ -13,8 +13,13 @@ interface WellKnown {
   database?: string
 }
 
+function normalizeUrl(input: string): string {
+  const trimmed = input.trim().replace(/\/+$/, '')
+  return trimmed.includes('://') ? trimmed : `http://${trimmed}`
+}
+
 async function discoverConfig(serverUrl: string): Promise<ServerConfig> {
-  const base = serverUrl.replace(/\/+$/, '')
+  const base = normalizeUrl(serverUrl)
   const res = await fetch(`${base}/.well-known/letschat.json`, { signal: AbortSignal.timeout(8000) })
   if (!res.ok) {
     throw new Error(`Discovery failed (${res.status}). Is /.well-known/letschat.json hosted at ${base}?`)

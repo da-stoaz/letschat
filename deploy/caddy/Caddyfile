@@ -18,5 +18,5 @@
 }
 
 {$CONNECT_DOMAIN} {
-  reverse_proxy discovery:80
+  reverse_proxy auth-service:44301
 }
