@@ -12,4 +12,8 @@ pub(crate) struct AppState {
     pub(crate) auth: Arc<RwLock<AuthFramework>>,
     pub(crate) uploads: uploads::UploadConfig,
     pub(crate) admin_api_key: Option<String>,
+    pub(crate) discovery_spacetimedb_uri: String,
+    pub(crate) discovery_auth_url: String,
+    pub(crate) discovery_livekit_url: String,
+    pub(crate) discovery_database: String,
 }

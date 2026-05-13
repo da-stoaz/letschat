@@ -9,6 +9,10 @@ pub(crate) struct ServiceConfig {
     pub(crate) minio_bucket: String,
     pub(crate) minio_internal_endpoint: String,
     pub(crate) minio_public_endpoint: String,
+    pub(crate) discovery_spacetimedb_uri: String,
+    pub(crate) discovery_auth_url: String,
+    pub(crate) discovery_livekit_url: String,
+    pub(crate) discovery_database: String,
 }
 
 impl ServiceConfig {
@@ -34,6 +38,15 @@ impl ServiceConfig {
         let minio_public_endpoint = std::env::var("MINIO_PUBLIC_ENDPOINT")
             .unwrap_or_else(|_| minio_internal_endpoint.clone());
 
+        let discovery_spacetimedb_uri = std::env::var("DISCOVERY_SPACETIMEDB_URI")
+            .unwrap_or_else(|_| "ws://localhost:4300".to_string());
+        let discovery_auth_url = std::env::var("DISCOVERY_AUTH_URL")
+            .unwrap_or_else(|_| "http://localhost:8787".to_string());
+        let discovery_livekit_url = std::env::var("DISCOVERY_LIVEKIT_URL")
+            .unwrap_or_else(|_| "ws://localhost:7880".to_string());
+        let discovery_database = std::env::var("DISCOVERY_DATABASE")
+            .unwrap_or_else(|_| "letschat".to_string());
+
         Self {
             database_url,
             bind,
@@ -44,6 +57,10 @@ impl ServiceConfig {
             minio_bucket,
             minio_internal_endpoint,
             minio_public_endpoint,
+            discovery_spacetimedb_uri,
+            discovery_auth_url,
+            discovery_livekit_url,
+            discovery_database,
         }
     }
 }
