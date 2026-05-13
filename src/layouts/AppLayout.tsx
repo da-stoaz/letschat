@@ -478,7 +478,6 @@ export function AppLayout() {
           onBan={(member) => setMemberAction({ kind: 'ban', member })}
           onTimeout={(member) => setMemberAction({ kind: 'timeout', member })}
           onRemoveTimeout={async (member) => {
-            const { reducers } = await import('../lib/spacetimedb')
             await reducers.removeTimeout(activeServerId, member.userIdentity)
           }}
           onSetRole={(member, newRole) => setMemberAction({ kind: 'setRole', member, newRole })}

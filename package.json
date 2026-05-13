@@ -1,9 +1,10 @@
 {
   "name": "letschat",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.5",
   "type": "module",
   "scripts": {
+    "version:bump": "bun scripts/bump-version.ts",
     "dev": "vite",
     "tauri": "tauri",
     "build": "tsc -b && vite build",
