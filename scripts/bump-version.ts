@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 import { readFileSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 
-const ROOT = join(import.meta.dir, '..')
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 function bumpVersion(current: string, bump: string): string {
   if (/^\d+\.\d+\.\d+$/.test(bump)) return bump
