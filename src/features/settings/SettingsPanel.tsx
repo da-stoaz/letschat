@@ -13,6 +13,7 @@ import { isDesktopTauriRuntime } from '../../lib/tauri'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useSelfStore } from '../../stores/selfStore'
 import { useUiStore } from '../../stores/uiStore'
+import { useServerConfigStore } from '../../stores/serverConfigStore'
 import { toast } from '@/components/ui/sonner'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -96,6 +97,7 @@ function normalizeTimeInput(value: string): string {
 export function SettingsPanel() {
   const user = useSelfStore((s) => s.user)
   const identity = useConnectionStore((s) => s.identity)
+  const config = useServerConfigStore((s) => s.config)
   const notificationSettings = useUiStore((s) => s.notificationSettings)
   const setNotificationsEnabled = useUiStore((s) => s.setNotificationsEnabled)
   const setNotificationEventEnabled = useUiStore((s) => s.setNotificationEventEnabled)
@@ -166,23 +168,12 @@ export function SettingsPanel() {
     [setAvatarPreviewFromFile],
   )
 
-  useEffect(() => {
-    setDisplayName(user?.displayName ?? '')
-    clearAvatarPreview()
-    setAvatarUrl(user?.avatarUrl ?? '')
-  }, [clearAvatarPreview, user?.avatarUrl, user?.displayName])
-
   useEffect(
     () => () => {
       if (avatarPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(avatarPreviewUrl)
     },
     [avatarPreviewUrl],
   )
-
-  useEffect(() => {
-    setQuietHoursStart(notificationSettings.quietHoursStart)
-    setQuietHoursEnd(notificationSettings.quietHoursEnd)
-  }, [notificationSettings.quietHoursEnd, notificationSettings.quietHoursStart])
 
   useEffect(() => {
     let active = true
@@ -284,6 +275,7 @@ export function SettingsPanel() {
                     try {
                       const normalizedAvatar = avatarUrl.trim()
                       await reducers.updateProfile(displayName || null, normalizedAvatar)
+                      clearAvatarPreview()
                       toast.success('Profile updated')
                     } catch (error) {
                       const message = error instanceof Error ? error.message : 'Could not save profile.'
@@ -392,6 +384,35 @@ export function SettingsPanel() {
                 </div>
               </CardContent>
             </Card>
+
+            {config ? (
+              <Card className="border-border/70 bg-muted/20">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Backend</CardTitle>
+                  <CardDescription>Services this client is connected to.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1.5 rounded-lg border border-border/70 bg-card/70 p-3 font-mono text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-primary shrink-0">SpacetimeDB</span>
+                      <span className="truncate text-right">{config.spacetimedbUri}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-primary shrink-0">Auth</span>
+                      <span className="truncate text-right">{config.authServiceUrl}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-primary shrink-0">LiveKit</span>
+                      <span className="truncate text-right">{config.livekitUrl}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-primary shrink-0">Database</span>
+                      <span className="truncate text-right">{config.spacetimedbDatabase}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
 
             <Card className="border-border/70 bg-muted/20">
               <CardHeader className="pb-3">
