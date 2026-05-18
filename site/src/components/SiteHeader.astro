@@ -16,60 +16,113 @@ const links = [
 ] as const;
 ---
 
-<header class="site-nav-wrap sticky top-0 z-50">
+<header class="site-nav-wrap sticky top-0 z-50" data-site-nav>
   <div class="site-nav-glass border-b border-border">
-    <nav class="max-w-7xl mx-auto px-5 sm:px-6 py-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      <a href="/" class="brand inline-flex items-center gap-3 shrink-0" aria-label="LetsChat home">
-        <img src="/letschat-logo.png" alt="LetsChat logo" class="h-10 w-10 rounded-xl brand-logo" />
-        <span class="flex flex-col leading-tight">
-          <span class="text-base font-semibold tracking-tight">LetsChat</span>
-          <span class="text-[11px] text-muted-foreground">Self-hosted team communication</span>
-        </span>
-      </a>
+    <div class="max-w-7xl mx-auto px-5 sm:px-6">
+      <nav class="nav-shell py-3" aria-label="Primary">
+        <a href="/" class="brand" aria-label="LetsChat home">
+          <img src="/letschat-logo.png" alt="LetsChat logo" class="brand-logo" />
+          <span class="brand-copy">
+            <span class="brand-name">LetsChat</span>
+            <span class="brand-sub">Self-hosted team communication</span>
+          </span>
+        </a>
 
-      <div class="flex items-center gap-2 overflow-x-auto whitespace-nowrap nav-track">
-        {links.map((link) => (
-          <a
-            href={link.href}
-            class:list={[
-              "nav-link text-sm px-3 py-2 rounded-lg border border-transparent transition-colors",
-              active === link.key
-                ? "text-foreground bg-card border-border"
-                : "text-muted-foreground hover:text-foreground hover:bg-card/70",
-            ]}
+        <div class="desktop-nav" role="navigation" aria-label="Desktop links">
+          <div class="desktop-links">
+            {links.map((link) => (
+              <a
+                href={link.href}
+                class:list={[
+                  "nav-link",
+                  active === link.key
+                    ? "nav-link-active"
+                    : "nav-link-idle",
+                ]}
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+
+          <div class="desktop-actions">
+            <a href={GITHUB_DISCUSSIONS} target="_blank" rel="noopener" class="action-btn action-btn-muted">Feature Portal</a>
+            <a href="/download" class="action-btn action-btn-primary">Download</a>
+            <a href={GITHUB_BASE} target="_blank" rel="noopener" class="action-btn action-btn-muted">GitHub</a>
+          </div>
+        </div>
+
+        <div class="mobile-actions">
+          <a href="/download" class="action-btn action-btn-primary">Download</a>
+          <button
+            type="button"
+            class="menu-toggle"
+            aria-label="Toggle navigation"
+            aria-controls="mobile-nav-panel"
+            aria-expanded="false"
+            data-nav-toggle
           >
-            {link.label}
-          </a>
-        ))}
-      </div>
+            Menu
+          </button>
+        </div>
+      </nav>
 
-      <div class="flex items-center gap-2 shrink-0">
-        <a
-          href={GITHUB_DISCUSSIONS}
-          target="_blank"
-          rel="noopener"
-          class="text-xs sm:text-sm px-3 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border-hover transition-colors"
-        >
-          Feature Portal
-        </a>
-        <a
-          href="/download"
-          class="text-xs sm:text-sm px-3.5 py-2 rounded-lg bg-accent-blue text-white font-semibold hover:opacity-90 transition-opacity"
-        >
-          Download
-        </a>
-        <a
-          href={GITHUB_BASE}
-          target="_blank"
-          rel="noopener"
-          class="text-xs sm:text-sm px-3 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border-hover transition-colors"
-        >
-          GitHub
-        </a>
+      <div id="mobile-nav-panel" class="mobile-panel" data-nav-panel>
+        <div class="mobile-links">
+          {links.map((link) => (
+            <a
+              href={link.href}
+              class:list={[
+                "mobile-link",
+                active === link.key
+                  ? "mobile-link-active"
+                  : "mobile-link-idle",
+              ]}
+            >
+              {link.label}
+            </a>
+          ))}
+        </div>
+
+        <div class="mobile-portal-row">
+          <a href={GITHUB_DISCUSSIONS} target="_blank" rel="noopener" class="action-btn action-btn-muted">Feature Portal</a>
+          <a href={GITHUB_BASE} target="_blank" rel="noopener" class="action-btn action-btn-muted">GitHub</a>
+        </div>
       </div>
-    </nav>
+    </div>
   </div>
 </header>
+
+<script>
+  (() => {
+    const root = document.querySelector('[data-site-nav]');
+    if (!root) return;
+
+    const toggle = root.querySelector('[data-nav-toggle]');
+    const panel = root.querySelector('[data-nav-panel]');
+    if (!(toggle instanceof HTMLButtonElement) || !(panel instanceof HTMLElement)) return;
+
+    const close = () => {
+      root.classList.remove('is-open');
+      toggle.setAttribute('aria-expanded', 'false');
+    };
+
+    const togglePanel = () => {
+      const open = root.classList.toggle('is-open');
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+
+    toggle.addEventListener('click', togglePanel);
+
+    panel.querySelectorAll('a').forEach((link) => {
+      link.addEventListener('click', close);
+    });
+
+    window.addEventListener('resize', () => {
+      if (window.innerWidth >= 1024) close();
+    });
+  })();
+</script>
 
 <style>
   .site-nav-wrap {
@@ -82,17 +135,234 @@ const links = [
       radial-gradient(900px 260px at 5% -120%, oklch(0.72 0.11 215 / 0.12), transparent 60%);
   }
 
+  .nav-shell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.62rem;
+    min-width: 0;
+  }
+
   .brand-logo {
+    width: 2.3rem;
+    height: 2.3rem;
+    border-radius: 0.75rem;
     background: linear-gradient(145deg, oklch(0.24 0.03 240), oklch(0.16 0.01 250));
     border: 1px solid oklch(1 0 0 / 0.14);
     box-shadow: 0 10px 24px oklch(0 0 0 / 0.25);
   }
 
-  .nav-track {
-    scrollbar-width: none;
+  .brand-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
   }
 
-  .nav-track::-webkit-scrollbar {
+  .brand-name {
+    font-size: 0.98rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+  }
+
+  .brand-sub {
+    font-size: 0.67rem;
+    color: var(--color-muted-foreground);
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .desktop-nav {
     display: none;
+  }
+
+  .mobile-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-shrink: 0;
+  }
+
+  .action-btn,
+  .menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.65rem;
+    padding: 0.55rem 0.72rem;
+    border: 1px solid var(--color-border);
+    font-size: 0.76rem;
+    line-height: 1;
+    transition: color 160ms ease, border-color 160ms ease, opacity 160ms ease;
+  }
+
+  .menu-toggle {
+    background: transparent;
+    color: var(--color-muted-foreground);
+    cursor: pointer;
+  }
+
+  .menu-toggle:hover {
+    color: var(--color-foreground);
+    border-color: var(--color-border-hover);
+  }
+
+  .action-btn-primary {
+    background: var(--color-accent-blue);
+    border-color: color-mix(in oklab, var(--color-accent-blue) 70%, transparent);
+    color: white;
+    font-weight: 600;
+  }
+
+  .action-btn-muted {
+    color: var(--color-muted-foreground);
+    background: transparent;
+  }
+
+  .action-btn-muted:hover {
+    color: var(--color-foreground);
+    border-color: var(--color-border-hover);
+  }
+
+  .mobile-panel {
+    display: none;
+    padding-bottom: 0.85rem;
+    border-top: 1px solid oklch(1 0 0 / 0.12);
+    margin-top: 0.15rem;
+  }
+
+  .site-nav-wrap.is-open .mobile-panel {
+    display: grid;
+    gap: 0.72rem;
+    padding-top: 0.72rem;
+  }
+
+  .mobile-links {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .mobile-link {
+    border-radius: 0.68rem;
+    border: 1px solid transparent;
+    padding: 0.6rem 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  .mobile-link-active {
+    color: var(--color-foreground);
+    border-color: var(--color-border);
+    background: var(--color-card);
+  }
+
+  .mobile-link-idle {
+    color: var(--color-muted-foreground);
+  }
+
+  .mobile-link-idle:hover {
+    color: var(--color-foreground);
+    background: color-mix(in oklab, var(--color-card) 78%, transparent);
+  }
+
+  .mobile-portal-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  @media (min-width: 640px) {
+    .action-btn,
+    .menu-toggle {
+      font-size: 0.82rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .brand-logo {
+      width: 2.45rem;
+      height: 2.45rem;
+    }
+
+    .brand-name {
+      font-size: 1.02rem;
+    }
+
+    .mobile-actions,
+    .mobile-panel {
+      display: none !important;
+    }
+
+    .desktop-nav {
+      display: flex;
+      align-items: center;
+      gap: 0.72rem;
+      margin-left: auto;
+      min-width: 0;
+    }
+
+    .desktop-links {
+      display: flex;
+      align-items: center;
+      gap: 0.26rem;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .nav-link {
+      border-radius: 0.62rem;
+      border: 1px solid transparent;
+      padding: 0.48rem 0.68rem;
+      font-size: 0.83rem;
+      white-space: nowrap;
+      transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+    }
+
+    .nav-link-active {
+      color: var(--color-foreground);
+      border-color: var(--color-border);
+      background: var(--color-card);
+    }
+
+    .nav-link-idle {
+      color: var(--color-muted-foreground);
+    }
+
+    .nav-link-idle:hover {
+      color: var(--color-foreground);
+      background: color-mix(in oklab, var(--color-card) 78%, transparent);
+    }
+
+    .desktop-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      flex-shrink: 0;
+    }
+
+    .desktop-actions .action-btn {
+      padding: 0.5rem 0.68rem;
+      font-size: 0.76rem;
+    }
+  }
+
+  @media (min-width: 1240px) {
+    .desktop-nav {
+      gap: 0.9rem;
+    }
+
+    .nav-link {
+      font-size: 0.87rem;
+      padding: 0.52rem 0.72rem;
+    }
+
+    .desktop-actions .action-btn {
+      font-size: 0.8rem;
+    }
   }
 </style>
