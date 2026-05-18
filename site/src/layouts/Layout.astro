@@ -6,7 +6,7 @@ interface Props {
 
 const {
   title,
-  description = "LetsChat — Self-hosted desktop app for real-time team communication. Voice, video, and messaging under your control.",
+  description = "LetsChat - Self-hosted desktop app for real-time team communication. Voice, video, and messaging under your control.",
 } = Astro.props;
 ---
 
@@ -23,7 +23,9 @@ const {
     <link rel="icon" type="image/png" href="/icon.png" />
   </head>
   <body>
-    <slot />
+    <div id="site-shell">
+      <slot />
+    </div>
   </body>
 </html>
 

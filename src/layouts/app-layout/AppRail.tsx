@@ -14,7 +14,6 @@ import {
   SortableContext,
   arrayMove,
   useSortable,
-  verticalListSortingStrategy,
   type SortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -393,12 +392,19 @@ export function AppRail({
   const dmUnreadTotal = countUnreadInDm()
   const dmHomeActive = !isSettingsActive && !activeServerId && !activeDmIdentity
 
-  const [dragIntent, setDragIntent] = useState<'sort' | 'group'>('sort')
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const [tempCollapsedGroupId, setTempCollapsedGroupId] = useState<string | null>(null)
+  const [dropSortTarget, setDropSortTarget] = useState<{ overId: string; insertBefore: boolean } | null>(null)
 
   const pointerYRef = useRef<number>(0)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const flatIdsRef = useRef<string[]>([])
+  // Tracks which over-item we've locked into group mode for — cleared when over-item changes
+  const groupLockRef = useRef<string | null>(null)
+  // Shadow of dragIntent/dragOverId for use inside callbacks without stale closures
+  const dragIntentRef = useRef<'sort' | 'group'>('sort')
+
   useEffect(() => {
     const handler = (e: PointerEvent) => { pointerYRef.current = e.clientY }
     window.addEventListener('pointermove', handler, { passive: true })
@@ -418,42 +424,80 @@ export function AppRail({
     [order, groups, expandedGroupIds],
   )
 
+  useEffect(() => { flatIdsRef.current = flatIds }, [flatIds])
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
-  const strategy: SortingStrategy = dragIntent === 'group' ? noopStrategy : verticalListSortingStrategy
 
   const handleDragStart = useCallback((e: DragStartEvent) => {
     const id = String(e.active.id)
     setActiveDragId(id)
-    setDragIntent('sort')
     setDragOverId(null)
+    setDropSortTarget(null)
+    dragIntentRef.current = 'sort'
+    groupLockRef.current = null
     if (id.startsWith('g:')) setTempCollapsedGroupId(id.slice(2))
   }, [])
 
   const handleDragMove = useCallback((e: DragMoveEvent) => {
-    if (!e.over) { setDragIntent('sort'); setDragOverId(null); return }
+    const clear = () => {
+      dragIntentRef.current = 'sort'
+      groupLockRef.current = null
+      setDragOverId(null)
+      setDropSortTarget(null)
+    }
+
+    if (!e.over) { clear(); return }
 
     const overId = String(e.over.id)
     const activeId = String(e.active.id)
+    if (overId === activeId) { clear(); return }
 
     const canGroup =
-      overId !== activeId &&
       (activeId.startsWith('s:') || activeId.startsWith('sg:')) &&
       (overId.startsWith('s:') || overId.startsWith('g:') || overId.startsWith('sg:'))
 
-    if (!canGroup) { setDragIntent('sort'); setDragOverId(null); return }
-
-    const overRect = e.over.rect
-    const itemCenter = overRect.top + overRect.height / 2
-    const halfHeight = overRect.height / 2
-    const distFromCenter = Math.abs(pointerYRef.current - itemCenter) / halfHeight
-
-    if (distFromCenter < 0.75) {
-      setDragIntent('group')
-      setDragOverId(overId)
-    } else {
-      setDragIntent('sort')
-      setDragOverId(null)
+    // Reset group lock when the over item changes
+    if (groupLockRef.current !== null && groupLockRef.current !== overId) {
+      groupLockRef.current = null
     }
+
+    let newIntent: 'sort' | 'group' = 'sort'
+    if (canGroup) {
+      if (groupLockRef.current === overId) {
+        // Already locked to this item — stay in group mode
+        newIntent = 'group'
+      } else {
+        const overRect = e.over.rect
+        const itemCenter = overRect.top + overRect.height / 2
+        const distFromCenter = Math.abs(pointerYRef.current - itemCenter) / (overRect.height / 2)
+        if (distFromCenter < 0.5) {
+          groupLockRef.current = overId
+          newIntent = 'group'
+        }
+      }
+    }
+
+    if (newIntent !== dragIntentRef.current) {
+      dragIntentRef.current = newIntent
+    }
+
+    if (newIntent === 'group') {
+      setDragOverId(overId)
+      setDropSortTarget(null)
+      return
+    }
+
+    // Sort mode — insert a spacer before/after the over item
+    setDragOverId(null)
+    const ids = flatIdsRef.current
+    const overIndex = ids.indexOf(overId)
+    const activeIndex = ids.indexOf(activeId)
+    if (overIndex !== -1 && activeIndex !== -1 && overIndex !== activeIndex) {
+      const insertBefore = pointerYRef.current < e.over.rect.top + e.over.rect.height / 2
+      setDropSortTarget({ overId, insertBefore })
+      return
+    }
+    setDropSortTarget(null)
   }, [])
 
   const handleDragEnd = useCallback((e: DragEndEvent) => {
@@ -461,9 +505,11 @@ export function AppRail({
     const activeId = String(active.id)
     const overId = over ? String(over.id) : null
 
-    const intent = dragIntent
-    setDragIntent('sort')
+    const intent = dragIntentRef.current
+    dragIntentRef.current = 'sort'
+    groupLockRef.current = null
     setDragOverId(null)
+    setDropSortTarget(null)
     setActiveDragId(null)
     setTempCollapsedGroupId(null)
 
@@ -498,16 +544,23 @@ export function AppRail({
       return
     }
 
-    // Sort intent — reorder via flat list
+    // Sort intent — use pointer Y to determine insert before/after the over item
     const currentFlatIds = buildFlatIds(state.order, state.groups, expandedGroupIds)
     const oldIndex = currentFlatIds.indexOf(activeId)
-    const newIndex = currentFlatIds.indexOf(overId)
-    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return
+    const overIndex = currentFlatIds.indexOf(overId)
+    if (oldIndex === -1 || overIndex === -1 || oldIndex === overIndex) return
 
+    const overCenterY = over!.rect.top + over!.rect.height / 2
+    const insertBefore = pointerYRef.current < overCenterY
+    const newIndex = insertBefore
+      ? (oldIndex < overIndex ? overIndex - 1 : overIndex)
+      : (oldIndex > overIndex ? overIndex + 1 : overIndex)
+
+    if (newIndex === oldIndex) return
     const newFlat = arrayMove(currentFlatIds, oldIndex, newIndex)
     const { order: newOrder, groups: newGroups } = flatToHierarchical(newFlat, state.groups, expandedGroupIds)
     state.setOrderAndGroups(newOrder, newGroups)
-  }, [dragIntent, expandedGroupIds])
+  }, [expandedGroupIds])
 
   const activeDragServer = useMemo(() => {
     if (!activeDragId) return null
@@ -521,11 +574,19 @@ export function AppRail({
     return groups[activeDragId.slice(2)] ?? null
   }, [activeDragId, groups])
 
+  const dropSpacer = (
+    <div key="drop-spacer" className="w-full flex items-center" style={{ height: 10 }}>
+      <div className="h-0.5 w-full rounded-full bg-primary/70" />
+    </div>
+  )
+
   // Build flat render list — group header + children share border styling
   const renderList = () => {
     const elements: React.ReactNode[] = []
     for (let i = 0; i < flatIds.length; i++) {
       const flatId = flatIds[i]
+      const isDropTarget = dropSortTarget?.overId === flatId
+      if (isDropTarget && dropSortTarget!.insertBefore) elements.push(dropSpacer)
 
       if (flatId.startsWith('s:')) {
         const serverId = Number(flatId.slice(2))
@@ -544,10 +605,7 @@ export function AppRail({
             onClick={() => onOpenServer(serverId)}
           />
         )
-        continue
-      }
-
-      if (flatId.startsWith('g:')) {
+      } else if (flatId.startsWith('g:')) {
         const groupId = flatId.slice(2)
         const group = groups[groupId]
         if (!group) continue
@@ -568,10 +626,7 @@ export function AppRail({
             onToggleCollapse={() => toggleGroupCollapsed(groupId)}
           />
         )
-        continue
-      }
-
-      if (flatId.startsWith('sg:')) {
+      } else if (flatId.startsWith('sg:')) {
         const parts = flatId.split(':')
         const groupId = parts[1]
         const serverId = Number(parts[2])
@@ -592,8 +647,9 @@ export function AppRail({
             onClick={() => onOpenServer(serverId)}
           />
         )
-        continue
       }
+
+      if (isDropTarget && !dropSortTarget!.insertBefore) elements.push(dropSpacer)
     }
     return elements
   }
@@ -616,7 +672,7 @@ export function AppRail({
         <div className="relative min-h-0 flex-1 w-full">
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-3 bg-linear-to-b from-card/90 to-transparent" />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-3 bg-linear-to-t from-card/90 to-transparent" />
-          <div className="h-full overflow-y-auto scrollbar-none">
+          <div ref={scrollContainerRef} className="h-full overflow-y-auto scrollbar-none">
             {/* gap-0 here — items control their own bottom margin */}
             <div className="flex flex-col items-center gap-0 px-1.5 pt-2 pb-1.5">
               <DndContext
@@ -626,7 +682,7 @@ export function AppRail({
                 onDragMove={handleDragMove}
                 onDragEnd={handleDragEnd}
               >
-                <SortableContext items={flatIds} strategy={strategy}>
+                <SortableContext items={flatIds} strategy={noopStrategy}>
                   {renderList()}
                 </SortableContext>
 

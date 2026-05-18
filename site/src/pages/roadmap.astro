@@ -1,0 +1,428 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import SiteHeader from "@/components/SiteHeader.astro";
+import SiteFooter from "@/components/SiteFooter.astro";
+import { GITHUB_DISCUSSIONS, GITHUB_ISSUE_NEW } from "@/lib/site";
+
+const updatedAt = "May 18, 2026";
+
+const milestones = [
+  {
+    id: "R-2026-06",
+    window: "June 2026",
+    priority: "P0",
+    status: "In Progress",
+    focus: "Voice reliability and state consistency",
+    goals: [
+      "Stabilize server voice control actions end-to-end.",
+      "Close parity gaps between DM voice and server voice behavior.",
+      "Harden voice state reconciliation across reconnects.",
+    ],
+  },
+  {
+    id: "R-2026-07",
+    window: "July 2026",
+    priority: "P0",
+    status: "Planned",
+    focus: "Release quality and deployment confidence",
+    goals: [
+      "Strengthen desktop release pipeline and validation checks.",
+      "Improve production deployment docs for first-time operators.",
+      "Add clearer upgrade guidance for existing installations.",
+    ],
+  },
+  {
+    id: "R-2026-08",
+    window: "August 2026",
+    priority: "P1",
+    status: "Planned",
+    focus: "Attachments and communication UX",
+    goals: [
+      "Expand attachment flows with stronger failure handling.",
+      "Refine composer and message-surface interaction details.",
+      "Improve upload and download feedback states.",
+    ],
+  },
+  {
+    id: "R-2026-09",
+    window: "September 2026",
+    priority: "P1",
+    status: "Planned",
+    focus: "Moderation and operator controls",
+    goals: [
+      "Improve member moderation ergonomics.",
+      "Improve role-management clarity in server administration.",
+      "Add tighter policy visibility for invite and access controls.",
+    ],
+  },
+  {
+    id: "R-2026-10",
+    window: "October 2026",
+    priority: "P2",
+    status: "Backlog",
+    focus: "Search and retention quality",
+    goals: [
+      "Prepare message search path and indexing direction.",
+      "Define retention and historical navigation expectations.",
+      "Stage implementation spikes for post-v0.4 execution.",
+    ],
+  },
+];
+---
+
+<Layout title="LetsChat Roadmap | Timeline and Priorities" description="LetsChat roadmap with release windows, priorities, and delivery focus.">
+  <SiteHeader active="roadmap" />
+
+  <main class="max-w-7xl mx-auto px-5 sm:px-6 py-14 space-y-10">
+    <section class="roadmap-hero">
+      <div>
+        <p class="inline-flex text-xs text-muted-foreground border border-border rounded-full px-3 py-1">Updated: {updatedAt}</p>
+        <h1 class="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight mt-4 mb-3">Roadmap with release windows and priority levels</h1>
+        <p class="text-muted-foreground max-w-3xl leading-relaxed">
+          This roadmap is timeline-first. Each milestone includes a target month, explicit priority, and delivery focus so product and operators can plan around concrete windows.
+        </p>
+      </div>
+
+      <div class="roadmap-kpis">
+        <article>
+          <p class="kpi-value">2</p>
+          <p class="kpi-label">P0 milestones</p>
+        </article>
+        <article>
+          <p class="kpi-value">2</p>
+          <p class="kpi-label">P1 milestones</p>
+        </article>
+        <article>
+          <p class="kpi-value">1</p>
+          <p class="kpi-label">P2 milestone</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="priority-box">
+      <h2 class="text-xl font-semibold mb-3">Priority rubric</h2>
+      <div class="grid md:grid-cols-3 gap-3 text-sm">
+        <article>
+          <p class="font-semibold">P0: Critical</p>
+          <p class="text-muted-foreground">Blocks reliability, release safety, or core product viability.</p>
+        </article>
+        <article>
+          <p class="font-semibold">P1: High</p>
+          <p class="text-muted-foreground">Major UX or operational improvements with direct user impact.</p>
+        </article>
+        <article>
+          <p class="font-semibold">P2: Planned</p>
+          <p class="text-muted-foreground">Important backlog themes staged after critical and high lanes.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-5">Milestone timeline</h2>
+      <div class="timeline-list">
+        {milestones.map((milestone) => (
+          <article class="timeline-card">
+            <div class="timeline-head">
+              <div>
+                <p class="timeline-window">{milestone.window}</p>
+                <h3>{milestone.id}: {milestone.focus}</h3>
+              </div>
+              <div class="timeline-meta">
+                <span class={`priority-chip priority-${milestone.priority.toLowerCase()}`}>{milestone.priority}</span>
+                <span class="status-chip">{milestone.status}</span>
+              </div>
+            </div>
+
+            <ul class="timeline-goals">
+              {milestone.goals.map((goal) => <li>{goal}</li>)}
+            </ul>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="calendar-box">
+      <h2 class="text-xl font-semibold mb-3">Release planning calendar</h2>
+      <div class="calendar-table-wrap">
+        <table class="calendar-table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Primary focus</th>
+              <th>Priority</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {milestones.map((milestone) => (
+              <tr>
+                <td>{milestone.window}</td>
+                <td>{milestone.focus}</td>
+                <td>{milestone.priority}</td>
+                <td>{milestone.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="feedback-strip">
+      <div>
+        <h2 class="text-xl font-semibold mb-1">Roadmap input channels</h2>
+        <p class="text-sm text-muted-foreground">Use GitHub discussions for feature direction and issue forms for execution blockers.</p>
+      </div>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <a href={GITHUB_DISCUSSIONS} target="_blank" rel="noopener" class="feedback-primary">Request a feature</a>
+        <a href={GITHUB_ISSUE_NEW} target="_blank" rel="noopener" class="feedback-secondary">Report Blocking Bug</a>
+      </div>
+    </section>
+  </main>
+
+  <SiteFooter />
+</Layout>
+
+<style>
+  .roadmap-hero {
+    border: 1px solid oklch(1 0 0 / 0.12);
+    border-radius: 1.2rem;
+    padding: 1.25rem;
+    background:
+      linear-gradient(170deg, oklch(0.21 0.02 240 / 0.96), oklch(0.16 0.01 245 / 0.93)),
+      radial-gradient(900px 320px at 90% 0%, oklch(0.72 0.1 220 / 0.2), transparent 66%);
+    display: grid;
+    gap: 1.1rem;
+    align-items: end;
+  }
+
+  .roadmap-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+
+  .roadmap-kpis article {
+    border-radius: 0.9rem;
+    border: 1px solid oklch(1 0 0 / 0.13);
+    background: oklch(0.17 0.01 245 / 0.9);
+    padding: 0.8rem;
+  }
+
+  .kpi-value {
+    font-size: 1.3rem;
+    font-weight: 650;
+    margin: 0 0 0.2rem;
+  }
+
+  .kpi-label {
+    margin: 0;
+    font-size: 0.72rem;
+    color: var(--color-muted-foreground);
+  }
+
+  .priority-box {
+    border: 1px solid oklch(1 0 0 / 0.11);
+    border-radius: 1rem;
+    padding: 1rem;
+    background: oklch(0.19 0.01 245 / 0.9);
+  }
+
+  .timeline-list {
+    position: relative;
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .timeline-list::before {
+    content: "";
+    position: absolute;
+    left: 0.55rem;
+    top: 0.65rem;
+    bottom: 0.65rem;
+    width: 2px;
+    background: linear-gradient(180deg, oklch(0.75 0.1 220 / 0.7), oklch(0.65 0.1 240 / 0.22));
+    border-radius: 999px;
+  }
+
+  .timeline-card {
+    position: relative;
+    margin-left: 1.45rem;
+    border: 1px solid oklch(1 0 0 / 0.12);
+    border-radius: 1rem;
+    padding: 1rem;
+    background: linear-gradient(175deg, oklch(0.21 0.01 245 / 0.95), oklch(0.18 0.01 245 / 0.92));
+  }
+
+  .timeline-card::before {
+    content: "";
+    position: absolute;
+    left: -1.03rem;
+    top: 1.22rem;
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 999px;
+    background: oklch(0.76 0.1 220);
+    box-shadow: 0 0 0 5px oklch(0.76 0.1 220 / 0.19);
+  }
+
+  .timeline-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 0.8rem;
+    margin-bottom: 0.7rem;
+  }
+
+  .timeline-window {
+    margin: 0 0 0.2rem;
+    font-size: 0.73rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-muted-foreground);
+  }
+
+  .timeline-head h3 {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.35;
+  }
+
+  .timeline-meta {
+    display: flex;
+    gap: 0.45rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .priority-chip,
+  .status-chip {
+    border-radius: 999px;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border: 1px solid oklch(1 0 0 / 0.15);
+  }
+
+  .priority-p0 {
+    background: oklch(0.66 0.2 25 / 0.16);
+    color: oklch(0.88 0.08 30);
+  }
+
+  .priority-p1 {
+    background: oklch(0.76 0.12 85 / 0.2);
+    color: oklch(0.9 0.07 100);
+  }
+
+  .priority-p2 {
+    background: oklch(0.62 0.1 235 / 0.16);
+    color: oklch(0.84 0.06 230);
+  }
+
+  .status-chip {
+    color: var(--color-muted-foreground);
+    background: oklch(0.17 0.01 245 / 0.85);
+  }
+
+  .timeline-goals {
+    margin: 0;
+    padding-left: 1rem;
+    display: grid;
+    gap: 0.35rem;
+    color: var(--color-muted-foreground);
+    font-size: 0.85rem;
+  }
+
+  .calendar-box {
+    border: 1px solid oklch(1 0 0 / 0.11);
+    border-radius: 1rem;
+    padding: 1rem;
+    background: oklch(0.19 0.01 245 / 0.9);
+  }
+
+  .calendar-table-wrap {
+    overflow-x: auto;
+    border-radius: 0.75rem;
+    border: 1px solid oklch(1 0 0 / 0.11);
+  }
+
+  .calendar-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 620px;
+  }
+
+  .calendar-table th,
+  .calendar-table td {
+    padding: 0.72rem 0.8rem;
+    border-bottom: 1px solid oklch(1 0 0 / 0.09);
+    text-align: left;
+    font-size: 0.84rem;
+  }
+
+  .calendar-table thead th {
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-muted-foreground);
+    background: oklch(0.17 0.01 245 / 0.85);
+  }
+
+  .calendar-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .feedback-strip {
+    border: 1px solid oklch(1 0 0 / 0.13);
+    border-radius: 1rem;
+    padding: 1rem;
+    background: linear-gradient(165deg, oklch(0.22 0.02 240 / 0.94), oklch(0.17 0.01 245 / 0.92));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+  }
+
+  .feedback-primary,
+  .feedback-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.75rem;
+    padding: 0.62rem 0.9rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .feedback-primary {
+    background: var(--color-accent-blue);
+    color: white;
+  }
+
+  .feedback-secondary {
+    border: 1px solid var(--color-border);
+    color: var(--color-muted-foreground);
+  }
+
+  .feedback-secondary:hover {
+    border-color: var(--color-border-hover);
+    color: var(--color-foreground);
+  }
+
+  @media (min-width: 1100px) {
+    .roadmap-hero {
+      grid-template-columns: 1.4fr 0.6fr;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .roadmap-kpis {
+      grid-template-columns: 1fr;
+    }
+
+    .timeline-head {
+      flex-direction: column;
+    }
+  }
+</style>
