@@ -6,6 +6,28 @@ interface Props {
 }
 
 const { active = "home" } = Astro.props;
+
+const formatStars = (value: number): string => {
+  if (!Number.isFinite(value)) return "--";
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
+  return String(value);
+};
+
+let githubStars = "--";
+try {
+  const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO_NAME}`, {
+    headers: { Accept: "application/vnd.github+json" },
+  });
+  if (response.ok) {
+    const repo = (await response.json()) as { stargazers_count?: number };
+    if (typeof repo.stargazers_count === "number") {
+      githubStars = formatStars(repo.stargazers_count);
+    }
+  }
+} catch {
+  // Keep fallback star label.
+}
 ---
 
 <header class="site-nav-wrap sticky top-0 z-50" data-site-nav>
@@ -25,15 +47,12 @@ const { active = "home" } = Astro.props;
                 target="_blank"
                 rel="noopener"
                 class="brand-github"
-                data-github-stars
-                data-owner={GITHUB_OWNER}
-                data-repo={GITHUB_REPO_NAME}
                 aria-label="GitHub repository stars"
               >
                 <svg class="star-icon" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 3.4l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8L3.6 9.5l5.8-.8L12 3.4z" />
                 </svg>
-                <span data-stars-number>--</span>
+                <span>{githubStars}</span>
               </a>
             </div>
             <span class="brand-sub">Self-hosted team communication</span>
@@ -99,37 +118,6 @@ const { active = "home" } = Astro.props;
     window.addEventListener('resize', () => {
       if (window.innerWidth >= 1024) close();
     });
-
-    const formatStars = (value: number): string => {
-      if (!Number.isFinite(value)) return '--';
-      if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-      if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
-      return String(value);
-    };
-
-    const starTargets = root.querySelectorAll('[data-github-stars]');
-    if (starTargets.length === 0) return;
-
-    const first = starTargets[0];
-    const owner = first.getAttribute('data-owner');
-    const repo = first.getAttribute('data-repo');
-    if (!owner || !repo) return;
-
-    fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-      headers: { Accept: 'application/vnd.github+json' },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!data || typeof data.stargazers_count !== 'number') return;
-        const label = formatStars(data.stargazers_count);
-        starTargets.forEach((target) => {
-          const node = target.querySelector('[data-stars-number]');
-          if (node) node.textContent = label;
-        });
-      })
-      .catch(() => {
-        // Keep fallback label.
-      });
   })();
 </script>
 

@@ -4,10 +4,27 @@ import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
 import {
   GITHUB_BASE,
+  GITHUB_OWNER,
+  GITHUB_REPO_NAME,
   GITHUB_DISCUSSIONS,
   GITHUB_ISSUE_NEW,
   LICENSE_NAME,
 } from "@/lib/site";
+
+let latestStableTag = "unavailable";
+try {
+  const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO_NAME}/releases/latest`, {
+    headers: { Accept: "application/vnd.github+json" },
+  });
+  if (response.ok) {
+    const release = (await response.json()) as { tag_name?: string };
+    if (typeof release.tag_name === "string" && release.tag_name.length > 0) {
+      latestStableTag = release.tag_name;
+    }
+  }
+} catch {
+  // Keep fallback tag.
+}
 ---
 
 <Layout title="LetsChat | Self-Hosted Team Chat and Voice" description="LetsChat is a self-hosted desktop app for team messaging, voice, video, notifications, and controlled operations.">
@@ -20,7 +37,7 @@ import {
         <div class="relative z-10">
           <p class="inline-flex items-center gap-2 text-xs text-muted-foreground border border-border rounded-full px-3 py-1 mb-6">
             <span class="h-1.5 w-1.5 rounded-full bg-accent-cyan"></span>
-            Last reviewed: May 18, 2026
+            <span>Latest stable: {latestStableTag}</span>
           </p>
 
           <h1 class="text-5xl sm:text-6xl xl:text-7xl font-semibold tracking-tight leading-[1.04] mb-5">
@@ -250,6 +267,7 @@ import {
     else if (/Win/i.test(ua)) btn.textContent = "Download for Windows";
     else if (/Linux/i.test(ua)) btn.textContent = "Download for Linux";
   }
+
 </script>
 
 <style>
