@@ -1,168 +1,566 @@
 ---
 import Layout from "@/layouts/Layout.astro";
-
-const GITHUB_REPO = "da-stoaz/letschat";
+import SiteHeader from "@/components/SiteHeader.astro";
+import SiteFooter from "@/components/SiteFooter.astro";
+import {
+  GITHUB_BASE,
+  GITHUB_DISCUSSIONS,
+  GITHUB_ISSUE_NEW,
+  LICENSE_NAME,
+} from "@/lib/site";
 ---
 
-<Layout title="LetsChat — Your team chat. Your infrastructure.">
-
-  <!-- Nav -->
-  <header class="border-b border-border sticky top-0 z-50 backdrop-blur-sm bg-background-translucent">
-    <nav class="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-      <span class="font-semibold text-foreground tracking-tight">LetsChat</span>
-      <div class="flex items-center gap-4">
-        <a href="/self-hosting"
-           class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-          Self-Hosting
-        </a>
-        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener"
-           class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-          GitHub
-        </a>
-        <a href="/download"
-           class="text-sm px-3 py-1.5 rounded-md bg-accent-blue text-white font-medium hover:opacity-90 transition-opacity">
-          Download
-        </a>
-      </div>
-    </nav>
-  </header>
+<Layout title="LetsChat | Self-Hosted Team Chat and Voice" description="LetsChat is a self-hosted desktop app for team messaging, voice, video, notifications, and controlled operations.">
+  <SiteHeader active="home" />
 
   <main>
+    <section id="product" class="relative overflow-hidden">
+      <div class="hero-gradient"></div>
+      <div class="max-w-7xl mx-auto px-5 sm:px-6 py-14 lg:py-20 grid gap-10 lg:grid-cols-[1.02fr_0.98fr] items-center">
+        <div class="relative z-10">
+          <p class="inline-flex items-center gap-2 text-xs text-muted-foreground border border-border rounded-full px-3 py-1 mb-6">
+            <span class="h-1.5 w-1.5 rounded-full bg-accent-cyan"></span>
+            Last reviewed: May 18, 2026
+          </p>
 
-    <!-- Hero -->
-    <section class="max-w-5xl mx-auto px-6 pt-24 pb-20 text-center">
-      <div class="inline-flex items-center gap-2 text-xs text-muted-foreground border border-border rounded-full px-3 py-1 mb-8">
-        <span class="w-1.5 h-1.5 rounded-full bg-accent-blue animate-pulse"></span>
-        <span id="hero-version">Open source · Free forever</span>
+          <h1 class="text-5xl sm:text-6xl xl:text-7xl font-semibold tracking-tight leading-[1.04] mb-5">
+            Own your team chat.
+            <span class="text-gradient">Keep your stack.</span>
+          </h1>
+
+          <p class="text-lg text-muted-foreground leading-relaxed max-w-xl mb-7">
+            LetsChat combines messaging, voice, video, notifications, and role-based moderation in one desktop client while you keep operational control over data and deployment.
+          </p>
+
+          <div class="flex flex-col sm:flex-row gap-3 mb-8">
+            <a id="hero-download-btn" href="/download" class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-accent-blue text-white font-semibold text-sm hover:opacity-90 transition-opacity">
+              Download LetsChat
+            </a>
+            <a href="/self-hosting" class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-border text-sm text-muted-foreground hover:text-foreground hover:border-border-hover transition-colors">
+              Self-Hosting Guide
+            </a>
+            <a href={GITHUB_BASE} target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-border text-sm text-muted-foreground hover:text-foreground hover:border-border-hover transition-colors">
+              Source on GitHub
+            </a>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div class="metric-card">
+              <p class="metric-value">Voice + Video</p>
+              <p class="metric-label">Realtime channels and DM calls</p>
+            </div>
+            <div class="metric-card">
+              <p class="metric-value">Notifications</p>
+              <p class="metric-label">Per-event controls and quiet hours</p>
+            </div>
+            <div class="metric-card">
+              <p class="metric-value">{LICENSE_NAME}</p>
+              <p class="metric-label">Source and license terms are public</p>
+            </div>
+            <div class="metric-card">
+              <p class="metric-value">Self-Hosted</p>
+              <p class="metric-label">Bring your own infrastructure</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="relative z-10 lg:pl-6">
+          <div class="product-stage">
+            <div class="product-stage-main">
+              <img src="/product-main.png" alt="LetsChat product visual" class="w-full h-auto block" />
+              <div class="product-tag">Desktop client</div>
+            </div>
+            <div class="product-stage-mini product-stage-mini-left">
+              <img src="/product-voice.png" alt="Voice and video controls visual" class="w-full h-full object-cover" />
+              <div class="product-tag">Voice and video</div>
+            </div>
+            <div class="product-stage-mini product-stage-mini-right">
+              <img src="/product-infra.png" alt="Infrastructure visual" class="w-full h-full object-cover" />
+              <div class="product-tag">Infra control</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="max-w-7xl mx-auto px-5 sm:px-6 py-16 space-y-8">
+      <div>
+        <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mb-3">Feature set that actually matters</h2>
+        <p class="text-muted-foreground max-w-3xl">
+          These are current product capabilities reflected in the codebase and operator flow, not placeholder marketing bullets.
+        </p>
       </div>
 
-      <h1 class="text-5xl sm:text-6xl font-semibold tracking-tight leading-[1.1] mb-6">
-        Your team chat.<br/>
-        Your infrastructure.
-      </h1>
+      <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <article class="feature-card">
+          <h3>Audio and video communication</h3>
+          <p>Always-on voice channels, DM voice sessions, camera toggles, screen sharing controls, and device selection for mic, camera, and output.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Notifications with control</h3>
+          <p>Event-level notification toggles, preview privacy mode, test notification flow, quiet hours, and runtime permission handling.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Licensing and transparency</h3>
+          <p>Open source under {LICENSE_NAME}, public release notes, explicit breaking-change tracking, and GitHub-native feedback channels.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Operational ownership</h3>
+          <p>Self-host deployment paths, discovery endpoint support, and composable service topology for auth, media, storage, and realtime state.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Moderation and access controls</h3>
+          <p>Server roles, invite policies, member moderation actions, and permission-aware channel/server management flows.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Desktop-first performance model</h3>
+          <p>Tauri-based app footprint with native integrations for OS notifications, badge updates, and desktop lifecycle behavior.</p>
+        </article>
+      </div>
+    </section>
 
-      <p class="text-lg text-muted-foreground max-w-xl mx-auto mb-10 leading-relaxed">
-        LetsChat is a self-hosted desktop app for real-time team communication.
-        Voice channels, messaging, and file sharing — fully under your control.
+    <section class="max-w-7xl mx-auto px-5 sm:px-6 py-4">
+      <div class="gallery-shell">
+        <div class="gallery-text">
+          <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-3">Product visuals</h2>
+          <p class="text-sm text-muted-foreground leading-relaxed">
+            The current build emphasizes desktop identity, communication controls, and infrastructure ownership in one cohesive interface language.
+          </p>
+        </div>
+        <div class="gallery-grid">
+          <figure>
+            <img src="/product-main.png" alt="LetsChat core product image" />
+            <figcaption>Core product identity</figcaption>
+          </figure>
+          <figure>
+            <img src="/product-voice.png" alt="LetsChat communication controls visual" />
+            <figcaption>Communication controls</figcaption>
+          </figure>
+          <figure>
+            <img src="/product-infra.png" alt="LetsChat infrastructure visual" />
+            <figcaption>Deployment and operations focus</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="compare" class="max-w-7xl mx-auto px-5 sm:px-6 py-16">
+      <div class="compare-head">
+        <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mb-3">LetsChat vs Discord</h2>
+        <p class="text-muted-foreground max-w-3xl">
+          Direct comparison for teams deciding between infrastructure control and convenience. This is intentionally pragmatic.
+        </p>
+      </div>
+
+      <div class="compare-table-wrap">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Dimension</th>
+              <th>LetsChat</th>
+              <th>Discord</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Data ownership</td>
+              <td>Hosted on your infrastructure and storage path.</td>
+              <td>Hosted on Discord-managed cloud services.</td>
+            </tr>
+            <tr>
+              <td>Deployment model</td>
+              <td>Self-hosted with operator-controlled topology.</td>
+              <td>Managed SaaS with no self-hosted core option.</td>
+            </tr>
+            <tr>
+              <td>Audio and video stack</td>
+              <td>Integrated voice/video flows with LiveKit-based media path.</td>
+              <td>Mature managed voice/video ecosystem.</td>
+            </tr>
+            <tr>
+              <td>Notification controls</td>
+              <td>Per-event toggles, quiet hours, preview controls.</td>
+              <td>Strong notification controls, account-wide UX polish.</td>
+            </tr>
+            <tr>
+              <td>License and source visibility</td>
+              <td>{LICENSE_NAME}; source and changes are auditable.</td>
+              <td>Proprietary platform.</td>
+            </tr>
+            <tr>
+              <td>Operational effort</td>
+              <td>Requires setup, upgrades, and infrastructure ownership.</td>
+              <td>Minimal setup for end users.</td>
+            </tr>
+            <tr>
+              <td>Ecosystem scale</td>
+              <td>Smaller ecosystem, closer control loop.</td>
+              <td>Larger ecosystem and network effects.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="text-xs text-muted-foreground mt-4">
+        Comparison context date: May 18, 2026.
       </p>
-
-      <div class="flex flex-col sm:flex-row gap-3 justify-center">
-        <a id="hero-download-btn" href="/download"
-           class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-foreground text-background font-medium text-sm hover:opacity-90 transition-opacity">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Download for free
-        </a>
-        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener"
-           class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg border border-border text-muted-foreground text-sm hover:text-foreground hover:border-border-hover transition-colors">
-          View on GitHub
-        </a>
-        <a href="/self-hosting"
-           class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg border border-border text-muted-foreground text-sm hover:text-foreground hover:border-border-hover transition-colors">
-          Self-Hosting Guide
-        </a>
-      </div>
-
-      <p class="mt-6 text-xs text-muted-foreground">macOS · Windows · Linux &nbsp;·&nbsp; Free &amp; open source</p>
     </section>
 
-    <!-- Features -->
-    <section class="max-w-5xl mx-auto px-6 pb-24">
-      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-
-        <div class="rounded-xl border border-border bg-card p-6">
-          <div class="w-9 h-9 rounded-md bg-muted flex items-center justify-center mb-4">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-foreground">
-              <rect x="2" y="2" width="20" height="20" rx="5"/><path d="M7 10h10M7 14h6"/>
-            </svg>
-          </div>
-          <h3 class="font-medium text-sm mb-1.5">Self-Hosted</h3>
-          <p class="text-xs text-muted-foreground leading-relaxed">Deploy on your own server. Your conversations never leave your infrastructure.</p>
-        </div>
-
-        <div class="rounded-xl border border-border bg-card p-6">
-          <div class="w-9 h-9 rounded-md bg-muted flex items-center justify-center mb-4">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-          </div>
-          <h3 class="font-medium text-sm mb-1.5">Voice &amp; Video Rooms</h3>
-          <p class="text-xs text-muted-foreground leading-relaxed">Drop into always-on voice channels. Real-time WebRTC, low-latency, no call setup needed.</p>
-        </div>
-
-        <div class="rounded-xl border border-border bg-card p-6">
-          <div class="w-9 h-9 rounded-md bg-muted flex items-center justify-center mb-4">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="13 2 13 9 20 9"/><path d="M20 14.5V7l-5-5H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8"/><circle cx="19" cy="19" r="3"/><path d="m21 21-1.5-1.5"/>
-            </svg>
-          </div>
-          <h3 class="font-medium text-sm mb-1.5">Native &amp; Fast</h3>
-          <p class="text-xs text-muted-foreground leading-relaxed">Built with Tauri, not Electron. Instant startup, a fraction of the memory usage.</p>
-        </div>
-
-        <div class="rounded-xl border border-border bg-card p-6">
-          <div class="w-9 h-9 rounded-md bg-muted flex items-center justify-center mb-4">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
-            </svg>
-          </div>
-          <h3 class="font-medium text-sm mb-1.5">Cross-Platform</h3>
-          <p class="text-xs text-muted-foreground leading-relaxed">macOS, Windows, and Linux. One app for every desk in your team.</p>
-        </div>
-
+    <section class="max-w-7xl mx-auto px-5 sm:px-6 py-6">
+      <div class="ops-grid">
+        <a href="/roadmap" class="ops-card">
+          <h3>Roadmap and priorities</h3>
+          <p>Timeline-driven milestones with explicit priorities and release windows.</p>
+        </a>
+        <a href="/breaking-changes" class="ops-card">
+          <h3>Breaking changes</h3>
+          <p>Versioned change log with migration impact and action notes.</p>
+        </a>
+        <a href="/self-hosting" class="ops-card">
+          <h3>Self-hosting guide</h3>
+          <p>Operator-focused deployment tracks for Caddy and Cloudflare Tunnel.</p>
+        </a>
       </div>
     </section>
 
-    <!-- Download strip -->
-    <section class="border-t border-border bg-card">
-      <div class="max-w-5xl mx-auto px-6 py-16 flex flex-col sm:flex-row items-center justify-between gap-8">
+    <section class="max-w-7xl mx-auto px-5 sm:px-6 py-16">
+      <div class="portal-banner">
         <div>
-          <h2 class="text-2xl font-semibold tracking-tight mb-1">Ready to get started?</h2>
-          <p class="text-sm text-muted-foreground">Free, open source, runs on your hardware.</p>
+          <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">Build with us</h2>
+          <p class="text-sm text-muted-foreground max-w-2xl">
+            Feature requests and bug reports go directly into GitHub so the product backlog remains transparent and actionable.
+          </p>
         </div>
-      <div class="flex flex-col sm:flex-row gap-3 shrink-0">
-        <a href="/download"
-           class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-accent-blue text-white text-sm font-medium hover:opacity-90 transition-opacity">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            All Downloads
-          </a>
-          <a href="/self-hosting"
-             class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:border-border-hover transition-colors">
-            Self-Hosting Guide
-          </a>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <a href={GITHUB_DISCUSSIONS} target="_blank" rel="noopener" class="portal-btn-primary">Feature Request Portal</a>
+          <a href={GITHUB_ISSUE_NEW} target="_blank" rel="noopener" class="portal-btn-secondary">Bug Report Portal</a>
         </div>
       </div>
     </section>
-
   </main>
 
-  <!-- Footer -->
-  <footer class="border-t border-border">
-    <div class="max-w-5xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
-      <span>© {new Date().getFullYear()} Felix Steinberger</span>
-      <div class="flex items-center gap-4">
-        <a href="/download" class="hover:text-foreground transition-colors">Download</a>
-        <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
-        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="hover:text-foreground transition-colors">GitHub</a>
-      </div>
-    </div>
-  </footer>
-
+  <SiteFooter />
 </Layout>
 
 <script>
   const btn = document.getElementById("hero-download-btn");
   if (btn) {
     const ua = navigator.userAgent;
-    if (/Mac/i.test(ua)) {
-      btn.innerHTML = btn.innerHTML.replace("Download for free", "Download for macOS");
-    } else if (/Win/i.test(ua)) {
-      btn.innerHTML = btn.innerHTML.replace("Download for free", "Download for Windows");
-    } else if (/Linux/i.test(ua)) {
-      btn.innerHTML = btn.innerHTML.replace("Download for free", "Download for Linux");
-    }
+    if (/Mac/i.test(ua)) btn.textContent = "Download for macOS";
+    else if (/Win/i.test(ua)) btn.textContent = "Download for Windows";
+    else if (/Linux/i.test(ua)) btn.textContent = "Download for Linux";
   }
 </script>
+
+<style>
+  .hero-gradient {
+    position: absolute;
+    inset: -220px -100px auto -100px;
+    height: 560px;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 15% 20%, oklch(0.7 0.1 230 / 0.22), transparent 60%),
+      radial-gradient(circle at 85% 8%, oklch(0.8 0.13 210 / 0.24), transparent 58%);
+  }
+
+  .text-gradient {
+    background: linear-gradient(92deg, oklch(0.85 0.12 210), oklch(0.74 0.17 240));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .metric-card {
+    border: 1px solid oklch(1 0 0 / 0.13);
+    border-radius: 0.9rem;
+    padding: 0.8rem;
+    background: linear-gradient(180deg, oklch(0.22 0.01 245 / 0.94), oklch(0.19 0.01 245 / 0.92));
+  }
+
+  .metric-value {
+    font-size: 0.78rem;
+    font-weight: 650;
+    margin: 0 0 0.2rem;
+  }
+
+  .metric-label {
+    margin: 0;
+    font-size: 0.7rem;
+    color: var(--color-muted-foreground);
+    line-height: 1.4;
+  }
+
+  .product-stage {
+    position: relative;
+    min-height: 430px;
+    border-radius: 1.4rem;
+    border: 1px solid oklch(1 0 0 / 0.12);
+    background:
+      linear-gradient(160deg, oklch(0.2 0.01 245 / 0.9), oklch(0.15 0.01 245 / 0.92)),
+      radial-gradient(700px 320px at 90% 10%, oklch(0.77 0.1 210 / 0.16), transparent 65%);
+    box-shadow: 0 30px 70px oklch(0 0 0 / 0.35);
+    overflow: hidden;
+    padding: 1.2rem;
+  }
+
+  .product-stage-main {
+    position: relative;
+    border-radius: 1rem;
+    border: 1px solid oklch(1 0 0 / 0.14);
+    background: oklch(0.16 0.01 250 / 0.9);
+    padding: 1rem;
+    width: 78%;
+    margin-left: auto;
+    box-shadow: 0 16px 38px oklch(0 0 0 / 0.28);
+  }
+
+  .product-stage-main img {
+    border-radius: 0.8rem;
+    border: 1px solid oklch(1 0 0 / 0.1);
+  }
+
+  .product-stage-mini {
+    position: absolute;
+    width: 42%;
+    border-radius: 0.95rem;
+    border: 1px solid oklch(1 0 0 / 0.14);
+    background: oklch(0.16 0.01 250 / 0.9);
+    padding: 0.7rem;
+    box-shadow: 0 16px 30px oklch(0 0 0 / 0.24);
+  }
+
+  .product-stage-mini img {
+    border-radius: 0.7rem;
+    border: 1px solid oklch(1 0 0 / 0.08);
+    aspect-ratio: 1/1;
+  }
+
+  .product-stage-mini-left {
+    left: 1rem;
+    bottom: 1rem;
+  }
+
+  .product-stage-mini-right {
+    left: 19%;
+    top: 1.2rem;
+  }
+
+  .product-tag {
+    position: absolute;
+    left: 0.7rem;
+    bottom: 0.7rem;
+    font-size: 0.67rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: oklch(0.9 0.02 240);
+    background: oklch(0.16 0.01 250 / 0.82);
+    border: 1px solid oklch(1 0 0 / 0.18);
+    border-radius: 999px;
+    padding: 0.22rem 0.55rem;
+  }
+
+  .feature-card {
+    border: 1px solid oklch(1 0 0 / 0.13);
+    border-radius: 1rem;
+    padding: 1.1rem;
+    background:
+      linear-gradient(175deg, oklch(0.22 0.01 245 / 0.95), oklch(0.19 0.01 245 / 0.92));
+    box-shadow: 0 16px 34px oklch(0 0 0 / 0.2);
+  }
+
+  .feature-card h3 {
+    margin: 0 0 0.55rem;
+    font-size: 1rem;
+    letter-spacing: -0.01em;
+  }
+
+  .feature-card p {
+    margin: 0;
+    color: var(--color-muted-foreground);
+    font-size: 0.84rem;
+    line-height: 1.55;
+  }
+
+  .gallery-shell {
+    border: 1px solid oklch(1 0 0 / 0.12);
+    border-radius: 1.15rem;
+    padding: 1.2rem;
+    background:
+      linear-gradient(170deg, oklch(0.2 0.01 245 / 0.95), oklch(0.16 0.01 245 / 0.93));
+  }
+
+  .gallery-grid {
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    margin-top: 1rem;
+  }
+
+  .gallery-grid figure {
+    margin: 0;
+    border-radius: 0.9rem;
+    border: 1px solid oklch(1 0 0 / 0.12);
+    background: oklch(0.16 0.01 245 / 0.9);
+    overflow: hidden;
+  }
+
+  .gallery-grid img {
+    width: 100%;
+    display: block;
+    aspect-ratio: 1.15 / 1;
+    object-fit: cover;
+  }
+
+  .gallery-grid figcaption {
+    padding: 0.55rem 0.75rem 0.7rem;
+    font-size: 0.75rem;
+    color: var(--color-muted-foreground);
+  }
+
+  .compare-head {
+    margin-bottom: 1rem;
+  }
+
+  .compare-table-wrap {
+    overflow-x: auto;
+    border-radius: 1rem;
+    border: 1px solid oklch(1 0 0 / 0.12);
+    background:
+      linear-gradient(180deg, oklch(0.2 0.01 245 / 0.96), oklch(0.17 0.01 245 / 0.95));
+  }
+
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 760px;
+  }
+
+  .compare-table th,
+  .compare-table td {
+    border-bottom: 1px solid oklch(1 0 0 / 0.1);
+    padding: 0.85rem 0.9rem;
+    text-align: left;
+    vertical-align: top;
+    font-size: 0.86rem;
+    line-height: 1.5;
+  }
+
+  .compare-table thead th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-muted-foreground);
+    background: oklch(0.16 0.01 245 / 0.85);
+  }
+
+  .compare-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .ops-grid {
+    display: grid;
+    gap: 0.8rem;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  }
+
+  .ops-card {
+    border: 1px solid oklch(1 0 0 / 0.12);
+    border-radius: 0.95rem;
+    padding: 1rem;
+    background: oklch(0.19 0.01 245 / 0.92);
+    transition: transform 160ms ease, border-color 160ms ease;
+  }
+
+  .ops-card:hover {
+    transform: translateY(-2px);
+    border-color: oklch(0.75 0.1 220 / 0.45);
+  }
+
+  .ops-card h3 {
+    margin: 0 0 0.45rem;
+    font-size: 0.95rem;
+  }
+
+  .ops-card p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--color-muted-foreground);
+    line-height: 1.45;
+  }
+
+  .portal-banner {
+    border: 1px solid oklch(1 0 0 / 0.14);
+    border-radius: 1.25rem;
+    padding: 1.4rem;
+    background:
+      linear-gradient(165deg, oklch(0.21 0.02 240 / 0.96), oklch(0.17 0.01 245 / 0.92)),
+      radial-gradient(700px 280px at 90% 0%, oklch(0.72 0.1 220 / 0.2), transparent 66%);
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .portal-btn-primary,
+  .portal-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.8rem;
+    padding: 0.7rem 1rem;
+    font-size: 0.84rem;
+    font-weight: 600;
+  }
+
+  .portal-btn-primary {
+    background: var(--color-accent-blue);
+    color: white;
+  }
+
+  .portal-btn-secondary {
+    border: 1px solid var(--color-border);
+    color: var(--color-muted-foreground);
+  }
+
+  .portal-btn-secondary:hover {
+    border-color: var(--color-border-hover);
+    color: var(--color-foreground);
+  }
+
+  @media (max-width: 1024px) {
+    .product-stage {
+      min-height: 380px;
+    }
+
+    .product-stage-main {
+      width: 82%;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .product-stage {
+      min-height: 320px;
+      padding: 0.8rem;
+    }
+
+    .product-stage-main {
+      width: 86%;
+      padding: 0.7rem;
+    }
+
+    .product-stage-mini {
+      width: 44%;
+      padding: 0.45rem;
+    }
+
+    .product-stage-mini-right {
+      left: 12%;
+      top: 0.8rem;
+    }
+
+    .product-stage-mini-left {
+      left: 0.7rem;
+      bottom: 0.7rem;
+    }
+  }
+</style>

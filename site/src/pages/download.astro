@@ -1,7 +1,8 @@
 ---
 import Layout from "@/layouts/Layout.astro";
-
-const GITHUB_REPO = "da-stoaz/letschat";
+import SiteHeader from "@/components/SiteHeader.astro";
+import SiteFooter from "@/components/SiteFooter.astro";
+import { GITHUB_BASE } from "@/lib/site";
 ---
 
 <Layout
@@ -9,21 +10,7 @@ const GITHUB_REPO = "da-stoaz/letschat";
   description="Download LetsChat for macOS, Windows, or Linux. Free, open source, self-hosted."
 >
 
-  <!-- Nav -->
-  <header class="border-b border-border sticky top-0 z-50 backdrop-blur-sm bg-background-translucent">
-    <nav class="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="/" class="font-semibold text-foreground tracking-tight hover:opacity-80 transition-opacity">LetsChat</a>
-      <div class="flex items-center gap-4">
-        <a href="/self-hosting" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-          Self-Hosting
-        </a>
-        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener"
-           class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-          GitHub
-        </a>
-      </div>
-    </nav>
-  </header>
+  <SiteHeader active="download" />
 
   <main class="max-w-3xl mx-auto px-6 py-20">
 
@@ -166,29 +153,18 @@ const GITHUB_REPO = "da-stoaz/letschat";
     <!-- Error state -->
     <p id="release-error" class="hidden text-center text-sm text-muted-foreground mt-8">
       Could not load release data.
-      <a href={`https://github.com/${GITHUB_REPO}/releases`} target="_blank" rel="noopener"
+      <a href={`${GITHUB_BASE}/releases`} target="_blank" rel="noopener"
          class="underline underline-offset-2 hover:text-foreground">Browse releases on GitHub.</a>
     </p>
 
     <p class="text-center text-xs text-muted-foreground mt-8">
       All releases are signed and notarized. View all versions on
-      <a href={`https://github.com/${GITHUB_REPO}/releases`} target="_blank" rel="noopener"
+      <a href={`${GITHUB_BASE}/releases`} target="_blank" rel="noopener"
          class="underline underline-offset-2 hover:text-foreground">GitHub Releases</a>.
     </p>
 
   </main>
-
-  <!-- Footer -->
-  <footer class="border-t border-border">
-    <div class="max-w-5xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
-      <span>© {new Date().getFullYear()} Felix Steinberger</span>
-      <div class="flex items-center gap-4">
-        <a href="/" class="hover:text-foreground transition-colors">Home</a>
-        <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
-        <a href={`https://github.com/${GITHUB_REPO}`} target="_blank" rel="noopener" class="hover:text-foreground transition-colors">GitHub</a>
-      </div>
-    </div>
-  </footer>
+  <SiteFooter />
 
 </Layout>
 
@@ -312,3 +288,4 @@ const GITHUB_REPO = "da-stoaz/letschat";
     color: var(--muted-foreground);
   }
 </style>
+

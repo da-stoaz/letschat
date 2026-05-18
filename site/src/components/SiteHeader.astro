@@ -1,0 +1,98 @@
+---
+import { GITHUB_BASE, GITHUB_DISCUSSIONS } from "@/lib/site";
+
+interface Props {
+  active?: "home" | "roadmap" | "changes" | "architecture" | "self-hosting" | "download";
+}
+
+const { active = "home" } = Astro.props;
+
+const links = [
+  { key: "home", href: "/#product", label: "Product" },
+  { key: "roadmap", href: "/roadmap", label: "Roadmap" },
+  { key: "changes", href: "/breaking-changes", label: "Breaking Changes" },
+  { key: "self-hosting", href: "/self-hosting", label: "Self-Hosting" },
+  { key: "architecture", href: "/architecture", label: "Architecture" },
+] as const;
+---
+
+<header class="site-nav-wrap sticky top-0 z-50">
+  <div class="site-nav-glass border-b border-border">
+    <nav class="max-w-7xl mx-auto px-5 sm:px-6 py-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <a href="/" class="brand inline-flex items-center gap-3 shrink-0" aria-label="LetsChat home">
+        <img src="/letschat-logo.png" alt="LetsChat logo" class="h-10 w-10 rounded-xl brand-logo" />
+        <span class="flex flex-col leading-tight">
+          <span class="text-base font-semibold tracking-tight">LetsChat</span>
+          <span class="text-[11px] text-muted-foreground">Self-hosted team communication</span>
+        </span>
+      </a>
+
+      <div class="flex items-center gap-2 overflow-x-auto whitespace-nowrap nav-track">
+        {links.map((link) => (
+          <a
+            href={link.href}
+            class:list={[
+              "nav-link text-sm px-3 py-2 rounded-lg border border-transparent transition-colors",
+              active === link.key
+                ? "text-foreground bg-card border-border"
+                : "text-muted-foreground hover:text-foreground hover:bg-card/70",
+            ]}
+          >
+            {link.label}
+          </a>
+        ))}
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <a
+          href={GITHUB_DISCUSSIONS}
+          target="_blank"
+          rel="noopener"
+          class="text-xs sm:text-sm px-3 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border-hover transition-colors"
+        >
+          Feature Portal
+        </a>
+        <a
+          href="/download"
+          class="text-xs sm:text-sm px-3.5 py-2 rounded-lg bg-accent-blue text-white font-semibold hover:opacity-90 transition-opacity"
+        >
+          Download
+        </a>
+        <a
+          href={GITHUB_BASE}
+          target="_blank"
+          rel="noopener"
+          class="text-xs sm:text-sm px-3 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border-hover transition-colors"
+        >
+          GitHub
+        </a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .site-nav-wrap {
+    backdrop-filter: blur(8px);
+  }
+
+  .site-nav-glass {
+    background:
+      linear-gradient(180deg, oklch(0.15 0.01 245 / 0.88), oklch(0.13 0.01 245 / 0.82)),
+      radial-gradient(900px 260px at 5% -120%, oklch(0.72 0.11 215 / 0.12), transparent 60%);
+  }
+
+  .brand-logo {
+    background: linear-gradient(145deg, oklch(0.24 0.03 240), oklch(0.16 0.01 250));
+    border: 1px solid oklch(1 0 0 / 0.14);
+    box-shadow: 0 10px 24px oklch(0 0 0 / 0.25);
+  }
+
+  .nav-track {
+    scrollbar-width: none;
+  }
+
+  .nav-track::-webkit-scrollbar {
+    display: none;
+  }
+</style>
