@@ -73,6 +73,14 @@ import SiteFooter from "@/components/SiteFooter.astro";
       </div>
     </section>
 
+    <section class="rounded-xl border border-border bg-card/80 p-5">
+      <p class="text-sm text-muted-foreground leading-relaxed">
+        Before applying setup or upgrade steps, review
+        <a href="/breaking-changes" class="text-foreground underline underline-offset-4 hover:opacity-80 transition-opacity">Breaking Changes</a>
+        to avoid version mismatch and migration issues.
+      </p>
+    </section>
+
     <section class="space-y-4">
       <h2 class="text-2xl font-semibold tracking-tight">Choose Your Deployment Path</h2>
       <p class="text-sm text-muted-foreground max-w-2xl">Both paths deploy the same backend stack. The difference is how HTTPS traffic reaches your server.</p>
@@ -280,5 +288,4 @@ import SiteFooter from "@/components/SiteFooter.astro";
     100% { transform: translate3d(0, 0, 0) scale(1); }
   }
 </style>
-
 

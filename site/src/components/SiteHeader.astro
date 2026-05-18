@@ -1,55 +1,50 @@
 ---
-import { GITHUB_BASE, GITHUB_DISCUSSIONS } from "@/lib/site";
+import { GITHUB_BASE, GITHUB_OWNER, GITHUB_REPO_NAME } from "@/lib/site";
 
 interface Props {
   active?: "home" | "roadmap" | "changes" | "architecture" | "self-hosting" | "download";
 }
 
 const { active = "home" } = Astro.props;
-
-const links = [
-  { key: "home", href: "/#product", label: "Product" },
-  { key: "roadmap", href: "/roadmap", label: "Roadmap" },
-  { key: "changes", href: "/breaking-changes", label: "Breaking Changes" },
-  { key: "self-hosting", href: "/self-hosting", label: "Self-Hosting" },
-  { key: "architecture", href: "/architecture", label: "Architecture" },
-] as const;
 ---
 
 <header class="site-nav-wrap sticky top-0 z-50" data-site-nav>
   <div class="site-nav-glass border-b border-border">
     <div class="max-w-7xl mx-auto px-5 sm:px-6">
       <nav class="nav-shell py-3" aria-label="Primary">
-        <a href="/" class="brand" aria-label="LetsChat home">
-          <img src="/letschat-logo.png" alt="LetsChat logo" class="brand-logo" />
-          <span class="brand-copy">
-            <span class="brand-name">LetsChat</span>
-            <span class="brand-sub">Self-hosted team communication</span>
-          </span>
-        </a>
+        <div class="brand">
+          <a href="/" class="brand-logo-link" aria-label="LetsChat home">
+            <img src="/letschat-logo.png" alt="LetsChat logo" class="brand-logo" />
+          </a>
 
-        <div class="desktop-nav" role="navigation" aria-label="Desktop links">
-          <div class="desktop-links">
-            {links.map((link) => (
+          <div class="brand-copy">
+            <div class="brand-title-row">
+              <a href="/" class="brand-name-link">LetsChat</a>
               <a
-                href={link.href}
-                class:list={[
-                  "nav-link",
-                  active === link.key
-                    ? "nav-link-active"
-                    : "nav-link-idle",
-                ]}
+                href={GITHUB_BASE}
+                target="_blank"
+                rel="noopener"
+                class="brand-github"
+                data-github-stars
+                data-owner={GITHUB_OWNER}
+                data-repo={GITHUB_REPO_NAME}
+                aria-label="GitHub repository stars"
               >
-                {link.label}
+                <svg class="star-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3.4l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8L3.6 9.5l5.8-.8L12 3.4z" />
+                </svg>
+                <span data-stars-number>--</span>
               </a>
-            ))}
+            </div>
+            <span class="brand-sub">Self-hosted team communication</span>
           </div>
+        </div>
 
-          <div class="desktop-actions">
-            <a href={GITHUB_DISCUSSIONS} target="_blank" rel="noopener" class="action-btn action-btn-muted">Feature Portal</a>
-            <a href="/download" class="action-btn action-btn-primary">Download</a>
-            <a href={GITHUB_BASE} target="_blank" rel="noopener" class="action-btn action-btn-muted">GitHub</a>
-          </div>
+        <div class="desktop-nav">
+          <a href="/#product" class:list={["nav-link", active === "home" ? "nav-link-active" : "nav-link-idle"]}>Product</a>
+          <a href="/roadmap" class:list={["nav-link", active === "roadmap" ? "nav-link-active" : "nav-link-idle"]}>Roadmap</a>
+          <a href="/self-hosting" class:list={["nav-link", active === "self-hosting" ? "nav-link-active" : "nav-link-idle"]}>Self-Hosting</a>
+          <a href="/download" class="action-btn action-btn-primary">Download</a>
         </div>
 
         <div class="mobile-actions">
@@ -69,24 +64,9 @@ const links = [
 
       <div id="mobile-nav-panel" class="mobile-panel" data-nav-panel>
         <div class="mobile-links">
-          {links.map((link) => (
-            <a
-              href={link.href}
-              class:list={[
-                "mobile-link",
-                active === link.key
-                  ? "mobile-link-active"
-                  : "mobile-link-idle",
-              ]}
-            >
-              {link.label}
-            </a>
-          ))}
-        </div>
-
-        <div class="mobile-portal-row">
-          <a href={GITHUB_DISCUSSIONS} target="_blank" rel="noopener" class="action-btn action-btn-muted">Feature Portal</a>
-          <a href={GITHUB_BASE} target="_blank" rel="noopener" class="action-btn action-btn-muted">GitHub</a>
+          <a href="/#product" class:list={["mobile-link", active === "home" ? "mobile-link-active" : "mobile-link-idle"]}>Product</a>
+          <a href="/roadmap" class:list={["mobile-link", active === "roadmap" ? "mobile-link-active" : "mobile-link-idle"]}>Roadmap</a>
+          <a href="/self-hosting" class:list={["mobile-link", active === "self-hosting" ? "mobile-link-active" : "mobile-link-idle"]}>Self-Hosting</a>
         </div>
       </div>
     </div>
@@ -107,12 +87,10 @@ const links = [
       toggle.setAttribute('aria-expanded', 'false');
     };
 
-    const togglePanel = () => {
+    toggle.addEventListener('click', () => {
       const open = root.classList.toggle('is-open');
       toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    };
-
-    toggle.addEventListener('click', togglePanel);
+    });
 
     panel.querySelectorAll('a').forEach((link) => {
       link.addEventListener('click', close);
@@ -121,6 +99,37 @@ const links = [
     window.addEventListener('resize', () => {
       if (window.innerWidth >= 1024) close();
     });
+
+    const formatStars = (value: number): string => {
+      if (!Number.isFinite(value)) return '--';
+      if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+      if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
+      return String(value);
+    };
+
+    const starTargets = root.querySelectorAll('[data-github-stars]');
+    if (starTargets.length === 0) return;
+
+    const first = starTargets[0];
+    const owner = first.getAttribute('data-owner');
+    const repo = first.getAttribute('data-repo');
+    if (!owner || !repo) return;
+
+    fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      headers: { Accept: 'application/vnd.github+json' },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data || typeof data.stargazers_count !== 'number') return;
+        const label = formatStars(data.stargazers_count);
+        starTargets.forEach((target) => {
+          const node = target.querySelector('[data-stars-number]');
+          if (node) node.textContent = label;
+        });
+      })
+      .catch(() => {
+        // Keep fallback label.
+      });
   })();
 </script>
 
@@ -149,6 +158,11 @@ const links = [
     min-width: 0;
   }
 
+  .brand-logo-link {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+
   .brand-logo {
     width: 2.3rem;
     height: 2.3rem;
@@ -164,11 +178,45 @@ const links = [
     min-width: 0;
   }
 
-  .brand-name {
+  .brand-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .brand-name-link {
     font-size: 0.98rem;
     font-weight: 650;
     letter-spacing: -0.01em;
     line-height: 1.1;
+    color: var(--color-foreground);
+    white-space: nowrap;
+  }
+
+  .brand-github {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.72rem;
+    line-height: 1;
+    color: var(--color-muted-foreground);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  .brand-github:hover {
+    color: var(--color-foreground);
+    border-color: var(--color-border-hover);
+  }
+
+  .star-icon {
+    width: 0.95rem;
+    height: 0.95rem;
+    fill: currentColor;
   }
 
   .brand-sub {
@@ -194,6 +242,7 @@ const links = [
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.4rem;
     border-radius: 0.65rem;
     padding: 0.55rem 0.72rem;
     border: 1px solid var(--color-border);
@@ -218,16 +267,6 @@ const links = [
     border-color: color-mix(in oklab, var(--color-accent-blue) 70%, transparent);
     color: white;
     font-weight: 600;
-  }
-
-  .action-btn-muted {
-    color: var(--color-muted-foreground);
-    background: transparent;
-  }
-
-  .action-btn-muted:hover {
-    color: var(--color-foreground);
-    border-color: var(--color-border-hover);
   }
 
   .mobile-panel {
@@ -270,10 +309,28 @@ const links = [
     background: color-mix(in oklab, var(--color-card) 78%, transparent);
   }
 
-  .mobile-portal-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.5rem;
+  .nav-link {
+    border-radius: 0.62rem;
+    border: 1px solid transparent;
+    padding: 0.48rem 0.68rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+  }
+
+  .nav-link-active {
+    color: var(--color-foreground);
+    border-color: var(--color-border);
+    background: var(--color-card);
+  }
+
+  .nav-link-idle {
+    color: var(--color-muted-foreground);
+  }
+
+  .nav-link-idle:hover {
+    color: var(--color-foreground);
+    background: color-mix(in oklab, var(--color-card) 78%, transparent);
   }
 
   @media (min-width: 640px) {
@@ -284,15 +341,6 @@ const links = [
   }
 
   @media (min-width: 1024px) {
-    .brand-logo {
-      width: 2.45rem;
-      height: 2.45rem;
-    }
-
-    .brand-name {
-      font-size: 1.02rem;
-    }
-
     .mobile-actions,
     .mobile-panel {
       display: none !important;
@@ -301,68 +349,33 @@ const links = [
     .desktop-nav {
       display: flex;
       align-items: center;
-      gap: 0.72rem;
+      gap: 0.46rem;
       margin-left: auto;
       min-width: 0;
     }
 
-    .desktop-links {
-      display: flex;
-      align-items: center;
-      gap: 0.26rem;
-      flex-wrap: wrap;
-      min-width: 0;
-    }
-
-    .nav-link {
-      border-radius: 0.62rem;
-      border: 1px solid transparent;
-      padding: 0.48rem 0.68rem;
-      font-size: 0.83rem;
-      white-space: nowrap;
-      transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
-    }
-
-    .nav-link-active {
-      color: var(--color-foreground);
-      border-color: var(--color-border);
-      background: var(--color-card);
-    }
-
-    .nav-link-idle {
-      color: var(--color-muted-foreground);
-    }
-
-    .nav-link-idle:hover {
-      color: var(--color-foreground);
-      background: color-mix(in oklab, var(--color-card) 78%, transparent);
-    }
-
-    .desktop-actions {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      flex-shrink: 0;
-    }
-
-    .desktop-actions .action-btn {
-      padding: 0.5rem 0.68rem;
-      font-size: 0.76rem;
-    }
-  }
-
-  @media (min-width: 1240px) {
-    .desktop-nav {
-      gap: 0.9rem;
-    }
-
-    .nav-link {
-      font-size: 0.87rem;
-      padding: 0.52rem 0.72rem;
-    }
-
-    .desktop-actions .action-btn {
+    .action-btn {
       font-size: 0.8rem;
+      padding: 0.52rem 0.75rem;
+    }
+
+    .brand-logo {
+      width: 2.45rem;
+      height: 2.45rem;
+    }
+
+    .brand-name-link {
+      font-size: 1.02rem;
+    }
+
+    .brand-github {
+      font-size: 0.74rem;
+      padding: 0.22rem 0.55rem;
+    }
+
+    .star-icon {
+      width: 1rem;
+      height: 1rem;
     }
   }
 </style>
