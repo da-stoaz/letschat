@@ -47,7 +47,7 @@ function App() {
 
   if (connectionStatus === 'connecting' && !user && !onAuthRoute && !onSetupRoute) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/20),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/15),transparent)] p-4">
+      <main className="grid min-h-screen place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,--theme(--color-blue-500/20),transparent),radial-gradient(900px_700px_at_100%_0%,--theme(--color-cyan-500/15),transparent)] p-4">
         <Card className="w-full max-w-md border-border/70 bg-card/90 backdrop-blur">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
