@@ -7,6 +7,13 @@ Full tutorial (beginner step-by-step):
 
 Use this file as a compact operator reference.
 
+> **Backend service:** the production stack described here deploys the Rust
+> `auth-service` (SQLite). `core-api` (.NET / ASP.NET Core Identity +
+> PostgreSQL) is the Phase-1 rebuild from `.claude/plans/1-control-panel.md` —
+> built and verified, but **not yet wired into these production compose files**.
+> When it is cut over, the `auth` service image, the `auth_data` volume, and the
+> backups list below change accordingly.
+
 ## Production Compose Entry Points
 
 Shared core services:
@@ -41,11 +48,15 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
 
 ## SpacetimeDB Publish (Production)
 
-After stack is up, publish the module:
+After the stack is up, publish the module:
 
 ```bash
 spacetime publish --server http://127.0.0.1:44300 letschat --module-path server --yes
 ```
+
+`--yes` is safe for the **first** publish of a fresh deployment. For later
+schema updates, drop `--yes` so SpacetimeDB prompts before any destructive
+migration instead of wiping data.
 
 ## Service / Env Reference
 

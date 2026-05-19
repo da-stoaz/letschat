@@ -1,6 +1,10 @@
 # LetsChat — Codebase Analysis
 
-> Last updated: 2026-03-27
+> Last updated: 2026-05-19
+>
+> The "What Is Functional" / "Urgent / Broken" / "Nice to Have" sections below
+> are a point-in-time snapshot and may lag the code; the architecture, schema,
+> and environment sections are kept current.
 
 ---
 
@@ -10,22 +14,23 @@
 |---|---|
 | Desktop shell | Tauri 2.8 |
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS 4, shadcn/ui |
-| Real-time DB | SpacetimeDB (Rust WASM module) |
-| Auth service | Rust + Axum + SQLite (Argon2, JWT) |
-| Voice/Video | LiveKit 2.15 |
+| Real-time DB | SpacetimeDB 2.2 (Rust WASM module) |
+| Auth service | Rust + Axum + SQLite (`auth-service/`, current prod); .NET + ASP.NET Core Identity + PostgreSQL rebuild in `core-api/` |
+| Voice/Video | LiveKit (`livekit-client` 2.19) |
 | File storage | MinIO (S3-compatible) |
 | State | Zustand 5 (18 stores) |
 
 ```
 /
 ├── server/          SpacetimeDB Rust module (schema + reducers)
-├── auth-service/    Rust HTTP API (auth, LiveKit token generation)
+├── auth-service/    Rust HTTP API (auth, LiveKit tokens, uploads) — current prod
+├── core-api/        .NET rebuild of the backend service (Identity + PostgreSQL)
 ├── src-tauri/       Tauri shell + native commands
 ├── src/             React frontend
 │   ├── features/    Channel, DM, Voice, Friends, Servers
 │   ├── stores/      Zustand state (18 stores)
-│   ├── lib/         SpacetimeDB client, LiveKit, auth, Tauri bridge
-│   ├── generated/   Auto-generated SpacetimeDB bindings (56 files)
+│   ├── lib/         SpacetimeDB client (lib/spacetimedb/), LiveKit, auth, Tauri bridge
+│   ├── generated/   Auto-generated SpacetimeDB bindings (never edit by hand)
 │   └── pages/       Auth, App, DM, Invite
 └── livekit/         LiveKit config + Docker compose
 ```
@@ -99,7 +104,7 @@ DM voice has full working implementations. Server voice controls were disabled m
 |---|---|
 | Message search | Button exists in the UI but is `disabled` — no backend query |
 | Pinned messages | Pin button exists in the UI but is `disabled` — no schema support |
-| File attachments | MinIO is running; `uploads.rs` stub exists in auth-service; no UI |
+| File attachments | Backend complete (auth-service `uploads.rs` presigned-URL flow, mirrored in core-api) and client helpers exist (`src/lib/uploads.ts`, `uploadSession.ts`, `downloadUrls.ts`); UI integration partial |
 | Emoji reactions | No reactions table in schema |
 | DM message editing | Trivial — infrastructure exists, just `allowEditOwn={false}` |
 | Message threads | Requires schema changes |
@@ -146,9 +151,12 @@ VITE_LIVEKIT_URL          default: ws://localhost:7880
 ### Auth Service
 ```
 AUTH_BIND           default: 127.0.0.1:8787
-AUTH_DATABASE_URL   default: sqlite://auth-service/auth.db
+AUTH_DATABASE_URL   auth-service: sqlite://auth-service/auth.db
+                    core-api:     PostgreSQL connection string (dev port 5433)
 AUTH_JWT_SECRET     required in production
+AUTH_ADMIN_API_KEY  optional; enables POST /admin/accounts/rebind
 ```
+See `core-api/README.md` for the full core-api configuration set.
 
 ### Tauri / Native
 ```

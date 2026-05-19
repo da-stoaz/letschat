@@ -2,7 +2,7 @@ services:
 
   # ── SpacetimeDB ─────────────────────────────────────────────────────────────
   spacetimedb:
-    image: clockworklabs/spacetime:latest
+    image: clockworklabs/spacetime:v2.2.1
     container_name: letschat-dev-spacetimedb
     command: start
     ports:
@@ -23,6 +23,25 @@ services:
       - "7882:7882/udp"
     volumes:
       - ./livekit/config.yaml:/etc/livekit.yaml:ro
+    restart: unless-stopped
+
+  # ── PostgreSQL (core-api: ASP.NET Core Identity + auth database) ──────────────
+  postgres:
+    image: postgres:17-alpine
+    container_name: letschat-dev-postgres
+    environment:
+      POSTGRES_USER: letschat
+      POSTGRES_PASSWORD: letschat
+      POSTGRES_DB: auth
+    ports:
+      - "5433:5432"   # core-api connects here  →  AUTH_DATABASE_URL (host 5433)
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U letschat -d auth"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
 
   # ── MinIO ────────────────────────────────────────────────────────────────────
@@ -59,4 +78,5 @@ services:
 volumes:
   spacetimedb_dev_home:
   minio_dev_data:
+  postgres_dev_data:
 

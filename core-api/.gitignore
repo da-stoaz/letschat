@@ -1,0 +1,8 @@
+# .NET build output
+bin/
+obj/
+
+# Local environment overrides
+.env
+.env.*
+appsettings.*.local.json

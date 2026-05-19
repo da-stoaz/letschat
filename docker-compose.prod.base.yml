@@ -3,7 +3,11 @@ services:
   # Host port 44300 is optional admin access. Public clients should use the
   # chat subdomain through either tunnel or reverse proxy.
   spacetimedb:
-    image: clockworklabs/spacetime:latest
+    # Pinned (not :latest) so prod runs a known server version. Must stay on the
+    # same 2.2.x line as the `spacetimedb` crate the module is built against and
+    # the `spacetimedb` npm SDK — a minor-version skew breaks module load and
+    # the client connection. `:latest` is cached per-host and never auto-refreshes.
+    image: clockworklabs/spacetime:v2.2.1
     command: start
     container_name: letschat-spacetimedb
     ports:
