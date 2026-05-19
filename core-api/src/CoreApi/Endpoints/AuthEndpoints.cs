@@ -1,3 +1,4 @@
+using CoreApi.Configuration;
 using CoreApi.Data;
 using CoreApi.Models;
 using CoreApi.Services;
@@ -8,25 +9,36 @@ namespace CoreApi.Endpoints;
 
 /// <summary>
 /// <c>/auth/*</c> endpoints — register, link, login, verify, renew-session,
-/// refresh-spacetime-token. Re-implements <c>handlers/auth.rs</c> on ASP.NET
-/// Core Identity with the JSON contract unchanged.
+/// refresh-spacetime-token, plus the Phase 2 email-verification endpoints
+/// (confirm-email, resend-confirmation).
 /// </summary>
 public static class AuthEndpoints
 {
+    /// <summary>Rate-limiting policy applied to abuse-prone auth endpoints.</summary>
+    public const string RateLimitPolicy = "auth";
+
     public static void MapAuthEndpoints(this IEndpointRouteBuilder routes)
     {
-        routes.MapPost("/auth/register", Register);
+        routes.MapPost("/auth/register", Register).RequireRateLimiting(RateLimitPolicy);
+        routes.MapPost("/auth/login", Login).RequireRateLimiting(RateLimitPolicy);
+        routes.MapPost("/auth/resend-confirmation", ResendConfirmation)
+            .RequireRateLimiting(RateLimitPolicy);
+
         routes.MapPost("/auth/link", Link);
-        routes.MapPost("/auth/login", Login);
         routes.MapPost("/auth/verify", Verify);
         routes.MapPost("/auth/renew-session", RenewSession);
         routes.MapPost("/auth/refresh-spacetime-token", RefreshSpacetimeToken);
+
+        // Hit from the email link in a browser — returns an HTML page.
+        routes.MapGet("/auth/confirm-email", ConfirmEmail);
     }
 
-    private static async Task<AuthResponse> Register(
+    private static async Task<RegisterResponse> Register(
         RegisterRequest request,
         UserManager<ApplicationUser> users,
-        TokenService tokens)
+        TokenService tokens,
+        ServiceOptions options,
+        AccountEmailService accountEmail)
     {
         var username = Validation.NormalizeUsername(request.Username);
         Validation.ValidateUsername(username);
@@ -35,6 +47,14 @@ public static class AuthEndpoints
         var spacetimeToken = Validation.Required(request.SpacetimeToken, "Spacetime token is required.");
         var spacetimeIdentity = Validation.Required(request.SpacetimeIdentity, "Spacetime identity is required.");
         var identityNorm = Validation.NormalizeIdentity(spacetimeIdentity);
+
+        // Email is mandatory when confirmation is required; otherwise optional.
+        var requiresConfirmation = options.RequireEmailConfirmation;
+        string? email = null;
+        if (requiresConfirmation || !string.IsNullOrWhiteSpace(request.Email))
+        {
+            email = Validation.NormalizeEmail(request.Email);
+        }
 
         if (await users.FindByNameAsync(username) is not null)
         {
@@ -50,15 +70,13 @@ public static class AuthEndpoints
         var user = new ApplicationUser
         {
             UserName = username,
+            Email = email,
             DisplayName = displayName,
             SpacetimeIdentity = spacetimeIdentity,
             SpacetimeIdentityNorm = identityNorm,
             SpacetimeToken = spacetimeToken,
-            // Phase 1 preserves the legacy behaviour: a fresh registration is
-            // immediately usable. Email verification (Phase 2) and approval
-            // (Phase 3) will gate this.
-            Status = AccountStatus.Active,
-            EmailConfirmed = true,
+            Status = requiresConfirmation ? AccountStatus.Registered : AccountStatus.Active,
+            EmailConfirmed = !requiresConfirmation,
         };
 
         var result = await users.CreateAsync(user, request.Password);
@@ -67,7 +85,14 @@ public static class AuthEndpoints
             throw TranslateIdentityFailure(result);
         }
 
-        return await BuildAuthResponse(user, users, tokens);
+        if (requiresConfirmation)
+        {
+            await accountEmail.SendConfirmationEmailAsync(user);
+            return new RegisterResponse("pending_email_verification", Auth: null, Email: email);
+        }
+
+        var auth = await BuildAuthResponse(user, users, tokens);
+        return new RegisterResponse("active", auth, Email: null);
     }
 
     private static async Task<AuthResponse> Link(
@@ -113,6 +138,7 @@ public static class AuthEndpoints
                 throw TranslateIdentityFailure(update);
             }
 
+            EnsureSignInAllowed(existing);
             return await BuildAuthResponse(existing, users, tokens);
         }
 
@@ -122,6 +148,8 @@ public static class AuthEndpoints
                 "Spacetime identity is already linked to another account.");
         }
 
+        // `link` is the credential-(re)binding path for an identity the caller
+        // already controls; a new account created here is Active directly.
         var user = new ApplicationUser
         {
             UserName = username,
@@ -159,6 +187,7 @@ public static class AuthEndpoints
             throw ApiException.Unauthorized("Invalid username or password.");
         }
 
+        EnsureSignInAllowed(user);
         return await BuildAuthResponse(user, users, tokens);
     }
 
@@ -181,6 +210,7 @@ public static class AuthEndpoints
             u.SpacetimeToken == spacetimeToken && u.SpacetimeIdentityNorm == identityNorm)
             ?? throw ApiException.Unauthorized("Could not renew session for this account.");
 
+        EnsureSignInAllowed(user);
         var roles = await users.GetRolesAsync(user);
         return new RenewSessionResponse(tokens.IssueSession(user.UserName!, roles));
     }
@@ -206,8 +236,74 @@ public static class AuthEndpoints
             throw TranslateIdentityFailure(update);
         }
 
-        // Legacy contract: an empty JSON object on success.
         return Results.Json(new { });
+    }
+
+    /// <summary>Email-link target — confirms the address and activates the account.</summary>
+    private static async Task<IResult> ConfirmEmail(
+        string? userId, string? token, UserManager<ApplicationUser> users)
+    {
+        if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(token))
+        {
+            return HtmlPage("Invalid link", "This confirmation link is malformed.", ok: false);
+        }
+
+        var user = await users.FindByIdAsync(userId);
+        if (user is null)
+        {
+            return HtmlPage("Invalid link", "This confirmation link is no longer valid.", ok: false);
+        }
+
+        if (user.EmailConfirmed && user.Status != AccountStatus.Registered)
+        {
+            return HtmlPage(
+                "Already confirmed",
+                "Your email address is already confirmed — you can sign in to LetsChat.",
+                ok: true);
+        }
+
+        var result = await users.ConfirmEmailAsync(user, token);
+        if (!result.Succeeded)
+        {
+            return HtmlPage(
+                "Link expired",
+                "This confirmation link is invalid or has expired. Request a new one from the app.",
+                ok: false);
+        }
+
+        if (user.Status == AccountStatus.Registered)
+        {
+            user.Status = AccountStatus.Active;
+            user.UpdatedAtUtc = DateTime.UtcNow;
+            await users.UpdateAsync(user);
+        }
+
+        return HtmlPage(
+            "Email confirmed",
+            "Your email address is confirmed. You can now sign in to LetsChat.",
+            ok: true);
+    }
+
+    /// <summary>Re-sends the confirmation email. Always responds generically.</summary>
+    private static async Task<IResult> ResendConfirmation(
+        ResendConfirmationRequest request,
+        UserManager<ApplicationUser> users,
+        AccountEmailService accountEmail)
+    {
+        var email = Validation.NormalizeEmail(request.Email);
+        var user = await users.FindByEmailAsync(email);
+
+        if (user is { Status: AccountStatus.Registered, EmailConfirmed: false })
+        {
+            await accountEmail.SendConfirmationEmailAsync(user);
+        }
+
+        // Generic response — never reveal whether an account exists for the address.
+        return Results.Json(new
+        {
+            status = "ok",
+            message = "If that address has an unconfirmed account, a new confirmation email has been sent.",
+        });
     }
 
     private static async Task<AuthResponse> BuildAuthResponse(
@@ -223,10 +319,55 @@ public static class AuthEndpoints
             session);
     }
 
-    /// <summary>
-    /// Maps an Identity failure to an <see cref="ApiException"/>. A unique
-    /// constraint surfaces as 409; everything else as 400.
-    /// </summary>
+    /// <summary>Blocks sign-in for any account not in the <see cref="AccountStatus.Active"/> state.</summary>
+    private static void EnsureSignInAllowed(ApplicationUser user)
+    {
+        switch (user.Status)
+        {
+            case AccountStatus.Active:
+                return;
+            case AccountStatus.Registered:
+                throw ApiException.Unauthorized(
+                    "Please confirm your email address before signing in.");
+            case AccountStatus.EmailVerified:
+                throw ApiException.Unauthorized(
+                    "Your account is awaiting administrator approval.");
+            case AccountStatus.Disabled:
+                throw ApiException.Unauthorized("This account has been disabled.");
+            case AccountStatus.Rejected:
+                throw ApiException.Unauthorized("This account was not approved.");
+            default:
+                throw ApiException.Unauthorized("This account cannot sign in.");
+        }
+    }
+
+    private static IResult HtmlPage(string heading, string message, bool ok)
+    {
+        var accent = ok ? "#16a34a" : "#dc2626";
+        var glyph = ok ? "&#10003;" : "&#10007;";
+        var html =
+            $"""
+             <!doctype html>
+             <html lang="en">
+             <head>
+               <meta charset="utf-8">
+               <meta name="viewport" content="width=device-width, initial-scale=1">
+               <title>{heading} — LetsChat</title>
+             </head>
+             <body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+                          background:#f3f4f6;font-family:-apple-system,Segoe UI,Roboto,sans-serif">
+               <div style="background:#fff;border-radius:12px;padding:40px;max-width:420px;text-align:center;
+                           box-shadow:0 1px 3px rgba(0,0,0,.1)">
+                 <div style="font-size:44px;line-height:1;color:{accent}">{glyph}</div>
+                 <h1 style="font-size:20px;color:#111827;margin:16px 0 8px">{heading}</h1>
+                 <p style="color:#4b5563;font-size:15px;line-height:1.6;margin:0">{message}</p>
+               </div>
+             </body>
+             </html>
+             """;
+        return Results.Content(html, "text/html");
+    }
+
     private static ApiException TranslateIdentityFailure(IdentityResult result)
     {
         var message = string.Join(" ", result.Errors.Select(e => e.Description));

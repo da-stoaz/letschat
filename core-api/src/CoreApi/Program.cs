@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Threading.RateLimiting;
 using CoreApi;
 using CoreApi.Configuration;
 using CoreApi.Data;
@@ -48,6 +49,44 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<LiveKitTokenService>();
 builder.Services.AddSingleton<StorageService>();
 
+// Email transport — SMTP for real delivery, log sender for local dev.
+if (options.EmailSenderKind == "smtp")
+{
+    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+}
+else
+{
+    builder.Services.AddSingleton<IEmailSender, LogEmailSender>();
+}
+
+builder.Services.AddScoped<AccountEmailService>();
+
+// ── Rate limiting ────────────────────────────────────────────────────────────
+// Per-IP fixed window on abuse-prone auth endpoints (register / login / resend).
+// NOTE: behind a reverse proxy, configure forwarded headers so the real client
+// IP is used for partitioning rather than the proxy's.
+builder.Services.AddRateLimiter(rateLimiter =>
+{
+    rateLimiter.AddPolicy(AuthEndpoints.RateLimitPolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = options.RateLimitPermitLimit,
+                Window = TimeSpan.FromSeconds(options.RateLimitWindowSeconds),
+                QueueLimit = 0,
+            }));
+
+    rateLimiter.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsync(
+            JsonSerializer.Serialize(new { error = "Too many requests. Please try again later." }),
+            cancellationToken);
+    };
+});
+
 builder.Services.AddCors(cors => cors.AddDefaultPolicy(policy =>
     policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
@@ -74,6 +113,7 @@ app.Use(async (context, next) =>
 });
 
 app.UseCors();
+app.UseRateLimiter();
 
 app.MapAuthEndpoints();
 app.MapLiveKitEndpoints();

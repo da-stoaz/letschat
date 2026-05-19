@@ -11,7 +11,17 @@ public sealed record RegisterRequest(
     string DisplayName,
     string Password,
     string SpacetimeToken,
-    string SpacetimeIdentity);
+    string SpacetimeIdentity,
+    string? Email = null);
+
+/// <summary>
+/// Register result. <c>Status</c> is <c>"active"</c> (account usable now,
+/// <c>Auth</c> populated) or <c>"pending_email_verification"</c> (a
+/// confirmation email was sent to <c>Email</c>, <c>Auth</c> is null).
+/// </summary>
+public sealed record RegisterResponse(string Status, AuthResponse? Auth, string? Email);
+
+public sealed record ResendConfirmationRequest(string Email);
 
 public sealed record LinkRequest(
     string Username,

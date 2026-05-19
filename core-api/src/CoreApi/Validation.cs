@@ -33,6 +33,18 @@ public static class Validation
         }
     }
 
+    /// <summary>Validates and normalises an email address; throws 400 if invalid.</summary>
+    public static string NormalizeEmail(string? email)
+    {
+        var trimmed = email?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0 || !System.Net.Mail.MailAddress.TryCreate(trimmed, out _))
+        {
+            throw ApiException.BadRequest("A valid email address is required.");
+        }
+
+        return trimmed.ToLowerInvariant();
+    }
+
     /// <summary>Returns the trimmed value or throws 400 with a field-named message.</summary>
     public static string Required(string? value, string fieldMessage)
     {

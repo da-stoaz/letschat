@@ -44,6 +44,15 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # ── Mailpit (core-api: dev SMTP catcher for email verification) ──────────────
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: letschat-dev-mailpit
+    ports:
+      - "1025:1025"   # SMTP   →  core-api sends here (SMTP_HOST/SMTP_PORT)
+      - "8025:8025"   # Web UI →  http://localhost:8025  (inspect sent emails)
+    restart: unless-stopped
+
   # ── MinIO ────────────────────────────────────────────────────────────────────
   minio:
     image: minio/minio:latest

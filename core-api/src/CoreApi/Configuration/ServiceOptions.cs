@@ -30,6 +30,30 @@ public sealed class ServiceOptions
     public string? BootstrapAdminUsername { get; init; }
     public string? BootstrapAdminPassword { get; init; }
 
+    // ── Phase 2: registration hardening ──────────────────────────────────────
+
+    /// <summary>
+    /// When true, a self-registered account starts <c>Registered</c> and cannot
+    /// sign in until its email is confirmed. When false, registration behaves as
+    /// in Phase 1 (account created <c>Active</c>, immediately usable).
+    /// </summary>
+    public required bool RequireEmailConfirmation { get; init; }
+
+    /// <summary>Email transport: <c>smtp</c> or <c>log</c> (dev — writes to the log).</summary>
+    public required string EmailSenderKind { get; init; }
+
+    public required string SmtpHost { get; init; }
+    public required int SmtpPort { get; init; }
+    public string? SmtpUser { get; init; }
+    public string? SmtpPassword { get; init; }
+    public required bool SmtpUseStartTls { get; init; }
+    public required string EmailFromAddress { get; init; }
+    public required string EmailFromName { get; init; }
+
+    /// <summary>Requests permitted per IP per <see cref="RateLimitWindowSeconds"/> on auth endpoints.</summary>
+    public required int RateLimitPermitLimit { get; init; }
+    public required int RateLimitWindowSeconds { get; init; }
+
     public static ServiceOptions FromConfiguration(IConfiguration config)
     {
         string Get(string key, string fallback) =>
@@ -37,6 +61,16 @@ public sealed class ServiceOptions
 
         string? GetOptional(string key) =>
             config[key] is { Length: > 0 } value ? value.Trim() : null;
+
+        bool GetBool(string key, bool fallback) =>
+            config[key] is { Length: > 0 } value
+                ? value.Trim().ToLowerInvariant() is "true" or "1" or "yes"
+                : fallback;
+
+        int GetInt(string key, int fallback) =>
+            config[key] is { Length: > 0 } value && int.TryParse(value, out var parsed)
+                ? parsed
+                : fallback;
 
         var minioInternal = Get("MINIO_INTERNAL_ENDPOINT", "http://127.0.0.1:4390");
 
@@ -69,6 +103,19 @@ public sealed class ServiceOptions
 
             BootstrapAdminUsername = GetOptional("ADMIN_BOOTSTRAP_USERNAME"),
             BootstrapAdminPassword = GetOptional("ADMIN_BOOTSTRAP_PASSWORD"),
+
+            RequireEmailConfirmation = GetBool("REQUIRE_EMAIL_CONFIRMATION", true),
+            EmailSenderKind = Get("EMAIL_SENDER", "log").Trim().ToLowerInvariant(),
+            SmtpHost = Get("SMTP_HOST", "localhost"),
+            SmtpPort = GetInt("SMTP_PORT", 1025),
+            SmtpUser = GetOptional("SMTP_USER"),
+            SmtpPassword = GetOptional("SMTP_PASSWORD"),
+            SmtpUseStartTls = GetBool("SMTP_USE_STARTTLS", false),
+            EmailFromAddress = Get("EMAIL_FROM_ADDRESS", "no-reply@letschat.local"),
+            EmailFromName = Get("EMAIL_FROM_NAME", "LetsChat"),
+
+            RateLimitPermitLimit = GetInt("RATE_LIMIT_PERMIT", 10),
+            RateLimitWindowSeconds = GetInt("RATE_LIMIT_WINDOW_SECONDS", 300),
         };
     }
 }

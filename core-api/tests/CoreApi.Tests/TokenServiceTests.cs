@@ -26,6 +26,15 @@ public sealed class TokenServiceTests
         DiscoveryAuthUrl = "http://x",
         DiscoveryLiveKitUrl = "ws://x",
         DiscoveryDatabase = "letschat",
+        RequireEmailConfirmation = true,
+        EmailSenderKind = "log",
+        SmtpHost = "localhost",
+        SmtpPort = 1025,
+        SmtpUseStartTls = false,
+        EmailFromAddress = "no-reply@test.local",
+        EmailFromName = "Test",
+        RateLimitPermitLimit = 10,
+        RateLimitWindowSeconds = 300,
     };
 
     private const string Secret = "this-is-a-sufficiently-long-test-jwt-secret-value";
