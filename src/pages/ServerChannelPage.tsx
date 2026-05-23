@@ -44,7 +44,7 @@ export function ServerChannelPage() {
       return (
         <Card className="h-full border-border/70 bg-card/70">
           <CardHeader>
-            <CardTitle>No channels in this server yet</CardTitle>
+            <CardTitle>No channels in this space yet</CardTitle>
             <CardDescription>Create your first text channel to start chatting.</CardDescription>
           </CardHeader>
           <CardContent>

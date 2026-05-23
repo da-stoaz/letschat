@@ -29,7 +29,7 @@ export function KickMemberModal({ serverId, member, onClose }: MemberActionModal
           Kick {memberLabel(member)}
         </DialogTitle>
         <DialogDescription>
-          This will remove <strong>@{memberUsername(member)}</strong> from the server. They can rejoin with a new invite.
+          This will remove <strong>@{memberUsername(member)}</strong> from the space. They can rejoin with a new invite.
         </DialogDescription>
       </DialogHeader>
       {error && <p className="text-sm text-destructive">{error}</p>}

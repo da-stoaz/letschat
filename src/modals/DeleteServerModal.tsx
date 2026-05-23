@@ -26,7 +26,7 @@ export function DeleteServerModal({ serverId, serverName, onClose, onDeleted }: 
       onClose()
       onDeleted?.()
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Could not delete server.'
+      const message = e instanceof Error ? e.message : 'Could not delete space.'
       setError(message)
       setLoading(false)
     }
@@ -37,10 +37,10 @@ export function DeleteServerModal({ serverId, serverName, onClose, onDeleted }: 
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2 text-destructive">
           <AlertTriangleIcon className="size-4" />
-          Delete Server
+          Delete Space
         </DialogTitle>
         <DialogDescription>
-          This permanently deletes the server, all channels, and all messages.
+          This permanently deletes the space, all channels, and all messages.
         </DialogDescription>
       </DialogHeader>
 
@@ -76,7 +76,7 @@ export function DeleteServerModal({ serverId, serverName, onClose, onDeleted }: 
           disabled={loading || confirmName !== serverName}
           onClick={() => void handleDelete()}
         >
-          {loading ? 'Deleting...' : 'Delete Server'}
+          {loading ? 'Deleting...' : 'Delete Space'}
         </Button>
       </div>
     </div>

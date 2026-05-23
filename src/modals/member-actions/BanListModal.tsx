@@ -77,7 +77,7 @@ export function BanListModal({ serverId, onClose }: BanListModalProps) {
           Banned Members
         </DialogTitle>
         <DialogDescription>
-          Members banned from this server. Unbanning allows them to rejoin with a valid invite.
+          Members banned from this space. Unbanning allows them to rejoin with a valid invite.
         </DialogDescription>
       </DialogHeader>
 

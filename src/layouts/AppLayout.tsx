@@ -372,12 +372,12 @@ export function AppLayout() {
     if (!activeServerId) return
     try {
       await reducers.leaveServer(activeServerId)
-      toast.success('Left server')
+      toast.success('Left space')
       setActiveServerId(null)
       navigate('/app')
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not leave server.'
-      toast.error('Failed to leave server', { description: message })
+      const message = error instanceof Error ? error.message : 'Could not leave space.'
+      toast.error('Failed to leave space', { description: message })
     }
   }, [activeServerId, navigate, setActiveServerId])
 

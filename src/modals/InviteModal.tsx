@@ -252,7 +252,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
 
   const handleSendDirectInvite = async () => {
     if (!canSendInvites) {
-      setError('You do not have permission to invite users in this server.')
+      setError('You do not have permission to invite users in this space.')
       return
     }
     if (selectedRecipients.length === 0) return
@@ -320,7 +320,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
 
   const handleCreate = async () => {
     if (!canSendInvites) {
-      setError('You do not have permission to invite users in this server.')
+      setError('You do not have permission to invite users in this space.')
       return
     }
     setError(null)
@@ -335,7 +335,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
       )
       toast.success('Invite link created', {
         id: toastId,
-        description: `Ready for ${server?.name ?? 'this server'}.`,
+        description: `Ready for ${server?.name ?? 'this space'}.`,
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Could not create invite.'
@@ -427,9 +427,9 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <LinkIcon className="size-4 text-primary" />
-          Invite to {server?.name ?? 'Server'}
+          Invite to {server?.name ?? 'Space'}
         </DialogTitle>
-        <DialogDescription>Invite people directly or create shareable server links.</DialogDescription>
+        <DialogDescription>Invite people directly or create shareable space links.</DialogDescription>
       </DialogHeader>
 
       <Tabs
@@ -439,7 +439,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
       >
         {!canSendInvites ? (
           <p className="text-xs text-muted-foreground">
-            Invites are restricted to owner and moderators in this server.
+            Invites are restricted to owner and moderators in this space.
           </p>
         ) : null}
         <TabsList className="w-full">
