@@ -1,0 +1,37 @@
+@page "/admin/audit"
+@model AuditModel
+@{
+    ViewData["Title"] = "Audit log";
+}
+
+<h1 class="page-title">Audit log</h1>
+<p class="page-sub">The most recent administrative actions.</p>
+
+<div class="card">
+    @if (Model.Entries.Count == 0)
+    {
+        <p class="muted">No actions recorded yet.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr><th>When (UTC)</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var e in Model.Entries)
+                    {
+                        <tr>
+                            <td class="muted">@e.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td>@e.Actor</td>
+                            <td><code>@e.Action</code></td>
+                            <td class="muted">@e.TargetType@(string.IsNullOrEmpty(e.TargetId) ? "" : $" · {e.TargetId}")</td>
+                            <td>@e.Detail</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

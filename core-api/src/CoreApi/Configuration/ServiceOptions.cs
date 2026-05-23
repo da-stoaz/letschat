@@ -9,6 +9,13 @@ public sealed class ServiceOptions
 {
     public required string ConnectionString { get; init; }
     public required string Bind { get; init; }
+
+    /// <summary>
+    /// Listener for the admin control panel (<c>/admin/*</c>). A separate port
+    /// that the public reverse proxy does not expose — defence in depth so the
+    /// panel is not reachable from the open internet.
+    /// </summary>
+    public required string AdminBind { get; init; }
     public required string JwtSecret { get; init; }
     public string? AdminApiKey { get; init; }
 
@@ -38,6 +45,14 @@ public sealed class ServiceOptions
     /// in Phase 1 (account created <c>Active</c>, immediately usable).
     /// </summary>
     public required bool RequireEmailConfirmation { get; init; }
+
+    /// <summary>
+    /// When true, a self-registered account waits in <c>EmailVerified</c> for an
+    /// admin to approve it before becoming <c>Active</c>. Only meaningful with
+    /// <see cref="RequireEmailConfirmation"/> enabled — the approval queue is
+    /// entered via the email-confirmation step.
+    /// </summary>
+    public required bool RequireAdminApproval { get; init; }
 
     /// <summary>Email transport: <c>smtp</c> or <c>log</c> (dev — writes to the log).</summary>
     public required string EmailSenderKind { get; init; }
@@ -80,6 +95,7 @@ public sealed class ServiceOptions
                 "AUTH_DATABASE_URL",
                 "Host=localhost;Port=5432;Database=auth;Username=letschat;Password=letschat"),
             Bind = Get("AUTH_BIND", "127.0.0.1:8787"),
+            AdminBind = Get("ADMIN_BIND", "127.0.0.1:8788"),
             JwtSecret = Get(
                 "AUTH_JWT_SECRET",
                 "w7Qk9R2mN5xH3cV8pL4tJ6dF1sA0zB7uY2gE5nK8qM3rT9hC"),
@@ -105,6 +121,7 @@ public sealed class ServiceOptions
             BootstrapAdminPassword = GetOptional("ADMIN_BOOTSTRAP_PASSWORD"),
 
             RequireEmailConfirmation = GetBool("REQUIRE_EMAIL_CONFIRMATION", true),
+            RequireAdminApproval = GetBool("REQUIRE_ADMIN_APPROVAL", false),
             EmailSenderKind = Get("EMAIL_SENDER", "log").Trim().ToLowerInvariant(),
             SmtpHost = Get("SMTP_HOST", "localhost"),
             SmtpPort = GetInt("SMTP_PORT", 1025),

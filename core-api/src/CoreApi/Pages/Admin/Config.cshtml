@@ -1,0 +1,85 @@
+@page "/admin/config"
+@model ConfigModel
+@{
+    ViewData["Title"] = "Configuration";
+}
+
+<h1 class="page-title">System configuration</h1>
+<p class="page-sub">Runtime settings. Changes take effect immediately and are recorded in the audit log.</p>
+
+@if (Model.Message is not null)
+{
+    <div class="alert alert-success">@Model.Message</div>
+}
+@if (Model.Error is not null)
+{
+    <div class="alert alert-error">@Model.Error</div>
+}
+
+<form method="post">
+    <div class="card">
+        <h2>Registration</h2>
+        <div class="field check">
+            <input type="checkbox" id="ro" name="RegistrationOpen" value="true" checked="@Model.RegistrationOpen">
+            <label for="ro">Allow new self-registration</label>
+        </div>
+        <div class="field check">
+            <input type="checkbox" id="rec" name="RequireEmailConfirmation" value="true" checked="@Model.RequireEmailConfirmation">
+            <label for="rec">Require email confirmation before sign-in</label>
+        </div>
+        <div class="field check">
+            <input type="checkbox" id="raa" name="RequireAdminApproval" value="true" checked="@Model.RequireAdminApproval">
+            <label for="raa">Require admin approval after email confirmation</label>
+        </div>
+        <p class="hint">Admin approval only applies when email confirmation is enabled.</p>
+    </div>
+
+    <div class="card">
+        <h2>Rate limiting</h2>
+        <p class="hint" style="margin-top:0">Per-IP limit on register / login / resend requests.</p>
+        <div class="field">
+            <label for="rlp">Requests allowed per window</label>
+            <input class="input" type="number" min="1" id="rlp" name="RateLimitPermitLimit" value="@Model.RateLimitPermitLimit">
+        </div>
+        <div class="field">
+            <label for="rlw">Window length (seconds)</label>
+            <input class="input" type="number" min="1" id="rlw" name="RateLimitWindowSeconds" value="@Model.RateLimitWindowSeconds">
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Email / SMTP</h2>
+        <div class="field">
+            <label for="sh">SMTP host</label>
+            <input class="input" id="sh" name="SmtpHost" value="@Model.SmtpHost">
+        </div>
+        <div class="field">
+            <label for="sp">SMTP port</label>
+            <input class="input" type="number" min="1" id="sp" name="SmtpPort" value="@Model.SmtpPort">
+        </div>
+        <div class="field">
+            <label for="su">SMTP username</label>
+            <input class="input" id="su" name="SmtpUser" value="@Model.SmtpUser" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="spw">SMTP password</label>
+            <input class="input" type="password" id="spw" name="SmtpPassword" autocomplete="new-password"
+                   placeholder="@(Model.SmtpPasswordSet ? "•••••••• (leave blank to keep)" : "(not set)")">
+            <div class="hint">Leave blank to keep the current password.</div>
+        </div>
+        <div class="field check">
+            <input type="checkbox" id="tls" name="SmtpUseStartTls" value="true" checked="@Model.SmtpUseStartTls">
+            <label for="tls">Use STARTTLS</label>
+        </div>
+        <div class="field">
+            <label for="fa">From address</label>
+            <input class="input" id="fa" name="EmailFromAddress" value="@Model.EmailFromAddress">
+        </div>
+        <div class="field">
+            <label for="fn">From name</label>
+            <input class="input" id="fn" name="EmailFromName" value="@Model.EmailFromName">
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save configuration</button>
+</form>

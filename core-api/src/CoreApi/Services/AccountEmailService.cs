@@ -27,6 +27,17 @@ public sealed class AccountEmailService(
         await email.SendAsync(user.Email, subject, body);
     }
 
+    public async Task SendApprovalEmailAsync(ApplicationUser user)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return;
+        }
+
+        var (subject, body) = EmailTemplates.AccountApproved(user.DisplayName);
+        await email.SendAsync(user.Email, subject, body);
+    }
+
     private string Link(string path, string userId, string token) =>
         $"{options.DiscoveryAuthUrl.TrimEnd('/')}{path}" +
         $"?userId={Uri.EscapeDataString(userId)}&token={Uri.EscapeDataString(token)}";

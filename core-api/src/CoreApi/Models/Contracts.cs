@@ -66,6 +66,16 @@ public sealed record AdminRebindAccountRequest(
 
 public sealed record AdminRebindAccountResponse(string Username, string SpacetimeIdentity);
 
+/// <summary>An account awaiting admin approval (status <c>EmailVerified</c>).</summary>
+public sealed record PendingUserDto(
+    string Id,
+    string Username,
+    string DisplayName,
+    string? Email,
+    string CreatedAtUtc);
+
+public sealed record PendingUsersResponse(List<PendingUserDto> Users);
+
 // ── Uploads ──────────────────────────────────────────────────────────────────
 
 public sealed record UploadRequestPayload(

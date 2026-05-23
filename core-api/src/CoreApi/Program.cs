@@ -16,8 +16,10 @@ var builder = WebApplication.CreateBuilder(args);
 var options = ServiceOptions.FromConfiguration(builder.Configuration);
 builder.Services.AddSingleton(options);
 
-// Bind to AUTH_BIND (host:port), matching the legacy service's listener.
-builder.WebHost.UseUrls($"http://{options.Bind}");
+// Public API on AUTH_BIND; the admin control panel on the separate ADMIN_BIND
+// port, which the public reverse proxy is not configured to expose.
+builder.WebHost.UseUrls($"http://{options.Bind}", $"http://{options.AdminBind}");
+var adminPort = int.Parse(options.AdminBind.Split(':')[^1]);
 
 // ── Persistence + Identity ───────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(db => db.UseNpgsql(options.ConnectionString));
@@ -44,6 +46,17 @@ builder.Services
 // Replace Identity's PBKDF2 hasher with Argon2id so migrated hashes verify.
 builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, Argon2PasswordHasher>();
 
+// The control panel signs admins in with the Identity cookie.
+builder.Services.ConfigureApplicationCookie(cookie =>
+{
+    cookie.Cookie.Name = "letschat.admin";
+    cookie.LoginPath = "/admin/login";
+    cookie.LogoutPath = "/admin/logout";
+    cookie.AccessDeniedPath = "/admin/login";
+    cookie.ExpireTimeSpan = TimeSpan.FromHours(8);
+    cookie.SlidingExpiration = true;
+});
+
 // ── Domain services ──────────────────────────────────────────────────────────
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<LiveKitTokenService>();
@@ -61,21 +74,29 @@ else
 
 builder.Services.AddScoped<AccountEmailService>();
 
+// Runtime-editable config + audit log (admin control panel).
+builder.Services.AddSingleton<SystemConfigService>();
+builder.Services.AddSingleton<AuditService>();
+
 // ── Rate limiting ────────────────────────────────────────────────────────────
 // Per-IP fixed window on abuse-prone auth endpoints (register / login / resend).
+// Limits come from the runtime SystemConfig; new windows pick up edits.
 // NOTE: behind a reverse proxy, configure forwarded headers so the real client
 // IP is used for partitioning rather than the proxy's.
 builder.Services.AddRateLimiter(rateLimiter =>
 {
     rateLimiter.AddPolicy(AuthEndpoints.RateLimitPolicy, httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
+    {
+        var config = httpContext.RequestServices.GetRequiredService<SystemConfigService>().Current;
+        return RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = options.RateLimitPermitLimit,
-                Window = TimeSpan.FromSeconds(options.RateLimitWindowSeconds),
+                PermitLimit = config.RateLimitPermitLimit,
+                Window = TimeSpan.FromSeconds(config.RateLimitWindowSeconds),
                 QueueLimit = 0,
-            }));
+            });
+    });
 
     rateLimiter.OnRejected = async (context, cancellationToken) =>
     {
@@ -90,13 +111,38 @@ builder.Services.AddRateLimiter(rateLimiter =>
 builder.Services.AddCors(cors => cors.AddDefaultPolicy(policy =>
     policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
+builder.Services.AddRazorPages();
+
 var app = builder.Build();
 
-// ── Error handling ───────────────────────────────────────────────────────────
-// Every failure becomes { "error": "…" } with an appropriate status — the
-// exact shape the desktop client's error parsing expects.
+// ── Admin-area exposure guard ────────────────────────────────────────────────
+// Everything under /admin (the control panel and admin APIs) is served ONLY on
+// the admin listener. A /admin request arriving on the public port is 404'd, so
+// the panel is never reachable from the public surface.
 app.Use(async (context, next) =>
 {
+    if (context.Request.Path.StartsWithSegments("/admin")
+        && context.Connection.LocalPort != adminPort)
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    await next();
+});
+
+// ── Error handling ───────────────────────────────────────────────────────────
+// API failures become { "error": "…" } with an appropriate status — the exact
+// shape the desktop client expects. Admin (Razor) requests are left to the
+// framework's own error handling so they render HTML, not JSON.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/admin"))
+    {
+        await next();
+        return;
+    }
+
     try
     {
         await next();
@@ -112,17 +158,29 @@ app.Use(async (context, next) =>
     }
 });
 
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+
+app.UseStaticFiles();
 app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapAuthEndpoints();
 app.MapLiveKitEndpoints();
 app.MapUploadEndpoints();
 app.MapMiscEndpoints();
+app.MapAdminEndpoints();
+app.MapRazorPages();
 
 await DbInitializer.InitializeAsync(app);
 
-app.Logger.LogInformation("core-api listening on http://{Bind}", options.Bind);
+app.Logger.LogInformation(
+    "core-api — public API on http://{Bind}, admin panel on http://{AdminBind}",
+    options.Bind, options.AdminBind);
 app.Run();
 
 static async Task WriteError(HttpContext context, HttpStatusCode status, string message)

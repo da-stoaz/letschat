@@ -14,6 +14,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 {
     public DbSet<PendingUpload> PendingUploads => Set<PendingUpload>();
     public DbSet<UploadQuota> UploadQuotas => Set<UploadQuota>();
+    public DbSet<SystemConfig> SystemConfig => Set<SystemConfig>();
+    public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -45,6 +47,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             quota.HasKey(q => new { q.Username, q.QuotaDate });
             quota.Property(q => q.Username).HasMaxLength(64);
             quota.Property(q => q.QuotaDate).HasMaxLength(10);
+        });
+
+        builder.Entity<SystemConfig>(config =>
+        {
+            // The Id is fixed (SystemConfig.SingletonId); never database-generated.
+            config.Property(c => c.Id).ValueGeneratedNever();
+        });
+
+        builder.Entity<AuditLogEntry>(audit =>
+        {
+            audit.Property(a => a.Actor).HasMaxLength(128);
+            audit.Property(a => a.Action).HasMaxLength(64);
+            audit.Property(a => a.TargetType).HasMaxLength(64);
+            audit.Property(a => a.TargetId).HasMaxLength(256);
+            audit.HasIndex(a => a.TimestampUtc);
         });
     }
 }

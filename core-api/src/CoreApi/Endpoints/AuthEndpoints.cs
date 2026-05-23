@@ -37,9 +37,14 @@ public static class AuthEndpoints
         RegisterRequest request,
         UserManager<ApplicationUser> users,
         TokenService tokens,
-        ServiceOptions options,
+        SystemConfigService config,
         AccountEmailService accountEmail)
     {
+        if (!config.Current.RegistrationOpen)
+        {
+            throw ApiException.BadRequest("Registration is currently closed.");
+        }
+
         var username = Validation.NormalizeUsername(request.Username);
         Validation.ValidateUsername(username);
         Validation.ValidatePassword(request.Password);
@@ -49,7 +54,7 @@ public static class AuthEndpoints
         var identityNorm = Validation.NormalizeIdentity(spacetimeIdentity);
 
         // Email is mandatory when confirmation is required; otherwise optional.
-        var requiresConfirmation = options.RequireEmailConfirmation;
+        var requiresConfirmation = config.Current.RequireEmailConfirmation;
         string? email = null;
         if (requiresConfirmation || !string.IsNullOrWhiteSpace(request.Email))
         {
@@ -239,9 +244,15 @@ public static class AuthEndpoints
         return Results.Json(new { });
     }
 
-    /// <summary>Email-link target — confirms the address and activates the account.</summary>
+    /// <summary>
+    /// Email-link target — confirms the address and advances the account. With
+    /// admin approval enabled the account moves to <c>EmailVerified</c> (waiting
+    /// for an admin); otherwise straight to <c>Active</c>.
+    /// </summary>
     private static async Task<IResult> ConfirmEmail(
-        string? userId, string? token, UserManager<ApplicationUser> users)
+        string? userId, string? token,
+        UserManager<ApplicationUser> users,
+        SystemConfigService config)
     {
         if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(token))
         {
@@ -254,12 +265,10 @@ public static class AuthEndpoints
             return HtmlPage("Invalid link", "This confirmation link is no longer valid.", ok: false);
         }
 
+        // Already past the Registered stage — report the current state idempotently.
         if (user.EmailConfirmed && user.Status != AccountStatus.Registered)
         {
-            return HtmlPage(
-                "Already confirmed",
-                "Your email address is already confirmed — you can sign in to LetsChat.",
-                ok: true);
+            return ConfirmedStatePage(user.Status);
         }
 
         var result = await users.ConfirmEmailAsync(user, token);
@@ -273,16 +282,29 @@ public static class AuthEndpoints
 
         if (user.Status == AccountStatus.Registered)
         {
-            user.Status = AccountStatus.Active;
+            user.Status = config.Current.RequireAdminApproval
+                ? AccountStatus.EmailVerified
+                : AccountStatus.Active;
             user.UpdatedAtUtc = DateTime.UtcNow;
             await users.UpdateAsync(user);
         }
 
-        return HtmlPage(
+        return ConfirmedStatePage(user.Status);
+    }
+
+    private static IResult ConfirmedStatePage(AccountStatus status) => status switch
+    {
+        AccountStatus.EmailVerified => HtmlPage(
+            "Email confirmed",
+            "Your email address is confirmed. Your account is now awaiting administrator " +
+            "approval — you'll be able to sign in once it has been approved.",
+            ok: true),
+        AccountStatus.Active => HtmlPage(
             "Email confirmed",
             "Your email address is confirmed. You can now sign in to LetsChat.",
-            ok: true);
-    }
+            ok: true),
+        _ => HtmlPage("Email confirmed", "Your email address is confirmed.", ok: true),
+    };
 
     /// <summary>Re-sends the confirmation email. Always responds generically.</summary>
     private static async Task<IResult> ResendConfirmation(

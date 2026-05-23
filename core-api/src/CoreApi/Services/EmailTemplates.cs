@@ -44,6 +44,21 @@ public static class EmailTemplates
         return (subject, body);
     }
 
+    public static (string Subject, string HtmlBody) AccountApproved(string displayName)
+    {
+        const string subject = "Your LetsChat account has been approved";
+        var body = Layout(
+            "Your account is approved",
+            $"""
+             <p style="margin:0 0 16px 0;">Hi {Escape(displayName)},</p>
+             <p style="margin:0;">
+               Good news — an administrator has approved your LetsChat account.
+               You can now sign in and start chatting.
+             </p>
+             """);
+        return (subject, body);
+    }
+
     private static string Layout(string heading, string innerHtml) =>
         $"""
          <!doctype html>

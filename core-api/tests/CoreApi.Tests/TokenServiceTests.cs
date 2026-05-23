@@ -14,6 +14,7 @@ public sealed class TokenServiceTests
     {
         ConnectionString = "Host=localhost;Database=test;Username=t;Password=t",
         Bind = "127.0.0.1:8787",
+        AdminBind = "127.0.0.1:8788",
         JwtSecret = secret,
         MinioAccessKey = "x",
         MinioSecretKey = "x",
@@ -27,6 +28,7 @@ public sealed class TokenServiceTests
         DiscoveryLiveKitUrl = "ws://x",
         DiscoveryDatabase = "letschat",
         RequireEmailConfirmation = true,
+        RequireAdminApproval = false,
         EmailSenderKind = "log",
         SmtpHost = "localhost",
         SmtpPort = 1025,

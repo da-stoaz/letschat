@@ -24,6 +24,10 @@ public static class DbInitializer
         await db.Database.MigrateAsync();
         logger.LogInformation("Database migrations applied.");
 
+        // Load (seeding on first run) the runtime-editable system configuration.
+        await services.GetRequiredService<Services.SystemConfigService>().InitializeAsync();
+        logger.LogInformation("System configuration loaded.");
+
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var swept = await db.PendingUploads.Where(p => p.ExpiresAt < now).ExecuteDeleteAsync();
         if (swept > 0)
