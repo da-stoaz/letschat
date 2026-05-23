@@ -16,7 +16,7 @@
     <div class="alert alert-error">@Model.Error</div>
 }
 
-<form method="post">
+<form method="post" id="config-form">
     <div class="card">
         <h2>Registration</h2>
         <div class="field check">
@@ -81,5 +81,34 @@
         </div>
     </div>
 
-    <button type="submit" class="btn btn-primary">Save configuration</button>
+    <div class="form-actions" id="save-bar" hidden>
+        <span class="muted small">Unsaved changes</span>
+        <button type="submit" class="btn btn-primary">Save configuration</button>
+    </div>
 </form>
+
+<script>
+    // Show the floating save chip only while the form differs from how it loaded.
+    (function () {
+        var form = document.getElementById('config-form');
+        var bar = document.getElementById('save-bar');
+        if (!form || !bar) return;
+
+        function snapshot() {
+            var parts = [];
+            new FormData(form).forEach(function (value, key) {
+                if (key !== '__RequestVerificationToken') parts.push(key + '=' + value);
+            });
+            return parts.sort().join('&');
+        }
+
+        var baseline = snapshot();
+        function refresh() { bar.hidden = snapshot() === baseline; }
+
+        form.addEventListener('input', refresh);
+        form.addEventListener('change', refresh);
+
+        // A server-side validation error means there are pending edits to fix.
+        if (document.querySelector('.alert-error')) bar.hidden = false;
+    })();
+</script>

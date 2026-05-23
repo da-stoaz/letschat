@@ -41,21 +41,25 @@
         @if (Model.Target.Status == AccountStatus.EmailVerified)
         {
             <form method="post" action="/admin/users/@id?handler=Approve" class="inline">
+                @Html.AntiForgeryToken()
                 <button type="submit" class="btn btn-primary">Approve</button>
             </form>
             <form method="post" action="/admin/users/@id?handler=Reject" class="inline">
+                @Html.AntiForgeryToken()
                 <button type="submit" class="btn btn-danger">Reject</button>
             </form>
         }
         @if (Model.Target.Status == AccountStatus.Active && !Model.IsSelf)
         {
             <form method="post" action="/admin/users/@id?handler=Disable" class="inline">
+                @Html.AntiForgeryToken()
                 <button type="submit" class="btn btn-danger">Disable account</button>
             </form>
         }
         @if (Model.Target.Status is AccountStatus.Disabled or AccountStatus.Rejected)
         {
             <form method="post" action="/admin/users/@id?handler=Enable" class="inline">
+                @Html.AntiForgeryToken()
                 <button type="submit" class="btn btn-primary">Enable account</button>
             </form>
         }
@@ -64,6 +68,7 @@
             @if (!Model.IsSelf)
             {
                 <form method="post" action="/admin/users/@id?handler=RevokeAdmin" class="inline">
+                    @Html.AntiForgeryToken()
                     <button type="submit" class="btn">Revoke admin</button>
                 </form>
             }
@@ -71,6 +76,7 @@
         else
         {
             <form method="post" action="/admin/users/@id?handler=GrantAdmin" class="inline">
+                @Html.AntiForgeryToken()
                 <button type="submit" class="btn">Grant admin</button>
             </form>
         }

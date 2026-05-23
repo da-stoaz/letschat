@@ -206,6 +206,22 @@ export async function authServiceResendConfirmation(email: string): Promise<void
   )
 }
 
+/**
+ * Polls an account's lifecycle status so the "confirm your email" screen can
+ * advance once the user confirms. Returns one of:
+ * `registered` | `email_verified` | `active` | `disabled` | `rejected` | `unknown`.
+ */
+export async function authServiceRegistrationStatus(
+  username: string,
+  spacetimeIdentity: string,
+): Promise<string> {
+  const result = await postJson<{ status: string }, { username: string; spacetimeIdentity: string }>(
+    '/auth/registration-status',
+    { username, spacetimeIdentity },
+  )
+  return result.status
+}
+
 export async function authServiceLink(payload: LinkPayload): Promise<AuthServiceResponse> {
   const result = await postJson<AuthServiceResponse, LinkPayload>('/auth/link', payload)
   setStoredAuthSessionToken(result.sessionToken)

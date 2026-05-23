@@ -4,5 +4,9 @@
       "WebSearch",
       "Bash(docker compose *)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "shadcn"
+  ],
+  "enableAllProjectMcpServers": true
 }

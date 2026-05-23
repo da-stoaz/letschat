@@ -25,6 +25,7 @@
         <div class="admin-user">
             <span class="muted small">@User.Identity?.Name</span>
             <form method="post" action="/admin/logout" class="inline">
+                @Html.AntiForgeryToken()
                 <button type="submit" class="btn btn-sm">Sign out</button>
             </form>
         </div>

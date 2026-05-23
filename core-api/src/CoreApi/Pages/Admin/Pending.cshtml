@@ -35,10 +35,12 @@
                             <td>
                                 <div class="btn-row">
                                     <form method="post" action="/admin/pending?handler=Approve" class="inline">
+                                        @Html.AntiForgeryToken()
                                         <input type="hidden" name="id" value="@u.Id">
                                         <button type="submit" class="btn btn-sm btn-primary">Approve</button>
                                     </form>
                                     <form method="post" action="/admin/pending?handler=Reject" class="inline">
+                                        @Html.AntiForgeryToken()
                                         <input type="hidden" name="id" value="@u.Id">
                                         <button type="submit" class="btn btn-sm btn-danger">Reject</button>
                                     </form>

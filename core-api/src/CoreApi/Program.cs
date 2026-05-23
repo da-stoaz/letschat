@@ -30,7 +30,7 @@ builder.Services
         // Username rules mirror the legacy validator ([a-z0-9_], 2-32).
         identity.User.AllowedUserNameCharacters =
             "abcdefghijklmnopqrstuvwxyz0123456789_";
-        identity.User.RequireUniqueEmail = false;
+        identity.User.RequireUniqueEmail = true;
 
         // Legacy password policy was simply "at least 8 characters".
         identity.Password.RequiredLength = 8;
@@ -158,9 +158,14 @@ app.Use(async (context, next) =>
     }
 });
 
+// Developer exception page — admin (Razor) area only. API errors are already
+// turned into { "error": … } JSON by the middleware above and must NOT be
+// intercepted here, or the desktop client receives an HTML 500 it can't parse.
 if (app.Environment.IsDevelopment())
 {
-    app.UseDeveloperExceptionPage();
+    app.UseWhen(
+        context => context.Request.Path.StartsWithSegments("/admin"),
+        branch => branch.UseDeveloperExceptionPage());
 }
 
 app.UseStaticFiles();

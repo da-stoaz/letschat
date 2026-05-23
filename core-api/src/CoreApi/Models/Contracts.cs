@@ -23,12 +23,22 @@ public sealed record RegisterResponse(string Status, AuthResponse? Auth, string?
 
 public sealed record ResendConfirmationRequest(string Email);
 
+/// <summary>
+/// Polled by the client's "confirm your email" screen to detect when the
+/// account has advanced. The SpacetimeDB identity must match the account's
+/// binding — this prevents username enumeration via the endpoint.
+/// </summary>
+public sealed record RegistrationStatusRequest(string Username, string SpacetimeIdentity);
+
+public sealed record RegistrationStatusResponse(string Status);
+
 public sealed record LinkRequest(
     string Username,
     string DisplayName,
     string Password,
     string SpacetimeToken,
-    string SpacetimeIdentity);
+    string SpacetimeIdentity,
+    string? Email = null);
 
 public sealed record LoginRequest(string Username, string Password);
 

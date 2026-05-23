@@ -24,6 +24,9 @@ public static class AuthEndpoints
         routes.MapPost("/auth/resend-confirmation", ResendConfirmation)
             .RequireRateLimiting(RateLimitPolicy);
 
+        // Not rate-limited — the client polls this from the "confirm email" screen.
+        routes.MapPost("/auth/registration-status", RegistrationStatus);
+
         routes.MapPost("/auth/link", Link);
         routes.MapPost("/auth/verify", Verify);
         routes.MapPost("/auth/renew-session", RenewSession);
@@ -53,13 +56,9 @@ public static class AuthEndpoints
         var spacetimeIdentity = Validation.Required(request.SpacetimeIdentity, "Spacetime identity is required.");
         var identityNorm = Validation.NormalizeIdentity(spacetimeIdentity);
 
-        // Email is mandatory when confirmation is required; otherwise optional.
+        // Email is mandatory on every account — it's the recovery + uniqueness key.
         var requiresConfirmation = config.Current.RequireEmailConfirmation;
-        string? email = null;
-        if (requiresConfirmation || !string.IsNullOrWhiteSpace(request.Email))
-        {
-            email = Validation.NormalizeEmail(request.Email);
-        }
+        var email = Validation.NormalizeEmail(request.Email);
 
         if (await users.FindByNameAsync(username) is not null)
         {
@@ -70,6 +69,11 @@ public static class AuthEndpoints
         {
             throw ApiException.Conflict(
                 "Spacetime identity is already linked to another account.");
+        }
+
+        if (await users.FindByEmailAsync(email) is not null)
+        {
+            throw ApiException.Conflict("Email address is already registered.");
         }
 
         var user = new ApplicationUser
@@ -153,11 +157,18 @@ public static class AuthEndpoints
                 "Spacetime identity is already linked to another account.");
         }
 
+        var email = Validation.NormalizeEmail(request.Email);
+        if (await users.FindByEmailAsync(email) is not null)
+        {
+            throw ApiException.Conflict("Email address is already registered.");
+        }
+
         // `link` is the credential-(re)binding path for an identity the caller
         // already controls; a new account created here is Active directly.
         var user = new ApplicationUser
         {
             UserName = username,
+            Email = email,
             DisplayName = displayName,
             SpacetimeIdentity = spacetimeIdentity,
             SpacetimeIdentityNorm = identityNorm,
@@ -305,6 +316,37 @@ public static class AuthEndpoints
             ok: true),
         _ => HtmlPage("Email confirmed", "Your email address is confirmed.", ok: true),
     };
+
+    /// <summary>
+    /// Reports an account's lifecycle status so the client's pending screen can
+    /// advance once the email is confirmed (and/or approved). Requires the
+    /// SpacetimeDB identity to match the account — no username enumeration.
+    /// </summary>
+    private static async Task<RegistrationStatusResponse> RegistrationStatus(
+        RegistrationStatusRequest request,
+        UserManager<ApplicationUser> users)
+    {
+        var username = Validation.NormalizeUsername(request.Username ?? string.Empty);
+        var identityNorm = Validation.NormalizeIdentity(request.SpacetimeIdentity ?? string.Empty);
+
+        var user = string.IsNullOrEmpty(username) ? null : await users.FindByNameAsync(username);
+        if (user is null
+            || identityNorm.Length == 0
+            || !string.Equals(user.SpacetimeIdentityNorm, identityNorm, StringComparison.Ordinal))
+        {
+            return new RegistrationStatusResponse("unknown");
+        }
+
+        return new RegistrationStatusResponse(user.Status switch
+        {
+            AccountStatus.Registered => "registered",
+            AccountStatus.EmailVerified => "email_verified",
+            AccountStatus.Active => "active",
+            AccountStatus.Disabled => "disabled",
+            AccountStatus.Rejected => "rejected",
+            _ => "unknown",
+        });
+    }
 
     /// <summary>Re-sends the confirmation email. Always responds generically.</summary>
     private static async Task<IResult> ResendConfirmation(
