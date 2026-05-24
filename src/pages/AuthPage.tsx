@@ -1,4 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
+
+function readPersistedPendingRegistration(): PendingRegistration | null {
+  const raw = localStorage.getItem(PENDING_KEY)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as PendingRegistration
+  } catch {
+    localStorage.removeItem(PENDING_KEY)
+    return null
+  }
+}
 import { useNavigate } from 'react-router-dom'
 import {
   CheckCircle2Icon,
@@ -45,7 +56,7 @@ export function AuthPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Registration done, awaiting email confirmation (polled in the background).
-  const [pendingRegistration, setPendingRegistration] = useState<PendingRegistration | null>(null)
+  const [pendingRegistration, setPendingRegistration] = useState<PendingRegistration | null>(readPersistedPendingRegistration)
   const [pendingConfirmed, setPendingConfirmed] = useState(false)
   const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle')
   // A sign-in attempt was blocked for a known, non-error reason.
@@ -57,17 +68,6 @@ export function AuthPage() {
   useEffect(() => {
     if (user) navigate('/app', { replace: true })
   }, [navigate, user])
-
-  // Restore the pending-confirmation screen if registration was interrupted.
-  useEffect(() => {
-    const raw = localStorage.getItem(PENDING_KEY)
-    if (!raw) return
-    try {
-      setPendingRegistration(JSON.parse(raw) as PendingRegistration)
-    } catch {
-      localStorage.removeItem(PENDING_KEY)
-    }
-  }, [])
 
   // While waiting on email confirmation, poll the account status and advance
   // automatically once it is confirmed (and approved, if approval is required).
@@ -161,13 +161,14 @@ export function AuthPage() {
     <section className="relative grid min-h-screen place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-4">
       <Button
         type="button"
-        variant="ghost"
-        size="icon"
-        className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
+        variant="outline"
+        size="sm"
+        className="absolute top-4 left-4 gap-1.5 border-border/70 bg-background/70 text-xs font-medium text-foreground/80 backdrop-blur-sm hover:bg-background hover:text-foreground"
         title="Connection settings"
         onClick={() => setConnectionSheetOpen(true)}
       >
-        <PlugZapIcon className="size-4" />
+        <PlugZapIcon className="size-3.5" />
+        Connection
       </Button>
       <Sheet open={connectionSheetOpen} onOpenChange={setConnectionSheetOpen}>
         <SheetContent side="right" className="overflow-y-auto">
