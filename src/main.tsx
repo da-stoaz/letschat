@@ -33,7 +33,7 @@ createRoot(document.getElementById('root')!).render(
           <BrowserRouter>
             <App />
           </BrowserRouter>
-          <Toaster richColors position="top-right" />
+          <Toaster richColors closeButton position="top-right" />
         </TooltipProvider>
       </QueryClientProvider>
     </AppErrorBoundary>

@@ -78,6 +78,20 @@ builder.Services.AddScoped<AccountEmailService>();
 builder.Services.AddSingleton<SystemConfigService>();
 builder.Services.AddSingleton<AuditService>();
 
+// Version triple (server + recommended/min client). Read once at startup
+// from the assembly's InformationalVersion plus env overrides.
+builder.Services.AddSingleton<VersionInfo>();
+
+// HTTP client + memory cache power the /downloads/{os} proxy that resolves
+// installer URLs from the GitHub Releases API server-side.
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient("github", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(8);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("letschat-core-api");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+});
+
 // ── Rate limiting ────────────────────────────────────────────────────────────
 // Per-IP fixed window on abuse-prone auth endpoints (register / login / resend).
 // Limits come from the runtime SystemConfig; new windows pick up edits.
@@ -115,14 +129,20 @@ builder.Services.AddRazorPages();
 
 var app = builder.Build();
 
-// ── Admin-area exposure guard ────────────────────────────────────────────────
-// Everything under /admin (the control panel and admin APIs) is served ONLY on
-// the admin listener. A /admin request arriving on the public port is 404'd, so
-// the panel is never reachable from the public surface.
+// ── Listener-scope guard ─────────────────────────────────────────────────────
+// Each listener is mutually exclusive about what it serves:
+//   • The admin listener serves ONLY /admin/* — never the public landing page,
+//     /auth/*, /downloads/*, etc. (so the admin port doesn't double as a back
+//     door to the public surface).
+//   • The public listener serves everything EXCEPT /admin/* (so the control
+//     panel is unreachable from the public reverse proxy).
+// Requests on the wrong listener get 404'd before any handler runs.
 app.Use(async (context, next) =>
 {
-    if (context.Request.Path.StartsWithSegments("/admin")
-        && context.Connection.LocalPort != adminPort)
+    var isAdminPath = context.Request.Path.StartsWithSegments("/admin");
+    var isAdminPort = context.Connection.LocalPort == adminPort;
+
+    if (isAdminPath != isAdminPort)
     {
         context.Response.StatusCode = StatusCodes.Status404NotFound;
         return;
@@ -178,6 +198,7 @@ app.MapAuthEndpoints();
 app.MapLiveKitEndpoints();
 app.MapUploadEndpoints();
 app.MapMiscEndpoints();
+app.MapDownloadEndpoints();
 app.MapAdminEndpoints();
 app.MapRazorPages();
 

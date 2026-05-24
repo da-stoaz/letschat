@@ -3,8 +3,21 @@
 <plist version="1.0">
 <dict>
   <key>NSCameraUsageDescription</key>
-  <string>StealthChat needs camera access for voice/video channel calls.</string>
+  <string>LetsChat needs camera access for voice/video channel calls.</string>
   <key>NSMicrophoneUsageDescription</key>
-  <string>StealthChat needs microphone access for voice channel calls.</string>
+  <string>LetsChat needs microphone access for voice channel calls.</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>net.stoaz.letschat.deeplink</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>letschat</string>
+      </array>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+    </dict>
+  </array>
 </dict>
 </plist>

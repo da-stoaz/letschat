@@ -118,9 +118,14 @@ public sealed record DownloadUrlsResponse(List<DownloadUrlItem> Items);
 
 // Single-word PascalCase members so the camelCase policy yields the exact
 // lowercase keys the client's discovery parser requires
-// (spacetimedb / auth / livekit / database).
+// (spacetimedb / auth / livekit / database). The version triple uses
+// camelCase keys (serverVersion / recommendedClient / minClient) so the
+// landing page and future client-side update gating can read them.
 public sealed record WellKnownResponse(
     string Spacetimedb,
     string Auth,
     string Livekit,
-    string Database);
+    string Database,
+    string ServerVersion,
+    string RecommendedClient,
+    string MinClient);

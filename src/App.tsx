@@ -13,6 +13,7 @@ import { useSelfStore } from './stores/selfStore'
 import { useConnectionStore } from './stores/connectionStore'
 import { useUiStore } from './stores/uiStore'
 import { useServerConfigStore } from './stores/serverConfigStore'
+import { useDeepLink } from './hooks/useDeepLink'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
 import { useVoiceStateReconciler } from './hooks/useVoiceStateReconciler'
 import { ensureNotificationPermission } from './lib/notifications'
@@ -21,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoaderCircleIcon } from 'lucide-react'
 
 function App() {
+  useDeepLink()
   usePresenceLifecycle()
   useVoiceStateReconciler()
   const user = useSelfStore((s) => s.user)

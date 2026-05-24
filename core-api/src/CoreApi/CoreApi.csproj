@@ -4,6 +4,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Kept in lock-step with package.json by scripts/bump-version.ts.
+         CI can still override at build time via -p:Version=x.y.z. -->
+    <Version>0.3.1</Version>
   </PropertyGroup>
 
   <ItemGroup>

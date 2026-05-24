@@ -32,6 +32,14 @@ function updateCargoToml(filePath: string, newVersion: string) {
   writeFileSync(filePath, updated.join('\n'))
 }
 
+function updateCsproj(filePath: string, newVersion: string) {
+  const content = readFileSync(filePath, 'utf-8')
+  if (!/<Version>[^<]*<\/Version>/.test(content)) {
+    throw new Error(`No <Version> element found in ${filePath}`)
+  }
+  writeFileSync(filePath, content.replace(/<Version>[^<]*<\/Version>/, `<Version>${newVersion}</Version>`))
+}
+
 const bump = process.argv[2] ?? 'patch'
 
 const pkgPath = join(ROOT, 'package.json')
@@ -52,7 +60,16 @@ for (const rel of cargoFiles) {
   updateCargoToml(join(ROOT, rel), newVersion)
 }
 
+const csprojFiles = [
+  'core-api/src/CoreApi/CoreApi.csproj',
+]
+
+for (const rel of csprojFiles) {
+  updateCsproj(join(ROOT, rel), newVersion)
+}
+
 console.log(`v${oldVersion} → v${newVersion}`)
 console.log('Updated:')
 console.log('  package.json')
 for (const rel of cargoFiles) console.log(`  ${rel}`)
+for (const rel of csprojFiles) console.log(`  ${rel}`)

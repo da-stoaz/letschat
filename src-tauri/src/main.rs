@@ -259,9 +259,22 @@ fn show_main_window(app: &AppHandle) {
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        // The single-instance callback fires when the OS launches a second copy
+        // of the app — on Windows/Linux that's how a `letschat://…` click reaches
+        // an already-running instance, so the URL arrives as a command-line arg.
+        // Forward it to the deep-link plugin so the same `onOpenUrl` listener on
+        // the frontend handles cold-start and warm-start identically.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             show_main_window(app);
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let _ = app.deep_link().handle_on_open_url(args.into_iter().skip(1));
+            }
+            #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+            let _ = args;
         }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -276,6 +289,20 @@ fn main() {
             save_attachment_file
         ])
         .setup(|app| {
+            // Register the `letschat://` URL scheme with the OS so that clicking
+            // a join link launches this app. On installed builds the OS already
+            // knows about the scheme (macOS via Info.plist, Windows via the
+            // installer's registry entry, Linux via the .desktop file) so this
+            // call is effectively a dev-mode safety net to keep `tauri dev` and
+            // unpackaged binaries working too.
+            #[cfg(debug_assertions)]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(error) = app.deep_link().register("letschat") {
+                    eprintln!("deep-link: failed to register `letschat` scheme: {error}");
+                }
+            }
+
             let open_item = MenuItem::with_id(app, "tray_open", "Open", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
             let separator = PredefinedMenuItem::separator(app)?;

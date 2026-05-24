@@ -1,0 +1,7 @@
+# Built installers are not checked in — operators drop their own here, or run
+# `bun run downloads:sync` to copy from src-tauri/target/release/bundle/.
+*.dmg
+*.msi
+*.exe
+*.AppImage
+*.deb

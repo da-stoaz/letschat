@@ -1,6 +1,7 @@
 using CoreApi.Configuration;
 using CoreApi.Data;
 using CoreApi.Models;
+using CoreApi.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,12 +16,15 @@ public static class MiscEndpoints
     {
         routes.MapGet("/health", () => Results.Json(new { status = "ok" }));
 
-        routes.MapGet("/.well-known/letschat.json", (ServiceOptions options) =>
+        routes.MapGet("/.well-known/letschat.json", (ServiceOptions options, VersionInfo version) =>
             new WellKnownResponse(
                 options.DiscoverySpacetimeDbUri,
                 options.DiscoveryAuthUrl,
                 options.DiscoveryLiveKitUrl,
-                options.DiscoveryDatabase));
+                options.DiscoveryDatabase,
+                version.ServerVersion,
+                version.RecommendedClientVersion,
+                version.MinClientVersion));
 
         routes.MapPost("/admin/accounts/rebind", AdminRebind);
     }
