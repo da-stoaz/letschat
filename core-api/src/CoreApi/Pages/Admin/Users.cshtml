@@ -4,8 +4,13 @@
     ViewData["Title"] = "Users";
 }
 
-<h1 class="page-title">Users</h1>
-<p class="page-sub">Search and manage LetsChat accounts.</p>
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div>
+        <h1 class="page-title">Users</h1>
+        <p class="page-sub">Search and manage LetsChat accounts.</p>
+    </div>
+    <a class="btn btn-primary" href="/admin/users/create">New user</a>
+</div>
 
 <div class="card">
     <form method="get" style="display:flex;gap:8px;flex-wrap:wrap">

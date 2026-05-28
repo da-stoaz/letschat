@@ -83,6 +83,11 @@ type LinkPayload = {
 type LoginPayload = {
   username: string
   password: string
+  // Optional — when the account is admin-created and the server still holds a
+  // `pending:{…}` placeholder identity, the login endpoint swaps in these
+  // values on first sign-in. Ignored for normal accounts.
+  spacetimeIdentity?: Identity
+  spacetimeToken?: string
 }
 
 type LivekitTokenPayload = {

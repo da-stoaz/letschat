@@ -40,7 +40,18 @@ public sealed record LinkRequest(
     string SpacetimeIdentity,
     string? Email = null);
 
-public sealed record LoginRequest(string Username, string Password);
+/// <summary>
+/// Login payload. <c>SpacetimeIdentity</c> and <c>SpacetimeToken</c> are optional
+/// — when the stored account still carries an <c>admin-created</c> placeholder
+/// identity (see <c>CreateUser</c> in the admin panel), the login endpoint
+/// swaps in the real values from the client transparently on first sign-in.
+/// For normal accounts these are ignored.
+/// </summary>
+public sealed record LoginRequest(
+    string Username,
+    string Password,
+    string? SpacetimeIdentity = null,
+    string? SpacetimeToken = null);
 
 public sealed record VerifyRequest(SessionToken SessionToken);
 

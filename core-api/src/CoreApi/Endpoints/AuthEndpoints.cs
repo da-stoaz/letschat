@@ -186,6 +186,9 @@ public static class AuthEndpoints
         return await BuildAuthResponse(user, users, tokens);
     }
 
+    /// <summary>Marker prefix the admin Create-User flow seeds for accounts that haven't bound a real SpacetimeDB identity yet.</summary>
+    public const string PendingIdentityPrefix = "pending:";
+
     private static async Task<AuthResponse> Login(
         LoginRequest request,
         UserManager<ApplicationUser> users,
@@ -204,6 +207,40 @@ public static class AuthEndpoints
         }
 
         EnsureSignInAllowed(user);
+
+        // First sign-in for an admin-created account: the stored identity is a
+        // `pending:{guid}` placeholder. If the client sent real values, swap
+        // them in so the chat-domain binding completes on the first login.
+        if (user.SpacetimeIdentity.StartsWith(PendingIdentityPrefix, StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(request.SpacetimeIdentity)
+            && !string.IsNullOrWhiteSpace(request.SpacetimeToken))
+        {
+            var realIdentity = request.SpacetimeIdentity.Trim();
+            var realToken = request.SpacetimeToken.Trim();
+            var identityNorm = Validation.NormalizeIdentity(realIdentity);
+
+            // Reject the swap if another account already owns this identity —
+            // SpacetimeIdentityNorm carries the unique index either way.
+            var conflict = await users.Users.AnyAsync(u =>
+                u.SpacetimeIdentityNorm == identityNorm && u.Id != user.Id);
+            if (conflict)
+            {
+                throw ApiException.Conflict(
+                    "This client identity is already linked to another account.");
+            }
+
+            user.SpacetimeIdentity = realIdentity;
+            user.SpacetimeIdentityNorm = identityNorm;
+            user.SpacetimeToken = realToken;
+            user.UpdatedAtUtc = DateTime.UtcNow;
+
+            var update = await users.UpdateAsync(user);
+            if (!update.Succeeded)
+            {
+                throw TranslateIdentityFailure(update);
+            }
+        }
+
         return await BuildAuthResponse(user, users, tokens);
     }
 

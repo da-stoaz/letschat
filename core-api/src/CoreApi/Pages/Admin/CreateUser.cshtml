@@ -1,0 +1,60 @@
+@page "/admin/users/create"
+@model CreateUserModel
+@{
+    ViewData["Title"] = "Create user";
+}
+
+<p><a href="/admin/users" class="muted small">← Back to users</a></p>
+<h1 class="page-title">Create user</h1>
+<p class="page-sub">
+    Admin-created accounts go straight to <strong>Active</strong> — the admin is the approval.
+    Hand the user the username and password out of band; their SpacetimeDB identity binds on first sign-in.
+</p>
+
+@if (Model.Error is not null)
+{
+    <div class="alert alert-error">@Model.Error</div>
+}
+
+<div class="card">
+    <form method="post">
+        @Html.AntiForgeryToken()
+
+        <div class="field">
+            <label for="username">Username</label>
+            <input class="input" id="username" name="Username" value="@Model.Username"
+                   autocapitalize="none" spellcheck="false" autocomplete="off" required
+                   minlength="2" maxlength="32" pattern="[a-z0-9_]+">
+            <p class="muted small">Lower-case letters, digits, underscore. 2–32 characters.</p>
+        </div>
+
+        <div class="field">
+            <label for="displayName">Display name</label>
+            <input class="input" id="displayName" name="DisplayName" value="@Model.DisplayName"
+                   autocomplete="off" required maxlength="100">
+        </div>
+
+        <div class="field">
+            <label for="email">Email</label>
+            <input class="input" id="email" name="Email" type="email" value="@Model.Email"
+                   autocapitalize="none" spellcheck="false" autocomplete="off" required>
+        </div>
+
+        <div class="field">
+            <label for="password">Initial password</label>
+            <input class="input" id="password" name="Password" type="password"
+                   autocomplete="new-password" required minlength="8">
+            <p class="muted small">Share this with the user securely. They can change it after signing in.</p>
+        </div>
+
+        <div class="field check">
+            <input type="checkbox" id="isAdmin" name="IsAdmin" value="true" @(Model.IsAdmin ? "checked" : "")>
+            <label for="isAdmin">Grant administrator role</label>
+        </div>
+
+        <div class="btn-row" style="margin-top:8px">
+            <button type="submit" class="btn btn-primary">Create account</button>
+            <a class="btn" href="/admin/users">Cancel</a>
+        </div>
+    </form>
+</div>

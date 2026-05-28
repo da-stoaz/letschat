@@ -36,6 +36,13 @@ public sealed class ServiceOptions
     /// <summary>Optional bootstrap admin — created on startup if both are set.</summary>
     public string? BootstrapAdminUsername { get; init; }
     public string? BootstrapAdminPassword { get; init; }
+    /// <summary>
+    /// Email for the bootstrap admin. Defaults to <c>admin@letschat.local</c>;
+    /// must be set explicitly when the placeholder collides with a real account.
+    /// Required because <c>RequireUniqueEmail</c> is on — Identity rejects an
+    /// empty email even on the first seeded account.
+    /// </summary>
+    public required string BootstrapAdminEmail { get; init; }
 
     // ── Phase 2: registration hardening ──────────────────────────────────────
 
@@ -119,6 +126,7 @@ public sealed class ServiceOptions
 
             BootstrapAdminUsername = GetOptional("ADMIN_BOOTSTRAP_USERNAME"),
             BootstrapAdminPassword = GetOptional("ADMIN_BOOTSTRAP_PASSWORD"),
+            BootstrapAdminEmail = Get("ADMIN_BOOTSTRAP_EMAIL", "admin@letschat.local"),
 
             RequireEmailConfirmation = GetBool("REQUIRE_EMAIL_CONFIRMATION", true),
             RequireAdminApproval = GetBool("REQUIRE_ADMIN_APPROVAL", false),
