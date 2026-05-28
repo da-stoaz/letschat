@@ -21,18 +21,34 @@ public static class DbInitializer
         var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("DbInitializer");
 
         var db = services.GetRequiredService<AppDbContext>();
-        await db.Database.MigrateAsync();
-        logger.LogInformation("Database migrations applied.");
+        // Relational providers (Postgres in prod) run real EF migrations; the
+        // InMemory provider used in tests has no migration story, so let EF
+        // derive a transient schema from the model instead.
+        if (db.Database.IsRelational())
+        {
+            await db.Database.MigrateAsync();
+            logger.LogInformation("Database migrations applied.");
+        }
+        else
+        {
+            await db.Database.EnsureCreatedAsync();
+            logger.LogInformation("Non-relational schema created from model.");
+        }
 
         // Load (seeding on first run) the runtime-editable system configuration.
         await services.GetRequiredService<Services.SystemConfigService>().InitializeAsync();
         logger.LogInformation("System configuration loaded.");
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var swept = await db.PendingUploads.Where(p => p.ExpiresAt < now).ExecuteDeleteAsync();
-        if (swept > 0)
+        // ExecuteDeleteAsync is a relational-only EF method; the InMemory
+        // provider in tests has no pending uploads to sweep anyway.
+        if (db.Database.IsRelational())
         {
-            logger.LogInformation("Swept {Count} expired pending upload(s).", swept);
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var swept = await db.PendingUploads.Where(p => p.ExpiresAt < now).ExecuteDeleteAsync();
+            if (swept > 0)
+            {
+                logger.LogInformation("Swept {Count} expired pending upload(s).", swept);
+            }
         }
 
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
@@ -62,10 +78,16 @@ public static class DbInitializer
             return;
         }
 
+        // Bootstrap admin uses a placeholder SpacetimeDB identity — it's
+        // valid as an admin-panel principal but can't sign in to the desktop
+        // client until rebound. Email is required (RequireUniqueEmail=true).
         var admin = new ApplicationUser
         {
             UserName = username,
+            Email = options.BootstrapAdminEmail,
             DisplayName = "Administrator",
+            SpacetimeIdentity = "pending:bootstrap-admin",
+            SpacetimeIdentityNorm = "pending:bootstrap-admin",
             Status = AccountStatus.Active,
             EmailConfirmed = true,
         };

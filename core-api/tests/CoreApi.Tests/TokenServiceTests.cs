@@ -37,6 +37,7 @@ public sealed class TokenServiceTests
         EmailFromName = "Test",
         RateLimitPermitLimit = 10,
         RateLimitWindowSeconds = 300,
+        BootstrapAdminEmail = "admin@test.local",
     };
 
     private const string Secret = "this-is-a-sufficiently-long-test-jwt-secret-value";
