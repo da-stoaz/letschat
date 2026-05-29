@@ -1,6 +1,9 @@
+# Shared by core-api/Dockerfile and core-api/tools/CoreApi.Migrator/Dockerfile.
+# `tools/` used to be excluded here; that broke the migrator build because
+# its Dockerfile lives under tools/ and copies the directory in. The main
+# core-api image only COPYs `src/`, so leaving tools/ in the build context
+# doesn't grow it.
 **/bin/
 **/obj/
-tests/
-tools/
 *.md
 .env*
