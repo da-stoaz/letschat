@@ -22,6 +22,39 @@
 
 <form method="post" id="config-form">
     <div class="card">
+        <h2>Spaces</h2>
+        <p class="hint" style="margin-top:0">
+            Who can call <code>create_server</code> on the SpacetimeDB module. Lives in
+            the chat-domain database, not the runtime <code>SystemConfig</code> row.
+        </p>
+        @if (!Model.SpacetimeWriteEnabled)
+        {
+            <div class="alert alert-error" style="margin-bottom:14px">
+                <strong>Read-only.</strong> <code>SPACETIMEDB_SERVICE_TOKEN</code> is not
+                set on core-api, so this form can't push changes to SpacetimeDB. See the
+                <code>ServiceOptions</code> doc comment for the bootstrap (generate a
+                SpacetimeDB token, promote that identity to admin via the publisher's
+                CLI, set the env var, restart core-api).
+            </div>
+        }
+        <div class="field">
+            <label>Space creation policy</label>
+            <div class="check">
+                <input type="radio" id="sccp-anyone" name="SpaceCreatePolicy" value="Anyone"
+                       checked="@(Model.SpaceCreatePolicy == "Anyone")"
+                       disabled="@(!Model.SpacetimeWriteEnabled)">
+                <label for="sccp-anyone">Anyone — any signed-in user can create spaces (default)</label>
+            </div>
+            <div class="check">
+                <input type="radio" id="sccp-admins" name="SpaceCreatePolicy" value="AdminsOnly"
+                       checked="@(Model.SpaceCreatePolicy == "AdminsOnly")"
+                       disabled="@(!Model.SpacetimeWriteEnabled)">
+                <label for="sccp-admins">Admins only — only users with <code>is_admin = true</code> on the SpacetimeDB <code>User</code> row</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
         <h2>Registration</h2>
         <div class="field check">
             <input type="checkbox" id="ro" name="RegistrationOpen" value="true" checked="@Model.RegistrationOpen">

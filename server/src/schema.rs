@@ -26,6 +26,26 @@ pub enum InvitePolicy {
     Everyone,
 }
 
+/// Who may call `create_server`. Set on the `SystemSettings` singleton and
+/// editable by any user with `User.is_admin = true`.
+#[derive(SpacetimeType, Clone, PartialEq, Eq)]
+pub enum SpaceCreatePolicy {
+    /// Default — preserves the historical behaviour where any signed-in user
+    /// can create unlimited spaces.
+    Anyone,
+    /// Only users with `User.is_admin = true` can create spaces.
+    AdminsOnly,
+}
+
+/// Instance-wide chat-domain settings (singleton, primary key fixed at 1).
+/// Seeded by the `init` lifecycle reducer on first module publish.
+#[spacetimedb::table(accessor = system_settings, public)]
+pub struct SystemSettings {
+    #[primary_key]
+    pub id: u8,
+    pub space_create_policy: SpaceCreatePolicy,
+}
+
 #[spacetimedb::table(accessor = user, public)]
 pub struct User {
     #[primary_key]
@@ -36,6 +56,12 @@ pub struct User {
     pub avatar_url: Option<String>,
     #[index(btree)]
     pub created_at: Timestamp,
+    /// Instance-level admin flag (independent of per-server Owner/Moderator).
+    /// Gates `set_space_create_policy`, `set_user_admin`, and the policy
+    /// check in `create_server`. Default is `false`; populated by the
+    /// `init` reducer (publisher becomes admin) and by `set_user_admin`.
+    #[default(false)]
+    pub is_admin: bool,
 }
 
 #[spacetimedb::table(accessor = auth_credential)]

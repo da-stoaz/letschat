@@ -76,6 +76,25 @@ public sealed class ServiceOptions
     public required int RateLimitPermitLimit { get; init; }
     public required int RateLimitWindowSeconds { get; init; }
 
+    // ── SpacetimeDB service identity (1.5 — space permissions & discovery) ───
+
+    /// <summary>HTTP base for SpacetimeDB reducer / SQL calls.</summary>
+    public required string SpacetimeHttpUrl { get; init; }
+
+    /// <summary>Module name (database identifier) for reducer URLs.</summary>
+    public required string SpacetimeModuleName { get; init; }
+
+    /// <summary>
+    /// Bearer token for the SpacetimeDB Identity that core-api signs reducer
+    /// calls with. Optional — when unset, instance-admin features that require
+    /// SpacetimeDB writes (space create policy, future admin pushes) are
+    /// disabled in the panel with a clear hint. To bootstrap: publish the
+    /// module, generate a token (<c>spacetime token gen</c>), promote that
+    /// token's identity to admin (<c>spacetime call letschat set_user_admin
+    /// &lt;identity&gt; true</c>) using the publisher identity, then set this var.
+    /// </summary>
+    public string? SpacetimeServiceToken { get; init; }
+
     public static ServiceOptions FromConfiguration(IConfiguration config)
     {
         string Get(string key, string fallback) =>
@@ -141,6 +160,10 @@ public sealed class ServiceOptions
 
             RateLimitPermitLimit = GetInt("RATE_LIMIT_PERMIT", 10),
             RateLimitWindowSeconds = GetInt("RATE_LIMIT_WINDOW_SECONDS", 300),
+
+            SpacetimeHttpUrl = Get("SPACETIMEDB_HTTP_URL", "http://localhost:4300"),
+            SpacetimeModuleName = Get("SPACETIMEDB_MODULE_NAME", "letschat"),
+            SpacetimeServiceToken = GetOptional("SPACETIMEDB_SERVICE_TOKEN"),
         };
     }
 }

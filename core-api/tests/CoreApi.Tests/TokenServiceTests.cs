@@ -38,6 +38,8 @@ public sealed class TokenServiceTests
         RateLimitPermitLimit = 10,
         RateLimitWindowSeconds = 300,
         BootstrapAdminEmail = "admin@test.local",
+        SpacetimeHttpUrl = "http://localhost:0",
+        SpacetimeModuleName = "letschat-test",
     };
 
     private const string Secret = "this-is-a-sufficiently-long-test-jwt-secret-value";

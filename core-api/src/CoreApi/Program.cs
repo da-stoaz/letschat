@@ -78,6 +78,15 @@ builder.Services.AddScoped<AccountEmailService>();
 builder.Services.AddSingleton<SystemConfigService>();
 builder.Services.AddSingleton<AuditService>();
 
+// SpacetimeDB HTTP wrapper — admin panel uses it to read / set chat-domain
+// settings (currently the space-create policy from plan 1.5).
+builder.Services.AddSingleton<SpacetimeClient>();
+builder.Services.AddHttpClient("spacetimedb", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(8);
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+});
+
 // Version triple (server + recommended/min client). Read once at startup
 // from the assembly's InformationalVersion plus env overrides.
 builder.Services.AddSingleton<VersionInfo>();
