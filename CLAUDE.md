@@ -9,24 +9,20 @@ LetsChat is a Tauri-based desktop chat application with a distributed backend. T
 - **Frontend**: React 19 + TypeScript, Vite, Tailwind CSS 4, shadcn/ui (via @base-ui/react), Zustand 5 (18 stores), React Router 7, React Query 5
 - **Desktop shell**: Tauri 2 (wraps the Vite frontend)
 - **Real-time database**: SpacetimeDB 2.2 — Rust WASM module defines schema and reducers; clients connect via WebSocket
-- **Auth / backend service**: in transition — see "Auth service" below
+- **Backend service**: `core-api` — .NET 10 / ASP.NET Core Identity + PostgreSQL. Public API on `127.0.0.1:8787`; admin Razor pages on the separate `127.0.0.1:8788` listener.
 - **Voice/video**: LiveKit (`livekit-client` 2.19)
 - **File storage**: MinIO (S3-compatible), presigned URLs for client access
 
-### Auth service — in transition
+### Auth service — cutover done
 
-Two implementations of the backend HTTP service exist:
-
-- **`auth-service/`** — the original Rust (Axum) + SQLite + Argon2 + JWT service. **This is still the production service.**
-- **`core-api/`** — a .NET / ASP.NET Core Identity + PostgreSQL rebuild (Phase 1 of `.claude/plans/1-control-panel.md`). Built and verified, runnable in dev, but **not yet cut over to production**. See `core-api/README.md`.
-
-Both expose the same HTTP/JSON contract on `127.0.0.1:8787`, so the desktop client works against either. Until the cutover, `auth-service/` is authoritative; run only one at a time.
+`core-api/` (.NET) is authoritative in dev **and** in the prod compose files. The legacy Rust `auth-service/` directory is kept buildable for one more release as a rollback safety net and as the source database for the one-time SQLite→Postgres migration (`core-api/tools/CoreApi.Migrator`). It is not started by any of the current compose files. Plan to delete `auth-service/` after one stable release of core-api in prod.
 
 ### Service Communication
 
 ```
 [Client]
-  ├─→ Auth Service (HTTP) — JWT tokens, LiveKit tokens, file upload presigned URLs
+  ├─→ core-api (HTTP) — JWT tokens, LiveKit tokens, file upload presigned URLs,
+  │                     admin panel (on a separate non-public listener)
   ├─→ SpacetimeDB (WebSocket) — real-time DB, permissions enforcement via reducers
   ├─→ LiveKit (WebSocket) — voice/video signaling
   └─→ MinIO (S3 API) — file upload/download via presigned URLs
@@ -45,9 +41,7 @@ Auto-discovery via `/.well-known/letschat.json` on the `connect.<domain>` subdom
 ```bash
 bun run services:up       # Start SpacetimeDB (4300), LiveKit (7880), MinIO (4390), PostgreSQL (5433)
 bun run spacetime:publish # Publish WASM module to SpacetimeDB (run once, or after server/ changes)
-bun run auth:dev          # Start the Rust auth-service (127.0.0.1:8787)
-# — or, to run the .NET rebuild instead of auth:dev —
-bun run core-api:dev      # Start core-api (127.0.0.1:8787); needs the PostgreSQL container
+bun run core-api:dev      # Start core-api (127.0.0.1:8787 public, :8788 admin)
 bun run tauri dev         # Start Tauri dev window with Vite hot-reload
 ```
 
@@ -61,10 +55,10 @@ bun run services:reset    # Stop containers and remove volumes (fresh state)
 | Task | Command |
 |------|---------|
 | Start dev services | `bun run services:up` |
-| Start Rust auth-service | `bun run auth:dev` |
-| Start .NET core-api | `bun run core-api:dev` |
+| Start core-api (authoritative) | `bun run core-api:dev` |
 | Run core-api tests | `bun run core-api:test` |
-| Migrate auth-service SQLite → core-api PostgreSQL | `bun run core-api:migrate` |
+| Migrate auth-service SQLite → core-api PostgreSQL (one-time, cutover only) | `bun run core-api:migrate` |
+| Build the legacy Rust auth-service (rollback only) | `bun run auth:dev` |
 | Start desktop app | `bun run tauri dev` |
 | Build frontend | `bun run build` |
 | Build Tauri binary | `bun run tauri:build:local` |
@@ -75,14 +69,14 @@ bun run services:reset    # Stop containers and remove volumes (fresh state)
 
 ### Building individual services
 ```bash
-# Rust auth-service
-cargo build --release --manifest-path auth-service/Cargo.toml
-
-# .NET core-api
+# .NET core-api (authoritative auth backend)
 dotnet build core-api/CoreApi.slnx
 
 # SpacetimeDB WASM module
 cargo build --manifest-path server/Cargo.toml --target wasm32-unknown-unknown --release
+
+# Legacy Rust auth-service (rollback safety net; not started by any compose)
+cargo build --release --manifest-path auth-service/Cargo.toml
 ```
 
 ## Architecture Details
@@ -94,9 +88,9 @@ cargo build --manifest-path server/Cargo.toml --target wasm32-unknown-unknown --
 - Compiles to WASM (`wasm32-unknown-unknown`) and gets published to the running SpacetimeDB instance
 - **Schema migration safety:** `bun run spacetime:publish` is the safe command — it has NO `--yes` flag, so SpacetimeDB will prompt before destructive migrations instead of silently wiping data. If a publish stops on a "requires deleting data" prompt, the schema change is incompatible: fix it by making new fields `Option<T>` or adding `#[default(...)]`, do not bypass the prompt. `bun run spacetime:reset` is the explicit nuke (uses `--delete-data --yes`) for intentional clean slates only.
 
-### Auth services
-- **`auth-service/`** (Rust) — Axum HTTP API: register, login, token refresh, LiveKit token generation, file-upload presigned URLs, admin endpoints. SQLite database at `auth-service/auth.db`, migrated via `auth-service/migrations/`. Loads config from `.env.development` (dev) or `.env.production` (prod) based on `APP_ENV`.
-- **`core-api/`** (.NET) — the same endpoints rebuilt on ASP.NET Core Identity + PostgreSQL (the `auth` database, dev port `5433`). EF Core migrations are applied on startup. See `core-api/README.md` for layout, config, and the data-migration tool.
+### Auth backend
+- **`core-api/`** (.NET 10) — authoritative. ASP.NET Core Identity + PostgreSQL (the `auth` database, dev port `5433`). EF Core migrations are applied on startup. Public API endpoints (register/login/refresh/livekit/uploads/well-known/downloads) on `AUTH_BIND`; admin Razor pages on the separate `ADMIN_BIND` listener that the public reverse proxy is **not** configured to expose. Integration tests in `core-api/tests/CoreApi.Tests/IntegrationTests/`. See `core-api/README.md` for layout, config, and the migration tool.
+- **`auth-service/`** (Rust, deprecated) — the original Axum + SQLite + JWT service. Buildable for one more release as a rollback safety net and as the source database for `core-api/tools/CoreApi.Migrator`. Not started by any compose file.
 
 ### Frontend State (`/src/stores`)
 - 18 Zustand stores — each domain has its own store

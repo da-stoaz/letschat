@@ -78,13 +78,18 @@ foreach (var account in legacyAccounts)
         continue;
     }
 
+    // RequireUniqueEmail=true rejects null emails on subsequent UserManager
+    // updates. The legacy SQLite schema didn't carry an email; stamp a
+    // per-account placeholder so the migrated row remains updatable. Operators
+    // are expected to ask migrated users to set a real email later.
+    var placeholderEmail = $"{username}@migrated.local";
     var user = new ApplicationUser
     {
         Id = Guid.NewGuid().ToString(),
         UserName = username,
         NormalizedUserName = normalizedUserName,
-        Email = null,
-        NormalizedEmail = null,
+        Email = placeholderEmail,
+        NormalizedEmail = placeholderEmail.ToUpperInvariant(),
         EmailConfirmed = true,
         PasswordHash = account.PasswordHash,
         SecurityStamp = Guid.NewGuid().ToString(),

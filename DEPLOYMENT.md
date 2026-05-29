@@ -7,18 +7,20 @@ Full tutorial (beginner step-by-step):
 
 Use this file as a compact operator reference.
 
-> **Backend service:** the production stack described here deploys the Rust
-> `auth-service` (SQLite). `core-api` (.NET / ASP.NET Core Identity +
-> PostgreSQL) is the Phase-1 rebuild from `.claude/plans/1-control-panel.md` —
-> built and verified, but **not yet wired into these production compose files**.
-> When it is cut over, the `auth` service image, the `auth_data` volume, and the
-> backups list below change accordingly.
+> **Backend service:** production runs **`core-api`** (.NET / ASP.NET Core
+> Identity + PostgreSQL). The legacy Rust `auth-service` (SQLite) is retained
+> only as a one-time data source for the migrator and is no longer wired into
+> these compose files. If you're upgrading from an `auth-service` deployment,
+> run the migration described in **First-time cutover** below before bringing
+> the new stack up.
 
 ## Production Compose Entry Points
 
 Shared core services:
 
-- `docker-compose.prod.base.yml`
+- `docker-compose.prod.base.yml` — `spacetimedb`, `postgres`, `core-api`,
+  `module-init`, `livekit`, `minio`, `minio-init`, plus the profile-gated
+  `core-api-migrator` one-shot.
 
 Topology overlays:
 
@@ -29,14 +31,14 @@ Topology overlays:
 
 ```bash
 cp .env.production.tunnel.example .env
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --build
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
 ```
 
 ### Caddy track
 
 ```bash
 cp .env.production.caddy.example .env
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d --build
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
 ```
 
 Validate config before start:
@@ -45,6 +47,46 @@ Validate config before start:
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml config >/tmp/letschat-tunnel-config.yml
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml config >/tmp/letschat-caddy-config.yml
 ```
+
+## First-time cutover from `auth-service`
+
+Skip this section for fresh deployments.
+
+```bash
+# 1. Pull the new images (core-api, postgres, migrator) without starting yet.
+docker compose -f docker-compose.prod.base.yml pull
+
+# 2. Stop the legacy auth-service so the SQLite file is no longer being
+#    written to during migration. Other services can keep serving until step 5.
+docker stop letschat-auth || true
+
+# 3. Bring postgres up so the migrator has a target.
+docker compose -f docker-compose.prod.base.yml up -d postgres
+
+# 4. Run the migrator. It mounts the legacy `auth_data` SQLite volume
+#    read-only at /data/auth.db and writes Identity rows into postgres.
+#    Idempotent: re-running skips users already present by username or
+#    SpacetimeDB identity. Migrated accounts get an `<username>@migrated.local`
+#    placeholder email; ask users to set a real one after first sign-in.
+docker compose -f docker-compose.prod.base.yml \
+    --profile migration run --rm core-api-migrator
+
+# 5. Bring the rest of the stack up (core-api + overlay).
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
+
+# 6. Verify before exposing publicly.
+curl -fsSL http://localhost/health             # via proxy
+curl -fsSL http://localhost/.well-known/letschat.json
+docker compose logs core-api --tail=80
+
+# 7. Once you're satisfied, the legacy SQLite volume is no longer needed.
+#    Snapshot it first if you want a paranoid backup, then drop it.
+docker volume rm letschat_auth_data
+```
+
+Rollback: redeploy the previous git tag's compose files and `pull` the
+older `letschat-auth:vX.Y.Z` image. The `auth_data` volume is left intact
+until step 7 specifically to make this safe.
 
 ## SpacetimeDB Publish (Production)
 
@@ -58,15 +100,38 @@ spacetime publish --server http://127.0.0.1:44300 letschat --module-path server 
 schema updates, drop `--yes` so SpacetimeDB prompts before any destructive
 migration instead of wiping data.
 
+## Admin Control Panel
+
+`core-api` serves the admin Razor area on container port `8788`. The
+host mapping is **loopback-only** (`127.0.0.1:48788`), so the panel is not
+reachable from the public internet even with the reverse proxy running.
+
+Reach it from an operator workstation via SSH port-forward:
+
+```bash
+ssh -L 8788:127.0.0.1:48788 your-host
+# then open http://localhost:8788/admin in a browser
+```
+
+The first time the stack starts, the bootstrap admin from
+`ADMIN_BOOTSTRAP_USERNAME` / `ADMIN_BOOTSTRAP_PASSWORD` / `ADMIN_BOOTSTRAP_EMAIL`
+is created automatically. Change the password as soon as you sign in and
+unset those env vars on the next deploy.
+
 ## Service / Env Reference
 
 | Area | Key env / file | Notes |
 |---|---|---|
-| Auth | `AUTH_JWT_SECRET` | Required in both tracks |
-| Auth admin | `AUTH_ADMIN_API_KEY` | Optional; enables explicit host-admin account rebinding endpoint |
+| Auth backend | `AUTH_JWT_SECRET`, `AUTH_ADMIN_API_KEY` | JWT secret required; admin API key optional (enables `/admin/accounts/rebind`) |
+| PostgreSQL | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Only the password is mandatory; defaults are `letschat` / `auth` |
+| Bootstrap admin | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD`, `ADMIN_BOOTSTRAP_EMAIL` | First-run seeding; remove from env after first sign-in |
+| Registration policy | `REQUIRE_EMAIL_CONFIRMATION`, `REQUIRE_ADMIN_APPROVAL` | Booleans (`true`/`false`) — also runtime-editable via the admin panel |
+| Email | `EMAIL_SENDER`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_STARTTLS`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME` | `EMAIL_SENDER=smtp` for real delivery; `log` only in dev |
+| Rate limiting | `RATE_LIMIT_PERMIT`, `RATE_LIMIT_WINDOW_SECONDS` | Per-IP fixed window on register/login/resend |
+| Client versions | `RECOMMENDED_CLIENT_VERSION`, `MIN_CLIENT_VERSION` | Optional; default to backend's compiled version |
 | LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `livekit/config.prod.yaml` | Keys must match exactly |
 | MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT` | Public endpoint is used in presigned URLs |
-| Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_DATABASE` | Served by `discovery` container at `/.well-known/letschat.json` |
+| Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_DATABASE` | Served by core-api at `/.well-known/letschat.json` |
 | Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
 | Caddy only | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `CONNECT_DOMAIN` | Used by `deploy/caddy/Caddyfile` |
 
@@ -79,29 +144,76 @@ LetsChat setup auto-discovery expects this shape:
   "spacetimedb": "wss://chat.example.com",
   "auth": "https://auth.example.com",
   "livekit": "wss://lk.example.com",
-  "database": "letschat"
+  "database": "letschat",
+  "serverVersion": "0.3.1",
+  "recommendedClient": "0.3.1",
+  "minClient": "0.3.1"
 }
 ```
+
+`serverVersion` is the running core-api version. `recommendedClient` and
+`minClient` default to the same value; operators can pin different desktop-app
+versions via env (used by `/downloads/{os}` and future client-side update
+gating).
 
 LiveKit scheme by track:
 
 - Tunnel track: usually `ws://lk.<domain>:44380`
 - Caddy track: usually `wss://lk.<domain>`
 
-Quick validation:
-
-```bash
-curl -i http://127.0.0.1:44305/.well-known/letschat.json
-```
-
 Public routing:
 
-- Tunnel track: add `connect.<domain> -> http://discovery:80` ingress in Cloudflare Tunnel.
+- Tunnel track: add `connect.<domain> -> http://core-api:8787` ingress in
+  Cloudflare Tunnel.
 - Caddy track: set `CONNECT_DOMAIN` and ensure DNS points to host IP.
 
-Template file:
+## Configuration lifecycle (env vs admin panel)
 
-- `deploy/examples/letschat.well-known.json.example`
+Two layers of config, two lifecycles:
+
+- **Env-only** — secrets and infrastructure pointers (`AUTH_JWT_SECRET`,
+  `POSTGRES_PASSWORD`, `MINIO_*`, `LIVEKIT_*`, `DISCOVERY_*`, `ADMIN_BOOTSTRAP_*`,
+  `EMAIL_SENDER`, `RECOMMENDED_CLIENT_VERSION`, `MIN_CLIENT_VERSION`). Read
+  once at startup. Restart-only to change.
+- **First-run defaults** — operational policy (`REQUIRE_EMAIL_CONFIRMATION`,
+  `REQUIRE_ADMIN_APPROVAL`, `SMTP_*`, `EMAIL_FROM_*`, `RATE_LIMIT_*`). On a
+  fresh deployment these seed a row in the runtime `SystemConfig` table; from
+  then on the live value comes from `/admin/config` and **the env vars are
+  ignored**. The env file becomes documentation, not configuration.
+
+Implications:
+
+- Bootstrap: a fresh deploy can be fully configured from `.env` before the
+  admin panel is ever opened.
+- Live edits: post-bootstrap, change policy/SMTP/rate-limit via the admin
+  panel — no restart.
+- "I changed `SMTP_HOST` in `.env` and nothing happened" → expected. Edit it
+  in `/admin/config`, or wipe the Postgres volume to re-seed from env.
+- Rolling out a new instance from the same `.env`: env defaults apply
+  cleanly because there's no row yet to override them.
+
+## Upgrade Strategy
+
+Routine releases do **not** have to be applied one-by-one. EF Core applies
+all pending migrations on `core-api` startup in order, the SpacetimeDB module
+diff is computed against whatever is currently published, and the Tauri
+desktop binary is independent of both. Going from `vA` directly to `vC` runs
+the same end state as `vA → vB → vC`.
+
+Three exceptions where the order DOES matter:
+
+1. **The legacy auth-service → core-api migrator** is the only path from a
+   SQLite `auth-service` deployment to the Postgres `core-api`. It will be
+   removed from CI one release after the cutover. Operators still on
+   `auth-service` past that point will need to step through a release that
+   still ships the migrator before jumping forward.
+2. **Destructive SpacetimeDB schema changes.** `spacetime publish` prompts
+   before deleting data; the prompt is the safety net. Always run publishes
+   without `--yes` for upgrades (see "SpacetimeDB Publish" above) so you
+   don't silently drop tables.
+3. **Env var renames.** Always read the release notes for new/renamed
+   variables before pulling. core-api fails fast on missing required values,
+   but a renamed-but-still-set old name silently falls back to defaults.
 
 ## Operations Basics
 
@@ -121,6 +233,12 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
 
 Minimum backups:
 
-- `auth_data` volume (auth SQLite)
+- `postgres_data` volume (Identity store, system config, audit log)
 - `minio_data` volume (attachments)
-- `spacetimedb_home` volume
+- `spacetimedb_home` volume (chat history)
+
+Postgres backup example:
+
+```bash
+docker exec letschat-postgres pg_dump -U letschat auth | gzip > auth-$(date +%F).sql.gz
+```

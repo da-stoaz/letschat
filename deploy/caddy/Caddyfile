@@ -1,8 +1,12 @@
 # LetsChat production reverse-proxy map.
 # Domains are provided via docker-compose.prod.caddy.yml environment variables.
+#
+# core-api binds the public API on container port 8787 and the admin Razor
+# pages on 8788. Only 8787 is fronted by Caddy; the admin port stays bound
+# to 127.0.0.1 on the host and is reached over SSH port-forward.
 
 {$AUTH_DOMAIN} {
-  reverse_proxy auth-service:44301
+  reverse_proxy core-api:8787
 }
 
 {$CHAT_DOMAIN} {
@@ -17,6 +21,8 @@
   reverse_proxy livekit:44380
 }
 
+# Serves the public landing page, /.well-known/letschat.json discovery, and
+# /downloads/{os} installer resolver. Same upstream as auth.<domain>.
 {$CONNECT_DOMAIN} {
-  reverse_proxy auth-service:44301
+  reverse_proxy core-api:8787
 }

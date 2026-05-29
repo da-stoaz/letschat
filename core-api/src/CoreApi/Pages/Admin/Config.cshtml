@@ -5,7 +5,11 @@
 }
 
 <h1 class="page-title">System configuration</h1>
-<p class="page-sub">Runtime settings. Changes take effect immediately and are recorded in the audit log.</p>
+<p class="page-sub">
+    Runtime settings. Changes take effect immediately and are recorded in the audit log.
+    These values were seeded from the deployment's <code>.env</code> file on first start —
+    edits here override that, and further <code>.env</code> changes to the same fields are ignored.
+</p>
 
 @if (Model.Message is not null)
 {
