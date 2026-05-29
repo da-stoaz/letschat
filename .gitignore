@@ -27,11 +27,13 @@ dist-ssr
 auth-service/target
 auth-service/*.db
 
-# Environment files — gitignore everything with real secrets
-# Committed templates: .env.example, .env.development.example, .env.production
+# Environment files — gitignore everything with real secrets.
+# Only the *.example templates are committed:
+#   .env.example, .env.development.example,
+#   .env.production.caddy.example, .env.production.tunnel.example
 .env
 .env.development
-.env.prod
+.env.production
 
 # graphify
 

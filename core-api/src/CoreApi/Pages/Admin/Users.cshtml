@@ -1,0 +1,70 @@
+@page "/admin/users"
+@model UsersModel
+@{
+    ViewData["Title"] = "Users";
+}
+
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div>
+        <h1 class="page-title">Users</h1>
+        <p class="page-sub">Search and manage LetsChat accounts.</p>
+    </div>
+    <a class="btn btn-primary" href="/admin/users/create">New user</a>
+</div>
+
+<div class="card">
+    <form method="get" style="display:flex;gap:8px;flex-wrap:wrap">
+        <input class="input" name="q" value="@Model.Q" placeholder="Search username, display name or email"
+               style="flex:1;min-width:220px" autocapitalize="none" spellcheck="false">
+        <button type="submit" class="btn btn-primary">Search</button>
+        @if (!string.IsNullOrWhiteSpace(Model.Q))
+        {
+            <a class="btn" href="/admin/users">Clear</a>
+        }
+    </form>
+</div>
+
+<div class="card">
+    @if (Model.Results.Count == 0)
+    {
+        <p class="muted">No accounts match.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Username</th><th>Display name</th><th>Email</th>
+                        <th>Status</th><th>Role</th><th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var u in Model.Results)
+                    {
+                        var (css, text) = AdminViewHelpers.StatusBadge(u.Status);
+                        <tr>
+                            <td><strong>@u.UserName</strong></td>
+                            <td>@u.DisplayName</td>
+                            <td class="muted">@(string.IsNullOrEmpty(u.Email) ? "—" : u.Email)</td>
+                            <td><span class="badge @css">@text</span></td>
+                            <td>
+                                @if (Model.AdminIds.Contains(u.Id))
+                                {
+                                    <span class="badge badge-admin">Admin</span>
+                                }
+                            </td>
+                            <td><a class="btn btn-sm" href="/admin/users/@u.Id">Manage</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (Model.Truncated)
+        {
+            <p class="muted small" style="margin-top:12px">
+                Showing the first 200 results — narrow your search to see more.
+            </p>
+        }
+    }
+</div>

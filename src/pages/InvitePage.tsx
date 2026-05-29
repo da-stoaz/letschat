@@ -35,7 +35,7 @@ export function InvitePage() {
       }, 800)
     } catch (e) {
       setStatus('error')
-      setErrorMsg(e instanceof Error ? e.message : 'Failed to join server.')
+      setErrorMsg(e instanceof Error ? e.message : 'Failed to join space.')
     }
   }
 
@@ -49,7 +49,7 @@ export function InvitePage() {
             </div>
             <CardTitle className="text-xl">You've been invited!</CardTitle>
             <CardDescription>
-              You have an invite to join a server on LetsChat.
+              You have an invite to join a space on LetsChat.
             </CardDescription>
           </CardHeader>
 
@@ -78,7 +78,7 @@ export function InvitePage() {
             {!isAuthenticated ? (
               <>
                 <p className="text-sm text-muted-foreground text-center mb-1">
-                  You need to be signed in to join a server.
+                  You need to be signed in to join a space.
                 </p>
                 <Button className="w-full" onClick={() => navigate(`/auth?redirect=/invite/${token}`)}>
                   Sign in to join
@@ -115,7 +115,7 @@ export function InvitePage() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground">
-          By accepting, you agree to abide by the server rules.
+          By accepting, you agree to abide by the space rules.
         </p>
       </div>
     </section>

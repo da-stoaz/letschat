@@ -3,7 +3,11 @@ services:
   # Host port 44300 is optional admin access. Public clients should use the
   # chat subdomain through either tunnel or reverse proxy.
   spacetimedb:
-    image: clockworklabs/spacetime:latest
+    # Pinned (not :latest) so prod runs a known server version. Must stay on the
+    # same 2.2.x line as the `spacetimedb` crate the module is built against and
+    # the `spacetimedb` npm SDK — a minor-version skew breaks module load and
+    # the client connection. `:latest` is cached per-host and never auto-refreshes.
+    image: clockworklabs/spacetime:v2.2.1
     command: start
     container_name: letschat-spacetimedb
     ports:
@@ -18,32 +22,116 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # ── Auth service ─────────────────────────────────────────────────────────────
-  # Host port 44301 is for local admin checks. Public clients should use the
-  # auth subdomain via tunnel or reverse proxy.
-  auth-service:
-    image: ghcr.io/da-stoaz/letschat-auth:latest
-    container_name: letschat-auth
-    ports:
-      - "44301:44301"
+  # ── PostgreSQL (auth database) ──────────────────────────────────────────────
+  # Backs core-api's ASP.NET Core Identity store. Only reachable on the
+  # internal Docker network; never published on a host port.
+  postgres:
+    image: postgres:17-alpine
+    container_name: letschat-postgres
     environment:
-      AUTH_BIND: "0.0.0.0:44301"
-      AUTH_DATABASE_URL: "sqlite:///data/auth.db"
+      POSTGRES_USER: "${POSTGRES_USER:-letschat}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB:-auth}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-letschat} -d $${POSTGRES_DB:-auth}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  # ── core-api (.NET / ASP.NET Core Identity) ─────────────────────────────────
+  # Public HTTP listener (AUTH_BIND) is reached via the reverse proxy on the
+  # auth.<domain> and connect.<domain> hostnames — not via a host port.
+  #
+  # Admin Razor pages (ADMIN_BIND) are bound to a SEPARATE container port and
+  # the host mapping is loopback-only (127.0.0.1:48788). Reach the panel from
+  # an operator workstation via SSH port forward:
+  #   ssh -L 8788:127.0.0.1:48788 your-host
+  # then open http://localhost:8788/admin in a browser.
+  core-api:
+    image: ghcr.io/da-stoaz/letschat-core-api:latest
+    container_name: letschat-core-api
+    ports:
+      - "127.0.0.1:48788:8788"
+    environment:
+      AUTH_BIND: "0.0.0.0:8787"
+      ADMIN_BIND: "0.0.0.0:8788"
+      AUTH_DATABASE_URL: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-auth};Username=${POSTGRES_USER:-letschat};Password=${POSTGRES_PASSWORD}"
       AUTH_JWT_SECRET: "${AUTH_JWT_SECRET}"
       AUTH_ADMIN_API_KEY: "${AUTH_ADMIN_API_KEY:-}"
+
       LIVEKIT_API_KEY: "${LIVEKIT_API_KEY}"
       LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET}"
+
       MINIO_INTERNAL_ENDPOINT: "http://minio:44390"
       MINIO_PUBLIC_ENDPOINT: "${MINIO_PUBLIC_ENDPOINT}"
       MINIO_ACCESS_KEY: "${MINIO_ACCESS_KEY}"
       MINIO_SECRET_KEY: "${MINIO_SECRET_KEY}"
       MINIO_BUCKET: "letschat-files"
-    volumes:
-      - auth_data:/data
+
+      DISCOVERY_SPACETIMEDB_URI: "${DISCOVERY_SPACETIMEDB_URI}"
+      DISCOVERY_AUTH_URL: "${DISCOVERY_AUTH_URL}"
+      DISCOVERY_LIVEKIT_URL: "${DISCOVERY_LIVEKIT_URL}"
+      DISCOVERY_DATABASE: "${DISCOVERY_DATABASE}"
+
+      # Optional version overrides — by default both fall back to the
+      # backend's compiled version (see /.well-known/letschat.json).
+      RECOMMENDED_CLIENT_VERSION: "${RECOMMENDED_CLIENT_VERSION:-}"
+      MIN_CLIENT_VERSION: "${MIN_CLIENT_VERSION:-}"
+
+      # Initial admin for the Razor control panel.
+      ADMIN_BOOTSTRAP_USERNAME: "${ADMIN_BOOTSTRAP_USERNAME:-}"
+      ADMIN_BOOTSTRAP_PASSWORD: "${ADMIN_BOOTSTRAP_PASSWORD:-}"
+      ADMIN_BOOTSTRAP_EMAIL: "${ADMIN_BOOTSTRAP_EMAIL:-admin@letschat.local}"
+
+      REQUIRE_EMAIL_CONFIRMATION: "${REQUIRE_EMAIL_CONFIRMATION:-true}"
+      REQUIRE_ADMIN_APPROVAL: "${REQUIRE_ADMIN_APPROVAL:-false}"
+
+      EMAIL_SENDER: "${EMAIL_SENDER:-smtp}"
+      SMTP_HOST: "${SMTP_HOST}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SMTP_USE_STARTTLS: "${SMTP_USE_STARTTLS:-true}"
+      EMAIL_FROM_ADDRESS: "${EMAIL_FROM_ADDRESS}"
+      EMAIL_FROM_NAME: "${EMAIL_FROM_NAME:-LetsChat}"
+
+      RATE_LIMIT_PERMIT: "${RATE_LIMIT_PERMIT:-10}"
+      RATE_LIMIT_WINDOW_SECONDS: "${RATE_LIMIT_WINDOW_SECONDS:-300}"
     depends_on:
-      - spacetimedb
-      - minio
+      postgres:
+        condition: service_healthy
+      spacetimedb:
+        condition: service_started
+      minio:
+        condition: service_started
     restart: unless-stopped
+
+  # ── Legacy auth-service data → core-api Postgres migrator ───────────────────
+  # Profile-gated one-shot. Reads /data/auth.db (the legacy auth-service SQLite
+  # volume, mounted read-only) and writes ASP.NET Core Identity rows into the
+  # core-api Postgres `auth` database. Idempotent: re-running skips users that
+  # already exist by username or SpacetimeDB identity.
+  #
+  # Trigger explicitly during the cutover from auth-service to core-api:
+  #   docker compose -f docker-compose.prod.base.yml \
+  #     --profile migration run --rm core-api-migrator
+  # then remove the now-stale auth_data volume.
+  core-api-migrator:
+    image: ghcr.io/da-stoaz/letschat-core-api-migrator:latest
+    container_name: letschat-core-api-migrator
+    profiles: ["migration"]
+    environment:
+      AUTH_DATABASE_URL: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-auth};Username=${POSTGRES_USER:-letschat};Password=${POSTGRES_PASSWORD}"
+    volumes:
+      - auth_data:/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   # ── SpacetimeDB module init ──────────────────────────────────────────────────
   # Publishes the server module on first start and after updates.
@@ -113,5 +201,9 @@ services:
 
 volumes:
   spacetimedb_home:
+  postgres_data:
+  # Retained ONLY for the one-time migration from the legacy Rust auth-service.
+  # Safe to remove (`docker volume rm letschat_auth_data`) once the migrator
+  # has been run and core-api is verified.
   auth_data:
   minio_data:

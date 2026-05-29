@@ -145,6 +145,13 @@ async function connectWithUri(uri: string, database: string, reportErrors: boole
       .withUri(uri)
       .withDatabaseName(database)
       .withLightMode(false)
+      // Disable WebSocket message compression. The SDK's default ("gzip")
+      // decompresses by async-iterating a DecompressionStream, which Tauri's
+      // WKWebView runtime does not support — every incoming message throws
+      // `undefined is not a function (near '...chunk of decompressedStream...')`
+      // and the connection never completes. "none" makes the server send
+      // uncompressed frames, which the SDK returns directly.
+      .withCompression('none')
       .withToken(getStoredToken())
       .onConnect((_conn, identity, token) => {
         const identityString =

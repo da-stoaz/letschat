@@ -53,7 +53,7 @@ export function EditServerModal({
       return
     }
     if (file.size > MAX_SERVER_ICON_SIZE_BYTES) {
-      toast.error('Server icon is too large. Max size is 10 MB.')
+      toast.error('Space icon is too large. Max size is 10 MB.')
       return
     }
 
@@ -65,10 +65,10 @@ export function EditServerModal({
           if (current?.startsWith('blob:')) URL.revokeObjectURL(current)
           return URL.createObjectURL(file)
         })
-        toast.success('Server icon uploaded')
+        toast.success('Space icon uploaded')
       })
       .catch((uploadError) => {
-        const message = uploadError instanceof Error ? uploadError.message : 'Could not upload server icon.'
+        const message = uploadError instanceof Error ? uploadError.message : 'Could not upload space icon.'
         toast.error(message)
       })
       .finally(() => {
@@ -100,11 +100,11 @@ export function EditServerModal({
           }
 
           if (nextName !== currentTrimmedName || nextIconUrl !== currentTrimmedIconUrl) {
-            toast.success('Server updated')
+            toast.success('Space updated')
           }
           onClose()
         } catch (e) {
-          const message = e instanceof Error ? e.message : 'Could not update server.'
+          const message = e instanceof Error ? e.message : 'Could not update space.'
           setError(message)
         } finally {
           setIsSaving(false)
@@ -112,8 +112,8 @@ export function EditServerModal({
       }}
     >
       <DialogHeader>
-        <DialogTitle>Edit Server</DialogTitle>
-        <DialogDescription>Update server name and icon.</DialogDescription>
+        <DialogTitle>Edit Space</DialogTitle>
+        <DialogDescription>Update space name and icon.</DialogDescription>
       </DialogHeader>
 
       <input
@@ -131,8 +131,8 @@ export function EditServerModal({
       <div className="space-y-3 rounded-lg border border-border/70 bg-muted/25 px-3 py-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <Label className="text-sm">Server icon</Label>
-            <p className="text-xs text-muted-foreground">Shown in sidebars and server headers.</p>
+            <Label className="text-sm">Space icon</Label>
+            <p className="text-xs text-muted-foreground">Shown in sidebars and space headers.</p>
           </div>
           <Avatar className="size-14 rounded-xl">
             {effectiveIconUrl ? <AvatarImage src={effectiveIconUrl} alt={name || currentName} /> : null}
@@ -169,7 +169,7 @@ export function EditServerModal({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="edit-server-name">Server name</Label>
+        <Label htmlFor="edit-server-name">Space name</Label>
         <Input
           id="edit-server-name"
           value={name}

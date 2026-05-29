@@ -191,12 +191,12 @@ export function ServerManagePage() {
     setLeaving(true)
     try {
       await reducers.leaveServer(numericServerId)
-      toast.success('Left server')
+      toast.success('Left space')
       setActiveServerId(null)
       navigate('/app')
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not leave server.'
-      toast.error('Failed to leave server', { description: message })
+      const message = error instanceof Error ? error.message : 'Could not leave space.'
+      toast.error('Failed to leave space', { description: message })
     } finally {
       setLeaving(false)
     }
@@ -206,8 +206,8 @@ export function ServerManagePage() {
     return (
       <Card className="h-full border-border/70 bg-card/70">
         <CardHeader>
-          <CardTitle>Server not found</CardTitle>
-          <CardDescription>This server is unavailable or you no longer have access.</CardDescription>
+          <CardTitle>Space not found</CardTitle>
+          <CardDescription>This space is unavailable or you no longer have access.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button variant="outline" onClick={() => navigate('/app')}>
@@ -223,7 +223,7 @@ export function ServerManagePage() {
       <Card className="h-full border-border/70 bg-card/70">
         <CardHeader>
           <CardTitle>Loading permissions...</CardTitle>
-          <CardDescription>Checking access to server management.</CardDescription>
+          <CardDescription>Checking access to space management.</CardDescription>
         </CardHeader>
       </Card>
     )
@@ -239,7 +239,7 @@ export function ServerManagePage() {
         <CardContent className="flex h-full min-h-0 flex-col gap-4 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Server Panel</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Space Panel</p>
               <div className="mt-0.5 flex items-center gap-2">
                 <Avatar className="size-8 rounded-lg">
                   {server.iconUrl ? <AvatarImage src={server.iconUrl} alt={server.name} /> : null}
@@ -247,12 +247,12 @@ export function ServerManagePage() {
                 </Avatar>
                 <h1 className="text-2xl font-semibold leading-tight">{server.name}</h1>
               </div>
-              <p className="text-sm text-muted-foreground">Manage members, channels, and server settings in one place.</p>
+              <p className="text-sm text-muted-foreground">Manage members, channels, and space settings in one place.</p>
             </div>
             <div className="flex items-center gap-2">
               <Button type="button" variant="outline" onClick={() => navigate(serverHomePath)}>
                 <ExternalLinkIcon className="size-4" />
-                Open Server
+                Open Space
               </Button>
             </div>
           </div>
@@ -261,7 +261,7 @@ export function ServerManagePage() {
             <TabsList className="w-full">
               <TabsTrigger value="members" className="flex-1">Members</TabsTrigger>
               <TabsTrigger value="channels" className="flex-1">Channels</TabsTrigger>
-              <TabsTrigger value="server" className="flex-1">Server</TabsTrigger>
+              <TabsTrigger value="server" className="flex-1">Space</TabsTrigger>
             </TabsList>
 
             <TabsContent value="members" className="min-h-0 flex-1">

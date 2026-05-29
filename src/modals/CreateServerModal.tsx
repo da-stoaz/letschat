@@ -19,18 +19,18 @@ export function CreateServerModal({ onClose }: { onClose: () => void }) {
           await reducers.createServer(name.trim())
           onClose()
         } catch (e) {
-          const message = e instanceof Error ? e.message : 'Could not create server.'
+          const message = e instanceof Error ? e.message : 'Could not create space.'
           setError(message)
         }
       }}
     >
       <DialogHeader>
-        <DialogTitle>Create Server</DialogTitle>
-        <DialogDescription>Set a name for your new server space.</DialogDescription>
+        <DialogTitle>Create Space</DialogTitle>
+        <DialogDescription>Set a name for your new space.</DialogDescription>
       </DialogHeader>
 
       <div className="space-y-2">
-        <Label htmlFor="server-name">Server name</Label>
+        <Label htmlFor="server-name">Space name</Label>
         <Input
           id="server-name"
           value={name}

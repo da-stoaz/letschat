@@ -1,0 +1,42 @@
+@page "/admin/login"
+@model LoginModel
+@{
+    Layout = null;
+    ViewData["Title"] = "Sign in";
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in — LetsChat Admin</title>
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+    <div class="login-page">
+        <div class="login-card">
+            <h1>Lets<span style="color:var(--accent)">Chat</span> Admin</h1>
+            <p class="muted small" style="margin-top:2px">Sign in with an administrator account.</p>
+            @if (Model.Error is not null)
+            {
+                <div class="alert alert-error">@Model.Error</div>
+            }
+            <form method="post">
+                <div class="field">
+                    <label for="u">Username</label>
+                    <input class="input" id="u" name="Username" value="@Model.Username"
+                           autocomplete="username" autocapitalize="none" spellcheck="false" required>
+                </div>
+                <div class="field">
+                    <label for="p">Password</label>
+                    <input class="input" id="p" name="Password" type="password"
+                           autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">
+                    Sign in
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

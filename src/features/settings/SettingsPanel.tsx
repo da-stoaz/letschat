@@ -42,8 +42,8 @@ const NOTIFICATION_TOGGLE_ROWS: NotificationToggleRow[] = [
   {
     event: 'channel_message',
     key: 'channelMessages',
-    label: 'Server messages',
-    description: 'New text messages from server channels.',
+    label: 'Space messages',
+    description: 'New text messages from space channels.',
   },
   {
     event: 'mention',

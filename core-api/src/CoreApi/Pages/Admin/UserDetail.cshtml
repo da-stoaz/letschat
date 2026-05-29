@@ -1,0 +1,90 @@
+@page "/admin/users/{id}"
+@model UserDetailModel
+@{
+    ViewData["Title"] = Model.Target.UserName;
+    var (statusCss, statusText) = AdminViewHelpers.StatusBadge(Model.Target.Status);
+    var id = Model.Target.Id;
+}
+
+<p><a href="/admin/users" class="muted small">← Back to users</a></p>
+<h1 class="page-title">@Model.Target.UserName</h1>
+<p class="page-sub">Manage this account.</p>
+
+@if (Model.Message is not null)
+{
+    <div class="alert alert-success">@Model.Message</div>
+}
+@if (Model.Error is not null)
+{
+    <div class="alert alert-error">@Model.Error</div>
+}
+
+<div class="card">
+    <h2>Account</h2>
+    <dl class="detail-grid">
+        <dt>Username</dt><dd>@Model.Target.UserName</dd>
+        <dt>Display name</dt><dd>@Model.Target.DisplayName</dd>
+        <dt>Email</dt><dd>@(string.IsNullOrEmpty(Model.Target.Email) ? "—" : Model.Target.Email)</dd>
+        <dt>Status</dt><dd><span class="badge @statusCss">@statusText</span></dd>
+        <dt>Role</dt>
+        <dd>@if (Model.TargetIsAdmin) { <span class="badge badge-admin">Administrator</span> } else { <span class="muted">Member</span> }</dd>
+        <dt>SpacetimeDB</dt>
+        <dd class="muted small">@(string.IsNullOrEmpty(Model.Target.SpacetimeIdentity) ? "— (no chat identity)" : Model.Target.SpacetimeIdentity)</dd>
+        <dt>Created</dt><dd class="muted">@Model.Target.CreatedAtUtc.ToString("u")</dd>
+        <dt>Updated</dt><dd class="muted">@Model.Target.UpdatedAtUtc.ToString("u")</dd>
+    </dl>
+</div>
+
+<div class="card">
+    <h2>Actions</h2>
+    <div class="btn-row">
+        @if (Model.Target.Status == AccountStatus.EmailVerified)
+        {
+            <form method="post" action="/admin/users/@id?handler=Approve" class="inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-primary">Approve</button>
+            </form>
+            <form method="post" action="/admin/users/@id?handler=Reject" class="inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-danger">Reject</button>
+            </form>
+        }
+        @if (Model.Target.Status == AccountStatus.Active && !Model.IsSelf)
+        {
+            <form method="post" action="/admin/users/@id?handler=Disable" class="inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-danger">Disable account</button>
+            </form>
+        }
+        @if (Model.Target.Status is AccountStatus.Disabled or AccountStatus.Rejected)
+        {
+            <form method="post" action="/admin/users/@id?handler=Enable" class="inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-primary">Enable account</button>
+            </form>
+        }
+        @if (Model.TargetIsAdmin)
+        {
+            @if (!Model.IsSelf)
+            {
+                <form method="post" action="/admin/users/@id?handler=RevokeAdmin" class="inline">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn">Revoke admin</button>
+                </form>
+            }
+        }
+        else
+        {
+            <form method="post" action="/admin/users/@id?handler=GrantAdmin" class="inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn">Grant admin</button>
+            </form>
+        }
+    </div>
+    @if (Model.IsSelf)
+    {
+        <p class="muted small" style="margin-bottom:0;margin-top:14px">
+            This is your own account — disabling it or revoking your admin role is blocked.
+        </p>
+    }
+</div>

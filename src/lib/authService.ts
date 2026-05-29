@@ -56,8 +56,20 @@ type RegisterPayload = {
   username: string
   displayName: string
   password: string
+  email: string
   spacetimeToken: string
   spacetimeIdentity: Identity
+}
+
+/**
+ * Result of `/auth/register`. When email confirmation is required the account
+ * is created but not yet usable — `status` is `pending_email_verification` and
+ * no session is issued; otherwise `status` is `active` and `auth` is populated.
+ */
+export interface RegisterResult {
+  status: 'active' | 'pending_email_verification'
+  auth: AuthServiceResponse | null
+  email: string | null
 }
 
 type LinkPayload = {
@@ -71,6 +83,11 @@ type LinkPayload = {
 type LoginPayload = {
   username: string
   password: string
+  // Optional — when the account is admin-created and the server still holds a
+  // `pending:{…}` placeholder identity, the login endpoint swaps in these
+  // values on first sign-in. Ignored for normal accounts.
+  spacetimeIdentity?: Identity
+  spacetimeToken?: string
 }
 
 type LivekitTokenPayload = {
@@ -178,10 +195,36 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
   return (await response.json()) as TResponse
 }
 
-export async function authServiceRegister(payload: RegisterPayload): Promise<AuthServiceResponse> {
-  const result = await postJson<AuthServiceResponse, RegisterPayload>('/auth/register', payload)
-  setStoredAuthSessionToken(result.sessionToken)
+export async function authServiceRegister(payload: RegisterPayload): Promise<RegisterResult> {
+  const result = await postJson<RegisterResult, RegisterPayload>('/auth/register', payload)
+  // Only an `active` registration yields a usable session to persist.
+  if (result.status === 'active' && result.auth) {
+    setStoredAuthSessionToken(result.auth.sessionToken)
+  }
   return result
+}
+
+export async function authServiceResendConfirmation(email: string): Promise<void> {
+  await postJson<{ status: string; message: string }, { email: string }>(
+    '/auth/resend-confirmation',
+    { email },
+  )
+}
+
+/**
+ * Polls an account's lifecycle status so the "confirm your email" screen can
+ * advance once the user confirms. Returns one of:
+ * `registered` | `email_verified` | `active` | `disabled` | `rejected` | `unknown`.
+ */
+export async function authServiceRegistrationStatus(
+  username: string,
+  spacetimeIdentity: string,
+): Promise<string> {
+  const result = await postJson<{ status: string }, { username: string; spacetimeIdentity: string }>(
+    '/auth/registration-status',
+    { username, spacetimeIdentity },
+  )
+  return result.status
 }
 
 export async function authServiceLink(payload: LinkPayload): Promise<AuthServiceResponse> {

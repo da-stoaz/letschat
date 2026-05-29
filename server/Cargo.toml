@@ -1,13 +1,13 @@
 [package]
 name = "letschat_server"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-spacetimedb = "2.1.0"
+spacetimedb = "2.2.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }

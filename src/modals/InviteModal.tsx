@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { reducers } from '../lib/spacetimedb'
 import { useInvitesStore } from '../stores/invitesStore'
@@ -44,15 +44,22 @@ const EXPIRY_OPTIONS = [
   { label: '30 days', value: 30 * 24 * 60 * 60 },
   { label: 'Never', value: undefined as number | undefined },
 ] as const
-const LINKS_LIST_MAX_HEIGHT_PX = 480
-const LINKS_LIST_MAX_VIEWPORT_RATIO = 0.52
-
 function inviteUrl(token: string): string {
   return `${APP_BASE_URL}/invite/${token}`
 }
 
-function formatExpiry(expiresAt: string): string {
-  const remaining = new Date(expiresAt).getTime() - Date.now()
+/** Subscribes to a ticking timestamp so render stays pure (no Date.now() in JSX). */
+function useNow(intervalMs = 30_000): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs)
+    return () => clearInterval(id)
+  }, [intervalMs])
+  return now
+}
+
+function formatExpiry(expiresAt: string, now: number): string {
+  const remaining = new Date(expiresAt).getTime() - now
   if (remaining <= 0) return 'Expired'
   const days = Math.floor(remaining / (1000 * 60 * 60 * 24))
   const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
@@ -80,13 +87,14 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
 
 interface InviteCardProps {
   invite: Invite
+  now: number
   onDelete: (token: string) => void
 }
 
-function InviteCard({ invite, onDelete }: InviteCardProps) {
+function InviteCard({ invite, now, onDelete }: InviteCardProps) {
   const [showQr, setShowQr] = useState(false)
   const url = inviteUrl(invite.token)
-  const expired = new Date(invite.expiresAt).getTime() <= Date.now()
+  const expired = new Date(invite.expiresAt).getTime() <= now
 
   return (
     <div className={`rounded-lg border p-3 space-y-2 overflow-hidden ${expired ? 'opacity-60' : 'border-border/70'}`}>
@@ -124,7 +132,7 @@ function InviteCard({ invite, onDelete }: InviteCardProps) {
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
         <span>Uses: {invite.useCount}{invite.maxUses != null ? ` / ${invite.maxUses}` : ''}</span>
         <span>·</span>
-        <span>{expired ? 'Expired' : `Expires in ${formatExpiry(invite.expiresAt)}`}</span>
+        <span>{expired ? 'Expired' : `Expires in ${formatExpiry(invite.expiresAt, now)}`}</span>
         {invite.allowedUsernames.length > 0 && (
           <>
             <span>·</span>
@@ -147,6 +155,7 @@ function InviteCard({ invite, onDelete }: InviteCardProps) {
 
 export function InviteModal({ serverId, onClose }: { serverId: number; onClose: () => void }) {
   type InviteTab = 'people' | 'create-link' | 'links'
+  const now = useNow()
   const [expirySeconds, setExpirySeconds] = useState<number | undefined>(7 * 24 * 60 * 60)
   const [maxUses, setMaxUses] = useState<number | ''>('')
   const [selectedRecipientIdentities, setSelectedRecipientIdentities] = useState<string[]>([])
@@ -155,12 +164,6 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [activeTab, setActiveTab] = useState<InviteTab>('people')
-  const [panelHeight, setPanelHeight] = useState<number | null>(null)
-  const [linksListHeight, setLinksListHeight] = useState<number>(0)
-  const peoplePanelRef = useRef<HTMLDivElement | null>(null)
-  const createLinkPanelRef = useRef<HTMLDivElement | null>(null)
-  const linksPanelRef = useRef<HTMLDivElement | null>(null)
-  const linksListContentRef = useRef<HTMLDivElement | null>(null)
   const invites = useInvitesStore((s) => s.invitesByServer[serverId] ?? EMPTY)
   const server = useServersStore((s) => s.servers.find((sv) => sv.id === serverId) ?? null)
   const role = useServerRole(serverId)
@@ -252,75 +255,41 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
 
   const handleSendDirectInvite = async () => {
     if (!canSendInvites) {
-      setError('You do not have permission to invite users in this server.')
+      setError('You do not have permission to invite users in this space.')
       return
     }
     if (selectedRecipients.length === 0) return
     setError(null)
     setSendingDirectInvite(true)
-    const toastId = toast.loading(
-      selectedRecipients.length === 1
-        ? `Sending invite to ${selectedRecipients[0].label}...`
-        : `Sending ${selectedRecipients.length} invites...`,
-    )
-    try {
-      const results = await Promise.allSettled(
-        selectedRecipients.map((recipient) => reducers.sendDmServerInvite(recipient.identity, serverId)),
-      )
-      const failedIdentities: string[] = []
-      const failedMessages: string[] = []
-      let successCount = 0
-      for (let idx = 0; idx < results.length; idx += 1) {
-        const result = results[idx]
-        if (result.status === 'fulfilled') {
-          successCount += 1
-        } else {
-          failedIdentities.push(selectedRecipients[idx].identity)
-          const message = result.reason instanceof Error ? result.reason.message : 'Failed to send invite.'
-          failedMessages.push(message)
-        }
-      }
 
-      if (failedIdentities.length === 0) {
-        toast.success(successCount === 1 ? 'Invite sent' : 'Invites sent', {
-          id: toastId,
-          description:
-            successCount === 1
-              ? `${selectedRecipients[0].label} can now accept it in DMs.`
-              : `${successCount} users can now accept your invite in DMs.`,
-        })
-        setSelectedRecipientIdentities([])
-        setRecipientQuery('')
-      } else if (successCount === 0) {
-        const message = failedMessages[0] ?? 'Failed to send invites.'
-        setError(message)
-        toast.error('Could not send invites', {
-          id: toastId,
-          description: message,
-        })
-      } else {
-        toast.error('Some invites failed', {
-          id: toastId,
-          description: `${successCount} sent, ${failedIdentities.length} failed.`,
-        })
-        setSelectedRecipientIdentities((prev) => prev.filter((id) => failedIdentities.includes(id)))
-        setRecipientQuery('')
+    const failed: string[] = []
+    let lastError = 'Failed to send invite.'
+    for (const recipient of selectedRecipients) {
+      try {
+        await reducers.sendDmServerInvite(recipient.identity, serverId)
+      } catch (e) {
+        failed.push(recipient.identity)
+        if (e instanceof Error) lastError = e.message
       }
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Failed to send invite.'
-      setError(message)
-      toast.error('Could not send invite', {
-        id: toastId,
-        description: message,
-      })
-    } finally {
-      setSendingDirectInvite(false)
+    }
+    setSendingDirectInvite(false)
+
+    const sent = selectedRecipients.length - failed.length
+    if (failed.length === 0) {
+      toast.success(sent === 1 ? 'Invite sent' : `${sent} invites sent`)
+      setSelectedRecipientIdentities([])
+      setRecipientQuery('')
+    } else {
+      const msg = sent > 0 ? `${sent} sent, ${failed.length} failed: ${lastError}` : lastError
+      setError(msg)
+      toast.error('Could not send all invites', { description: msg })
+      setSelectedRecipientIdentities((prev) => prev.filter((id) => failed.includes(id)))
     }
   }
 
   const handleCreate = async () => {
     if (!canSendInvites) {
-      setError('You do not have permission to invite users in this server.')
+      setError('You do not have permission to invite users in this space.')
       return
     }
     setError(null)
@@ -335,7 +304,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
       )
       toast.success('Invite link created', {
         id: toastId,
-        description: `Ready for ${server?.name ?? 'this server'}.`,
+        description: `Ready for ${server?.name ?? 'this space'}.`,
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Could not create invite.'
@@ -369,67 +338,14 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
     void reducers.cleanupExpiredInvites()
   }, [serverId])
 
-  useLayoutEffect(() => {
-    const activePanel =
-      activeTab === 'people'
-        ? peoplePanelRef.current
-        : activeTab === 'create-link'
-          ? createLinkPanelRef.current
-          : linksPanelRef.current
-    if (!activePanel) return
-
-    const updateHeight = () => {
-      const next = Math.ceil(activePanel.scrollHeight) + 1
-      setPanelHeight((prev) => (prev === next ? prev : next))
-    }
-
-    updateHeight()
-    const rafId = window.requestAnimationFrame(updateHeight)
-
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => updateHeight())
-    observer.observe(activePanel)
-    return () => {
-      observer.disconnect()
-      window.cancelAnimationFrame(rafId)
-    }
-  }, [activeTab])
-
-  useLayoutEffect(() => {
-    const content = linksListContentRef.current
-    if (!content) return
-
-    const viewportCap = () =>
-      Math.min(
-        Math.floor(window.innerHeight * LINKS_LIST_MAX_VIEWPORT_RATIO),
-        LINKS_LIST_MAX_HEIGHT_PX,
-      )
-
-    const updateHeight = () => {
-      const contentHeight = Math.ceil(content.scrollHeight)
-      setLinksListHeight(Math.min(contentHeight, viewportCap()))
-    }
-
-    updateHeight()
-
-    const observer = new ResizeObserver(() => updateHeight())
-    observer.observe(content)
-    window.addEventListener('resize', updateHeight)
-
-    return () => {
-      observer.disconnect()
-      window.removeEventListener('resize', updateHeight)
-    }
-  }, [activeTab, invites.length])
-
   return (
     <div className="flex min-h-0 flex-col gap-4 overflow-hidden">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <LinkIcon className="size-4 text-primary" />
-          Invite to {server?.name ?? 'Server'}
+          Invite to {server?.name ?? 'Space'}
         </DialogTitle>
-        <DialogDescription>Invite people directly or create shareable server links.</DialogDescription>
+        <DialogDescription>Invite people directly or create shareable space links.</DialogDescription>
       </DialogHeader>
 
       <Tabs
@@ -439,7 +355,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
       >
         {!canSendInvites ? (
           <p className="text-xs text-muted-foreground">
-            Invites are restricted to owner and moderators in this server.
+            Invites are restricted to owner and moderators in this space.
           </p>
         ) : null}
         <TabsList className="w-full">
@@ -453,12 +369,9 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
           </TabsTrigger>
         </TabsList>
 
-        <div
-          className="overflow-hidden transition-[height] duration-200 ease-out"
-          style={panelHeight === null ? undefined : { height: `${panelHeight}px` }}
-        >
+        <div>
           <TabsContent value="people" className="flex-none">
-            <div ref={peoplePanelRef} className="space-y-3 pt-4">
+            <div className="space-y-3 pt-4">
               <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3">
                 <div className="space-y-1">
                   <h3 className="text-sm font-medium">Invite Existing User</h3>
@@ -583,7 +496,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
           </TabsContent>
 
           <TabsContent value="create-link" className="flex-none">
-            <div ref={createLinkPanelRef} className="space-y-3 pt-4">
+            <div className="space-y-3 pt-4">
               <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3">
                 <div className="space-y-1">
                   <h3 className="text-sm font-medium">Create Shareable Link</h3>
@@ -651,9 +564,9 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
           </TabsContent>
 
           <TabsContent value="links" className="flex-none">
-            <div ref={linksPanelRef} className="flex flex-col gap-3 pt-4">
+            <div className="flex flex-col gap-3 pt-4">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">Manage shareable links for this server.</p>
+                <p className="text-xs text-muted-foreground">Manage shareable links for this space.</p>
                 <Button
                   type="button"
                   variant="outline"
@@ -667,15 +580,13 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
               {invites.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">No invite links yet. Create one first.</p>
               ) : (
-                <ScrollArea
-                  className="pr-2"
-                  style={linksListHeight > 0 ? { height: `${linksListHeight}px` } : undefined}
-                >
-                  <div ref={linksListContentRef} className="space-y-2">
+                <ScrollArea className="max-h-120 pr-2">
+                  <div className="space-y-2">
                     {invites.map((inv) => (
                       <InviteCard
                         key={inv.token}
                         invite={inv}
+                        now={now}
                         onDelete={handleDelete}
                       />
                     ))}
@@ -684,7 +595,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
               )}
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
               <div className="mt-1 flex justify-end gap-2">
-                {invites.some((i) => new Date(i.expiresAt).getTime() <= Date.now()) && (
+                {invites.some((i) => new Date(i.expiresAt).getTime() <= now) && (
                   <Button
                     type="button"
                     variant="outline"

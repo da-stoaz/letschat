@@ -1,0 +1,81 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Join this LetsChat space";
+}
+
+<main class="landing">
+    <section class="hero">
+        <div class="brand">
+            <img src="/img/letschat-logo.png" alt="" width="36" height="36" class="brand-mark">
+            <span>Lets<span class="accent">Chat</span></span>
+        </div>
+
+        <h1>You're invited to a LetsChat space.</h1>
+        <p class="lede">
+            LetsChat is a self-hosted chat app — voice, video, text, and file-sharing.
+            This page is the front door to one specific instance; download the app, then open it.
+        </p>
+
+        <div class="cta">
+            <a id="open-app" class="btn btn-primary" href="@Model.DeepLink">
+                Open in LetsChat
+            </a>
+            @if (Model.HasAnyInstaller)
+            {
+                <a id="download"
+                   class="btn btn-secondary"
+                   href="/downloads/macos"
+                   data-download-macos="/downloads/macos"
+                   data-download-windows="/downloads/windows"
+                   data-download-linux="/downloads/linux">
+                    Get the app for <span data-platform-label>your device</span>
+                </a>
+            }
+            else
+            {
+                <span class="btn btn-secondary" aria-disabled="true" title="No installer hosted on this instance.">
+                    Download coming soon
+                </span>
+            }
+        </div>
+
+        <p class="trust">
+            Open-source · Code-signed installers · v@(Model.RecommendedClientVersion)
+        </p>
+    </section>
+
+    <footer class="foot">
+        <span>LetsChat · self-hosted</span>
+        <a href="https://github.com/da-stoaz/letschat" target="_blank" rel="noopener">View source</a>
+    </footer>
+</main>
+
+<script>
+    (function () {
+        var ua = (navigator.userAgent || '').toLowerCase();
+        var os =
+            /mac|iphone|ipad|ipod/.test(ua) ? 'macos' :
+            /win/.test(ua) ? 'windows' :
+            /linux/.test(ua) ? 'linux' :
+            null;
+        var label =
+            os === 'macos' ? 'macOS' :
+            os === 'windows' ? 'Windows' :
+            os === 'linux' ? 'Linux' :
+            'your device';
+
+        document.querySelectorAll('[data-platform-label]').forEach(function (el) {
+            el.textContent = label;
+        });
+
+        // Swap the download CTA's href to the detected OS so the click lands
+        // on the right /downloads/{os} resolver. Defaults to /downloads/macos
+        // for unknown user agents (the most common share-target visitor).
+        if (os) {
+            var dl = document.getElementById('download');
+            var attr = dl && dl.getAttribute('data-download-' + os);
+            if (dl && attr) dl.setAttribute('href', attr);
+        }
+    })();
+</script>

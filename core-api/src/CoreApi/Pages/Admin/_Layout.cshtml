@@ -1,0 +1,37 @@
+@{
+    var path = Context.Request.Path.Value ?? "/admin";
+    bool On(string prefix) => prefix == "/admin"
+        ? path == "/admin"
+        : path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@(ViewData["Title"] ?? "Admin") — LetsChat</title>
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+    <header class="admin-header">
+        <div class="admin-brand">Lets<span class="accent">Chat</span> Admin</div>
+        <nav class="admin-nav">
+            <a href="/admin" class="@(On("/admin") ? "active" : "")">Dashboard</a>
+            <a href="/admin/users" class="@(On("/admin/users") ? "active" : "")">Users</a>
+            <a href="/admin/pending" class="@(On("/admin/pending") ? "active" : "")">Pending</a>
+            <a href="/admin/config" class="@(On("/admin/config") ? "active" : "")">Configuration</a>
+            <a href="/admin/audit" class="@(On("/admin/audit") ? "active" : "")">Audit log</a>
+        </nav>
+        <div class="admin-user">
+            <span class="muted small">@User.Identity?.Name</span>
+            <form method="post" action="/admin/logout" class="inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-sm">Sign out</button>
+            </form>
+        </div>
+    </header>
+    <main class="admin-main">
+        @RenderBody()
+    </main>
+</body>
+</html>

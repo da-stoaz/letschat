@@ -86,9 +86,17 @@ export async function loginWithPassword(username: string, password: string): Pro
   if (!normalized) throw new Error('Username is required.')
   if (password.length < 8) throw new Error('Password must be at least 8 characters.')
 
+  // Pass the client's current SpacetimeDB identity + token so the server can
+  // bind an admin-created account whose identity is still a `pending:{…}`
+  // placeholder. Ignored server-side for normal accounts.
+  const currentIdentity = useConnectionStore.getState().identity
+  const currentToken = getCurrentSessionToken()
+
   const auth = await authServiceLogin({
     username: normalized,
     password,
+    spacetimeIdentity: currentIdentity ?? undefined,
+    spacetimeToken: currentToken ?? undefined,
   })
 
   disconnect()

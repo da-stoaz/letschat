@@ -1,0 +1,28 @@
+@page "/admin"
+@model IndexModel
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<h1 class="page-title">Dashboard</h1>
+<p class="page-sub">Overview of LetsChat accounts.</p>
+
+<div class="stat-grid">
+    <div class="stat"><div class="value">@Model.Total</div><div class="label">Total accounts</div></div>
+    <div class="stat"><div class="value">@Model.Active</div><div class="label">Active</div></div>
+    <div class="stat"><div class="value">@Model.PendingApproval</div><div class="label">Pending approval</div></div>
+    <div class="stat"><div class="value">@Model.Unconfirmed</div><div class="label">Email unconfirmed</div></div>
+    <div class="stat"><div class="value">@Model.Disabled</div><div class="label">Disabled</div></div>
+    <div class="stat"><div class="value">@Model.Rejected</div><div class="label">Rejected</div></div>
+    <div class="stat"><div class="value">@Model.Admins</div><div class="label">Administrators</div></div>
+</div>
+
+<div class="card">
+    <h2>Quick actions</h2>
+    <div class="btn-row">
+        <a class="btn btn-primary" href="/admin/pending">Review pending (@Model.PendingApproval)</a>
+        <a class="btn" href="/admin/users">Manage users</a>
+        <a class="btn" href="/admin/config">System configuration</a>
+        <a class="btn" href="/admin/audit">Audit log</a>
+    </div>
+</div>

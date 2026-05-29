@@ -105,10 +105,10 @@ export function ServerChannelBar({
                 <Avatar className="size-5 rounded-md">
                   {activeServer?.iconUrl ? <AvatarImage src={activeServer.iconUrl} alt={activeServer.name} /> : null}
                   <AvatarFallback className="rounded-md bg-primary/10 text-[10px]">
-                    {serverInitials(activeServer?.name ?? 'Server')}
+                    {serverInitials(activeServer?.name ?? 'Space')}
                   </AvatarFallback>
                 </Avatar>
-                <span className="truncate">{activeServer?.name ?? 'Server'}</span>
+                <span className="truncate">{activeServer?.name ?? 'Space'}</span>
               </span>
               <ChevronsUpDownIcon className="size-4 text-muted-foreground" />
             </DropdownMenuTrigger>
@@ -116,7 +116,7 @@ export function ServerChannelBar({
               {canAccessServerPanel ? (
                 <DropdownMenuItem onClick={onOpenServerPanel}>
                   <Settings2Icon className="size-3.5" />
-                  Server Panel
+                  Space Panel
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem
@@ -125,7 +125,7 @@ export function ServerChannelBar({
                 className="text-destructive focus:text-destructive"
               >
                 <LogOutIcon className="size-3.5" />
-                {ownerCannotLeave ? 'Transfer ownership to leave' : 'Leave Server'}
+                {ownerCannotLeave ? 'Transfer ownership to leave' : 'Leave Space'}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

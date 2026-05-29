@@ -718,7 +718,7 @@ export function AppRail({
                   >
                     <PlusIcon className="size-4" />
                   </TooltipTrigger>
-                  <TooltipContent side="right">Create Server</TooltipContent>
+                  <TooltipContent side="right">Create Space</TooltipContent>
                 </Tooltip>
               </div>
             </div>
