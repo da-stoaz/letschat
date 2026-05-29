@@ -194,12 +194,12 @@ export function FriendsView() {
     setPending(identity, action)
     try {
       await fn()
+      // Accept keeps the row (Pending → Accepted); delete-style actions drop it.
+      if (action === 'accept') setPending(identity, null)
     } catch (e) {
       setError(e instanceof Error ? e.message : fallbackMessage)
       setPending(identity, null)
     }
-    // Leave the pending marker until the store removes the row, so the UI
-    // shows the action in flight without flicker.
   }
 
   const acceptedTrailing = (identity: Identity) => {
