@@ -29,6 +29,7 @@ pub fn register_user(
         display_name,
         avatar_url: None,
         created_at: ctx.timestamp,
+        is_admin: false,
     });
     Ok(())
 }

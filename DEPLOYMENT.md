@@ -100,6 +100,37 @@ spacetime publish --server http://127.0.0.1:44300 letschat --module-path server 
 schema updates, drop `--yes` so SpacetimeDB prompts before any destructive
 migration instead of wiping data.
 
+## Promoting core-api as a SpacetimeDB admin (plan 1.5)
+
+Some admin-panel surfaces (currently: the **Spaces → create policy** card on
+`/admin/config`) push updates to the chat-domain SpacetimeDB module rather
+than to the Postgres `SystemConfig` row. core-api needs a SpacetimeDB
+identity that has `is_admin = true` to call those reducers.
+
+Run this once, after the first `spacetime publish`:
+
+```bash
+# 1. Generate a long-lived token (and identity) for core-api.
+spacetime token gen > core-api.token
+CORE_API_IDENTITY=$(spacetime identity list | grep -A1 "$(cat core-api.token)" | tail -1 | awk '{print $1}')
+
+# 2. As the module publisher (your operator identity — the publisher is
+#    automatically the first admin via the module's `init` reducer), grant
+#    core-api's identity instance-admin status:
+spacetime call letschat set_user_admin "$CORE_API_IDENTITY" true
+
+# 3. Put the token in core-api's environment and restart:
+echo "SPACETIMEDB_SERVICE_TOKEN=$(cat core-api.token)" >> .env
+docker compose -f docker-compose.prod.base.yml restart core-api
+
+# 4. Verify: /admin/config now shows the Spaces card as editable; the
+#    audit log records the bootstrap.
+```
+
+If you skip this, the rest of core-api works fine — only the Spaces card on
+`/admin/config` renders read-only with a hint pointing back at these
+instructions.
+
 ## Admin Control Panel
 
 `core-api` serves the admin Razor area on container port `8788`. The

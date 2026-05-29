@@ -107,8 +107,21 @@ export function useDeepLink(): void {
       // listener alive for the process lifetime, so we don't need to (and must
       // not) unsubscribe on effect cleanup — that would silently drop URLs
       // delivered while React's strict-mode unmount/remount is in flight.
+      //
+      // The Rust side also emits a `letschat-deeplink-warm` event from the
+      // single-instance callback so Windows/Linux warm-start URLs (which the
+      // OS delivers as a process arg, not via NSAppleEventManager) reach
+      // the same handler. macOS routes naturally through `onOpenUrl`.
       if (!warmListenerInitialised) {
         warmListenerInitialised = true
+        try {
+          const event = await import('@tauri-apps/api/event')
+          await event.listen<string>('letschat-deeplink-warm', (payload) => {
+            if (typeof payload.payload === 'string') applyUrl(payload.payload, 'warm')
+          })
+        } catch {
+          // ignore — not running in Tauri
+        }
         try {
           await mod.onOpenUrl((urls) => {
             for (const url of urls) applyUrl(url, 'warm')

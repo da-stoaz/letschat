@@ -122,6 +122,24 @@ pub(crate) fn require_invite_permission(
     assert_or_err(allowed, "insufficient permissions to invite users")
 }
 
+/// True if `identity` has a `User` row with `is_admin = true`. Used by the
+/// instance-level admin gate (distinct from per-server Owner/Moderator).
+pub(crate) fn is_system_admin(ctx: &ReducerContext, identity: Identity) -> bool {
+    ctx.db
+        .user()
+        .identity()
+        .find(identity)
+        .map(|u| u.is_admin)
+        .unwrap_or(false)
+}
+
+pub(crate) fn require_system_admin(
+    ctx: &ReducerContext,
+    identity: Identity,
+) -> Result<(), String> {
+    assert_or_err(is_system_admin(ctx, identity), "instance admin permission required")
+}
+
 pub(crate) fn find_channel(ctx: &ReducerContext, channel_id: u64) -> Result<Channel, String> {
     ctx.db
         .channel()

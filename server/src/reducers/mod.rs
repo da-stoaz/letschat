@@ -8,5 +8,6 @@ mod presence;
 mod read_state;
 mod servers;
 mod social;
+mod system;
 mod users;
 mod voice;

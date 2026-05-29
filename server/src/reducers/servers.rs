@@ -1,6 +1,8 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, member_key, require_member_role, require_owner, voice_key};
+use crate::helpers::{
+    assert_or_err, is_system_admin, member_key, require_member_role, require_owner, voice_key,
+};
 use crate::schema::*;
 
 #[spacetimedb::reducer]
@@ -9,6 +11,23 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
         (2..=100).contains(&name.len()),
         "server name must be 2-100 chars",
     )?;
+
+    // Instance-wide policy gate. The `SystemSettings` row is seeded by the
+    // `init` lifecycle reducer; defaults to `Anyone` so the existing
+    // behaviour is preserved until an operator flips it to `AdminsOnly`.
+    let policy = ctx
+        .db
+        .system_settings()
+        .id()
+        .find(1u8)
+        .map(|s| s.space_create_policy)
+        .unwrap_or(SpaceCreatePolicy::Anyone);
+    if matches!(policy, SpaceCreatePolicy::AdminsOnly) {
+        assert_or_err(
+            is_system_admin(ctx, ctx.sender()),
+            "only instance admins can create spaces under the current policy",
+        )?;
+    }
 
     let server_row = ctx.db.server().insert(Server {
         id: 0,
