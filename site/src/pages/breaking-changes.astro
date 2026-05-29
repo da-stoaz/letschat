@@ -1,0 +1,54 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import SiteHeader from "@/components/SiteHeader.astro";
+import SiteFooter from "@/components/SiteFooter.astro";
+
+const changes = [
+  {
+    version: "v0.3.x",
+    date: "May 2026",
+    items: [
+      "Service discovery moved into auth-service (replace legacy external discovery setup).",
+      "Production compose split into base plus topology overlays.",
+      "Environment examples for tunnel and caddy tracks updated.",
+    ],
+    migration: "Review deployment env files and align domain/discovery variables before upgrading.",
+  },
+  {
+    version: "v0.2.x",
+    date: "April 2026",
+    items: [
+      "Runtime and dependency baseline updates.",
+      "Desktop packaging and release workflow adjustments.",
+    ],
+    migration: "Pull the latest deployment files and revalidate service startup order.",
+  },
+];
+---
+
+<Layout title="LetsChat Breaking Changes" description="Versioned breaking changes and migration notes for LetsChat.">
+  <SiteHeader active="changes" />
+
+  <main class="max-w-6xl mx-auto px-6 py-16 space-y-8">
+    <section>
+      <p class="text-xs text-muted-foreground border border-border rounded-full inline-flex px-3 py-1">Migration-focused</p>
+      <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight mt-4 mb-3">Breaking Changes</h1>
+      <p class="text-muted-foreground max-w-2xl">Each entry explains what changed, who is affected, and what to migrate.</p>
+    </section>
+
+    {changes.map((entry) => (
+      <article class="rounded-xl border border-border bg-card p-6 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-xl font-semibold">{entry.version}</h2>
+          <span class="text-xs text-muted-foreground">{entry.date}</span>
+        </div>
+        <ul class="space-y-2 text-sm text-muted-foreground">
+          {entry.items.map((item) => <li>{item}</li>)}
+        </ul>
+        <p class="text-sm"><span class="font-semibold">Migration note:</span> <span class="text-muted-foreground">{entry.migration}</span></p>
+      </article>
+    ))}
+  </main>
+
+  <SiteFooter />
+</Layout>

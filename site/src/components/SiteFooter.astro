@@ -1,0 +1,72 @@
+---
+import {
+  GITHUB_BASE,
+  GITHUB_DISCUSSIONS,
+  GITHUB_ISSUE_NEW,
+  GITHUB_RELEASES,
+  LICENSE_NAME,
+} from "@/lib/site";
+---
+
+<footer class="site-footer border-t border-border mt-12">
+  <div class="max-w-7xl mx-auto px-5 sm:px-6 py-12 grid gap-10 lg:grid-cols-[1.35fr_1fr_1fr_1fr]">
+    <section>
+      <a href="/" class="inline-flex items-center gap-3 mb-4" aria-label="LetsChat home">
+        <img src="/letschat-logo.png" alt="LetsChat logo" class="h-11 w-11 rounded-xl footer-logo" />
+        <span>
+          <strong class="block text-lg tracking-tight">LetsChat</strong>
+          <span class="block text-xs text-muted-foreground">Open source desktop chat platform</span>
+        </span>
+      </a>
+      <p class="text-sm text-muted-foreground leading-relaxed max-w-sm">
+        Built for teams that want modern voice and chat workflows without giving their infrastructure ownership to third-party SaaS.
+      </p>
+      <p class="text-xs text-muted-foreground mt-4">
+        License: <span class="text-foreground">{LICENSE_NAME}</span>
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-sm font-semibold mb-3">Product</h2>
+      <ul class="space-y-2 text-sm text-muted-foreground">
+        <li><a href="/#product" class="hover:text-foreground transition-colors">Overview</a></li>
+        <li><a href="/#features" class="hover:text-foreground transition-colors">Core Features</a></li>
+        <li><a href="/#compare" class="hover:text-foreground transition-colors">Discord Comparison</a></li>
+        <li><a href="/download" class="hover:text-foreground transition-colors">Downloads</a></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-sm font-semibold mb-3">Operators</h2>
+      <ul class="space-y-2 text-sm text-muted-foreground">
+        <li><a href="/roadmap" class="hover:text-foreground transition-colors">Roadmap and Priorities</a></li>
+        <li><a href="/breaking-changes" class="hover:text-foreground transition-colors">Breaking Changes</a></li>
+        <li><a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting Guide</a></li>
+        <li><a href="/architecture" class="hover:text-foreground transition-colors">Architecture</a></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-sm font-semibold mb-3">Community and Support</h2>
+      <ul class="space-y-2 text-sm text-muted-foreground">
+        <li><a href={GITHUB_DISCUSSIONS} target="_blank" rel="noopener" class="hover:text-foreground transition-colors">Feature Requests</a></li>
+        <li><a href={GITHUB_ISSUE_NEW} target="_blank" rel="noopener" class="hover:text-foreground transition-colors">Bug Reports</a></li>
+        <li><a href={GITHUB_RELEASES} target="_blank" rel="noopener" class="hover:text-foreground transition-colors">Release Notes</a></li>
+        <li><a href={GITHUB_BASE} target="_blank" rel="noopener" class="hover:text-foreground transition-colors">GitHub Repository</a></li>
+      </ul>
+    </section>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    background:
+      linear-gradient(180deg, oklch(0.18 0.01 245 / 0.78), oklch(0.15 0.01 245 / 0.95)),
+      radial-gradient(1000px 320px at 10% -120%, oklch(0.7 0.1 220 / 0.1), transparent 65%);
+  }
+
+  .footer-logo {
+    border: 1px solid oklch(1 0 0 / 0.14);
+    background: linear-gradient(145deg, oklch(0.24 0.03 240), oklch(0.16 0.01 250));
+  }
+</style>
