@@ -262,14 +262,16 @@ fn main() {
         // The single-instance callback fires when the OS launches a second copy
         // of the app — on Windows/Linux that's how a `letschat://…` click reaches
         // an already-running instance, so the URL arrives as a command-line arg.
-        // Forward it to the deep-link plugin so the same `onOpenUrl` listener on
-        // the frontend handles cold-start and warm-start identically.
+        // Emit a custom event the frontend hook listens for, alongside the
+        // `onOpenUrl` listener used for cold-start and for macOS warm-start
+        // (which the deep-link plugin handles natively via NSAppleEventManager).
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             show_main_window(app);
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             {
-                use tauri_plugin_deep_link::DeepLinkExt;
-                let _ = app.deep_link().handle_on_open_url(args.into_iter().skip(1));
+                if let Some(url) = args.iter().skip(1).find(|a| a.starts_with("letschat://")) {
+                    let _ = app.emit("letschat-deeplink-warm", url.clone());
+                }
             }
             #[cfg(not(any(target_os = "windows", target_os = "linux")))]
             let _ = args;
