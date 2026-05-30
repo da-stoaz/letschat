@@ -44,6 +44,33 @@ public static class EmailTemplates
         return (subject, body);
     }
 
+    public static (string Subject, string HtmlBody) PasswordReset(
+        string displayName, string resetUrl)
+    {
+        const string subject = "Reset your LetsChat password";
+        var body = Layout(
+            "Reset your password",
+            $"""
+             <p style="margin:0 0 16px 0;">Hi {Escape(displayName)},</p>
+             <p style="margin:0 0 8px 0;">
+               We received a request to reset the password on your LetsChat
+               account. Tap the button below to choose a new one.
+             </p>
+             {Button("Reset password", resetUrl)}
+             <p style="margin:0 0 4px 0;font-size:13px;color:#6b7280;">
+               Button not working? Paste this link into your browser:
+             </p>
+             <p style="margin:0;font-size:13px;word-break:break-all;">
+               <a href="{Escape(resetUrl)}" style="color:#4f46e5;text-decoration:underline;">{Escape(resetUrl)}</a>
+             </p>
+             <p style="margin:24px 0 0 0;font-size:13px;color:#6b7280;">
+               Didn't ask to reset your password? You can safely ignore this email —
+               your current password stays unchanged. The link expires shortly.
+             </p>
+             """);
+        return (subject, body);
+    }
+
     public static (string Subject, string HtmlBody) AccountApproved(string displayName)
     {
         const string subject = "Your LetsChat account has been approved";

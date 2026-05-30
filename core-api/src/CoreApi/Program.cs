@@ -180,6 +180,15 @@ app.Use(async (context, next) =>
     {
         await WriteError(context, ex.Status, ex.Message);
     }
+    catch (EmailDeliveryException ex)
+    {
+        // The transport already logged the cause; the client just needs a clear,
+        // actionable 503 rather than an opaque "Internal server error".
+        app.Logger.LogError(ex, "Email delivery failed processing {Path}", context.Request.Path);
+        await WriteError(
+            context, HttpStatusCode.ServiceUnavailable,
+            "The server could not send a required email. Please try again later or contact the administrator.");
+    }
     catch (Exception ex)
     {
         app.Logger.LogError(ex, "Unhandled exception processing {Path}", context.Request.Path);

@@ -212,6 +212,18 @@ export async function authServiceResendConfirmation(email: string): Promise<void
 }
 
 /**
+ * Starts the password-reset flow. The server mails a tokenised link (opened in
+ * a browser) and always responds generically, so this resolves regardless of
+ * whether the address has an account — never surface a "no such user" error.
+ */
+export async function authServiceForgotPassword(email: string): Promise<void> {
+  await postJson<{ status: string; message: string }, { email: string }>(
+    '/auth/forgot-password',
+    { email },
+  )
+}
+
+/**
  * Polls an account's lifecycle status so the "confirm your email" screen can
  * advance once the user confirms. Returns one of:
  * `registered` | `email_verified` | `active` | `disabled` | `rejected` | `unknown`.

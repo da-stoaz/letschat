@@ -29,14 +29,29 @@ public sealed class SmtpEmailSender(SystemConfigService config, ILogger<SmtpEmai
             ? SecureSocketOptions.StartTls
             : SecureSocketOptions.None;
 
-        await client.ConnectAsync(settings.SmtpHost, settings.SmtpPort, socketOptions, ct);
-        if (!string.IsNullOrEmpty(settings.SmtpUser))
+        try
         {
-            await client.AuthenticateAsync(settings.SmtpUser, settings.SmtpPassword ?? string.Empty, ct);
-        }
+            await client.ConnectAsync(settings.SmtpHost, settings.SmtpPort, socketOptions, ct);
+            if (!string.IsNullOrEmpty(settings.SmtpUser))
+            {
+                await client.AuthenticateAsync(settings.SmtpUser, settings.SmtpPassword ?? string.Empty, ct);
+            }
 
-        await client.SendAsync(message, ct);
-        await client.DisconnectAsync(quit: true, ct);
+            await client.SendAsync(message, ct);
+            await client.DisconnectAsync(quit: true, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not EmailDeliveryException)
+        {
+            // Surface transport failures (refused connection, wrong port, auth
+            // rejected, …) as a typed error so the API answers 503 with a clear
+            // message instead of a raw 500 — and callers can react.
+            logger.LogError(
+                ex, "SMTP delivery to {To} failed via {Host}:{Port}",
+                toAddress, settings.SmtpHost, settings.SmtpPort);
+            throw new EmailDeliveryException(
+                $"Could not send email: the SMTP server at {settings.SmtpHost}:{settings.SmtpPort} " +
+                "is unreachable or rejected the message.", ex);
+        }
 
         logger.LogInformation("Sent email to {To} (subject: {Subject})", toAddress, subject);
     }

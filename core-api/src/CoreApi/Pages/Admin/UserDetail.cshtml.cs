@@ -47,9 +47,17 @@ public sealed class UserDetailModel(
         }
 
         await SetStatusAsync(user, AccountStatus.Active);
-        await accountEmail.SendApprovalEmailAsync(user);
         await AuditAsync("user.approve", user, $"Approved {user.UserName}");
-        Message = $"Approved {user.UserName}.";
+        try
+        {
+            await accountEmail.SendApprovalEmailAsync(user);
+            Message = $"Approved {user.UserName}.";
+        }
+        catch (EmailDeliveryException ex)
+        {
+            // The approval itself stuck — only the notification email failed.
+            Error = $"Approved {user.UserName}, but the approval email could not be sent — {ex.Message}";
+        }
         return Back(id);
     }
 
@@ -95,6 +103,33 @@ public sealed class UserDetailModel(
         await SetStatusAsync(user, AccountStatus.Active);
         await AuditAsync("user.enable", user, $"Enabled {user.UserName}");
         Message = $"Enabled {user.UserName}.";
+        return Back(id);
+    }
+
+    public async Task<IActionResult> OnPostSendPasswordResetAsync(string id)
+    {
+        var user = await users.FindByIdAsync(id);
+        if (user is null) return NotFound();
+
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            Error = "This account has no email address to send a reset link to.";
+            return Back(id);
+        }
+
+        try
+        {
+            await accountEmail.SendPasswordResetEmailAsync(user);
+        }
+        catch (EmailDeliveryException ex)
+        {
+            // The whole point of this action is the email — don't claim success.
+            Error = $"Could not send the password-reset email — {ex.Message}";
+            return Back(id);
+        }
+
+        await AuditAsync("user.password-reset", user, $"Sent password-reset email to {user.UserName}");
+        Message = $"Sent a password-reset email to {user.UserName}.";
         return Back(id);
     }
 

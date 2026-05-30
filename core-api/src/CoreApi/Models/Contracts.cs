@@ -24,6 +24,12 @@ public sealed record RegisterResponse(string Status, AuthResponse? Auth, string?
 public sealed record ResendConfirmationRequest(string Email);
 
 /// <summary>
+/// Kicks off the password-reset flow. Always answered generically so the
+/// endpoint can't be used to probe which addresses have accounts.
+/// </summary>
+public sealed record ForgotPasswordRequest(string Email);
+
+/// <summary>
 /// Polled by the client's "confirm your email" screen to detect when the
 /// account has advanced. The SpacetimeDB identity must match the account's
 /// binding — this prevents username enumeration via the endpoint.
