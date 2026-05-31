@@ -75,7 +75,9 @@ import SetMemberRoleReducer from "./set_member_role_reducer";
 import SetPresenceOfflineReducer from "./set_presence_offline_reducer";
 import SetServerIconReducer from "./set_server_icon_reducer";
 import SetServerInvitePolicyReducer from "./set_server_invite_policy_reducer";
+import SetSpaceCreatePolicyReducer from "./set_space_create_policy_reducer";
 import SetTypingStateReducer from "./set_typing_state_reducer";
+import SetUserAdminReducer from "./set_user_admin_reducer";
 import TimeoutMemberReducer from "./timeout_member_reducer";
 import TouchPresenceReducer from "./touch_presence_reducer";
 import TransferOwnershipReducer from "./transfer_ownership_reducer";
@@ -104,6 +106,7 @@ import MyReadStatesRow from "./my_read_states_table";
 import MyTypingStatesRow from "./my_typing_states_table";
 import ServerRow from "./server_table";
 import ServerMemberRow from "./server_member_table";
+import SystemSettingsRow from "./system_settings_table";
 import UserRow from "./user_table";
 import VoiceParticipantRow from "./voice_participant_table";
 
@@ -250,6 +253,17 @@ const tablesSchema = __schema({
       { name: 'server_member_member_key_key', constraint: 'unique', columns: ['memberKey'] },
     ],
   }, ServerMemberRow),
+  system_settings: __table({
+    name: 'system_settings',
+    indexes: [
+      { accessor: 'id', name: 'system_settings_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'system_settings_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, SystemSettingsRow),
   user: __table({
     name: 'user',
     indexes: [
@@ -373,7 +387,9 @@ const reducersSchema = __reducers(
   __reducerSchema("set_presence_offline", SetPresenceOfflineReducer),
   __reducerSchema("set_server_icon", SetServerIconReducer),
   __reducerSchema("set_server_invite_policy", SetServerInvitePolicyReducer),
+  __reducerSchema("set_space_create_policy", SetSpaceCreatePolicyReducer),
   __reducerSchema("set_typing_state", SetTypingStateReducer),
+  __reducerSchema("set_user_admin", SetUserAdminReducer),
   __reducerSchema("timeout_member", TimeoutMemberReducer),
   __reducerSchema("touch_presence", TouchPresenceReducer),
   __reducerSchema("transfer_ownership", TransferOwnershipReducer),

@@ -205,6 +205,21 @@ export const ServerMember = __t.object("ServerMember", {
 });
 export type ServerMember = __Infer<typeof ServerMember>;
 
+// The tagged union or sum type for the algebraic type `SpaceCreatePolicy`.
+export const SpaceCreatePolicy = __t.enum("SpaceCreatePolicy", {
+  Anyone: __t.unit(),
+  AdminsOnly: __t.unit(),
+});
+export type SpaceCreatePolicy = __Infer<typeof SpaceCreatePolicy>;
+
+export const SystemSettings = __t.object("SystemSettings", {
+  id: __t.u8(),
+  get spaceCreatePolicy() {
+    return SpaceCreatePolicy;
+  },
+});
+export type SystemSettings = __Infer<typeof SystemSettings>;
+
 export const TypingState = __t.object("TypingState", {
   typingKey: __t.string(),
   scopeKey: __t.string(),
@@ -219,6 +234,7 @@ export const User = __t.object("User", {
   displayName: __t.string(),
   avatarUrl: __t.option(__t.string()),
   createdAt: __t.timestamp(),
+  isAdmin: __t.bool(),
 });
 export type User = __Infer<typeof User>;
 

@@ -9,12 +9,14 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
+import {
+  SpaceCreatePolicy,
+} from "./types";
+
 
 export default __t.row({
-  identity: __t.identity().primaryKey(),
-  username: __t.string(),
-  displayName: __t.string().name("display_name"),
-  avatarUrl: __t.option(__t.string()).name("avatar_url"),
-  createdAt: __t.timestamp().name("created_at"),
-  isAdmin: __t.bool().name("is_admin"),
+  id: __t.u8().primaryKey(),
+  get spaceCreatePolicy() {
+    return SpaceCreatePolicy.name("space_create_policy");
+  },
 });

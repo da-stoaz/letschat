@@ -217,7 +217,9 @@ public static class AuthEndpoints
     private static async Task<AuthResponse> Login(
         LoginRequest request,
         UserManager<ApplicationUser> users,
-        TokenService tokens)
+        TokenService tokens,
+        SpacetimeClient spacetime,
+        ILoggerFactory loggerFactory)
     {
         var username = Validation.NormalizeUsername(request.Username);
         Validation.ValidateUsername(username);
@@ -266,7 +268,39 @@ public static class AuthEndpoints
             }
         }
 
+        // Admin accounts created before they had a SpacetimeDB identity (the
+        // admin Create-User flow, the bootstrap admin) only get a real identity
+        // here on first sign-in — push their instance-admin flag through now so
+        // the chat-domain gate matches the ASP.NET Admin role. Best-effort.
+        await SyncAdminFlagBestEffort(user, users, spacetime, loggerFactory);
+
         return await BuildAuthResponse(user, users, tokens);
+    }
+
+    /// <summary>
+    /// Pushes <c>is_admin = true</c> to SpacetimeDB for an account that holds the
+    /// ASP.NET <c>Admin</c> role, keeping the chat-domain admin gate in sync.
+    /// Never blocks sign-in: a failure (SpacetimeDB down, identity not yet
+    /// registered) is logged and swallowed; the next grant or sign-in retries.
+    /// </summary>
+    private static async Task SyncAdminFlagBestEffort(
+        ApplicationUser user,
+        UserManager<ApplicationUser> users,
+        SpacetimeClient spacetime,
+        ILoggerFactory loggerFactory)
+    {
+        try
+        {
+            if (await users.IsInRoleAsync(user, DbInitializer.AdminRole))
+            {
+                await spacetime.SyncUserAdminAsync(user.SpacetimeIdentity, true);
+            }
+        }
+        catch (Exception ex)
+        {
+            loggerFactory.CreateLogger("CoreApi.Auth").LogWarning(
+                ex, "Could not sync admin flag to SpacetimeDB for {User} on login", user.UserName);
+        }
     }
 
     private static async Task<VerifyResponse> Verify(VerifyRequest request, TokenService tokens)
