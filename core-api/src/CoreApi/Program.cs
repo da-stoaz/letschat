@@ -140,18 +140,26 @@ var app = builder.Build();
 
 // ── Listener-scope guard ─────────────────────────────────────────────────────
 // Each listener is mutually exclusive about what it serves:
-//   • The admin listener serves ONLY /admin/* — never the public landing page,
-//     /auth/*, /downloads/*, etc. (so the admin port doesn't double as a back
-//     door to the public surface).
+//   • The admin listener serves ONLY /admin/* and the admin panel's own static
+//     assets (its stylesheet lives at /css/…, not under /admin) — never the
+//     public landing page, /auth/*, /downloads/*, etc.
 //   • The public listener serves everything EXCEPT /admin/* (so the control
 //     panel is unreachable from the public reverse proxy).
 // Requests on the wrong listener get 404'd before any handler runs.
 app.Use(async (context, next) =>
 {
-    var isAdminPath = context.Request.Path.StartsWithSegments("/admin");
+    var path = context.Request.Path;
     var isAdminPort = context.Connection.LocalPort == adminPort;
+    var isAdminPath = path.StartsWithSegments("/admin");
+    // Static assets the admin pages reference from the app root.
+    var isAdminAsset =
+        path.StartsWithSegments("/css")
+        || path.StartsWithSegments("/js")
+        || path.StartsWithSegments("/lib")
+        || path.StartsWithSegments("/favicon.ico");
 
-    if (isAdminPath != isAdminPort)
+    var allowed = isAdminPort ? isAdminPath || isAdminAsset : !isAdminPath;
+    if (!allowed)
     {
         context.Response.StatusCode = StatusCodes.Status404NotFound;
         return;
