@@ -1,7 +1,8 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err, is_system_admin, member_key, require_member_role, require_owner, voice_key,
+    assert_or_err, has_member_role, is_banned, is_system_admin, member_key, require_member_role,
+    require_owner, voice_key,
 };
 use crate::schema::*;
 
@@ -36,6 +37,8 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
         invite_policy: InvitePolicy::ModeratorsOnly,
         icon_url: None,
         created_at: ctx.timestamp,
+        is_discoverable: false,
+        description: None,
     });
 
     let server_id = server_row.id;
@@ -107,6 +110,83 @@ pub fn set_server_invite_policy(
         .ok_or_else(|| "server not found".to_string())?;
     server_row.invite_policy = invite_policy;
     ctx.db.server().id().update(server_row);
+    Ok(())
+}
+
+/// Owner-only: toggle a space's discoverability and set its blurb. The
+/// description is trimmed and capped at 280 chars; an empty/whitespace blurb is
+/// stored as `None`.
+#[spacetimedb::reducer]
+pub fn set_server_discovery(
+    ctx: &ReducerContext,
+    server_id: u64,
+    is_discoverable: bool,
+    description: Option<String>,
+) -> Result<(), String> {
+    require_owner(ctx, server_id, ctx.sender())?;
+
+    let normalized_description = description
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if let Some(desc) = normalized_description.as_ref() {
+        assert_or_err(
+            desc.chars().count() <= 280,
+            "description must be at most 280 chars",
+        )?;
+    }
+    // Per-owner discoverable-space quota deferred (plan 1.5 phase 3) — revisit
+    // if discovery spam appears.
+
+    let mut server_row = ctx
+        .db
+        .server()
+        .id()
+        .find(server_id)
+        .ok_or_else(|| "server not found".to_string())?;
+    server_row.is_discoverable = is_discoverable;
+    server_row.description = normalized_description;
+    ctx.db.server().id().update(server_row);
+    Ok(())
+}
+
+/// One-click join for a space surfaced on Discover. Only valid for a space that
+/// is discoverable AND has an `Everyone` invite policy; `ModeratorsOnly` spaces
+/// must still be invited (the client shows a stub for those). Rejects callers
+/// who are already members or are banned.
+#[spacetimedb::reducer]
+pub fn join_discoverable_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
+    let caller = ctx.sender();
+
+    let server_row = ctx
+        .db
+        .server()
+        .id()
+        .find(server_id)
+        .ok_or_else(|| "server not found".to_string())?;
+
+    assert_or_err(server_row.is_discoverable, "this space is not discoverable")?;
+    assert_or_err(
+        matches!(server_row.invite_policy, InvitePolicy::Everyone),
+        "this space requires an invite from a moderator",
+    )?;
+    assert_or_err(
+        has_member_role(ctx, server_id, caller).is_none(),
+        "you are already a member of this space",
+    )?;
+    assert_or_err(
+        !is_banned(ctx, server_id, caller),
+        "you are banned from this space",
+    )?;
+
+    ctx.db.server_member().insert(ServerMember {
+        member_key: member_key(server_id, caller),
+        server_id,
+        user_identity: caller,
+        role: Role::Member,
+        joined_at: ctx.timestamp,
+        timeout_until: None,
+    });
+
     Ok(())
 }
 

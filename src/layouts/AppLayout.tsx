@@ -95,7 +95,10 @@ export function AppLayout() {
   const isMobile = useIsMobile()
   const activeDmIdentity = params.identity && params.identity !== 'friends' ? params.identity : null
   const isSettingsPage = location.pathname.startsWith('/app/settings')
+  const isDiscoverPage = location.pathname.startsWith('/app/discover')
   const isServerManagePage = /^\/app\/[^/]+\/manage\/?$/.test(location.pathname)
+  // Settings and Discover are full-pane: no channel bar, collapsed two-column grid.
+  const isFullPanePage = isSettingsPage || isDiscoverPage
   const normalizedSelfIdentity = selfIdentity ? normalizeIdentity(selfIdentity) : null
 
   useEffect(() => {
@@ -461,7 +464,7 @@ export function AppLayout() {
         <CardContent
           className={cn(
             'h-full min-h-0 overflow-hidden',
-            isSettingsPage || isServerManagePage ? 'p-1.5 sm:p-2' : 'p-0',
+            isFullPanePage || isServerManagePage ? 'p-1.5 sm:p-2' : 'p-0',
           )}
         >
           <Outlet />
@@ -496,7 +499,7 @@ export function AppLayout() {
         <div
           className={cn(
             'grid h-full min-h-0 grid-rows-1 gap-1.5 overflow-hidden',
-            isSettingsPage
+            isFullPanePage
               ? 'grid-cols-[48px_minmax(0,1fr)]'
               : 'grid-cols-[48px_var(--channel-bar-width)_minmax(0,1fr)] max-md:grid-cols-[48px_minmax(0,1fr)]',
           )}
@@ -506,13 +509,14 @@ export function AppLayout() {
             activeServerId={activeServerId}
             activeDmIdentity={activeDmIdentity}
             quickDmContacts={quickDmContacts}
-            onOpenHome={() => navigate('/app')}
             onOpenServer={openServer}
             onOpenDmHome={() => navigate('/app/dm/friends')}
             onOpenDmCompose={() => setShowComposeDm(true)}
             onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
             onOpenCreateServer={() => setShowCreateServer(true)}
+            onOpenDiscover={() => navigate('/app/discover')}
             onOpenSettings={() => navigate('/app/settings')}
+            isDiscoverActive={isDiscoverPage}
             isSettingsActive={isSettingsPage}
             hasUnreadInServer={hasUnreadInServer}
             countUnreadInServer={countUnreadInServer}
@@ -522,7 +526,7 @@ export function AppLayout() {
             dmCallActiveByIdentity={dmCallActiveByIdentity}
           />
 
-          {isSettingsPage ? null : (
+          {isFullPanePage ? null : (
             <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto] gap-3">
               <div className="relative min-h-0 min-w-0">
                 <ChannelBar

@@ -74,6 +74,14 @@ export const reducers = {
       serverId: toU64(serverId, 'serverId'),
       invitePolicy: reducerEnum(invitePolicy),
     }),
+  setServerDiscovery: (serverId: number, isDiscoverable: boolean, description: string | null) =>
+    spacetimedbClient.call('setServerDiscovery', {
+      serverId: toU64(serverId, 'serverId'),
+      isDiscoverable,
+      description: description === null || description.trim().length === 0 ? null : description.trim(),
+    }),
+  joinDiscoverableServer: (serverId: number) =>
+    spacetimedbClient.call('joinDiscoverableServer', { serverId: toU64(serverId, 'serverId') }),
   deleteServer: (serverId: number) =>
     spacetimedbClient.call('deleteServer', { serverId: toU64(serverId, 'serverId') }),
   leaveServer: (serverId: number) =>

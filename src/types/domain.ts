@@ -21,6 +21,19 @@ export interface Server {
   invitePolicy: ServerInvitePolicy
   iconUrl: string | null
   createdAt: string
+  isDiscoverable: boolean
+  description: string | null
+}
+
+/** A discoverable space as shown on the Discover surface (non-member view). */
+export interface DiscoverServer {
+  id: u64
+  name: string
+  ownerIdentity: Identity
+  invitePolicy: ServerInvitePolicy
+  iconUrl: string | null
+  description: string | null
+  memberCount: number
 }
 
 export interface ServerMember {

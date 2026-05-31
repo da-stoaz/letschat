@@ -22,6 +22,7 @@ import {
 } from './mappers'
 import { useChannelsStore } from '../../stores/channelsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useDiscoverStore } from '../../stores/discoverStore'
 import { useDmStore } from '../../stores/dmStore'
 import { useDmVoiceStore } from '../../stores/dmVoiceStore'
 import { useDmVoiceSessionStore } from '../../stores/dmVoiceSessionStore'
@@ -152,6 +153,34 @@ export function syncServers(conn: DbConnection): void {
     .map(mapServer)
     .filter((server) => allowedServerIds.has(server.id))
   useServersStore.getState().setServers(servers)
+}
+
+export function syncDiscover(conn: DbConnection): void {
+  const joined = joinedServerIds(conn)
+
+  // Member counts are computed across the full (public) server_member table so
+  // a discover card can show how many people are in a space the caller hasn't
+  // joined.
+  const memberCounts = new Map<number, number>()
+  for (const member of conn.db.server_member.iter()) {
+    const sid = toU64Number(member.serverId)
+    memberCounts.set(sid, (memberCounts.get(sid) ?? 0) + 1)
+  }
+
+  const servers = Array.from(conn.db.server.iter())
+    .map(mapServer)
+    .filter((server) => server.isDiscoverable && !joined.has(server.id))
+    .map((server) => ({
+      id: server.id,
+      name: server.name,
+      ownerIdentity: server.ownerIdentity,
+      invitePolicy: server.invitePolicy,
+      iconUrl: server.iconUrl,
+      description: server.description,
+      memberCount: memberCounts.get(server.id) ?? 0,
+    }))
+
+  useDiscoverStore.getState().setServers(servers)
 }
 
 export function syncMembers(conn: DbConnection, users: User[] = syncUsers(conn)): void {
@@ -357,6 +386,7 @@ export function syncServerScopedState(conn: DbConnection, users: User[] = syncUs
   syncMembers(conn, users)
   syncChannels(conn)
   syncInvites(conn)
+  syncDiscover(conn)
 }
 
 export function syncAll(conn: DbConnection): void {
@@ -389,6 +419,7 @@ export function resetClientState(): void {
   useUsersStore.setState({ users: [], byIdentity: {} })
 
   useServersStore.setState({ servers: [], activeServerId: null })
+  useDiscoverStore.setState({ servers: [] })
   useChannelsStore.setState({ channelsByServer: {} })
   useMembersStore.setState({ membersByServer: {} })
   useMessagesStore.setState({ messagesByChannel: {} })

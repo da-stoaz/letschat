@@ -89,6 +89,14 @@ pub struct Server {
     pub invite_policy: InvitePolicy,
     pub icon_url: Option<String>,
     pub created_at: Timestamp,
+    /// Opt-in: when true the space is listed on the "Discover" surface for
+    /// non-members. Owner-controlled via `set_server_discovery`. Default off.
+    #[default(false)]
+    pub is_discoverable: bool,
+    /// Short blurb shown on the Discover card (≤280 chars, enforced at the
+    /// reducer). Only meaningful when `is_discoverable`.
+    #[default(None::<String>)]
+    pub description: Option<String>,
 }
 
 #[spacetimedb::table(

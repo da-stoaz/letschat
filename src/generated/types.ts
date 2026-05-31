@@ -190,6 +190,8 @@ export const Server = __t.object("Server", {
   },
   iconUrl: __t.option(__t.string()),
   createdAt: __t.timestamp(),
+  isDiscoverable: __t.bool(),
+  description: __t.option(__t.string()),
 });
 export type Server = __Infer<typeof Server>;
 

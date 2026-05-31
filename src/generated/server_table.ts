@@ -23,4 +23,6 @@ export default __t.row({
   },
   iconUrl: __t.option(__t.string()).name("icon_url"),
   createdAt: __t.timestamp().name("created_at"),
+  isDiscoverable: __t.bool().name("is_discoverable"),
+  description: __t.option(__t.string()),
 });

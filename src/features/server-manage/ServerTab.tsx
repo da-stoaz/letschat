@@ -1,4 +1,15 @@
-import { CrownIcon, LogOutIcon, ServerIcon, Settings2Icon, ShieldCheckIcon, Trash2Icon, UserPlusIcon } from 'lucide-react'
+import { useState } from 'react'
+import {
+  CompassIcon,
+  CrownIcon,
+  LogOutIcon,
+  Loader2Icon,
+  ServerIcon,
+  Settings2Icon,
+  ShieldCheckIcon,
+  Trash2Icon,
+  UserPlusIcon,
+} from 'lucide-react'
 import type { Server, ServerInvitePolicy } from '../../types/domain'
 import { invitePolicyLabel, formatMemberSince } from './helpers'
 import { serverInitials } from '../../layouts/app-layout/helpers'
@@ -6,18 +17,25 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
+
+const DESCRIPTION_MAX = 280
 
 type ServerTabProps = {
   server: Server
   isOwner: boolean
   leaving: boolean
   invitePolicySaving: boolean
+  discoverySaving: boolean
   onOpenEditServer: () => void
   onOpenDeleteServer: () => void
   onLeaveServer: () => void
   onUpdateInvitePolicy: (policy: ServerInvitePolicy) => void
+  onUpdateDiscovery: (isDiscoverable: boolean, description: string | null) => void
 }
 
 export function ServerTab({
@@ -25,139 +43,214 @@ export function ServerTab({
   isOwner,
   leaving,
   invitePolicySaving,
+  discoverySaving,
   onOpenEditServer,
   onOpenDeleteServer,
   onLeaveServer,
   onUpdateInvitePolicy,
+  onUpdateDiscovery,
 }: ServerTabProps) {
-  const invitePolicyDescription = isOwner
-    ? 'This controls both invite links and direct in-app invites.'
-    : 'Only the owner can change invite permissions.'
+  // Discovery applies immediately. The toggle is optimistic-local (instant, and
+  // a consistent source for the blur-commit below — reading the prop mid-save
+  // could send a stale value). Description is the one free-text field, so it
+  // commits on blur if changed rather than per keystroke.
+  const [discoverable, setDiscoverable] = useState(server.isDiscoverable)
+  const [description, setDescription] = useState(server.description ?? '')
+
+  const commitDiscovery = (isDiscoverable: boolean, desc: string) =>
+    onUpdateDiscovery(isDiscoverable, desc.trim().length > 0 ? desc.trim() : null)
+
+  const toggleDiscoverable = (value: boolean) => {
+    setDiscoverable(value)
+    commitDiscovery(value, description)
+  }
+
+  const commitDescriptionIfChanged = () => {
+    if (description.trim() !== (server.description ?? '').trim()) {
+      commitDiscovery(discoverable, description)
+    }
+  }
 
   return (
-    <div className="grid gap-3 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-      <Card className="border-border/70 bg-background/40">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ServerIcon className="size-4 text-muted-foreground" />
-            Space Identity & Access
-          </CardTitle>
-          <CardDescription>Everything related to branding and who can bring new members in.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <section className="rounded-xl border border-border/70 bg-muted/20 p-3.5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <Avatar className="size-14 rounded-xl">
-                  {server.iconUrl ? <AvatarImage src={server.iconUrl} alt={server.name} /> : null}
-                  <AvatarFallback className="rounded-xl bg-primary/10 text-sm">
-                    {serverInitials(server.name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 space-y-1">
-                  <p className="truncate text-base font-semibold">{server.name}</p>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Badge variant="outline">{server.iconUrl ? 'Custom icon' : 'Fallback icon'}</Badge>
-                    {isOwner ? (
-                      <Badge variant="secondary">
-                        <CrownIcon className="size-3" />
-                        Owner permissions
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline">Read-only settings</Badge>
-                    )}
+    <ScrollArea className="h-full pr-2">
+      <div className="grid items-start gap-3 pb-1 lg:grid-cols-2">
+        {/* ── Left column ───────────────────────────────────────────── */}
+        <div className="space-y-3">
+          <Card className="border-border/70 bg-background/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ServerIcon className="size-4 text-muted-foreground" />
+                Identity
+              </CardTitle>
+              <CardDescription>Branding shown to members and on Discover.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 p-3.5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar className="size-14 shrink-0 rounded-xl">
+                    {server.iconUrl ? <AvatarImage src={server.iconUrl} alt={server.name} /> : null}
+                    <AvatarFallback className="rounded-xl bg-primary/10 text-sm">
+                      {serverInitials(server.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 space-y-1">
+                    <p className="truncate text-base font-semibold">{server.name}</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {isOwner ? (
+                        <Badge variant="secondary" className="gap-1">
+                          <CrownIcon className="size-3" />
+                          Owner
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline">Member</Badge>
+                      )}
+                      <Badge variant="outline">{server.iconUrl ? 'Custom icon' : 'Fallback icon'}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Created {formatMemberSince(server.createdAt)}</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">Created {formatMemberSince(server.createdAt)}</p>
                 </div>
+                <Button type="button" variant="outline" size="sm" disabled={!isOwner} onClick={onOpenEditServer}>
+                  <Settings2Icon className="size-4" />
+                  Edit
+                </Button>
               </div>
-              <Button type="button" variant="outline" size="sm" disabled={!isOwner} onClick={onOpenEditServer}>
-                <Settings2Icon className="size-4" />
-                Edit Name/Icon
-              </Button>
-            </div>
-          </section>
+            </CardContent>
+          </Card>
 
-          <Separator />
+          <Card className="border-border/70 bg-background/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShieldCheckIcon className="size-4 text-muted-foreground" />
+                Access &amp; Discovery
+              </CardTitle>
+              <CardDescription>Who can find this space and how new members get in.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <section className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Invite permissions</p>
+                  {invitePolicySaving ? (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Loader2Icon className="size-3 animate-spin" />
+                      Saving
+                    </span>
+                  ) : null}
+                </div>
+                <Select
+                  value={server.invitePolicy}
+                  onValueChange={(value) => onUpdateInvitePolicy(value as ServerInvitePolicy)}
+                  disabled={!isOwner || invitePolicySaving}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue>{invitePolicyLabel(server.invitePolicy)}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ModeratorsOnly">Owner + Moderators</SelectItem>
+                    <SelectItem value="Everyone">Everyone (all members)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Applies to both invite links and direct in-app invites.
+                </p>
+              </section>
 
-          <section className="space-y-2 rounded-xl border border-border/70 bg-muted/20 p-3.5">
-            <div className="flex items-center gap-2">
-              <ShieldCheckIcon className="size-4 text-muted-foreground" />
-              <p className="text-sm font-medium">Invite Permissions</p>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Decide who can invite new members. Current policy: <span className="font-medium">{invitePolicyLabel(server.invitePolicy)}</span>
-            </p>
-            <Select
-              value={server.invitePolicy}
-              onValueChange={(value) => onUpdateInvitePolicy(value as ServerInvitePolicy)}
-              disabled={!isOwner || invitePolicySaving}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue>{invitePolicyLabel(server.invitePolicy)}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ModeratorsOnly">Owner + Moderators</SelectItem>
-                <SelectItem value="Everyone">Everyone (all members)</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">{invitePolicyDescription}</p>
-          </section>
+              <Separator />
 
-          {!isOwner ? (
-            <p className="text-xs text-muted-foreground">
-              You can review settings here, but only the owner can change branding, invite permissions, or delete this space.
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
+              <section className="space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2">
+                    <CompassIcon className="mt-0.5 size-4 text-muted-foreground" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">List on Discover</p>
+                        {discoverySaving ? <Loader2Icon className="size-3 animate-spin text-muted-foreground" /> : null}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Let non-members find and join this space from Discover.
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={discoverable}
+                    onCheckedChange={toggleDiscoverable}
+                    disabled={!isOwner || discoverySaving}
+                    aria-label="List on Discover"
+                  />
+                </div>
 
-      <div className="space-y-3">
-        <Card className="border-border/70 bg-background/40">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Your Membership</CardTitle>
-            <CardDescription>Leave this space if you no longer want access.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="rounded-xl border border-border/70 bg-muted/20 p-3.5">
-              <div className="flex items-center gap-2">
+                <div className="space-y-1.5">
+                  <Textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_MAX))}
+                    onBlur={commitDescriptionIfChanged}
+                    placeholder="Briefly describe this space — shown on its Discover card."
+                    rows={3}
+                    maxLength={DESCRIPTION_MAX}
+                    disabled={!isOwner || discoverySaving}
+                  />
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] text-muted-foreground">
+                      {isOwner ? 'Saved when you click away.' : 'Only the owner can edit this.'}
+                    </p>
+                    <p className="text-[11px] tabular-nums text-muted-foreground">
+                      {description.length}/{DESCRIPTION_MAX}
+                    </p>
+                  </div>
+                </div>
+              </section>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ── Right column ──────────────────────────────────────────── */}
+        <div className="space-y-3">
+          <Card className="border-border/70 bg-background/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
                 <UserPlusIcon className="size-4 text-muted-foreground" />
-                <p className="text-sm font-medium">Exit Space</p>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Leaving removes this space from your sidebar. You can only return with a valid invite.
-              </p>
-              <Button type="button" variant="destructive" className="mt-3" disabled={isOwner || leaving} onClick={onLeaveServer}>
+                Your membership
+              </CardTitle>
+              <CardDescription>Leave this space if you no longer want access.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start text-destructive hover:text-destructive"
+                disabled={isOwner || leaving}
+                onClick={onLeaveServer}
+              >
                 <LogOutIcon className="size-4" />
-                {leaving ? 'Leaving...' : 'Leave Space'}
+                {leaving ? 'Leaving…' : 'Leave space'}
               </Button>
-            </div>
-            {isOwner ? (
               <p className="text-xs text-muted-foreground">
-                Owners cannot leave. Transfer ownership first in the Members tab.
+                {isOwner
+                  ? 'Owners cannot leave — transfer ownership first in the Members tab.'
+                  : 'Leaving removes this space from your sidebar; you can only return with a valid invite.'}
               </p>
-            ) : null}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className="border-destructive/35 bg-destructive/5">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base text-destructive">
-              <Trash2Icon className="size-4" />
-              Danger Zone
-            </CardTitle>
-            <CardDescription>Permanently delete the space and all associated channels/messages.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button type="button" variant="destructive" disabled={!isOwner} onClick={onOpenDeleteServer}>
-              <Trash2Icon className="size-4" />
-              Delete Space
-            </Button>
-            {!isOwner ? (
-              <p className="mt-2 text-xs text-muted-foreground">Only the owner can delete this space.</p>
-            ) : null}
-          </CardContent>
-        </Card>
+          <Card className="border-destructive/35 bg-destructive/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base text-destructive">
+                <Trash2Icon className="size-4" />
+                Danger zone
+              </CardTitle>
+              <CardDescription>Permanently delete this space and all its channels and messages.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button type="button" variant="destructive" className="w-full" disabled={!isOwner} onClick={onOpenDeleteServer}>
+                <Trash2Icon className="size-4" />
+                Delete space
+              </Button>
+              {!isOwner ? (
+                <p className="text-xs text-muted-foreground">Only the owner can delete this space.</p>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    </div>
+    </ScrollArea>
   )
 }

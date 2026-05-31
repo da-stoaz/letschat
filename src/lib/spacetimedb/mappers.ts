@@ -119,6 +119,8 @@ export function mapServer(row: DbRow): Server {
     invitePolicy: enumTag(row.invitePolicy || 'ModeratorsOnly') as ServerInvitePolicy,
     iconUrl: rowNullableString(row, 'iconUrl'),
     createdAt: toIsoString(row.createdAt),
+    isDiscoverable: Boolean(row.isDiscoverable),
+    description: rowNullableString(row, 'description'),
   }
 }
 

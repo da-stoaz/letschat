@@ -50,6 +50,7 @@ import DeleteMessageReducer from "./delete_message_reducer";
 import DeleteServerReducer from "./delete_server_reducer";
 import EditDirectMessageReducer from "./edit_direct_message_reducer";
 import EditMessageReducer from "./edit_message_reducer";
+import JoinDiscoverableServerReducer from "./join_discoverable_server_reducer";
 import JoinDmVoiceReducer from "./join_dm_voice_reducer";
 import JoinVoiceChannelReducer from "./join_voice_channel_reducer";
 import KickMemberReducer from "./kick_member_reducer";
@@ -73,6 +74,7 @@ import SendMessageReducer from "./send_message_reducer";
 import SetChannelSectionReducer from "./set_channel_section_reducer";
 import SetMemberRoleReducer from "./set_member_role_reducer";
 import SetPresenceOfflineReducer from "./set_presence_offline_reducer";
+import SetServerDiscoveryReducer from "./set_server_discovery_reducer";
 import SetServerIconReducer from "./set_server_icon_reducer";
 import SetServerInvitePolicyReducer from "./set_server_invite_policy_reducer";
 import SetSpaceCreatePolicyReducer from "./set_space_create_policy_reducer";
@@ -362,6 +364,7 @@ const reducersSchema = __reducers(
   __reducerSchema("delete_server", DeleteServerReducer),
   __reducerSchema("edit_direct_message", EditDirectMessageReducer),
   __reducerSchema("edit_message", EditMessageReducer),
+  __reducerSchema("join_discoverable_server", JoinDiscoverableServerReducer),
   __reducerSchema("join_dm_voice", JoinDmVoiceReducer),
   __reducerSchema("join_voice_channel", JoinVoiceChannelReducer),
   __reducerSchema("kick_member", KickMemberReducer),
@@ -385,6 +388,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_channel_section", SetChannelSectionReducer),
   __reducerSchema("set_member_role", SetMemberRoleReducer),
   __reducerSchema("set_presence_offline", SetPresenceOfflineReducer),
+  __reducerSchema("set_server_discovery", SetServerDiscoveryReducer),
   __reducerSchema("set_server_icon", SetServerIconReducer),
   __reducerSchema("set_server_invite_policy", SetServerInvitePolicyReducer),
   __reducerSchema("set_space_create_policy", SetSpaceCreatePolicyReducer),

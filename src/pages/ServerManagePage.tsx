@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { ExternalLinkIcon } from 'lucide-react'
 import { reducers } from '../lib/spacetimedb'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -45,6 +44,7 @@ export function ServerManagePage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [invitePolicySaving, setInvitePolicySaving] = useState(false)
+  const [discoverySaving, setDiscoverySaving] = useState(false)
 
   const isOwner = role === 'Owner'
   const canModerateMembers = role === 'Owner' || role === 'Moderator'
@@ -118,6 +118,20 @@ export function ServerManagePage() {
       toast.error('Failed to update invite permission', { description: message })
     } finally {
       setInvitePolicySaving(false)
+    }
+  }
+
+  const updateDiscovery = async (isDiscoverable: boolean, description: string | null) => {
+    if (!isOwner || !server) return
+    setDiscoverySaving(true)
+    try {
+      await reducers.setServerDiscovery(server.id, isDiscoverable, description)
+      toast.success('Discovery settings updated')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not update discovery settings.'
+      toast.error('Failed to update discovery', { description: message })
+    } finally {
+      setDiscoverySaving(false)
     }
   }
 
@@ -249,19 +263,13 @@ export function ServerManagePage() {
               </div>
               <p className="text-sm text-muted-foreground">Manage members, channels, and space settings in one place.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => navigate(serverHomePath)}>
-                <ExternalLinkIcon className="size-4" />
-                Open Space
-              </Button>
-            </div>
           </div>
 
-          <Tabs defaultValue="members" className="min-h-0 flex-1 overflow-hidden">
+          <Tabs defaultValue="server" className="min-h-0 flex-1 overflow-hidden">
             <TabsList className="w-full">
+              <TabsTrigger value="server" className="flex-1">Space</TabsTrigger>
               <TabsTrigger value="members" className="flex-1">Members</TabsTrigger>
               <TabsTrigger value="channels" className="flex-1">Channels</TabsTrigger>
-              <TabsTrigger value="server" className="flex-1">Space</TabsTrigger>
             </TabsList>
 
             <TabsContent value="members" className="min-h-0 flex-1">
@@ -298,6 +306,7 @@ export function ServerManagePage() {
                 isOwner={isOwner}
                 leaving={leaving}
                 invitePolicySaving={invitePolicySaving}
+                discoverySaving={discoverySaving}
                 onOpenEditServer={() => setShowEditServer(true)}
                 onOpenDeleteServer={() => setShowDeleteServer(true)}
                 onLeaveServer={() => {
@@ -305,6 +314,9 @@ export function ServerManagePage() {
                 }}
                 onUpdateInvitePolicy={(value) => {
                   void updateInvitePolicy(value)
+                }}
+                onUpdateDiscovery={(isDiscoverable, description) => {
+                  void updateDiscovery(isDiscoverable, description)
                 }}
               />
             </TabsContent>
