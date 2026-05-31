@@ -34,6 +34,10 @@ pub(crate) fn ban_key(server_id: u64, user_identity: Identity) -> String {
     format!("{server_id}:{user_identity}")
 }
 
+pub(crate) fn join_request_key(server_id: u64, user_identity: Identity) -> String {
+    format!("{server_id}:{user_identity}")
+}
+
 pub(crate) fn voice_key(channel_id: u64, user_identity: Identity) -> String {
     format!("{channel_id}:{user_identity}")
 }

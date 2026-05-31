@@ -35,13 +35,16 @@ import {
 
 // Import all reducer arg schemas
 import AcceptFriendRequestReducer from "./accept_friend_request_reducer";
+import ApproveJoinRequestReducer from "./approve_join_request_reducer";
 import BanMemberReducer from "./ban_member_reducer";
 import BlockUserReducer from "./block_user_reducer";
+import CancelJoinRequestReducer from "./cancel_join_request_reducer";
 import CleanupExpiredInvitesReducer from "./cleanup_expired_invites_reducer";
 import CreateChannelReducer from "./create_channel_reducer";
 import CreateInviteReducer from "./create_invite_reducer";
 import CreateServerReducer from "./create_server_reducer";
 import DeclineFriendRequestReducer from "./decline_friend_request_reducer";
+import DeclineJoinRequestReducer from "./decline_join_request_reducer";
 import DeleteChannelReducer from "./delete_channel_reducer";
 import DeleteChannelSectionReducer from "./delete_channel_section_reducer";
 import DeleteDirectMessageReducer from "./delete_direct_message_reducer";
@@ -66,6 +69,7 @@ import RegisterUserReducer from "./register_user_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
 import RemoveTimeoutReducer from "./remove_timeout_reducer";
 import RenameServerReducer from "./rename_server_reducer";
+import RequestToJoinReducer from "./request_to_join_reducer";
 import RespondDmServerInviteReducer from "./respond_dm_server_invite_reducer";
 import SendDirectMessageReducer from "./send_direct_message_reducer";
 import SendDmServerInviteReducer from "./send_dm_server_invite_reducer";
@@ -99,6 +103,7 @@ import ChannelRow from "./channel_table";
 import DirectMessageRow from "./direct_message_table";
 import DmServerInviteRow from "./dm_server_invite_table";
 import InviteRow from "./invite_table";
+import JoinRequestRow from "./join_request_table";
 import MessageRow from "./message_table";
 import MyBlocksRow from "./my_blocks_table";
 import MyDmVoiceParticipantsRow from "./my_dm_voice_participants_table";
@@ -202,6 +207,23 @@ const tablesSchema = __schema({
       { name: 'invite_token_key', constraint: 'unique', columns: ['token'] },
     ],
   }, InviteRow),
+  join_request: __table({
+    name: 'join_request',
+    indexes: [
+      { accessor: 'request_key', name: 'join_request_request_key_idx_btree', algorithm: 'btree', columns: [
+        'requestKey',
+      ] },
+      { accessor: 'server_id', name: 'join_request_server_id_idx_btree', algorithm: 'btree', columns: [
+        'serverId',
+      ] },
+      { accessor: 'user_identity', name: 'join_request_user_identity_idx_btree', algorithm: 'btree', columns: [
+        'userIdentity',
+      ] },
+    ],
+    constraints: [
+      { name: 'join_request_request_key_key', constraint: 'unique', columns: ['requestKey'] },
+    ],
+  }, JoinRequestRow),
   message: __table({
     name: 'message',
     indexes: [
@@ -349,13 +371,16 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("accept_friend_request", AcceptFriendRequestReducer),
+  __reducerSchema("approve_join_request", ApproveJoinRequestReducer),
   __reducerSchema("ban_member", BanMemberReducer),
   __reducerSchema("block_user", BlockUserReducer),
+  __reducerSchema("cancel_join_request", CancelJoinRequestReducer),
   __reducerSchema("cleanup_expired_invites", CleanupExpiredInvitesReducer),
   __reducerSchema("create_channel", CreateChannelReducer),
   __reducerSchema("create_invite", CreateInviteReducer),
   __reducerSchema("create_server", CreateServerReducer),
   __reducerSchema("decline_friend_request", DeclineFriendRequestReducer),
+  __reducerSchema("decline_join_request", DeclineJoinRequestReducer),
   __reducerSchema("delete_channel", DeleteChannelReducer),
   __reducerSchema("delete_channel_section", DeleteChannelSectionReducer),
   __reducerSchema("delete_direct_message", DeleteDirectMessageReducer),
@@ -380,6 +405,7 @@ const reducersSchema = __reducers(
   __reducerSchema("remove_friend", RemoveFriendReducer),
   __reducerSchema("remove_timeout", RemoveTimeoutReducer),
   __reducerSchema("rename_server", RenameServerReducer),
+  __reducerSchema("request_to_join", RequestToJoinReducer),
   __reducerSchema("respond_dm_server_invite", RespondDmServerInviteReducer),
   __reducerSchema("send_direct_message", SendDirectMessageReducer),
   __reducerSchema("send_dm_server_invite", SendDmServerInviteReducer),

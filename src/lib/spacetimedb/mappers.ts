@@ -15,6 +15,7 @@ import type {
   FriendStatus,
   Identity,
   Invite,
+  JoinRequest,
   Message,
   PresenceState,
   ReadState,
@@ -131,6 +132,14 @@ export function mapServerMember(row: DbRow): ServerMember {
     role: enumTag(row.role) as Role,
     joinedAt: toIsoString(row.joinedAt),
     timeoutUntil: row.timeoutUntil ? toIsoString(row.timeoutUntil) : null,
+  }
+}
+
+export function mapJoinRequest(row: DbRow): JoinRequest {
+  return {
+    serverId: toU64Number(row.serverId),
+    userIdentity: toIdentityString(row.userIdentity),
+    createdAt: toIsoString(row.createdAt),
   }
 }
 

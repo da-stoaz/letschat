@@ -82,6 +82,20 @@ export const reducers = {
     }),
   joinDiscoverableServer: (serverId: number) =>
     spacetimedbClient.call('joinDiscoverableServer', { serverId: toU64(serverId, 'serverId') }),
+  requestToJoin: (serverId: number) =>
+    spacetimedbClient.call('requestToJoin', { serverId: toU64(serverId, 'serverId') }),
+  cancelJoinRequest: (serverId: number) =>
+    spacetimedbClient.call('cancelJoinRequest', { serverId: toU64(serverId, 'serverId') }),
+  approveJoinRequest: (serverId: number, targetIdentity: Identity) =>
+    spacetimedbClient.call('approveJoinRequest', {
+      serverId: toU64(serverId, 'serverId'),
+      targetIdentity: toReducerIdentity(targetIdentity),
+    }),
+  declineJoinRequest: (serverId: number, targetIdentity: Identity) =>
+    spacetimedbClient.call('declineJoinRequest', {
+      serverId: toU64(serverId, 'serverId'),
+      targetIdentity: toReducerIdentity(targetIdentity),
+    }),
   deleteServer: (serverId: number) =>
     spacetimedbClient.call('deleteServer', { serverId: toU64(serverId, 'serverId') }),
   leaveServer: (serverId: number) =>

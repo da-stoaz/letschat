@@ -133,6 +133,21 @@ pub struct Ban {
     pub banned_at: Timestamp,
 }
 
+/// A non-member's pending request to join a discoverable, invite-only space.
+/// A row existing == the request is pending; approving creates a `ServerMember`
+/// and removes the row, declining/cancelling just removes it.
+#[spacetimedb::table(accessor = join_request, public)]
+pub struct JoinRequest {
+    /// "{server_id}:{user_identity}" — one pending request per user per space.
+    #[primary_key]
+    pub request_key: String,
+    #[index(btree)]
+    pub server_id: u64,
+    #[index(btree)]
+    pub user_identity: Identity,
+    pub created_at: Timestamp,
+}
+
 #[spacetimedb::table(accessor = invite, public)]
 pub struct Invite {
     #[primary_key]

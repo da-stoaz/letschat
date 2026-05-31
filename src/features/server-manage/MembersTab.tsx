@@ -1,4 +1,5 @@
 import {
+  CheckIcon,
   ClockIcon,
   CrownIcon,
   HammerIcon,
@@ -8,12 +9,17 @@ import {
   ShieldOffIcon,
   TimerOffIcon,
   UserMinusIcon,
+  XIcon,
 } from 'lucide-react'
 import { reducers } from '../../lib/spacetimedb'
 import type { ServerMemberWithUser } from '../../stores/membersStore'
+import type { JoinRequestWithUser } from '../../stores/joinRequestStore'
+import { userInitials } from '../../layouts/app-layout/helpers'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { toast } from '@/components/ui/sonner'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +39,7 @@ type MembersTabProps = {
   role: 'Owner' | 'Moderator'
   serverId: number
   sortedMembers: ServerMemberWithUser[]
+  joinRequests: JoinRequestWithUser[]
   selfIdentity: string | null
   canModerateMembers: boolean
   isOwner: boolean
@@ -43,11 +50,23 @@ export function MembersTab({
   role,
   serverId,
   sortedMembers,
+  joinRequests,
   selfIdentity,
   canModerateMembers,
   isOwner,
   onSetMemberAction,
 }: MembersTabProps) {
+  const resolveRequest = async (action: () => Promise<void>, failMessage: string) => {
+    try {
+      await action()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : failMessage
+      toast.error(failMessage, { description: message })
+    }
+  }
+
+  const showRequests = canModerateMembers && joinRequests.length > 0
+
   return (
     <Card className="flex h-full min-h-0 flex-col border-border/70 bg-background/40">
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
@@ -67,6 +86,66 @@ export function MembersTab({
       </CardHeader>
       <CardContent className="min-h-0 flex-1 pt-0">
         <ScrollArea className="h-full pr-2">
+          {showRequests ? (
+            <section className="mb-4 space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Pending requests · {joinRequests.length}
+              </p>
+              <div className="space-y-2">
+                {joinRequests.map((req) => {
+                  const label = req.user?.displayName || req.user?.username || req.userIdentity.slice(0, 10)
+                  const username = req.user?.username || req.userIdentity.slice(0, 12)
+                  return (
+                    <div
+                      key={req.userIdentity}
+                      className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/20 p-2.5"
+                    >
+                      <Avatar className="size-8 shrink-0 rounded-full">
+                        {req.user?.avatarUrl ? <AvatarImage src={req.user.avatarUrl} alt={label} /> : null}
+                        <AvatarFallback className="rounded-full bg-primary/10 text-[10px]">
+                          {userInitials(label)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{label}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          @{username} · requested {formatMemberSince(req.createdAt)}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() =>
+                          void resolveRequest(async () => {
+                            await reducers.approveJoinRequest(serverId, req.userIdentity)
+                            toast.success(`${label} joined the space`)
+                          }, 'Could not approve the request.')
+                        }
+                      >
+                        <CheckIcon className="size-4" />
+                        Approve
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground"
+                        onClick={() =>
+                          void resolveRequest(
+                            () => reducers.declineJoinRequest(serverId, req.userIdentity),
+                            'Could not decline the request.',
+                          )
+                        }
+                      >
+                        <XIcon className="size-4" />
+                        Decline
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          ) : null}
           <Table>
             <TableHeader>
               <TableRow>

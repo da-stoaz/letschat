@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   CompassIcon,
   CrownIcon,
+  InfoIcon,
   LogOutIcon,
   Loader2Icon,
   ServerIcon,
@@ -22,6 +23,7 @@ import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 const DESCRIPTION_MAX = 280
 
@@ -161,12 +163,26 @@ export function ServerTab({
                   <div className="flex items-start gap-2">
                     <CompassIcon className="mt-0.5 size-4 text-muted-foreground" />
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <p className="text-sm font-medium">List on Discover</p>
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <button type="button" className="text-muted-foreground/70 hover:text-foreground">
+                                <InfoIcon className="size-3.5" />
+                              </button>
+                            }
+                          />
+                          <TooltipContent className="max-w-60">
+                            {server.invitePolicy === 'Everyone'
+                              ? 'With “Everyone” invites, people can join this space in one click from Discover.'
+                              : 'Invites are moderator-only, so people who find this space on Discover can request to join — a moderator approves each request.'}
+                          </TooltipContent>
+                        </Tooltip>
                         {discoverySaving ? <Loader2Icon className="size-3 animate-spin text-muted-foreground" /> : null}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Let non-members find and join this space from Discover.
+                        Let non-members find this space from Discover.
                       </p>
                     </div>
                   </div>

@@ -25,6 +25,13 @@ export interface Server {
   description: string | null
 }
 
+/** A non-member's pending request to join a discoverable, invite-only space. */
+export interface JoinRequest {
+  serverId: u64
+  userIdentity: Identity
+  createdAt: string
+}
+
 /** A discoverable space as shown on the Discover surface (non-member view). */
 export interface DiscoverServer {
   id: u64

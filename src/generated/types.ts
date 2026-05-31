@@ -145,6 +145,14 @@ export const InvitePolicy = __t.enum("InvitePolicy", {
 });
 export type InvitePolicy = __Infer<typeof InvitePolicy>;
 
+export const JoinRequest = __t.object("JoinRequest", {
+  requestKey: __t.string(),
+  serverId: __t.u64(),
+  userIdentity: __t.identity(),
+  createdAt: __t.timestamp(),
+});
+export type JoinRequest = __Infer<typeof JoinRequest>;
+
 export const Message = __t.object("Message", {
   id: __t.u64(),
   channelId: __t.u64(),

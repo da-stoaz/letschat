@@ -287,6 +287,16 @@ pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String>
         ctx.db.invite().token().delete(&invite_row.token);
     }
 
+    let join_requests: Vec<JoinRequest> = ctx
+        .db
+        .join_request()
+        .iter()
+        .filter(|r| r.server_id == server_id)
+        .collect();
+    for request in join_requests {
+        ctx.db.join_request().request_key().delete(&request.request_key);
+    }
+
     for channel_id in channel_ids {
         ctx.db.channel().id().delete(channel_id);
     }

@@ -1,89 +1,125 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CompassIcon, LockIcon, UsersIcon } from 'lucide-react'
+import { CheckIcon, CompassIcon, UsersIcon } from 'lucide-react'
 import { reducers } from '../lib/spacetimedb'
 import { useDiscoverStore } from '../stores/discoverStore'
+import { useJoinRequestStore } from '../stores/joinRequestStore'
 import { serverInitials } from '../layouts/app-layout/helpers'
 import type { DiscoverServer } from '../types/domain'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from '@/components/ui/sonner'
 
 function formatMemberCount(count: number): string {
-  if (count === 1) return '1 member'
-  return `${count} members`
+  return `${count} ${count === 1 ? 'member' : 'members'}`
 }
 
-function DiscoverCard({ server, onJoined }: { server: DiscoverServer; onJoined: (id: number) => void }) {
-  const [joining, setJoining] = useState(false)
-  const canJoin = server.invitePolicy === 'Everyone'
+function DiscoverCard({
+  server,
+  pending,
+  onJoined,
+}: {
+  server: DiscoverServer
+  pending: boolean
+  onJoined: (id: number) => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const directJoin = server.invitePolicy === 'Everyone'
+  const description = server.description?.trim()
 
-  const join = async () => {
-    if (!canJoin || joining) return
-    setJoining(true)
+  const run = async (action: () => Promise<void>, failMessage: string) => {
+    if (busy) return
+    setBusy(true)
     try {
-      await reducers.joinDiscoverableServer(server.id)
-      toast.success(`Joined ${server.name}`)
-      onJoined(server.id)
+      await action()
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not join this space.'
-      toast.error('Failed to join', { description: message })
-      setJoining(false)
+      const message = error instanceof Error ? error.message : failMessage
+      toast.error(failMessage, { description: message })
+    } finally {
+      setBusy(false)
     }
   }
 
+  const join = () =>
+    run(async () => {
+      await reducers.joinDiscoverableServer(server.id)
+      toast.success(`Joined ${server.name}`)
+      onJoined(server.id)
+    }, 'Could not join this space.')
+
+  const request = () =>
+    run(async () => {
+      await reducers.requestToJoin(server.id)
+      toast.success('Request sent', { description: 'A moderator will review your request to join.' })
+    }, 'Could not send your request.')
+
+  const cancel = () =>
+    run(async () => {
+      await reducers.cancelJoinRequest(server.id)
+    }, 'Could not cancel your request.')
+
   return (
-    <Card className="flex flex-col border-border/70 bg-background/40">
+    <Card className="flex flex-col border-border/70 bg-background/40 transition-colors hover:border-border">
       <CardContent className="flex flex-1 flex-col gap-3 p-4">
-        <div className="flex items-start gap-3">
-          <Avatar className="size-12 rounded-xl">
+        <div className="flex items-center gap-3">
+          <Avatar className="size-11 shrink-0 rounded-xl">
             {server.iconUrl ? <AvatarImage src={server.iconUrl} alt={server.name} /> : null}
             <AvatarFallback className="rounded-xl bg-primary/10 text-sm">
               {serverInitials(server.name)}
             </AvatarFallback>
           </Avatar>
-          <div className="min-w-0 flex-1 space-y-1">
+          <div className="min-w-0">
             <p className="truncate font-semibold leading-tight">{server.name}</p>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant="outline" className="gap-1 text-[11px]">
-                <UsersIcon className="size-3" />
-                {formatMemberCount(server.memberCount)}
-              </Badge>
-              {server.invitePolicy === 'Everyone' ? (
-                <Badge variant="secondary" className="text-[11px]">Open to all</Badge>
-              ) : (
-                <Badge variant="outline" className="gap-1 text-[11px]">
-                  <LockIcon className="size-3" />
-                  Invite only
-                </Badge>
-              )}
-            </div>
+            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+              <UsersIcon className="size-3" />
+              {formatMemberCount(server.memberCount)}
+            </p>
           </div>
         </div>
 
-        <p className="line-clamp-3 min-h-[3.75rem] text-sm text-muted-foreground">
-          {server.description?.trim() || 'No description provided.'}
+        <p
+          className={`line-clamp-2 text-sm ${
+            description ? 'text-muted-foreground' : 'text-muted-foreground/55 italic'
+          }`}
+        >
+          {description || 'No description yet.'}
         </p>
 
-        {canJoin ? (
-          <Button type="button" className="mt-auto w-full" disabled={joining} onClick={() => void join()}>
-            {joining ? 'Joining…' : 'Join'}
-          </Button>
-        ) : (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button type="button" variant="outline" className="mt-auto w-full" disabled>
-                  Invite only
-                </Button>
-              }
-            />
-            <TooltipContent>Ask a moderator to invite you.</TooltipContent>
-          </Tooltip>
-        )}
+        <div className="mt-auto pt-1">
+          {directJoin ? (
+            <Button type="button" className="w-full" disabled={busy} onClick={() => void join()}>
+              {busy ? 'Joining…' : 'Join'}
+            </Button>
+          ) : pending ? (
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md border border-border/60 bg-muted/20 text-xs font-medium text-muted-foreground">
+                <CheckIcon className="size-3.5 text-emerald-500" />
+                Request pending
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                disabled={busy}
+                onClick={() => void cancel()}
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              disabled={busy}
+              onClick={() => void request()}
+            >
+              {busy ? 'Requesting…' : 'Request to join'}
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   )
@@ -92,6 +128,8 @@ function DiscoverCard({ server, onJoined }: { server: DiscoverServer; onJoined: 
 export function DiscoverPage() {
   const navigate = useNavigate()
   const servers = useDiscoverStore((s) => s.servers)
+  const myPendingServerIds = useJoinRequestStore((s) => s.myPendingServerIds)
+  const pendingSet = new Set(myPendingServerIds)
 
   const onJoined = (serverId: number) => {
     // The membership sync removes this space from Discover; jump into it.
@@ -126,7 +164,12 @@ export function DiscoverPage() {
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {servers.map((server) => (
-                <DiscoverCard key={server.id} server={server} onJoined={onJoined} />
+                <DiscoverCard
+                  key={server.id}
+                  server={server}
+                  pending={pendingSet.has(server.id)}
+                  onJoined={onJoined}
+                />
               ))}
             </div>
           )}

@@ -2,6 +2,7 @@ mod channels;
 mod direct_messages;
 mod dm_voice;
 mod invites;
+mod join_requests;
 mod member_management;
 mod messages;
 mod presence;

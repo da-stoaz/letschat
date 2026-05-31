@@ -4,6 +4,7 @@ import {
   mapServer,
   mapServerMember,
   mapInvite,
+  mapJoinRequest,
   isInviteActive,
   mapDmServerInvite,
   mapChannel,
@@ -23,6 +24,7 @@ import {
 import { useChannelsStore } from '../../stores/channelsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useDiscoverStore } from '../../stores/discoverStore'
+import { useJoinRequestStore, type JoinRequestWithUser } from '../../stores/joinRequestStore'
 import { useDmStore } from '../../stores/dmStore'
 import { useDmVoiceStore } from '../../stores/dmVoiceStore'
 import { useDmVoiceSessionStore } from '../../stores/dmVoiceSessionStore'
@@ -181,6 +183,45 @@ export function syncDiscover(conn: DbConnection): void {
     }))
 
   useDiscoverStore.getState().setServers(servers)
+}
+
+export function syncJoinRequests(conn: DbConnection, users: User[] = syncUsers(conn)): void {
+  const me = useConnectionStore.getState().identity
+
+  // Spaces the caller moderates (Owner/Moderator) — they see incoming requests.
+  const moderated = new Set<number>()
+  if (me) {
+    for (const row of conn.db.server_member.iter()) {
+      const member = mapServerMember(row)
+      if (
+        sameIdentity(member.userIdentity, me) &&
+        (member.role === 'Owner' || member.role === 'Moderator')
+      ) {
+        moderated.add(member.serverId)
+      }
+    }
+  }
+
+  const usersByIdentity = new Map(users.map((user) => [normalizeIdentity(user.identity), user]))
+  const mine: number[] = []
+  const byServer: Record<number, JoinRequestWithUser[]> = {}
+  for (const row of conn.db.join_request.iter()) {
+    const request = mapJoinRequest(row)
+    if (me && sameIdentity(request.userIdentity, me)) {
+      mine.push(request.serverId)
+    }
+    if (moderated.has(request.serverId)) {
+      ;(byServer[request.serverId] ??= []).push({
+        ...request,
+        user: usersByIdentity.get(normalizeIdentity(request.userIdentity)) ?? null,
+      })
+    }
+  }
+  for (const rows of Object.values(byServer)) {
+    rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  }
+
+  useJoinRequestStore.getState().setRequests(mine, byServer)
 }
 
 export function syncMembers(conn: DbConnection, users: User[] = syncUsers(conn)): void {
@@ -387,6 +428,7 @@ export function syncServerScopedState(conn: DbConnection, users: User[] = syncUs
   syncChannels(conn)
   syncInvites(conn)
   syncDiscover(conn)
+  syncJoinRequests(conn, users)
 }
 
 export function syncAll(conn: DbConnection): void {
@@ -420,6 +462,7 @@ export function resetClientState(): void {
 
   useServersStore.setState({ servers: [], activeServerId: null })
   useDiscoverStore.setState({ servers: [] })
+  useJoinRequestStore.setState({ myPendingServerIds: [], requestsByServer: {} })
   useChannelsStore.setState({ channelsByServer: {} })
   useMembersStore.setState({ membersByServer: {} })
   useMessagesStore.setState({ messagesByChannel: {} })

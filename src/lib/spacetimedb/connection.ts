@@ -213,6 +213,7 @@ async function connectWithUri(uri: string, database: string, reportErrors: boole
         tables.my_typing_states,
         tables.my_read_states,
         tables.invite,
+        tables.join_request,
         tables.dm_server_invite,
       ])
 

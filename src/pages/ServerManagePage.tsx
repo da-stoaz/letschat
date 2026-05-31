@@ -4,6 +4,7 @@ import { reducers } from '../lib/spacetimedb'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useMembersStore, type ServerMemberWithUser } from '../stores/membersStore'
+import { useJoinRequestStore } from '../stores/joinRequestStore'
 import { useServersStore } from '../stores/serversStore'
 import { useServerRole } from '../hooks/useServerRole'
 import { canManageChannels } from '../lib/permissions'
@@ -30,6 +31,7 @@ export function ServerManagePage() {
   const role = useServerRole(Number.isFinite(numericServerId) ? numericServerId : null)
   const server = useServersStore((s) => s.servers.find((entry) => entry.id === numericServerId) ?? null)
   const members = useMembersStore((s) => s.membersByServer[numericServerId] ?? [])
+  const joinRequests = useJoinRequestStore((s) => s.requestsByServer[numericServerId] ?? [])
   const channels = useChannelsStore((s) => s.channelsByServer[numericServerId] ?? [])
 
   const [showEditServer, setShowEditServer] = useState(false)
@@ -277,6 +279,7 @@ export function ServerManagePage() {
                 role={role}
                 serverId={server.id}
                 sortedMembers={sortedMembers}
+                joinRequests={joinRequests}
                 selfIdentity={selfIdentity}
                 canModerateMembers={canModerateMembers}
                 isOwner={isOwner}
