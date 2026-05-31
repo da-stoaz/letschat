@@ -4,7 +4,7 @@ import { reducers } from '../lib/spacetimedb'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useMembersStore, type ServerMemberWithUser } from '../stores/membersStore'
-import { useJoinRequestStore } from '../stores/joinRequestStore'
+import { useJoinRequestStore, type JoinRequestWithUser } from '../stores/joinRequestStore'
 import { useServersStore } from '../stores/serversStore'
 import { useServerRole } from '../hooks/useServerRole'
 import { canManageChannels } from '../lib/permissions'
@@ -22,6 +22,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from '@/components/ui/sonner'
 import { serverInitials } from '../layouts/app-layout/helpers'
 
+// Stable empty reference: a space usually has no pending requests, so the
+// selector must not mint a new array each render (that loops useSyncExternalStore).
+const EMPTY_JOIN_REQUESTS: JoinRequestWithUser[] = []
+
 export function ServerManagePage() {
   const { serverId } = useParams()
   const navigate = useNavigate()
@@ -31,7 +35,7 @@ export function ServerManagePage() {
   const role = useServerRole(Number.isFinite(numericServerId) ? numericServerId : null)
   const server = useServersStore((s) => s.servers.find((entry) => entry.id === numericServerId) ?? null)
   const members = useMembersStore((s) => s.membersByServer[numericServerId] ?? [])
-  const joinRequests = useJoinRequestStore((s) => s.requestsByServer[numericServerId] ?? [])
+  const joinRequests = useJoinRequestStore((s) => s.requestsByServer[numericServerId] ?? EMPTY_JOIN_REQUESTS)
   const channels = useChannelsStore((s) => s.channelsByServer[numericServerId] ?? [])
 
   const [showEditServer, setShowEditServer] = useState(false)
