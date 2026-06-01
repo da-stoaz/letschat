@@ -25,12 +25,16 @@ export interface Server {
   description: string | null
 }
 
-/** A non-member's pending request to join a discoverable, invite-only space. */
+/** A non-member's request to join a discoverable, invite-only space. */
 export interface JoinRequest {
   serverId: u64
   userIdentity: Identity
   createdAt: string
+  /** A moderator declined it; the row is kept so the requester sees the outcome. */
+  declined: boolean
 }
+
+export type JoinRequestStatus = 'pending' | 'declined'
 
 /** A discoverable space as shown on the Discover surface (non-member view). */
 export interface DiscoverServer {

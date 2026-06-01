@@ -150,6 +150,7 @@ export const JoinRequest = __t.object("JoinRequest", {
   serverId: __t.u64(),
   userIdentity: __t.identity(),
   createdAt: __t.timestamp(),
+  declined: __t.bool(),
 });
 export type JoinRequest = __Infer<typeof JoinRequest>;
 

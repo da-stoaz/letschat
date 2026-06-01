@@ -43,7 +43,7 @@ import { useTypingStore } from '../../stores/typingStore'
 import { useInvitesStore } from '../../stores/invitesStore'
 import { useDmServerInvitesStore } from '../../stores/dmServerInvitesStore'
 import type { ServerMemberWithUser } from '../../stores/membersStore'
-import type { Channel, DirectMessage, Identity, User } from '../../types/domain'
+import type { Channel, DirectMessage, Identity, JoinRequestStatus, User } from '../../types/domain'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -203,14 +203,15 @@ export function syncJoinRequests(conn: DbConnection, users: User[] = syncUsers(c
   }
 
   const usersByIdentity = new Map(users.map((user) => [normalizeIdentity(user.identity), user]))
-  const mine: number[] = []
+  const mine: Record<number, JoinRequestStatus> = {}
   const byServer: Record<number, JoinRequestWithUser[]> = {}
   for (const row of conn.db.join_request.iter()) {
     const request = mapJoinRequest(row)
     if (me && sameIdentity(request.userIdentity, me)) {
-      mine.push(request.serverId)
+      mine[request.serverId] = request.declined ? 'declined' : 'pending'
     }
-    if (moderated.has(request.serverId)) {
+    // Moderators only act on still-pending requests; declined ones are resolved.
+    if (moderated.has(request.serverId) && !request.declined) {
       ;(byServer[request.serverId] ??= []).push({
         ...request,
         user: usersByIdentity.get(normalizeIdentity(request.userIdentity)) ?? null,
@@ -462,7 +463,7 @@ export function resetClientState(): void {
 
   useServersStore.setState({ servers: [], activeServerId: null })
   useDiscoverStore.setState({ servers: [] })
-  useJoinRequestStore.setState({ myPendingServerIds: [], requestsByServer: {} })
+  useJoinRequestStore.setState({ myStatusByServer: {}, requestsByServer: {} })
   useChannelsStore.setState({ channelsByServer: {} })
   useMembersStore.setState({ membersByServer: {} })
   useMessagesStore.setState({ messagesByChannel: {} })

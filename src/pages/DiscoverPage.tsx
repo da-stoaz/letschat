@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckIcon, CompassIcon, UsersIcon } from 'lucide-react'
+import { CheckIcon, CompassIcon, UsersIcon, XCircleIcon } from 'lucide-react'
 import { reducers } from '../lib/spacetimedb'
 import { useDiscoverStore } from '../stores/discoverStore'
 import { useJoinRequestStore } from '../stores/joinRequestStore'
 import { serverInitials } from '../layouts/app-layout/helpers'
-import type { DiscoverServer } from '../types/domain'
+import type { DiscoverServer, JoinRequestStatus } from '../types/domain'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -17,11 +17,11 @@ function formatMemberCount(count: number): string {
 
 function DiscoverCard({
   server,
-  pending,
+  status,
   onJoined,
 }: {
   server: DiscoverServer
-  pending: boolean
+  status: JoinRequestStatus | undefined
   onJoined: (id: number) => void
 }) {
   const [busy, setBusy] = useState(false)
@@ -91,7 +91,7 @@ function DiscoverCard({
             <Button type="button" className="w-full" disabled={busy} onClick={() => void join()}>
               {busy ? 'Joining…' : 'Join'}
             </Button>
-          ) : pending ? (
+          ) : status === 'pending' ? (
             <div className="flex items-center gap-2">
               <span className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md border border-border/60 bg-muted/20 text-xs font-medium text-muted-foreground">
                 <CheckIcon className="size-3.5 text-emerald-500" />
@@ -106,6 +106,22 @@ function DiscoverCard({
                 onClick={() => void cancel()}
               >
                 Cancel
+              </Button>
+            </div>
+          ) : status === 'declined' ? (
+            <div className="space-y-2">
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <XCircleIcon className="size-3.5 text-destructive/80" />
+                A moderator declined your request.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                disabled={busy}
+                onClick={() => void request()}
+              >
+                {busy ? 'Requesting…' : 'Request again'}
               </Button>
             </div>
           ) : (
@@ -128,8 +144,7 @@ function DiscoverCard({
 export function DiscoverPage() {
   const navigate = useNavigate()
   const servers = useDiscoverStore((s) => s.servers)
-  const myPendingServerIds = useJoinRequestStore((s) => s.myPendingServerIds)
-  const pendingSet = new Set(myPendingServerIds)
+  const myStatusByServer = useJoinRequestStore((s) => s.myStatusByServer)
 
   const onJoined = (serverId: number) => {
     // The membership sync removes this space from Discover; jump into it.
@@ -167,7 +182,7 @@ export function DiscoverPage() {
                 <DiscoverCard
                   key={server.id}
                   server={server}
-                  pending={pendingSet.has(server.id)}
+                  status={myStatusByServer[server.id]}
                   onJoined={onJoined}
                 />
               ))}

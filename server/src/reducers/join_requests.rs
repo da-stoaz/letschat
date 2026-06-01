@@ -35,15 +35,20 @@ pub fn request_to_join(ctx: &ReducerContext, server_id: u64) -> Result<(), Strin
     )?;
 
     let key = join_request_key(server_id, caller);
-    assert_or_err(
-        ctx.db.join_request().request_key().find(&key).is_none(),
-        "you already have a pending request to join",
-    )?;
+    if let Some(mut existing) = ctx.db.join_request().request_key().find(&key) {
+        // A previously declined request can be re-sent; a still-pending one can't.
+        assert_or_err(existing.declined, "you already have a pending request to join")?;
+        existing.declined = false;
+        existing.created_at = ctx.timestamp;
+        ctx.db.join_request().request_key().update(existing);
+        return Ok(());
+    }
 
     ctx.db.join_request().insert(JoinRequest {
         request_key: key,
         server_id,
         user_identity: caller,
+        declined: false,
         created_at: ctx.timestamp,
     });
 
@@ -96,7 +101,8 @@ pub fn approve_join_request(
     Ok(())
 }
 
-/// A moderator/owner declines a pending request, removing it. Idempotent.
+/// A moderator/owner declines a pending request. The row is kept, flagged
+/// `declined`, so the requester sees the outcome (and can re-request). Idempotent.
 #[spacetimedb::reducer]
 pub fn decline_join_request(
     ctx: &ReducerContext,
@@ -104,9 +110,13 @@ pub fn decline_join_request(
     target_identity: Identity,
 ) -> Result<(), String> {
     require_mod_or_owner(ctx, server_id, ctx.sender())?;
-    ctx.db
-        .join_request()
-        .request_key()
-        .delete(join_request_key(server_id, target_identity));
+
+    let key = join_request_key(server_id, target_identity);
+    if let Some(mut request) = ctx.db.join_request().request_key().find(&key) {
+        if !request.declined {
+            request.declined = true;
+            ctx.db.join_request().request_key().update(request);
+        }
+    }
     Ok(())
 }

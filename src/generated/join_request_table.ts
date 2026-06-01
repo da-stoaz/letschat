@@ -15,4 +15,5 @@ export default __t.row({
   serverId: __t.u64().name("server_id"),
   userIdentity: __t.identity().name("user_identity"),
   createdAt: __t.timestamp().name("created_at"),
+  declined: __t.bool(),
 });

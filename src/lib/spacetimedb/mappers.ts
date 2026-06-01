@@ -140,6 +140,7 @@ export function mapJoinRequest(row: DbRow): JoinRequest {
     serverId: toU64Number(row.serverId),
     userIdentity: toIdentityString(row.userIdentity),
     createdAt: toIsoString(row.createdAt),
+    declined: Boolean(row.declined),
   }
 }
 

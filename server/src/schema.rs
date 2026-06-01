@@ -138,7 +138,7 @@ pub struct Ban {
 /// and removes the row, declining/cancelling just removes it.
 #[spacetimedb::table(accessor = join_request, public)]
 pub struct JoinRequest {
-    /// "{server_id}:{user_identity}" — one pending request per user per space.
+    /// "{server_id}:{user_identity}" — one request per user per space.
     #[primary_key]
     pub request_key: String,
     #[index(btree)]
@@ -146,6 +146,11 @@ pub struct JoinRequest {
     #[index(btree)]
     pub user_identity: Identity,
     pub created_at: Timestamp,
+    /// A moderator declined this request. The row is kept (not deleted) so the
+    /// requester gets feedback; re-requesting flips it back to pending. Appended
+    /// last so the migration stays additive.
+    #[default(false)]
+    pub declined: bool,
 }
 
 #[spacetimedb::table(accessor = invite, public)]

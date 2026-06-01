@@ -274,7 +274,14 @@ export function ServerManagePage() {
           <Tabs defaultValue="server" className="min-h-0 flex-1 overflow-hidden">
             <TabsList className="w-full">
               <TabsTrigger value="server" className="flex-1">Space</TabsTrigger>
-              <TabsTrigger value="members" className="flex-1">Members</TabsTrigger>
+              <TabsTrigger value="members" className="flex-1 gap-1.5">
+                Members
+                {joinRequests.length > 0 ? (
+                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                    {joinRequests.length}
+                  </span>
+                ) : null}
+              </TabsTrigger>
               <TabsTrigger value="channels" className="flex-1">Channels</TabsTrigger>
             </TabsList>
 
