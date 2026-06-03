@@ -44,7 +44,7 @@ export function ConfirmEmailScreen({
             setError(null)
             setResendState('sending')
             try {
-              await authServiceResendConfirmation(pending.email)
+              await authServiceResendConfirmation({ email: pending.email })
               setResendState('sent')
             } catch (e) {
               setError(e instanceof Error ? e.message : 'Could not resend the email.')

@@ -21,7 +21,12 @@ public sealed record RegisterRequest(
 /// </summary>
 public sealed record RegisterResponse(string Status, AuthResponse? Auth, string? Email);
 
-public sealed record ResendConfirmationRequest(string Email);
+/// <summary>
+/// Re-send the confirmation email. Identify the account by <c>Email</c> (the
+/// post-registration screen) or <c>Username</c> (the blocked-login screen, which
+/// only knows the username the user typed). Answered generically either way.
+/// </summary>
+public sealed record ResendConfirmationRequest(string? Email = null, string? Username = null);
 
 /// <summary>
 /// Kicks off the password-reset flow. Always answered generically so the

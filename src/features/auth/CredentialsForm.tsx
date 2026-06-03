@@ -141,6 +141,7 @@ export function CredentialsForm({
                 message:
                   'This account exists but its email address has not been confirmed. ' +
                   'Open the confirmation link in your inbox, then sign in.',
+                username: username.trim().toLowerCase(),
               })
             } else if (/awaiting administrator approval/i.test(message)) {
               onBlocked({

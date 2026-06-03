@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2Icon, ClockIcon, MailCheckIcon, PlugZapIcon } from 'lucide-react'
+import { CheckCircle2Icon, PlugZapIcon } from 'lucide-react'
 import { useSelfStore } from '../stores/selfStore'
 import { ConnectionTab } from '../features/settings/ConnectionTab'
 import { AuthStatusScreen } from '../features/auth/AuthStatusScreen'
+import { BlockedNoticeScreen } from '../features/auth/BlockedNoticeScreen'
 import { ConfirmEmailScreen } from '../features/auth/ConfirmEmailScreen'
 import { CredentialsForm } from '../features/auth/CredentialsForm'
 import { ForgotPasswordForm } from '../features/auth/ForgotPasswordForm'
@@ -133,23 +134,7 @@ export function AuthPage() {
     }
 
     if (loginNotice) {
-      return (
-        <AuthStatusScreen
-          icon={
-            loginNotice.kind === 'approval' ? (
-              <ClockIcon className="size-6 text-primary" />
-            ) : (
-              <MailCheckIcon className="size-6 text-primary" />
-            )
-          }
-          title={loginNotice.title}
-          description={loginNotice.message}
-        >
-          <Button type="button" variant="ghost" onClick={() => setLoginNotice(null)}>
-            Back to sign in
-          </Button>
-        </AuthStatusScreen>
-      )
+      return <BlockedNoticeScreen notice={loginNotice} onBack={() => setLoginNotice(null)} />
     }
 
     if (view === 'forgot') {

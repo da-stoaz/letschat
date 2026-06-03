@@ -17,6 +17,8 @@ export type LoginNotice = {
   kind: 'email' | 'approval'
   title: string
   message: string
+  /** The username from the blocked attempt, so the screen can offer a resend. */
+  username?: string
 }
 
 export function readPendingRegistration(): PendingRegistration | null {

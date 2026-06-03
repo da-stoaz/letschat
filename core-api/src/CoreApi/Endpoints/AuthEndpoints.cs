@@ -450,19 +450,28 @@ public static class AuthEndpoints
         UserManager<ApplicationUser> users,
         AccountEmailService accountEmail)
     {
-        var email = Validation.NormalizeEmail(request.Email);
-        var user = await users.FindByEmailAsync(email);
+        // Look the account up by whichever identifier was supplied: email (the
+        // post-registration screen) or username (the blocked-login screen).
+        ApplicationUser? user = null;
+        if (!string.IsNullOrWhiteSpace(request.Email))
+        {
+            user = await users.FindByEmailAsync(Validation.NormalizeEmail(request.Email));
+        }
+        else if (!string.IsNullOrWhiteSpace(request.Username))
+        {
+            user = await users.FindByNameAsync(Validation.NormalizeUsername(request.Username));
+        }
 
         if (user is { Status: AccountStatus.Registered, EmailConfirmed: false })
         {
             await accountEmail.SendConfirmationEmailAsync(user);
         }
 
-        // Generic response — never reveal whether an account exists for the address.
+        // Generic response — never reveal whether an account exists.
         return Results.Json(new
         {
             status = "ok",
-            message = "If that address has an unconfirmed account, a new confirmation email has been sent.",
+            message = "If that account exists and is unconfirmed, a new confirmation email has been sent.",
         });
     }
 
