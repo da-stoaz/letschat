@@ -105,7 +105,7 @@ export function ServerTab({
           regardless of the viewport width. */}
       <div className="@container">
         <div className="grid items-start gap-3 pb-1 @5xl:grid-cols-2">
-          {/* ── Left column ───────────────────────────────────────────── */}
+        {/* ── Left column: identity + your relationship to the space ─── */}
         <div className="space-y-3">
           <Card className="border-border/70 bg-background/40">
             <CardHeader className="pb-3">
@@ -148,6 +148,55 @@ export function ServerTab({
             </CardContent>
           </Card>
 
+          <Card className="border-border/70 bg-background/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <UserPlusIcon className="size-4 text-muted-foreground" />
+                Your membership
+              </CardTitle>
+              <CardDescription>Leave this space if you no longer want access.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start text-destructive hover:text-destructive"
+                disabled={isOwner || leaving}
+                onClick={onLeaveServer}
+              >
+                <LogOutIcon className="size-4" />
+                {leaving ? 'Leaving…' : 'Leave space'}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                {isOwner
+                  ? 'Owners cannot leave — transfer ownership first in the Members tab.'
+                  : 'Leaving removes this space from your sidebar; you can only return with a valid invite.'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-destructive/35 bg-destructive/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base text-destructive">
+                <Trash2Icon className="size-4" />
+                Danger zone
+              </CardTitle>
+              <CardDescription>Permanently delete this space and all its channels and messages.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button type="button" variant="destructive" className="w-full" disabled={!isOwner} onClick={onOpenDeleteServer}>
+                <Trash2Icon className="size-4" />
+                Delete space
+              </Button>
+              {!isOwner ? (
+                <p className="text-xs text-muted-foreground">Only the owner can delete this space.</p>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ── Right column: access & discovery settings ─────────────── */}
+        <div className="space-y-3">
           <Card className="border-border/70 bg-background/40">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -287,55 +336,6 @@ export function ServerTab({
                   </p>
                 </div>
               </section>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* ── Right column ──────────────────────────────────────────── */}
-        <div className="space-y-3">
-          <Card className="border-border/70 bg-background/40">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <UserPlusIcon className="size-4 text-muted-foreground" />
-                Your membership
-              </CardTitle>
-              <CardDescription>Leave this space if you no longer want access.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start text-destructive hover:text-destructive"
-                disabled={isOwner || leaving}
-                onClick={onLeaveServer}
-              >
-                <LogOutIcon className="size-4" />
-                {leaving ? 'Leaving…' : 'Leave space'}
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                {isOwner
-                  ? 'Owners cannot leave — transfer ownership first in the Members tab.'
-                  : 'Leaving removes this space from your sidebar; you can only return with a valid invite.'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-destructive/35 bg-destructive/5">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base text-destructive">
-                <Trash2Icon className="size-4" />
-                Danger zone
-              </CardTitle>
-              <CardDescription>Permanently delete this space and all its channels and messages.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button type="button" variant="destructive" className="w-full" disabled={!isOwner} onClick={onOpenDeleteServer}>
-                <Trash2Icon className="size-4" />
-                Delete space
-              </Button>
-              {!isOwner ? (
-                <p className="text-xs text-muted-foreground">Only the owner can delete this space.</p>
-              ) : null}
             </CardContent>
           </Card>
         </div>
