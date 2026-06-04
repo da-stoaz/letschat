@@ -14,7 +14,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { VoiceChannelButton } from '../VoiceChannelButton'
 import { ChannelBarShell } from './ChannelBarShell'
-import { useJoinRequestStore } from '../../../stores/joinRequestStore'
 import type { ServerChannelBarProps } from './types'
 import type { Channel } from '../../../types/domain'
 import { serverInitials } from '../helpers'
@@ -51,11 +50,6 @@ export function ServerChannelBar({
 }: ServerChannelBarProps) {
   const ownerCannotLeave = role === 'Owner'
   const canAccessServerPanel = role === 'Owner' || role === 'Moderator'
-  // Pending join requests for this space (moderators only act on these).
-  const pendingRequestCount = useJoinRequestStore((s) =>
-    activeServer ? s.requestsByServer[activeServer.id]?.length ?? 0 : 0,
-  )
-  const showRequests = canAccessServerPanel && pendingRequestCount > 0
   const canInvite =
     Boolean(role && activeServer && canInviteUsers(role, activeServer.invitePolicy))
   const channelSections = useMemo(() => {
@@ -116,28 +110,9 @@ export function ServerChannelBar({
                 </Avatar>
                 <span className="truncate">{activeServer?.name ?? 'Space'}</span>
               </span>
-              <span className="flex items-center gap-1.5">
-                {showRequests ? (
-                  <span
-                    className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
-                    title={`${pendingRequestCount} pending join request${pendingRequestCount === 1 ? '' : 's'}`}
-                  >
-                    {pendingRequestCount}
-                  </span>
-                ) : null}
-                <ChevronsUpDownIcon className="size-4 text-muted-foreground" />
-              </span>
+              <ChevronsUpDownIcon className="size-4 text-muted-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
-              {showRequests ? (
-                <DropdownMenuItem onClick={onOpenServerPanel}>
-                  <UserPlusIcon className="size-3.5" />
-                  Review requests
-                  <span className="ml-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                    {pendingRequestCount}
-                  </span>
-                </DropdownMenuItem>
-              ) : null}
               {canAccessServerPanel ? (
                 <DropdownMenuItem onClick={onOpenServerPanel}>
                   <Settings2Icon className="size-3.5" />

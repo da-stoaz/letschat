@@ -11,6 +11,7 @@ import { canManageChannels } from '../lib/permissions'
 import type { Channel, ServerInvitePolicy } from '../types/domain'
 import { ChannelsTab } from '../features/server-manage/ChannelsTab'
 import { MembersTab } from '../features/server-manage/MembersTab'
+import { RequestsTab } from '../features/server-manage/RequestsTab'
 import { ServerTab } from '../features/server-manage/ServerTab'
 import { ServerManageDialogs } from '../features/server-manage/Dialogs'
 import { channelGroupKey, memberLabel, sectionKey, sectionLabel } from '../features/server-manage/helpers'
@@ -274,8 +275,9 @@ export function ServerManagePage() {
           <Tabs defaultValue="server" className="min-h-0 flex-1 overflow-hidden">
             <TabsList className="w-full">
               <TabsTrigger value="server" className="flex-1">Space</TabsTrigger>
-              <TabsTrigger value="members" className="flex-1 gap-1.5">
-                Members
+              <TabsTrigger value="members" className="flex-1">Members</TabsTrigger>
+              <TabsTrigger value="requests" className="flex-1 gap-1.5">
+                Requests
                 {joinRequests.length > 0 ? (
                   <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
                     {joinRequests.length}
@@ -290,12 +292,15 @@ export function ServerManagePage() {
                 role={role}
                 serverId={server.id}
                 sortedMembers={sortedMembers}
-                joinRequests={joinRequests}
                 selfIdentity={selfIdentity}
                 canModerateMembers={canModerateMembers}
                 isOwner={isOwner}
                 onSetMemberAction={setMemberAction}
               />
+            </TabsContent>
+
+            <TabsContent value="requests" className="min-h-0 flex-1">
+              <RequestsTab serverId={server.id} joinRequests={joinRequests} />
             </TabsContent>
 
             <TabsContent value="channels" className="min-h-0 flex-1">
