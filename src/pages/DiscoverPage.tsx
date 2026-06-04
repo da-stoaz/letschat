@@ -5,6 +5,8 @@ import { reducers } from '../lib/spacetimedb'
 import { cn } from '../lib/utils'
 import { useDiscoverStore } from '../stores/discoverStore'
 import { useJoinRequestStore } from '../stores/joinRequestStore'
+import { matchesSearch } from '../features/server-manage/helpers'
+import { ListSearchInput } from '../features/server-manage/ListSearchInput'
 import { serverInitials } from '../layouts/app-layout/helpers'
 import type { DiscoverServer, JoinRequestStatus } from '../types/domain'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -176,15 +178,18 @@ export function DiscoverPage() {
   const servers = useDiscoverStore((s) => s.servers)
   const myStatusByServer = useJoinRequestStore((s) => s.myStatusByServer)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [search, setSearch] = useState('')
 
   const toggleTag = (tag: string) =>
     setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))
 
   const availableTags = [...new Set(servers.flatMap((s) => s.tags))].sort()
-  const filteredServers =
-    selectedTags.length === 0
-      ? servers
-      : servers.filter((s) => s.tags.some((t) => selectedTags.includes(t)))
+  const filteredServers = servers.filter((s) => {
+    const matchesTags = selectedTags.length === 0 || s.tags.some((t) => selectedTags.includes(t))
+    const matchesQuery =
+      search.trim().length === 0 || matchesSearch(search, s.name, s.description ?? '', ...s.tags)
+    return matchesTags && matchesQuery
+  })
 
   const onJoined = (serverId: number) => {
     // The membership sync removes this space from Discover; jump into it.
@@ -218,6 +223,12 @@ export function DiscoverPage() {
             </div>
           ) : (
             <>
+              <ListSearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Search spaces by name, description, or tag…"
+              />
+
               {availableTags.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="mr-0.5 text-xs text-muted-foreground">Tags:</span>
@@ -238,7 +249,7 @@ export function DiscoverPage() {
 
               {filteredServers.length === 0 ? (
                 <p className="py-12 text-center text-sm text-muted-foreground">
-                  No spaces match the selected tags.
+                  No spaces match your search.
                 </p>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
