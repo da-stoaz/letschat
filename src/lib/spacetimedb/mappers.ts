@@ -122,6 +122,7 @@ export function mapServer(row: DbRow): Server {
     createdAt: toIsoString(row.createdAt),
     isDiscoverable: Boolean(row.isDiscoverable),
     description: rowNullableString(row, 'description'),
+    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
   }
 }
 

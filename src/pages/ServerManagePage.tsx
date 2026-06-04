@@ -142,6 +142,19 @@ export function ServerManagePage() {
     }
   }
 
+  const updateTags = async (tags: string[]) => {
+    if (!isOwner || !server) return
+    setDiscoverySaving(true)
+    try {
+      await reducers.setServerTags(server.id, tags)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not update tags.'
+      toast.error('Failed to update tags', { description: message })
+    } finally {
+      setDiscoverySaving(false)
+    }
+  }
+
   const moveChannel = async (channelId: number, direction: -1 | 1) => {
     if (!canManageServerChannels || reorderingChannelId !== null) return
 
@@ -336,6 +349,9 @@ export function ServerManagePage() {
                 }}
                 onUpdateDiscovery={(isDiscoverable, description) => {
                   void updateDiscovery(isDiscoverable, description)
+                }}
+                onUpdateTags={(tags) => {
+                  void updateTags(tags)
                 }}
               />
             </TabsContent>

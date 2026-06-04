@@ -97,6 +97,11 @@ pub struct Server {
     /// reducer). Only meaningful when `is_discoverable`.
     #[default(None::<String>)]
     pub description: Option<String>,
+    /// Up to 5 lowercased topic tags (≤24 chars each), used to filter the
+    /// Discover surface. Owner-controlled via `set_server_tags`. `None` ==
+    /// no tags (a Vec column can't carry a const default).
+    #[default(None::<Vec<String>>)]
+    pub tags: Option<Vec<String>>,
 }
 
 #[spacetimedb::table(

@@ -10,6 +10,7 @@ import {
   ShieldCheckIcon,
   Trash2Icon,
   UserPlusIcon,
+  XIcon,
 } from 'lucide-react'
 import type { Server, ServerInvitePolicy } from '../../types/domain'
 import { invitePolicyLabel, formatMemberSince } from './helpers'
@@ -18,6 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -26,6 +28,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 const DESCRIPTION_MAX = 280
+const MAX_TAGS = 5
+const TAG_MAX_LEN = 24
 
 type ServerTabProps = {
   server: Server
@@ -38,6 +42,7 @@ type ServerTabProps = {
   onLeaveServer: () => void
   onUpdateInvitePolicy: (policy: ServerInvitePolicy) => void
   onUpdateDiscovery: (isDiscoverable: boolean, description: string | null) => void
+  onUpdateTags: (tags: string[]) => void
 }
 
 export function ServerTab({
@@ -51,6 +56,7 @@ export function ServerTab({
   onLeaveServer,
   onUpdateInvitePolicy,
   onUpdateDiscovery,
+  onUpdateTags,
 }: ServerTabProps) {
   // Discovery applies immediately. The toggle is optimistic-local (instant, and
   // a consistent source for the blur-commit below — reading the prop mid-save
@@ -71,6 +77,25 @@ export function ServerTab({
     if (description.trim() !== (server.description ?? '').trim()) {
       commitDiscovery(discoverable, description)
     }
+  }
+
+  // Tags apply immediately on add/remove (optimistic-local, like the toggle).
+  const [tags, setTags] = useState<string[]>(server.tags)
+  const [tagDraft, setTagDraft] = useState('')
+
+  const addTag = () => {
+    const tag = tagDraft.trim().toLowerCase().slice(0, TAG_MAX_LEN)
+    setTagDraft('')
+    if (!tag || tags.includes(tag) || tags.length >= MAX_TAGS) return
+    const next = [...tags, tag]
+    setTags(next)
+    onUpdateTags(next)
+  }
+
+  const removeTag = (tag: string) => {
+    const next = tags.filter((t) => t !== tag)
+    setTags(next)
+    onUpdateTags(next)
   }
 
   return (
@@ -212,6 +237,50 @@ export function ServerTab({
                       {description.length}/{DESCRIPTION_MAX}
                     </p>
                   </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground">Tags</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {tags.map((tag) => (
+                      <Badge key={tag} variant="secondary" className="gap-1 pr-1">
+                        {tag}
+                        {isOwner ? (
+                          <button
+                            type="button"
+                            onClick={() => removeTag(tag)}
+                            disabled={discoverySaving}
+                            className="rounded-full text-muted-foreground hover:text-foreground"
+                            aria-label={`Remove ${tag}`}
+                          >
+                            <XIcon className="size-3" />
+                          </button>
+                        ) : null}
+                      </Badge>
+                    ))}
+                    {tags.length === 0 ? (
+                      <span className="text-[11px] text-muted-foreground">No tags yet.</span>
+                    ) : null}
+                  </div>
+                  {isOwner && tags.length < MAX_TAGS ? (
+                    <Input
+                      value={tagDraft}
+                      onChange={(e) => setTagDraft(e.target.value.slice(0, TAG_MAX_LEN))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ',') {
+                          e.preventDefault()
+                          addTag()
+                        }
+                      }}
+                      onBlur={addTag}
+                      placeholder="Add a tag, then press Enter"
+                      disabled={discoverySaving}
+                      className="h-8 text-sm"
+                    />
+                  ) : null}
+                  <p className="text-[11px] text-muted-foreground">
+                    Up to {MAX_TAGS} topic tags help people find this space on Discover.
+                  </p>
                 </div>
               </section>
             </CardContent>

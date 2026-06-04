@@ -201,6 +201,7 @@ export const Server = __t.object("Server", {
   createdAt: __t.timestamp(),
   isDiscoverable: __t.bool(),
   description: __t.option(__t.string()),
+  tags: __t.option(__t.array(__t.string())),
 });
 export type Server = __Infer<typeof Server>;
 

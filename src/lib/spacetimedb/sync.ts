@@ -179,6 +179,7 @@ export function syncDiscover(conn: DbConnection): void {
       invitePolicy: server.invitePolicy,
       iconUrl: server.iconUrl,
       description: server.description,
+      tags: server.tags,
       memberCount: memberCounts.get(server.id) ?? 0,
     }))
 

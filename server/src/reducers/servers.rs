@@ -39,6 +39,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
         created_at: ctx.timestamp,
         is_discoverable: false,
         description: None,
+        tags: None,
     });
 
     let server_id = server_row.id;
@@ -145,6 +146,43 @@ pub fn set_server_discovery(
         .ok_or_else(|| "server not found".to_string())?;
     server_row.is_discoverable = is_discoverable;
     server_row.description = normalized_description;
+    ctx.db.server().id().update(server_row);
+    Ok(())
+}
+
+/// Owner-only: set a space's topic tags (≤5, each lowercased and ≤24 chars,
+/// de-duplicated). Used to filter the Discover surface.
+#[spacetimedb::reducer]
+pub fn set_server_tags(
+    ctx: &ReducerContext,
+    server_id: u64,
+    tags: Vec<String>,
+) -> Result<(), String> {
+    require_owner(ctx, server_id, ctx.sender())?;
+
+    let mut normalized: Vec<String> = Vec::new();
+    for raw in tags {
+        let tag = raw.trim().to_lowercase();
+        if tag.is_empty() {
+            continue;
+        }
+        assert_or_err(
+            tag.chars().count() <= 24,
+            "each tag must be at most 24 characters",
+        )?;
+        if !normalized.contains(&tag) {
+            normalized.push(tag);
+        }
+    }
+    assert_or_err(normalized.len() <= 5, "a space can have at most 5 tags")?;
+
+    let mut server_row = ctx
+        .db
+        .server()
+        .id()
+        .find(server_id)
+        .ok_or_else(|| "server not found".to_string())?;
+    server_row.tags = if normalized.is_empty() { None } else { Some(normalized) };
     ctx.db.server().id().update(server_row);
     Ok(())
 }

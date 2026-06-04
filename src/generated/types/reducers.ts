@@ -53,6 +53,7 @@ import SetPresenceOfflineReducer from "../set_presence_offline_reducer";
 import SetServerDiscoveryReducer from "../set_server_discovery_reducer";
 import SetServerIconReducer from "../set_server_icon_reducer";
 import SetServerInvitePolicyReducer from "../set_server_invite_policy_reducer";
+import SetServerTagsReducer from "../set_server_tags_reducer";
 import SetSpaceCreatePolicyReducer from "../set_space_create_policy_reducer";
 import SetTypingStateReducer from "../set_typing_state_reducer";
 import SetUserAdminReducer from "../set_user_admin_reducer";
@@ -114,6 +115,7 @@ export type SetPresenceOfflineParams = __Infer<typeof SetPresenceOfflineReducer>
 export type SetServerDiscoveryParams = __Infer<typeof SetServerDiscoveryReducer>;
 export type SetServerIconParams = __Infer<typeof SetServerIconReducer>;
 export type SetServerInvitePolicyParams = __Infer<typeof SetServerInvitePolicyReducer>;
+export type SetServerTagsParams = __Infer<typeof SetServerTagsReducer>;
 export type SetSpaceCreatePolicyParams = __Infer<typeof SetSpaceCreatePolicyReducer>;
 export type SetTypingStateParams = __Infer<typeof SetTypingStateReducer>;
 export type SetUserAdminParams = __Infer<typeof SetUserAdminReducer>;

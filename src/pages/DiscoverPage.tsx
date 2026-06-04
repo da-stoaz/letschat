@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CheckIcon, CompassIcon, UsersIcon, XCircleIcon } from 'lucide-react'
 import { reducers } from '../lib/spacetimedb'
+import { cn } from '../lib/utils'
 import { useDiscoverStore } from '../stores/discoverStore'
 import { useJoinRequestStore } from '../stores/joinRequestStore'
 import { serverInitials } from '../layouts/app-layout/helpers'
@@ -15,13 +16,34 @@ function formatMemberCount(count: number): string {
   return `${count} ${count === 1 ? 'member' : 'members'}`
 }
 
+function TagPill({ tag, active, onClick }: { tag: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-full border px-2 py-0.5 text-[11px] transition-colors',
+        active
+          ? 'border-primary/60 bg-primary/10 text-primary'
+          : 'border-border/60 text-muted-foreground hover:border-border hover:text-foreground',
+      )}
+    >
+      {tag}
+    </button>
+  )
+}
+
 function DiscoverCard({
   server,
   status,
+  selectedTags,
+  onToggleTag,
   onJoined,
 }: {
   server: DiscoverServer
   status: JoinRequestStatus | undefined
+  selectedTags: string[]
+  onToggleTag: (tag: string) => void
   onJoined: (id: number) => void
 }) {
   const [busy, setBusy] = useState(false)
@@ -86,6 +108,14 @@ function DiscoverCard({
           {description || 'No description yet.'}
         </p>
 
+        {server.tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {server.tags.map((tag) => (
+              <TagPill key={tag} tag={tag} active={selectedTags.includes(tag)} onClick={() => onToggleTag(tag)} />
+            ))}
+          </div>
+        ) : null}
+
         <div className="mt-auto pt-1">
           {directJoin ? (
             <Button type="button" className="w-full" disabled={busy} onClick={() => void join()}>
@@ -145,6 +175,16 @@ export function DiscoverPage() {
   const navigate = useNavigate()
   const servers = useDiscoverStore((s) => s.servers)
   const myStatusByServer = useJoinRequestStore((s) => s.myStatusByServer)
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
+
+  const toggleTag = (tag: string) =>
+    setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))
+
+  const availableTags = [...new Set(servers.flatMap((s) => s.tags))].sort()
+  const filteredServers =
+    selectedTags.length === 0
+      ? servers
+      : servers.filter((s) => s.tags.some((t) => selectedTags.includes(t)))
 
   const onJoined = (serverId: number) => {
     // The membership sync removes this space from Discover; jump into it.
@@ -177,16 +217,44 @@ export function DiscoverPage() {
               </p>
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {servers.map((server) => (
-                <DiscoverCard
-                  key={server.id}
-                  server={server}
-                  status={myStatusByServer[server.id]}
-                  onJoined={onJoined}
-                />
-              ))}
-            </div>
+            <>
+              {availableTags.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="mr-0.5 text-xs text-muted-foreground">Tags:</span>
+                  {availableTags.map((tag) => (
+                    <TagPill key={tag} tag={tag} active={selectedTags.includes(tag)} onClick={() => toggleTag(tag)} />
+                  ))}
+                  {selectedTags.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTags([])}
+                      className="ml-1 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {filteredServers.length === 0 ? (
+                <p className="py-12 text-center text-sm text-muted-foreground">
+                  No spaces match the selected tags.
+                </p>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {filteredServers.map((server) => (
+                    <DiscoverCard
+                      key={server.id}
+                      server={server}
+                      status={myStatusByServer[server.id]}
+                      selectedTags={selectedTags}
+                      onToggleTag={toggleTag}
+                      onJoined={onJoined}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </CardContent>

@@ -80,6 +80,8 @@ export const reducers = {
       isDiscoverable,
       description: description === null || description.trim().length === 0 ? null : description.trim(),
     }),
+  setServerTags: (serverId: number, tags: string[]) =>
+    spacetimedbClient.call('setServerTags', { serverId: toU64(serverId, 'serverId'), tags }),
   joinDiscoverableServer: (serverId: number) =>
     spacetimedbClient.call('joinDiscoverableServer', { serverId: toU64(serverId, 'serverId') }),
   requestToJoin: (serverId: number) =>

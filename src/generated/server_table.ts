@@ -25,4 +25,5 @@ export default __t.row({
   createdAt: __t.timestamp().name("created_at"),
   isDiscoverable: __t.bool().name("is_discoverable"),
   description: __t.option(__t.string()),
+  tags: __t.option(__t.array(__t.string())),
 });

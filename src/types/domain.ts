@@ -23,6 +23,7 @@ export interface Server {
   createdAt: string
   isDiscoverable: boolean
   description: string | null
+  tags: string[]
 }
 
 /** A non-member's request to join a discoverable, invite-only space. */
@@ -44,6 +45,7 @@ export interface DiscoverServer {
   invitePolicy: ServerInvitePolicy
   iconUrl: string | null
   description: string | null
+  tags: string[]
   memberCount: number
 }
 
