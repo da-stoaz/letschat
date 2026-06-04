@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckIcon, CompassIcon, UsersIcon, XCircleIcon } from 'lucide-react'
+import { CheckIcon, CompassIcon, EyeOffIcon, UsersIcon, XCircleIcon } from 'lucide-react'
 import { reducers } from '../lib/spacetimedb'
 import { cn } from '../lib/utils'
 import { useDiscoverStore } from '../stores/discoverStore'
 import { useJoinRequestStore } from '../stores/joinRequestStore'
+import { useSelfStore } from '../stores/selfStore'
 import { matchesSearch } from '../features/server-manage/helpers'
 import { ListSearchInput } from '../features/server-manage/ListSearchInput'
 import { serverInitials } from '../layouts/app-layout/helpers'
@@ -39,12 +40,14 @@ function DiscoverCard({
   server,
   status,
   selectedTags,
+  isAdmin,
   onToggleTag,
   onJoined,
 }: {
   server: DiscoverServer
   status: JoinRequestStatus | undefined
   selectedTags: string[]
+  isAdmin: boolean
   onToggleTag: (tag: string) => void
   onJoined: (id: number) => void
 }) {
@@ -82,6 +85,12 @@ function DiscoverCard({
     run(async () => {
       await reducers.cancelJoinRequest(server.id)
     }, 'Could not cancel your request.')
+
+  const adminUnlist = () =>
+    run(async () => {
+      await reducers.adminUnlistServer(server.id)
+      toast.success(`Removed ${server.name} from Discover`)
+    }, 'Could not remove this space from Discover.')
 
   return (
     <Card className="flex flex-col border-border/70 bg-background/40 transition-colors hover:border-border">
@@ -168,6 +177,19 @@ function DiscoverCard({
             </Button>
           )}
         </div>
+
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={() => void adminUnlist()}
+            disabled={busy}
+            className="flex items-center justify-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-destructive"
+            title="Instance-admin moderation: remove this space from Discover"
+          >
+            <EyeOffIcon className="size-3" />
+            Remove from Discover
+          </button>
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -177,6 +199,7 @@ export function DiscoverPage() {
   const navigate = useNavigate()
   const servers = useDiscoverStore((s) => s.servers)
   const myStatusByServer = useJoinRequestStore((s) => s.myStatusByServer)
+  const isAdmin = useSelfStore((s) => s.user?.isAdmin ?? false)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [search, setSearch] = useState('')
 
@@ -259,6 +282,7 @@ export function DiscoverPage() {
                       server={server}
                       status={myStatusByServer[server.id]}
                       selectedTags={selectedTags}
+                      isAdmin={isAdmin}
                       onToggleTag={toggleTag}
                       onJoined={onJoined}
                     />

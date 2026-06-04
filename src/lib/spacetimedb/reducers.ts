@@ -82,6 +82,8 @@ export const reducers = {
     }),
   setServerTags: (serverId: number, tags: string[]) =>
     spacetimedbClient.call('setServerTags', { serverId: toU64(serverId, 'serverId'), tags }),
+  adminUnlistServer: (serverId: number) =>
+    spacetimedbClient.call('adminUnlistServer', { serverId: toU64(serverId, 'serverId') }),
   joinDiscoverableServer: (serverId: number) =>
     spacetimedbClient.call('joinDiscoverableServer', { serverId: toU64(serverId, 'serverId') }),
   requestToJoin: (serverId: number) =>

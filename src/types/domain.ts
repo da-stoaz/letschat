@@ -12,6 +12,7 @@ export interface User {
   displayName: string
   avatarUrl: string | null
   createdAt: string
+  isAdmin: boolean
 }
 
 export interface Server {

@@ -7,6 +7,7 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import AcceptFriendRequestReducer from "../accept_friend_request_reducer";
+import AdminUnlistServerReducer from "../admin_unlist_server_reducer";
 import ApproveJoinRequestReducer from "../approve_join_request_reducer";
 import BanMemberReducer from "../ban_member_reducer";
 import BlockUserReducer from "../block_user_reducer";
@@ -69,6 +70,7 @@ import UpdateVoiceStateReducer from "../update_voice_state_reducer";
 import UseInviteReducer from "../use_invite_reducer";
 
 export type AcceptFriendRequestParams = __Infer<typeof AcceptFriendRequestReducer>;
+export type AdminUnlistServerParams = __Infer<typeof AdminUnlistServerReducer>;
 export type ApproveJoinRequestParams = __Infer<typeof ApproveJoinRequestReducer>;
 export type BanMemberParams = __Infer<typeof BanMemberReducer>;
 export type BlockUserParams = __Infer<typeof BlockUserReducer>;

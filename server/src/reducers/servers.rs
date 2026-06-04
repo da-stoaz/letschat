@@ -2,9 +2,12 @@ use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{
     assert_or_err, has_member_role, is_banned, is_system_admin, member_key, require_member_role,
-    require_owner, voice_key,
+    require_owner, require_system_admin, voice_key,
 };
 use crate::schema::*;
+
+/// Anti-spam cap: how many spaces one owner may list on Discover at once.
+const MAX_DISCOVERABLE_PER_OWNER: usize = 10;
 
 #[spacetimedb::reducer]
 pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
@@ -135,8 +138,20 @@ pub fn set_server_discovery(
             "description must be at most 280 chars",
         )?;
     }
-    // Per-owner discoverable-space quota deferred (plan 1.5 phase 3) — revisit
-    // if discovery spam appears.
+    // Anti-spam: cap how many spaces a single owner can list on Discover.
+    if is_discoverable {
+        let owner = ctx.sender();
+        let already_listed = ctx
+            .db
+            .server()
+            .iter()
+            .filter(|s| s.owner_identity == owner && s.is_discoverable && s.id != server_id)
+            .count();
+        assert_or_err(
+            already_listed < MAX_DISCOVERABLE_PER_OWNER,
+            "you have reached the limit of discoverable spaces for one owner",
+        )?;
+    }
 
     let mut server_row = ctx
         .db
@@ -184,6 +199,26 @@ pub fn set_server_tags(
         .ok_or_else(|| "server not found".to_string())?;
     server_row.tags = if normalized.is_empty() { None } else { Some(normalized) };
     ctx.db.server().id().update(server_row);
+    Ok(())
+}
+
+/// Instance-admin moderation: force a space off the Discover surface without
+/// owning it. Admin-gated; only clears `is_discoverable` (leaves the space and
+/// its membership untouched). The owner can re-list it later.
+#[spacetimedb::reducer]
+pub fn admin_unlist_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
+    require_system_admin(ctx, ctx.sender())?;
+
+    let mut server_row = ctx
+        .db
+        .server()
+        .id()
+        .find(server_id)
+        .ok_or_else(|| "server not found".to_string())?;
+    if server_row.is_discoverable {
+        server_row.is_discoverable = false;
+        ctx.db.server().id().update(server_row);
+    }
     Ok(())
 }
 

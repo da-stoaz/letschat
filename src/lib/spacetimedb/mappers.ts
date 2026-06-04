@@ -109,6 +109,7 @@ export function mapUser(row: DbRow): User {
     displayName: rowString(row, 'displayName'),
     avatarUrl: rowNullableString(row, 'avatarUrl'),
     createdAt: toIsoString(row.createdAt),
+    isAdmin: Boolean(row.isAdmin),
   }
 }
 
