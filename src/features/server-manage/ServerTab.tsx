@@ -100,8 +100,12 @@ export function ServerTab({
 
   return (
     <ScrollArea className="h-full pr-2">
-      <div className="grid items-start gap-3 pb-1 lg:grid-cols-2">
-        {/* ── Left column ───────────────────────────────────────────── */}
+      {/* Container query: two columns only when the panel itself is wide
+          enough — collapses to one column in windowed/small-laptop sizes
+          regardless of the viewport width. */}
+      <div className="@container">
+        <div className="grid items-start gap-3 pb-1 @5xl:grid-cols-2">
+          {/* ── Left column ───────────────────────────────────────────── */}
         <div className="space-y-3">
           <Card className="border-border/70 bg-background/40">
             <CardHeader className="pb-3">
@@ -334,6 +338,7 @@ export function ServerTab({
               ) : null}
             </CardContent>
           </Card>
+        </div>
         </div>
       </div>
     </ScrollArea>
