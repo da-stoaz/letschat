@@ -41,16 +41,22 @@ jobs:
   react-doctor:
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 gives React Doctor the history it needs to diff the PR
+      # against its base branch, so `scope: changed` can scope to the PR.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
-      - uses: millionco/react-doctor@v1
-        # Common configuration knobs — uncomment any to override the default.
+      - uses: millionco/react-doctor@v2
+        with:
+          # Only gate on issues this PR introduces — not the whole codebase.
+          scope: changed
+          # Fail only on error-severity findings (warnings stay advisory).
+          blocking: error
+        # Other knobs (defaults shown) — uncomment to override.
         # Full reference: https://www.react.doctor/ci
-        # with:
-        #   non-blocking: true       # Report findings but always exit 0 (won't fail the PR check)
-        #   fail-on: warning         # Gate level: "error" (default) | "warning" | "none"
-        #   comment: false           # Disable the sticky PR summary comment
-        #   annotations: false       # Disable inline GitHub Actions annotations on changed files
-        #   version: "0.2.18"        # Pin to a specific react-doctor version instead of "latest"
-        #   directory: apps/web      # Scan a sub-directory (default: ".")
-        #   project: "web,admin"     # In a monorepo, scan specific workspace project(s)
+        #   comment: true            # sticky PR summary comment
+        #   review-comments: true    # inline comments on changed lines
+        #   version: "latest"        # pin a specific react-doctor npm version
+        #   directory: "."           # scan a sub-directory
+        #   project: "*"             # monorepo: specific workspace project(s)
