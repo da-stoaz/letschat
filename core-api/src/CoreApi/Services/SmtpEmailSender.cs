@@ -1,4 +1,3 @@
-using CoreApi.Logging;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
@@ -47,14 +46,15 @@ public sealed class SmtpEmailSender(SystemConfigService config, ILogger<SmtpEmai
             // rejected, …) as a typed error so the API answers 503 with a clear
             // message instead of a raw 500 — and callers can react.
             logger.LogError(
-                ex, "SMTP delivery to {To} failed via {Host}:{Port}",
-                PiiRedactor.MaskEmail(toAddress), settings.SmtpHost, settings.SmtpPort);
+                ex, "SMTP delivery failed via {Host}:{Port}",
+                settings.SmtpHost, settings.SmtpPort);
             throw new EmailDeliveryException(
                 $"Could not send email: the SMTP server at {settings.SmtpHost}:{settings.SmtpPort} " +
                 "is unreachable or rejected the message.", ex);
         }
 
         logger.LogInformation(
-            "Sent email to {To} (subject: {Subject})", PiiRedactor.MaskEmail(toAddress), subject);
+            "Sent email via {Host}:{Port} (subject: {Subject})",
+            settings.SmtpHost, settings.SmtpPort, subject);
     }
 }
