@@ -1,3 +1,4 @@
+using CoreApi.Logging;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
@@ -47,12 +48,13 @@ public sealed class SmtpEmailSender(SystemConfigService config, ILogger<SmtpEmai
             // message instead of a raw 500 — and callers can react.
             logger.LogError(
                 ex, "SMTP delivery to {To} failed via {Host}:{Port}",
-                toAddress, settings.SmtpHost, settings.SmtpPort);
+                PiiRedactor.MaskEmail(toAddress), settings.SmtpHost, settings.SmtpPort);
             throw new EmailDeliveryException(
                 $"Could not send email: the SMTP server at {settings.SmtpHost}:{settings.SmtpPort} " +
                 "is unreachable or rejected the message.", ex);
         }
 
-        logger.LogInformation("Sent email to {To} (subject: {Subject})", toAddress, subject);
+        logger.LogInformation(
+            "Sent email to {To} (subject: {Subject})", PiiRedactor.MaskEmail(toAddress), subject);
     }
 }
