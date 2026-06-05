@@ -40,13 +40,14 @@ export interface AppRailProps {
   activeServerId: number | null
   activeDmIdentity: string | null
   quickDmContacts: QuickDmContact[]
-  onOpenHome: () => void
   onOpenServer: (serverId: number) => void
   onOpenDmHome: () => void
   onOpenDmCompose: () => void
   onOpenDmContact: (identity: string) => void
   onOpenCreateServer: () => void
+  onOpenDiscover: () => void
   onOpenSettings: () => void
+  isDiscoverActive: boolean
   isSettingsActive: boolean
   hasUnreadInServer: (serverId: number) => boolean
   countUnreadInServer: (serverId: number) => number
@@ -368,13 +369,14 @@ export function AppRail({
   activeServerId,
   activeDmIdentity,
   quickDmContacts,
-  onOpenHome,
   onOpenServer,
   onOpenDmHome,
   onOpenDmCompose,
   onOpenDmContact,
   onOpenCreateServer,
+  onOpenDiscover,
   onOpenSettings,
+  isDiscoverActive,
   isSettingsActive,
   hasUnreadInServer,
   countUnreadInServer,
@@ -659,12 +661,18 @@ export function AppRail({
       <CardContent className="flex min-h-0 flex-1 flex-col items-center gap-1 px-0 py-1">
         <Tooltip>
           <TooltipTrigger
-            render={<Button variant="secondary" size="icon" className="relative mt-0.5 h-9 w-9 rounded-lg" />}
-            onClick={onOpenHome}
+            render={
+              <Button
+                variant="secondary"
+                size="icon"
+                className={`relative mt-0.5 h-9 w-9 rounded-lg ${isDiscoverActive ? 'ring-1 ring-primary/70' : ''}`}
+                onClick={onOpenDiscover}
+              />
+            }
           >
             <img src={stealthChatLogo} alt="StealthChat" className="h-6 w-6 object-contain" />
           </TooltipTrigger>
-          <TooltipContent>Home</TooltipContent>
+          <TooltipContent side="right">Discover Spaces</TooltipContent>
         </Tooltip>
 
         <Separator className="my-0.5" />

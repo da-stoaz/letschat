@@ -9,6 +9,18 @@ export function memberUsername(member: ServerMemberWithUser): string {
   return member.user?.username || member.userIdentity.slice(0, 12)
 }
 
+/** Lowercase and strip "@" + whitespace so "@User 2" matches "User2", "user2", etc. */
+function normalizeForSearch(value: string): string {
+  return value.toLowerCase().replace(/[@\s]+/g, '')
+}
+
+/** True if any of `fields` contains the (normalized) query. Empty query matches all. */
+export function matchesSearch(query: string, ...fields: string[]): boolean {
+  const q = normalizeForSearch(query)
+  if (!q) return true
+  return fields.some((field) => normalizeForSearch(field).includes(q))
+}
+
 export function formatMemberSince(joinedAt: string): string {
   const date = new Date(joinedAt)
   if (Number.isNaN(date.getTime())) return 'Unknown'

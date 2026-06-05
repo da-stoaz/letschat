@@ -27,6 +27,19 @@ public sealed class AccountEmailService(
         await email.SendAsync(user.Email, subject, body);
     }
 
+    public async Task SendPasswordResetEmailAsync(ApplicationUser user)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return;
+        }
+
+        var token = await users.GeneratePasswordResetTokenAsync(user);
+        var url = Link("/auth/reset-password", user.Id, token);
+        var (subject, body) = EmailTemplates.PasswordReset(user.DisplayName, url);
+        await email.SendAsync(user.Email, subject, body);
+    }
+
     public async Task SendApprovalEmailAsync(ApplicationUser user)
     {
         if (string.IsNullOrWhiteSpace(user.Email))

@@ -63,6 +63,13 @@
                 <button type="submit" class="btn btn-primary">Enable account</button>
             </form>
         }
+        @if (!string.IsNullOrEmpty(Model.Target.Email))
+        {
+            <form method="post" action="/admin/users/@id?handler=SendPasswordReset" class="inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn">Send password reset</button>
+            </form>
+        }
         @if (Model.TargetIsAdmin)
         {
             @if (!Model.IsSelf)

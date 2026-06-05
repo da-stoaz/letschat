@@ -74,6 +74,32 @@ export const reducers = {
       serverId: toU64(serverId, 'serverId'),
       invitePolicy: reducerEnum(invitePolicy),
     }),
+  setServerDiscovery: (serverId: number, isDiscoverable: boolean, description: string | null) =>
+    spacetimedbClient.call('setServerDiscovery', {
+      serverId: toU64(serverId, 'serverId'),
+      isDiscoverable,
+      description: description === null || description.trim().length === 0 ? null : description.trim(),
+    }),
+  setServerTags: (serverId: number, tags: string[]) =>
+    spacetimedbClient.call('setServerTags', { serverId: toU64(serverId, 'serverId'), tags }),
+  adminUnlistServer: (serverId: number) =>
+    spacetimedbClient.call('adminUnlistServer', { serverId: toU64(serverId, 'serverId') }),
+  joinDiscoverableServer: (serverId: number) =>
+    spacetimedbClient.call('joinDiscoverableServer', { serverId: toU64(serverId, 'serverId') }),
+  requestToJoin: (serverId: number) =>
+    spacetimedbClient.call('requestToJoin', { serverId: toU64(serverId, 'serverId') }),
+  cancelJoinRequest: (serverId: number) =>
+    spacetimedbClient.call('cancelJoinRequest', { serverId: toU64(serverId, 'serverId') }),
+  approveJoinRequest: (serverId: number, targetIdentity: Identity) =>
+    spacetimedbClient.call('approveJoinRequest', {
+      serverId: toU64(serverId, 'serverId'),
+      targetIdentity: toReducerIdentity(targetIdentity),
+    }),
+  declineJoinRequest: (serverId: number, targetIdentity: Identity) =>
+    spacetimedbClient.call('declineJoinRequest', {
+      serverId: toU64(serverId, 'serverId'),
+      targetIdentity: toReducerIdentity(targetIdentity),
+    }),
   deleteServer: (serverId: number) =>
     spacetimedbClient.call('deleteServer', { serverId: toU64(serverId, 'serverId') }),
   leaveServer: (serverId: number) =>

@@ -1,16 +1,17 @@
 import { useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { ExternalLinkIcon } from 'lucide-react'
 import { reducers } from '../lib/spacetimedb'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useMembersStore, type ServerMemberWithUser } from '../stores/membersStore'
+import { useJoinRequestStore, type JoinRequestWithUser } from '../stores/joinRequestStore'
 import { useServersStore } from '../stores/serversStore'
 import { useServerRole } from '../hooks/useServerRole'
 import { canManageChannels } from '../lib/permissions'
 import type { Channel, ServerInvitePolicy } from '../types/domain'
 import { ChannelsTab } from '../features/server-manage/ChannelsTab'
 import { MembersTab } from '../features/server-manage/MembersTab'
+import { RequestsTab } from '../features/server-manage/RequestsTab'
 import { ServerTab } from '../features/server-manage/ServerTab'
 import { ServerManageDialogs } from '../features/server-manage/Dialogs'
 import { channelGroupKey, memberLabel, sectionKey, sectionLabel } from '../features/server-manage/helpers'
@@ -22,6 +23,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from '@/components/ui/sonner'
 import { serverInitials } from '../layouts/app-layout/helpers'
 
+// Stable empty reference: a space usually has no pending requests, so the
+// selector must not mint a new array each render (that loops useSyncExternalStore).
+const EMPTY_JOIN_REQUESTS: JoinRequestWithUser[] = []
+
 export function ServerManagePage() {
   const { serverId } = useParams()
   const navigate = useNavigate()
@@ -31,6 +36,7 @@ export function ServerManagePage() {
   const role = useServerRole(Number.isFinite(numericServerId) ? numericServerId : null)
   const server = useServersStore((s) => s.servers.find((entry) => entry.id === numericServerId) ?? null)
   const members = useMembersStore((s) => s.membersByServer[numericServerId] ?? [])
+  const joinRequests = useJoinRequestStore((s) => s.requestsByServer[numericServerId] ?? EMPTY_JOIN_REQUESTS)
   const channels = useChannelsStore((s) => s.channelsByServer[numericServerId] ?? [])
 
   const [showEditServer, setShowEditServer] = useState(false)
@@ -45,6 +51,7 @@ export function ServerManagePage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [invitePolicySaving, setInvitePolicySaving] = useState(false)
+  const [discoverySaving, setDiscoverySaving] = useState(false)
 
   const isOwner = role === 'Owner'
   const canModerateMembers = role === 'Owner' || role === 'Moderator'
@@ -118,6 +125,33 @@ export function ServerManagePage() {
       toast.error('Failed to update invite permission', { description: message })
     } finally {
       setInvitePolicySaving(false)
+    }
+  }
+
+  const updateDiscovery = async (isDiscoverable: boolean, description: string | null) => {
+    if (!isOwner || !server) return
+    setDiscoverySaving(true)
+    try {
+      await reducers.setServerDiscovery(server.id, isDiscoverable, description)
+      toast.success('Discovery settings updated')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not update discovery settings.'
+      toast.error('Failed to update discovery', { description: message })
+    } finally {
+      setDiscoverySaving(false)
+    }
+  }
+
+  const updateTags = async (tags: string[]) => {
+    if (!isOwner || !server) return
+    setDiscoverySaving(true)
+    try {
+      await reducers.setServerTags(server.id, tags)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not update tags.'
+      toast.error('Failed to update tags', { description: message })
+    } finally {
+      setDiscoverySaving(false)
     }
   }
 
@@ -249,19 +283,21 @@ export function ServerManagePage() {
               </div>
               <p className="text-sm text-muted-foreground">Manage members, channels, and space settings in one place.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => navigate(serverHomePath)}>
-                <ExternalLinkIcon className="size-4" />
-                Open Space
-              </Button>
-            </div>
           </div>
 
-          <Tabs defaultValue="members" className="min-h-0 flex-1 overflow-hidden">
+          <Tabs defaultValue="server" className="min-h-0 flex-1 overflow-hidden">
             <TabsList className="w-full">
-              <TabsTrigger value="members" className="flex-1">Members</TabsTrigger>
-              <TabsTrigger value="channels" className="flex-1">Channels</TabsTrigger>
               <TabsTrigger value="server" className="flex-1">Space</TabsTrigger>
+              <TabsTrigger value="members" className="flex-1">Members</TabsTrigger>
+              <TabsTrigger value="requests" className="flex-1 gap-1.5">
+                Requests
+                {joinRequests.length > 0 ? (
+                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                    {joinRequests.length}
+                  </span>
+                ) : null}
+              </TabsTrigger>
+              <TabsTrigger value="channels" className="flex-1">Channels</TabsTrigger>
             </TabsList>
 
             <TabsContent value="members" className="min-h-0 flex-1">
@@ -274,6 +310,10 @@ export function ServerManagePage() {
                 isOwner={isOwner}
                 onSetMemberAction={setMemberAction}
               />
+            </TabsContent>
+
+            <TabsContent value="requests" className="min-h-0 flex-1">
+              <RequestsTab serverId={server.id} joinRequests={joinRequests} />
             </TabsContent>
 
             <TabsContent value="channels" className="min-h-0 flex-1">
@@ -298,6 +338,7 @@ export function ServerManagePage() {
                 isOwner={isOwner}
                 leaving={leaving}
                 invitePolicySaving={invitePolicySaving}
+                discoverySaving={discoverySaving}
                 onOpenEditServer={() => setShowEditServer(true)}
                 onOpenDeleteServer={() => setShowDeleteServer(true)}
                 onLeaveServer={() => {
@@ -305,6 +346,12 @@ export function ServerManagePage() {
                 }}
                 onUpdateInvitePolicy={(value) => {
                   void updateInvitePolicy(value)
+                }}
+                onUpdateDiscovery={(isDiscoverable, description) => {
+                  void updateDiscovery(isDiscoverable, description)
+                }}
+                onUpdateTags={(tags) => {
+                  void updateTags(tags)
                 }}
               />
             </TabsContent>

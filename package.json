@@ -1,7 +1,7 @@
 {
   "name": "letschat",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "type": "module",
   "scripts": {
     "version:bump": "bun scripts/bump-version.ts",
@@ -24,7 +24,8 @@
     "services:up": "docker compose -f docker-compose.dev.yml up -d",
     "services:down": "docker compose -f docker-compose.dev.yml down",
     "services:logs": "docker compose -f docker-compose.dev.yml logs -f",
-    "services:reset": "docker compose -f docker-compose.dev.yml down -v"
+    "services:reset": "docker compose -f docker-compose.dev.yml down -v",
+    "doctor": "npx react-doctor@latest"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -33,6 +34,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/geist": "^5.2.8",
     "@tanstack/react-query": "^5.100.10",
+    "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.24",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-deep-link": "^2.4.9",

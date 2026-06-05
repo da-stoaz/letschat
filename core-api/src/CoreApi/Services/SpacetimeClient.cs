@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -27,6 +28,19 @@ public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptio
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
+
+    /// <summary>
+    /// Serialises reducer args as a JSON body with a bare <c>application/json</c>
+    /// content type. SpacetimeDB's <c>/call</c> endpoint returns 415 when the
+    /// media type carries a <c>charset</c> parameter (which <c>JsonContent</c>
+    /// adds by default), so it's stripped here.
+    /// </summary>
+    private static JsonContent ReducerArgs(object args)
+    {
+        var content = JsonContent.Create(args, options: JsonOpts);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        return content;
+    }
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.SpacetimeServiceToken);
 
@@ -87,7 +101,7 @@ public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptio
         var url = $"{options.SpacetimeHttpUrl.TrimEnd('/')}/v1/database/{options.SpacetimeModuleName}/call/set_space_create_policy";
         using var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Content = JsonContent.Create(args, options: JsonOpts),
+            Content = ReducerArgs(args),
         };
         request.Headers.Authorization = new("Bearer", options.SpacetimeServiceToken);
 
@@ -98,6 +112,59 @@ public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptio
             throw new InvalidOperationException(
                 $"SpacetimeDB rejected set_space_create_policy ({(int)response.StatusCode}): {body}");
         }
+    }
+
+    /// <summary>Placeholder prefix on accounts that haven't bound a real SpacetimeDB identity yet.</summary>
+    private const string PendingIdentityPrefix = "pending:";
+
+    /// <summary>
+    /// Pushes a user's instance-admin flag onto their SpacetimeDB <c>User</c> row
+    /// via the <c>set_user_admin</c> reducer, keeping the chat-domain admin gate
+    /// in sync with the ASP.NET Identity <c>Admin</c> role.
+    ///
+    /// <para>
+    /// No-ops (returns <c>false</c>) when the service token isn't configured or
+    /// the account has no real SpacetimeDB identity yet — admin-created accounts
+    /// carry a <c>pending:</c> placeholder until first sign-in, when the login
+    /// path retries this. Returns <c>true</c> when the reducer was called;
+    /// throws if SpacetimeDB rejects it (e.g. the service identity isn't admin,
+    /// or the target hasn't registered a <c>User</c> row yet).
+    /// </para>
+    /// </summary>
+    public async Task<bool> SyncUserAdminAsync(
+        string? spacetimeIdentity, bool isAdmin, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(options.SpacetimeServiceToken)
+            || string.IsNullOrWhiteSpace(spacetimeIdentity)
+            || spacetimeIdentity.StartsWith(PendingIdentityPrefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        // SpacetimeDB encodes an `Identity` arg as a 1-element tuple of its hex
+        // string: set_user_admin(target, is_admin) → [["0x<hex>"], <bool>].
+        var hex = spacetimeIdentity.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? spacetimeIdentity
+            : "0x" + spacetimeIdentity;
+        var args = new List<object> { new[] { hex }, isAdmin };
+
+        var http = httpFactory.CreateClient(ClientName);
+        var url = $"{options.SpacetimeHttpUrl.TrimEnd('/')}/v1/database/{options.SpacetimeModuleName}/call/set_user_admin";
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = ReducerArgs(args),
+        };
+        request.Headers.Authorization = new("Bearer", options.SpacetimeServiceToken);
+
+        var response = await http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            throw new InvalidOperationException(
+                $"SpacetimeDB rejected set_user_admin ({(int)response.StatusCode}): {body}");
+        }
+
+        return true;
     }
 }
 

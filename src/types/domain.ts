@@ -12,6 +12,7 @@ export interface User {
   displayName: string
   avatarUrl: string | null
   createdAt: string
+  isAdmin: boolean
 }
 
 export interface Server {
@@ -21,6 +22,32 @@ export interface Server {
   invitePolicy: ServerInvitePolicy
   iconUrl: string | null
   createdAt: string
+  isDiscoverable: boolean
+  description: string | null
+  tags: string[]
+}
+
+/** A non-member's request to join a discoverable, invite-only space. */
+export interface JoinRequest {
+  serverId: u64
+  userIdentity: Identity
+  createdAt: string
+  /** A moderator declined it; the row is kept so the requester sees the outcome. */
+  declined: boolean
+}
+
+export type JoinRequestStatus = 'pending' | 'declined'
+
+/** A discoverable space as shown on the Discover surface (non-member view). */
+export interface DiscoverServer {
+  id: u64
+  name: string
+  ownerIdentity: Identity
+  invitePolicy: ServerInvitePolicy
+  iconUrl: string | null
+  description: string | null
+  tags: string[]
+  memberCount: number
 }
 
 export interface ServerMember {

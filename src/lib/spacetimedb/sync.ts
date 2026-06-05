@@ -4,6 +4,7 @@ import {
   mapServer,
   mapServerMember,
   mapInvite,
+  mapJoinRequest,
   isInviteActive,
   mapDmServerInvite,
   mapChannel,
@@ -22,6 +23,8 @@ import {
 } from './mappers'
 import { useChannelsStore } from '../../stores/channelsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useDiscoverStore } from '../../stores/discoverStore'
+import { useJoinRequestStore, type JoinRequestWithUser } from '../../stores/joinRequestStore'
 import { useDmStore } from '../../stores/dmStore'
 import { useDmVoiceStore } from '../../stores/dmVoiceStore'
 import { useDmVoiceSessionStore } from '../../stores/dmVoiceSessionStore'
@@ -40,7 +43,7 @@ import { useTypingStore } from '../../stores/typingStore'
 import { useInvitesStore } from '../../stores/invitesStore'
 import { useDmServerInvitesStore } from '../../stores/dmServerInvitesStore'
 import type { ServerMemberWithUser } from '../../stores/membersStore'
-import type { Channel, DirectMessage, Identity, User } from '../../types/domain'
+import type { Channel, DirectMessage, Identity, JoinRequestStatus, User } from '../../types/domain'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -152,6 +155,75 @@ export function syncServers(conn: DbConnection): void {
     .map(mapServer)
     .filter((server) => allowedServerIds.has(server.id))
   useServersStore.getState().setServers(servers)
+}
+
+export function syncDiscover(conn: DbConnection): void {
+  const joined = joinedServerIds(conn)
+
+  // Member counts are computed across the full (public) server_member table so
+  // a discover card can show how many people are in a space the caller hasn't
+  // joined.
+  const memberCounts = new Map<number, number>()
+  for (const member of conn.db.server_member.iter()) {
+    const sid = toU64Number(member.serverId)
+    memberCounts.set(sid, (memberCounts.get(sid) ?? 0) + 1)
+  }
+
+  const servers = Array.from(conn.db.server.iter())
+    .map(mapServer)
+    .filter((server) => server.isDiscoverable && !joined.has(server.id))
+    .map((server) => ({
+      id: server.id,
+      name: server.name,
+      ownerIdentity: server.ownerIdentity,
+      invitePolicy: server.invitePolicy,
+      iconUrl: server.iconUrl,
+      description: server.description,
+      tags: server.tags,
+      memberCount: memberCounts.get(server.id) ?? 0,
+    }))
+
+  useDiscoverStore.getState().setServers(servers)
+}
+
+export function syncJoinRequests(conn: DbConnection, users: User[] = syncUsers(conn)): void {
+  const me = useConnectionStore.getState().identity
+
+  // Spaces the caller moderates (Owner/Moderator) — they see incoming requests.
+  const moderated = new Set<number>()
+  if (me) {
+    for (const row of conn.db.server_member.iter()) {
+      const member = mapServerMember(row)
+      if (
+        sameIdentity(member.userIdentity, me) &&
+        (member.role === 'Owner' || member.role === 'Moderator')
+      ) {
+        moderated.add(member.serverId)
+      }
+    }
+  }
+
+  const usersByIdentity = new Map(users.map((user) => [normalizeIdentity(user.identity), user]))
+  const mine: Record<number, JoinRequestStatus> = {}
+  const byServer: Record<number, JoinRequestWithUser[]> = {}
+  for (const row of conn.db.join_request.iter()) {
+    const request = mapJoinRequest(row)
+    if (me && sameIdentity(request.userIdentity, me)) {
+      mine[request.serverId] = request.declined ? 'declined' : 'pending'
+    }
+    // Moderators only act on still-pending requests; declined ones are resolved.
+    if (moderated.has(request.serverId) && !request.declined) {
+      ;(byServer[request.serverId] ??= []).push({
+        ...request,
+        user: usersByIdentity.get(normalizeIdentity(request.userIdentity)) ?? null,
+      })
+    }
+  }
+  for (const rows of Object.values(byServer)) {
+    rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  }
+
+  useJoinRequestStore.getState().setRequests(mine, byServer)
 }
 
 export function syncMembers(conn: DbConnection, users: User[] = syncUsers(conn)): void {
@@ -357,6 +429,8 @@ export function syncServerScopedState(conn: DbConnection, users: User[] = syncUs
   syncMembers(conn, users)
   syncChannels(conn)
   syncInvites(conn)
+  syncDiscover(conn)
+  syncJoinRequests(conn, users)
 }
 
 export function syncAll(conn: DbConnection): void {
@@ -389,6 +463,8 @@ export function resetClientState(): void {
   useUsersStore.setState({ users: [], byIdentity: {} })
 
   useServersStore.setState({ servers: [], activeServerId: null })
+  useDiscoverStore.setState({ servers: [] })
+  useJoinRequestStore.setState({ myStatusByServer: {}, requestsByServer: {} })
   useChannelsStore.setState({ channelsByServer: {} })
   useMembersStore.setState({ membersByServer: {} })
   useMessagesStore.setState({ messagesByChannel: {} })

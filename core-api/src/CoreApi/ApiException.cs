@@ -20,4 +20,7 @@ public sealed class ApiException(HttpStatusCode status, string message)
 
     public static ApiException Conflict(string message) =>
         new(HttpStatusCode.Conflict, message);
+
+    public static ApiException ServiceUnavailable(string message) =>
+        new(HttpStatusCode.ServiceUnavailable, message);
 }

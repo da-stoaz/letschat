@@ -89,6 +89,19 @@ pub struct Server {
     pub invite_policy: InvitePolicy,
     pub icon_url: Option<String>,
     pub created_at: Timestamp,
+    /// Opt-in: when true the space is listed on the "Discover" surface for
+    /// non-members. Owner-controlled via `set_server_discovery`. Default off.
+    #[default(false)]
+    pub is_discoverable: bool,
+    /// Short blurb shown on the Discover card (≤280 chars, enforced at the
+    /// reducer). Only meaningful when `is_discoverable`.
+    #[default(None::<String>)]
+    pub description: Option<String>,
+    /// Up to 5 lowercased topic tags (≤24 chars each), used to filter the
+    /// Discover surface. Owner-controlled via `set_server_tags`. `None` ==
+    /// no tags (a Vec column can't carry a const default).
+    #[default(None::<Vec<String>>)]
+    pub tags: Option<Vec<String>>,
 }
 
 #[spacetimedb::table(
@@ -123,6 +136,26 @@ pub struct Ban {
     pub banned_by: Identity,
     pub reason: Option<String>,
     pub banned_at: Timestamp,
+}
+
+/// A non-member's pending request to join a discoverable, invite-only space.
+/// A row existing == the request is pending; approving creates a `ServerMember`
+/// and removes the row, declining/cancelling just removes it.
+#[spacetimedb::table(accessor = join_request, public)]
+pub struct JoinRequest {
+    /// "{server_id}:{user_identity}" — one request per user per space.
+    #[primary_key]
+    pub request_key: String,
+    #[index(btree)]
+    pub server_id: u64,
+    #[index(btree)]
+    pub user_identity: Identity,
+    pub created_at: Timestamp,
+    /// A moderator declined this request. The row is kept (not deleted) so the
+    /// requester gets feedback; re-requesting flips it back to pending. Appended
+    /// last so the migration stays additive.
+    #[default(false)]
+    pub declined: bool,
 }
 
 #[spacetimedb::table(accessor = invite, public)]

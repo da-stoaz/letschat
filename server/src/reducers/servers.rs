@@ -1,9 +1,13 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err, is_system_admin, member_key, require_member_role, require_owner, voice_key,
+    assert_or_err, has_member_role, is_banned, is_system_admin, member_key, require_member_role,
+    require_owner, require_system_admin, voice_key,
 };
 use crate::schema::*;
+
+/// Anti-spam cap: how many spaces one owner may list on Discover at once.
+const MAX_DISCOVERABLE_PER_OWNER: usize = 10;
 
 #[spacetimedb::reducer]
 pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
@@ -36,6 +40,9 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
         invite_policy: InvitePolicy::ModeratorsOnly,
         icon_url: None,
         created_at: ctx.timestamp,
+        is_discoverable: false,
+        description: None,
+        tags: None,
     });
 
     let server_id = server_row.id;
@@ -107,6 +114,152 @@ pub fn set_server_invite_policy(
         .ok_or_else(|| "server not found".to_string())?;
     server_row.invite_policy = invite_policy;
     ctx.db.server().id().update(server_row);
+    Ok(())
+}
+
+/// Owner-only: toggle a space's discoverability and set its blurb. The
+/// description is trimmed and capped at 280 chars; an empty/whitespace blurb is
+/// stored as `None`.
+#[spacetimedb::reducer]
+pub fn set_server_discovery(
+    ctx: &ReducerContext,
+    server_id: u64,
+    is_discoverable: bool,
+    description: Option<String>,
+) -> Result<(), String> {
+    require_owner(ctx, server_id, ctx.sender())?;
+
+    let normalized_description = description
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if let Some(desc) = normalized_description.as_ref() {
+        assert_or_err(
+            desc.chars().count() <= 280,
+            "description must be at most 280 chars",
+        )?;
+    }
+    // Anti-spam: cap how many spaces a single owner can list on Discover.
+    if is_discoverable {
+        let owner = ctx.sender();
+        let already_listed = ctx
+            .db
+            .server()
+            .iter()
+            .filter(|s| s.owner_identity == owner && s.is_discoverable && s.id != server_id)
+            .count();
+        assert_or_err(
+            already_listed < MAX_DISCOVERABLE_PER_OWNER,
+            "you have reached the limit of discoverable spaces for one owner",
+        )?;
+    }
+
+    let mut server_row = ctx
+        .db
+        .server()
+        .id()
+        .find(server_id)
+        .ok_or_else(|| "server not found".to_string())?;
+    server_row.is_discoverable = is_discoverable;
+    server_row.description = normalized_description;
+    ctx.db.server().id().update(server_row);
+    Ok(())
+}
+
+/// Owner-only: set a space's topic tags (≤5, each lowercased and ≤24 chars,
+/// de-duplicated). Used to filter the Discover surface.
+#[spacetimedb::reducer]
+pub fn set_server_tags(
+    ctx: &ReducerContext,
+    server_id: u64,
+    tags: Vec<String>,
+) -> Result<(), String> {
+    require_owner(ctx, server_id, ctx.sender())?;
+
+    let mut normalized: Vec<String> = Vec::new();
+    for raw in tags {
+        let tag = raw.trim().to_lowercase();
+        if tag.is_empty() {
+            continue;
+        }
+        assert_or_err(
+            tag.chars().count() <= 24,
+            "each tag must be at most 24 characters",
+        )?;
+        if !normalized.contains(&tag) {
+            normalized.push(tag);
+        }
+    }
+    assert_or_err(normalized.len() <= 5, "a space can have at most 5 tags")?;
+
+    let mut server_row = ctx
+        .db
+        .server()
+        .id()
+        .find(server_id)
+        .ok_or_else(|| "server not found".to_string())?;
+    server_row.tags = if normalized.is_empty() { None } else { Some(normalized) };
+    ctx.db.server().id().update(server_row);
+    Ok(())
+}
+
+/// Instance-admin moderation: force a space off the Discover surface without
+/// owning it. Admin-gated; only clears `is_discoverable` (leaves the space and
+/// its membership untouched). The owner can re-list it later.
+#[spacetimedb::reducer]
+pub fn admin_unlist_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
+    require_system_admin(ctx, ctx.sender())?;
+
+    let mut server_row = ctx
+        .db
+        .server()
+        .id()
+        .find(server_id)
+        .ok_or_else(|| "server not found".to_string())?;
+    if server_row.is_discoverable {
+        server_row.is_discoverable = false;
+        ctx.db.server().id().update(server_row);
+    }
+    Ok(())
+}
+
+/// One-click join for a space surfaced on Discover. Only valid for a space that
+/// is discoverable AND has an `Everyone` invite policy; `ModeratorsOnly` spaces
+/// must still be invited (the client shows a stub for those). Rejects callers
+/// who are already members or are banned.
+#[spacetimedb::reducer]
+pub fn join_discoverable_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
+    let caller = ctx.sender();
+
+    let server_row = ctx
+        .db
+        .server()
+        .id()
+        .find(server_id)
+        .ok_or_else(|| "server not found".to_string())?;
+
+    assert_or_err(server_row.is_discoverable, "this space is not discoverable")?;
+    assert_or_err(
+        matches!(server_row.invite_policy, InvitePolicy::Everyone),
+        "this space requires an invite from a moderator",
+    )?;
+    assert_or_err(
+        has_member_role(ctx, server_id, caller).is_none(),
+        "you are already a member of this space",
+    )?;
+    assert_or_err(
+        !is_banned(ctx, server_id, caller),
+        "you are banned from this space",
+    )?;
+
+    ctx.db.server_member().insert(ServerMember {
+        member_key: member_key(server_id, caller),
+        server_id,
+        user_identity: caller,
+        role: Role::Member,
+        joined_at: ctx.timestamp,
+        timeout_until: None,
+    });
+
     Ok(())
 }
 
@@ -205,6 +358,16 @@ pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String>
         .collect();
     for invite_row in invites {
         ctx.db.invite().token().delete(&invite_row.token);
+    }
+
+    let join_requests: Vec<JoinRequest> = ctx
+        .db
+        .join_request()
+        .iter()
+        .filter(|r| r.server_id == server_id)
+        .collect();
+    for request in join_requests {
+        ctx.db.join_request().request_key().delete(&request.request_key);
     }
 
     for channel_id in channel_ids {

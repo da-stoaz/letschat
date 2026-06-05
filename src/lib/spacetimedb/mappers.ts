@@ -15,6 +15,7 @@ import type {
   FriendStatus,
   Identity,
   Invite,
+  JoinRequest,
   Message,
   PresenceState,
   ReadState,
@@ -108,6 +109,7 @@ export function mapUser(row: DbRow): User {
     displayName: rowString(row, 'displayName'),
     avatarUrl: rowNullableString(row, 'avatarUrl'),
     createdAt: toIsoString(row.createdAt),
+    isAdmin: Boolean(row.isAdmin),
   }
 }
 
@@ -119,6 +121,9 @@ export function mapServer(row: DbRow): Server {
     invitePolicy: enumTag(row.invitePolicy || 'ModeratorsOnly') as ServerInvitePolicy,
     iconUrl: rowNullableString(row, 'iconUrl'),
     createdAt: toIsoString(row.createdAt),
+    isDiscoverable: Boolean(row.isDiscoverable),
+    description: rowNullableString(row, 'description'),
+    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
   }
 }
 
@@ -129,6 +134,15 @@ export function mapServerMember(row: DbRow): ServerMember {
     role: enumTag(row.role) as Role,
     joinedAt: toIsoString(row.joinedAt),
     timeoutUntil: row.timeoutUntil ? toIsoString(row.timeoutUntil) : null,
+  }
+}
+
+export function mapJoinRequest(row: DbRow): JoinRequest {
+  return {
+    serverId: toU64Number(row.serverId),
+    userIdentity: toIdentityString(row.userIdentity),
+    createdAt: toIsoString(row.createdAt),
+    declined: Boolean(row.declined),
   }
 }
 

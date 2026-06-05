@@ -145,6 +145,15 @@ export const InvitePolicy = __t.enum("InvitePolicy", {
 });
 export type InvitePolicy = __Infer<typeof InvitePolicy>;
 
+export const JoinRequest = __t.object("JoinRequest", {
+  requestKey: __t.string(),
+  serverId: __t.u64(),
+  userIdentity: __t.identity(),
+  createdAt: __t.timestamp(),
+  declined: __t.bool(),
+});
+export type JoinRequest = __Infer<typeof JoinRequest>;
+
 export const Message = __t.object("Message", {
   id: __t.u64(),
   channelId: __t.u64(),
@@ -190,6 +199,9 @@ export const Server = __t.object("Server", {
   },
   iconUrl: __t.option(__t.string()),
   createdAt: __t.timestamp(),
+  isDiscoverable: __t.bool(),
+  description: __t.option(__t.string()),
+  tags: __t.option(__t.array(__t.string())),
 });
 export type Server = __Infer<typeof Server>;
 
@@ -205,6 +217,21 @@ export const ServerMember = __t.object("ServerMember", {
 });
 export type ServerMember = __Infer<typeof ServerMember>;
 
+// The tagged union or sum type for the algebraic type `SpaceCreatePolicy`.
+export const SpaceCreatePolicy = __t.enum("SpaceCreatePolicy", {
+  Anyone: __t.unit(),
+  AdminsOnly: __t.unit(),
+});
+export type SpaceCreatePolicy = __Infer<typeof SpaceCreatePolicy>;
+
+export const SystemSettings = __t.object("SystemSettings", {
+  id: __t.u8(),
+  get spaceCreatePolicy() {
+    return SpaceCreatePolicy;
+  },
+});
+export type SystemSettings = __Infer<typeof SystemSettings>;
+
 export const TypingState = __t.object("TypingState", {
   typingKey: __t.string(),
   scopeKey: __t.string(),
@@ -219,6 +246,7 @@ export const User = __t.object("User", {
   displayName: __t.string(),
   avatarUrl: __t.option(__t.string()),
   createdAt: __t.timestamp(),
+  isAdmin: __t.bool(),
 });
 export type User = __Infer<typeof User>;
 

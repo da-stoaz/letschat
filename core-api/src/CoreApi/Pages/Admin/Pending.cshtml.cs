@@ -17,6 +17,7 @@ public sealed class PendingModel(
     public List<ApplicationUser> Pending { get; private set; } = [];
 
     [TempData] public string? Message { get; set; }
+    [TempData] public string? Error { get; set; }
 
     public async Task OnGetAsync()
     {
@@ -34,11 +35,19 @@ public sealed class PendingModel(
             user.Status = AccountStatus.Active;
             user.UpdatedAtUtc = DateTime.UtcNow;
             await users.UpdateAsync(user);
-            await accountEmail.SendApprovalEmailAsync(user);
             await audit.RecordAsync(
                 User.Identity?.Name ?? "admin", "user.approve", "user", user.Id,
                 $"Approved {user.UserName}");
-            Message = $"Approved {user.UserName}.";
+            try
+            {
+                await accountEmail.SendApprovalEmailAsync(user);
+                Message = $"Approved {user.UserName}.";
+            }
+            catch (EmailDeliveryException ex)
+            {
+                // Approval succeeded — only the notification email failed.
+                Error = $"Approved {user.UserName}, but the approval email could not be sent — {ex.Message}";
+            }
         }
 
         return Redirect("/admin/pending");

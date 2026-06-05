@@ -9,6 +9,7 @@ import { ServerChannelPage } from './pages/ServerChannelPage'
 import { ServerManagePage } from './pages/ServerManagePage'
 import { DMPage } from './pages/DMPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { DiscoverPage } from './pages/DiscoverPage'
 import { useSelfStore } from './stores/selfStore'
 import { useConnectionStore } from './stores/connectionStore'
 import { useUiStore } from './stores/uiStore'
@@ -74,6 +75,7 @@ function App() {
         <Route index element={<AppIndexPage />} />
         <Route path="dm/:identity" element={<DMPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="discover" element={<DiscoverPage />} />
         <Route path=":serverId/manage" element={<ServerManagePage />} />
         <Route path=":serverId" element={<ServerChannelPage />} />
         <Route path=":serverId/:channelId" element={<ServerChannelPage />} />

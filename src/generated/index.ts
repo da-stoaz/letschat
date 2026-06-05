@@ -35,13 +35,17 @@ import {
 
 // Import all reducer arg schemas
 import AcceptFriendRequestReducer from "./accept_friend_request_reducer";
+import AdminUnlistServerReducer from "./admin_unlist_server_reducer";
+import ApproveJoinRequestReducer from "./approve_join_request_reducer";
 import BanMemberReducer from "./ban_member_reducer";
 import BlockUserReducer from "./block_user_reducer";
+import CancelJoinRequestReducer from "./cancel_join_request_reducer";
 import CleanupExpiredInvitesReducer from "./cleanup_expired_invites_reducer";
 import CreateChannelReducer from "./create_channel_reducer";
 import CreateInviteReducer from "./create_invite_reducer";
 import CreateServerReducer from "./create_server_reducer";
 import DeclineFriendRequestReducer from "./decline_friend_request_reducer";
+import DeclineJoinRequestReducer from "./decline_join_request_reducer";
 import DeleteChannelReducer from "./delete_channel_reducer";
 import DeleteChannelSectionReducer from "./delete_channel_section_reducer";
 import DeleteDirectMessageReducer from "./delete_direct_message_reducer";
@@ -50,6 +54,7 @@ import DeleteMessageReducer from "./delete_message_reducer";
 import DeleteServerReducer from "./delete_server_reducer";
 import EditDirectMessageReducer from "./edit_direct_message_reducer";
 import EditMessageReducer from "./edit_message_reducer";
+import JoinDiscoverableServerReducer from "./join_discoverable_server_reducer";
 import JoinDmVoiceReducer from "./join_dm_voice_reducer";
 import JoinVoiceChannelReducer from "./join_voice_channel_reducer";
 import KickMemberReducer from "./kick_member_reducer";
@@ -65,6 +70,7 @@ import RegisterUserReducer from "./register_user_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
 import RemoveTimeoutReducer from "./remove_timeout_reducer";
 import RenameServerReducer from "./rename_server_reducer";
+import RequestToJoinReducer from "./request_to_join_reducer";
 import RespondDmServerInviteReducer from "./respond_dm_server_invite_reducer";
 import SendDirectMessageReducer from "./send_direct_message_reducer";
 import SendDmServerInviteReducer from "./send_dm_server_invite_reducer";
@@ -73,9 +79,13 @@ import SendMessageReducer from "./send_message_reducer";
 import SetChannelSectionReducer from "./set_channel_section_reducer";
 import SetMemberRoleReducer from "./set_member_role_reducer";
 import SetPresenceOfflineReducer from "./set_presence_offline_reducer";
+import SetServerDiscoveryReducer from "./set_server_discovery_reducer";
 import SetServerIconReducer from "./set_server_icon_reducer";
 import SetServerInvitePolicyReducer from "./set_server_invite_policy_reducer";
+import SetServerTagsReducer from "./set_server_tags_reducer";
+import SetSpaceCreatePolicyReducer from "./set_space_create_policy_reducer";
 import SetTypingStateReducer from "./set_typing_state_reducer";
+import SetUserAdminReducer from "./set_user_admin_reducer";
 import TimeoutMemberReducer from "./timeout_member_reducer";
 import TouchPresenceReducer from "./touch_presence_reducer";
 import TransferOwnershipReducer from "./transfer_ownership_reducer";
@@ -95,6 +105,7 @@ import ChannelRow from "./channel_table";
 import DirectMessageRow from "./direct_message_table";
 import DmServerInviteRow from "./dm_server_invite_table";
 import InviteRow from "./invite_table";
+import JoinRequestRow from "./join_request_table";
 import MessageRow from "./message_table";
 import MyBlocksRow from "./my_blocks_table";
 import MyDmVoiceParticipantsRow from "./my_dm_voice_participants_table";
@@ -104,6 +115,7 @@ import MyReadStatesRow from "./my_read_states_table";
 import MyTypingStatesRow from "./my_typing_states_table";
 import ServerRow from "./server_table";
 import ServerMemberRow from "./server_member_table";
+import SystemSettingsRow from "./system_settings_table";
 import UserRow from "./user_table";
 import VoiceParticipantRow from "./voice_participant_table";
 
@@ -197,6 +209,23 @@ const tablesSchema = __schema({
       { name: 'invite_token_key', constraint: 'unique', columns: ['token'] },
     ],
   }, InviteRow),
+  join_request: __table({
+    name: 'join_request',
+    indexes: [
+      { accessor: 'request_key', name: 'join_request_request_key_idx_btree', algorithm: 'btree', columns: [
+        'requestKey',
+      ] },
+      { accessor: 'server_id', name: 'join_request_server_id_idx_btree', algorithm: 'btree', columns: [
+        'serverId',
+      ] },
+      { accessor: 'user_identity', name: 'join_request_user_identity_idx_btree', algorithm: 'btree', columns: [
+        'userIdentity',
+      ] },
+    ],
+    constraints: [
+      { name: 'join_request_request_key_key', constraint: 'unique', columns: ['requestKey'] },
+    ],
+  }, JoinRequestRow),
   message: __table({
     name: 'message',
     indexes: [
@@ -250,6 +279,17 @@ const tablesSchema = __schema({
       { name: 'server_member_member_key_key', constraint: 'unique', columns: ['memberKey'] },
     ],
   }, ServerMemberRow),
+  system_settings: __table({
+    name: 'system_settings',
+    indexes: [
+      { accessor: 'id', name: 'system_settings_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'system_settings_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, SystemSettingsRow),
   user: __table({
     name: 'user',
     indexes: [
@@ -333,13 +373,17 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("accept_friend_request", AcceptFriendRequestReducer),
+  __reducerSchema("admin_unlist_server", AdminUnlistServerReducer),
+  __reducerSchema("approve_join_request", ApproveJoinRequestReducer),
   __reducerSchema("ban_member", BanMemberReducer),
   __reducerSchema("block_user", BlockUserReducer),
+  __reducerSchema("cancel_join_request", CancelJoinRequestReducer),
   __reducerSchema("cleanup_expired_invites", CleanupExpiredInvitesReducer),
   __reducerSchema("create_channel", CreateChannelReducer),
   __reducerSchema("create_invite", CreateInviteReducer),
   __reducerSchema("create_server", CreateServerReducer),
   __reducerSchema("decline_friend_request", DeclineFriendRequestReducer),
+  __reducerSchema("decline_join_request", DeclineJoinRequestReducer),
   __reducerSchema("delete_channel", DeleteChannelReducer),
   __reducerSchema("delete_channel_section", DeleteChannelSectionReducer),
   __reducerSchema("delete_direct_message", DeleteDirectMessageReducer),
@@ -348,6 +392,7 @@ const reducersSchema = __reducers(
   __reducerSchema("delete_server", DeleteServerReducer),
   __reducerSchema("edit_direct_message", EditDirectMessageReducer),
   __reducerSchema("edit_message", EditMessageReducer),
+  __reducerSchema("join_discoverable_server", JoinDiscoverableServerReducer),
   __reducerSchema("join_dm_voice", JoinDmVoiceReducer),
   __reducerSchema("join_voice_channel", JoinVoiceChannelReducer),
   __reducerSchema("kick_member", KickMemberReducer),
@@ -363,6 +408,7 @@ const reducersSchema = __reducers(
   __reducerSchema("remove_friend", RemoveFriendReducer),
   __reducerSchema("remove_timeout", RemoveTimeoutReducer),
   __reducerSchema("rename_server", RenameServerReducer),
+  __reducerSchema("request_to_join", RequestToJoinReducer),
   __reducerSchema("respond_dm_server_invite", RespondDmServerInviteReducer),
   __reducerSchema("send_direct_message", SendDirectMessageReducer),
   __reducerSchema("send_dm_server_invite", SendDmServerInviteReducer),
@@ -371,9 +417,13 @@ const reducersSchema = __reducers(
   __reducerSchema("set_channel_section", SetChannelSectionReducer),
   __reducerSchema("set_member_role", SetMemberRoleReducer),
   __reducerSchema("set_presence_offline", SetPresenceOfflineReducer),
+  __reducerSchema("set_server_discovery", SetServerDiscoveryReducer),
   __reducerSchema("set_server_icon", SetServerIconReducer),
   __reducerSchema("set_server_invite_policy", SetServerInvitePolicyReducer),
+  __reducerSchema("set_server_tags", SetServerTagsReducer),
+  __reducerSchema("set_space_create_policy", SetSpaceCreatePolicyReducer),
   __reducerSchema("set_typing_state", SetTypingStateReducer),
+  __reducerSchema("set_user_admin", SetUserAdminReducer),
   __reducerSchema("timeout_member", TimeoutMemberReducer),
   __reducerSchema("touch_presence", TouchPresenceReducer),
   __reducerSchema("transfer_ownership", TransferOwnershipReducer),

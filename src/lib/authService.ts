@@ -204,9 +204,28 @@ export async function authServiceRegister(payload: RegisterPayload): Promise<Reg
   return result
 }
 
-export async function authServiceResendConfirmation(email: string): Promise<void> {
-  await postJson<{ status: string; message: string }, { email: string }>(
+/**
+ * Re-sends the confirmation email. Identify the account by `email` (the
+ * post-registration screen) or `username` (the blocked-login screen, which only
+ * knows the username the user typed). The server answers generically.
+ */
+export async function authServiceResendConfirmation(
+  payload: { email: string } | { username: string },
+): Promise<void> {
+  await postJson<{ status: string; message: string }, Record<string, string>>(
     '/auth/resend-confirmation',
+    payload,
+  )
+}
+
+/**
+ * Starts the password-reset flow. The server mails a tokenised link (opened in
+ * a browser) and always responds generically, so this resolves regardless of
+ * whether the address has an account — never surface a "no such user" error.
+ */
+export async function authServiceForgotPassword(email: string): Promise<void> {
+  await postJson<{ status: string; message: string }, { email: string }>(
+    '/auth/forgot-password',
     { email },
   )
 }
