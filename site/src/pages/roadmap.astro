@@ -4,132 +4,176 @@ import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
 import { GITHUB_DISCUSSIONS, GITHUB_ISSUE_NEW } from "@/lib/site";
 
-const updatedAt = "May 18, 2026";
+const updatedAt = "June 7, 2026";
 
-const milestones = [
+// Delivered and merged to main.
+const shipped = [
   {
-    id: "R-2026-06",
-    window: "June 2026",
-    priority: "P0",
-    status: "In Progress",
-    focus: "Voice reliability and state consistency",
-    goals: [
-      "Stabilize server voice control actions end-to-end.",
-      "Close parity gaps between DM voice and server voice behavior.",
-      "Harden voice state reconciliation across reconnects.",
+    id: "Plan 1",
+    focus: "Admin Control Panel & Identity",
+    blurb: "An authoritative .NET auth backend and a browser-based admin panel.",
+    items: [
+      "core-api rebuilt on .NET 10 / ASP.NET Core Identity backed by PostgreSQL.",
+      "Email verification, per-IP rate limiting, and an admin approval workflow.",
+      "Razor admin panel — users, pending queue, system config, audit log — on a non-public listener.",
+      "Password reset end-to-end and production deployment cutover.",
     ],
   },
   {
-    id: "R-2026-07",
-    window: "July 2026",
-    priority: "P0",
-    status: "Planned",
-    focus: "Release quality and deployment confidence",
-    goals: [
-      "Strengthen desktop release pipeline and validation checks.",
-      "Improve production deployment docs for first-time operators.",
-      "Add clearer upgrade guidance for existing installations.",
-    ],
-  },
-  {
-    id: "R-2026-08",
-    window: "August 2026",
-    priority: "P1",
-    status: "Planned",
-    focus: "Attachments and communication UX",
-    goals: [
-      "Expand attachment flows with stronger failure handling.",
-      "Refine composer and message-surface interaction details.",
-      "Improve upload and download feedback states.",
-    ],
-  },
-  {
-    id: "R-2026-09",
-    window: "September 2026",
-    priority: "P1",
-    status: "Planned",
-    focus: "Moderation and operator controls",
-    goals: [
-      "Improve member moderation ergonomics.",
-      "Improve role-management clarity in server administration.",
-      "Add tighter policy visibility for invite and access controls.",
-    ],
-  },
-  {
-    id: "R-2026-10",
-    window: "October 2026",
-    priority: "P2",
-    status: "Backlog",
-    focus: "Search and retention quality",
-    goals: [
-      "Prepare message search path and indexing direction.",
-      "Define retention and historical navigation expectations.",
-      "Stage implementation spikes for post-v0.4 execution.",
+    id: "Plan 1.5",
+    focus: "Space Permissions & Discovery",
+    blurb: "Control over who can create spaces, and a public surface to find and join them.",
+    items: [
+      "Configurable space-creation policy, propagated into the chat-domain admin gate.",
+      "Opt-in discoverability with descriptions and topic tags; a Discover panel with search and tag filters.",
+      "Request-to-join flow for invite-only spaces — approve, decline, and re-request.",
+      "Per-owner anti-spam quota and instance-admin moderation (un-list any space).",
     ],
   },
 ];
+
+// Sequenced ahead — each builds on the one before it.
+const upcoming = [
+  {
+    id: "Plan 2",
+    focus: "Storage Tiering — hot/cold split",
+    priority: "P0",
+    status: "Next",
+    effort: "~5 weeks",
+    goals: [
+      "Keep only a bounded hot working set in SpacetimeDB to cap server RAM.",
+      "Mirror everything to a PostgreSQL cold archive via a .NET replication worker.",
+      "Serve older history from the archive; turn destructive migrations into wipe-and-rebuild.",
+    ],
+  },
+  {
+    id: "Plan 3",
+    focus: "End-to-End Encryption",
+    priority: "P1",
+    status: "Planned",
+    effort: "Multi-week",
+    goals: [
+      "Encrypt DMs, channel messages, and attachments — the server stores only ciphertext.",
+      "Per-conversation symmetric keys, wrapped per device; all decryption happens on-device.",
+      "Key epochs rotate on membership change for re-readable, multi-device history.",
+    ],
+  },
+  {
+    id: "Plan 4",
+    focus: "Client-Side Local Cache & Search",
+    priority: "P2",
+    status: "Optional",
+    effort: "~2 weeks",
+    goals: [
+      "On-device SQLite cache for offline history and faster cold start.",
+      "Local search across cached conversations.",
+      "Pure optimization layer — built after tiering and E2EE, or skipped.",
+    ],
+  },
+  {
+    id: "Plan 5",
+    focus: "Multi-Instance Client",
+    priority: "Idea",
+    status: "Deferred",
+    effort: "~4–6 weeks",
+    goals: [
+      "Connect to many instances at once, with their spaces shown side-by-side.",
+      "Refactor the store/connection layer away from single-instance assumptions.",
+      "Idea-stage — captured from product discussion, not yet scheduled.",
+    ],
+  },
+];
+
+const sequence = [
+  ...shipped.map((m) => ({ id: m.id, focus: m.focus, status: "Shipped", effort: "Delivered" })),
+  ...upcoming.map((m) => ({ id: m.id, focus: m.focus, status: m.status, effort: m.effort })),
+];
 ---
 
-<Layout title="LetsChat Roadmap | Timeline and Priorities" description="LetsChat roadmap with release windows, priorities, and delivery focus.">
+<Layout title="LetsChat Roadmap | Plans and Delivery" description="LetsChat roadmap: shipped milestones and the sequenced plans ahead — storage tiering, end-to-end encryption, local cache, and multi-instance.">
   <SiteHeader active="roadmap" />
 
   <main class="max-w-7xl mx-auto px-5 sm:px-6 py-14 space-y-10">
     <section class="roadmap-hero">
       <div>
         <p class="inline-flex text-xs text-muted-foreground border border-border rounded-full px-3 py-1">Updated: {updatedAt}</p>
-        <h1 class="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight mt-4 mb-3">Roadmap with release windows and priority levels</h1>
+        <h1 class="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight mt-4 mb-3">Roadmap: shipped milestones and the plans ahead</h1>
         <p class="text-muted-foreground max-w-3xl leading-relaxed">
-          This roadmap is timeline-first. Each milestone includes a target month, explicit priority, and delivery focus so product and operators can plan around concrete windows.
+          LetsChat is built plan by plan. This roadmap tracks what has shipped and the sequenced
+          work ahead — each plan builds on the one before it. There are no fixed calendar dates;
+          plans land in order as they're completed.
         </p>
       </div>
 
       <div class="roadmap-kpis">
         <article>
           <p class="kpi-value">2</p>
-          <p class="kpi-label">P0 milestones</p>
-        </article>
-        <article>
-          <p class="kpi-value">2</p>
-          <p class="kpi-label">P1 milestones</p>
+          <p class="kpi-label">Plans shipped</p>
         </article>
         <article>
           <p class="kpi-value">1</p>
-          <p class="kpi-label">P2 milestone</p>
+          <p class="kpi-label">Next up</p>
+        </article>
+        <article>
+          <p class="kpi-value">3</p>
+          <p class="kpi-label">Planned &amp; later</p>
         </article>
       </div>
     </section>
 
     <section class="priority-box">
-      <h2 class="text-xl font-semibold mb-3">Priority rubric</h2>
+      <h2 class="text-xl font-semibold mb-3">How to read this</h2>
       <div class="grid md:grid-cols-3 gap-3 text-sm">
         <article>
-          <p class="font-semibold">P0: Critical</p>
-          <p class="text-muted-foreground">Blocks reliability, release safety, or core product viability.</p>
+          <p class="font-semibold">Shipped</p>
+          <p class="text-muted-foreground">Delivered and merged into <code>main</code>.</p>
         </article>
         <article>
-          <p class="font-semibold">P1: High</p>
-          <p class="text-muted-foreground">Major UX or operational improvements with direct user impact.</p>
+          <p class="font-semibold">Next / Planned</p>
+          <p class="text-muted-foreground">Sequenced and scoped; later plans depend on earlier ones.</p>
         </article>
         <article>
-          <p class="font-semibold">P2: Planned</p>
-          <p class="text-muted-foreground">Important backlog themes staged after critical and high lanes.</p>
+          <p class="font-semibold">Optional / Deferred</p>
+          <p class="text-muted-foreground">Nice-to-have or idea-stage; may be skipped or scheduled later.</p>
         </article>
       </div>
     </section>
 
     <section>
-      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-5">Milestone timeline</h2>
+      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-5">Shipped</h2>
+      <div class="shipped-grid">
+        {shipped.map((milestone) => (
+          <article class="shipped-card">
+            <div class="timeline-head">
+              <div>
+                <p class="timeline-window">{milestone.id}</p>
+                <h3>{milestone.focus}</h3>
+              </div>
+              <span class="status-chip status-shipped">Shipped</span>
+            </div>
+            <p class="shipped-blurb">{milestone.blurb}</p>
+            <ul class="timeline-goals">
+              {milestone.items.map((item) => <li>{item}</li>)}
+            </ul>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-5">Plans ahead</h2>
       <div class="timeline-list">
-        {milestones.map((milestone) => (
+        {upcoming.map((milestone) => (
           <article class="timeline-card">
             <div class="timeline-head">
               <div>
-                <p class="timeline-window">{milestone.window}</p>
-                <h3>{milestone.id}: {milestone.focus}</h3>
+                <p class="timeline-window">{milestone.id}</p>
+                <h3>{milestone.focus}</h3>
               </div>
               <div class="timeline-meta">
                 <span class={`priority-chip priority-${milestone.priority.toLowerCase()}`}>{milestone.priority}</span>
-                <span class="status-chip">{milestone.status}</span>
+                <span class={`status-chip status-${milestone.status.toLowerCase()}`}>{milestone.status}</span>
+                <span class="effort-chip">{milestone.effort}</span>
               </div>
             </div>
 
@@ -142,24 +186,24 @@ const milestones = [
     </section>
 
     <section class="calendar-box">
-      <h2 class="text-xl font-semibold mb-3">Release planning calendar</h2>
+      <h2 class="text-xl font-semibold mb-3">Plan sequence at a glance</h2>
       <div class="calendar-table-wrap">
         <table class="calendar-table">
           <thead>
             <tr>
-              <th>Month</th>
-              <th>Primary focus</th>
-              <th>Priority</th>
+              <th>Plan</th>
+              <th>Focus</th>
               <th>Status</th>
+              <th>Effort</th>
             </tr>
           </thead>
           <tbody>
-            {milestones.map((milestone) => (
+            {sequence.map((row) => (
               <tr>
-                <td>{milestone.window}</td>
-                <td>{milestone.focus}</td>
-                <td>{milestone.priority}</td>
-                <td>{milestone.status}</td>
+                <td>{row.id}</td>
+                <td>{row.focus}</td>
+                <td><span class={`status-chip status-${row.status.toLowerCase()}`}>{row.status}</span></td>
+                <td>{row.effort}</td>
               </tr>
             ))}
           </tbody>
@@ -225,6 +269,32 @@ const milestones = [
     border-radius: 1rem;
     padding: 1rem;
     background: oklch(0.19 0.01 245 / 0.9);
+  }
+
+  .priority-box code {
+    font-size: 0.85em;
+    padding: 0.05rem 0.3rem;
+    border-radius: 0.3rem;
+    background: oklch(1 0 0 / 0.08);
+  }
+
+  .shipped-grid {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .shipped-card {
+    border: 1px solid oklch(0.6 0.13 150 / 0.32);
+    border-left: 3px solid oklch(0.62 0.14 150 / 0.8);
+    border-radius: 1rem;
+    padding: 1rem;
+    background: linear-gradient(175deg, oklch(0.21 0.02 175 / 0.5), oklch(0.18 0.01 245 / 0.92));
+  }
+
+  .shipped-blurb {
+    margin: 0 0 0.6rem;
+    font-size: 0.9rem;
+    color: var(--color-foreground);
   }
 
   .timeline-list {
@@ -295,13 +365,15 @@ const milestones = [
   }
 
   .priority-chip,
-  .status-chip {
+  .status-chip,
+  .effort-chip {
     border-radius: 999px;
     padding: 0.2rem 0.6rem;
     font-size: 0.7rem;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     border: 1px solid oklch(1 0 0 / 0.15);
+    white-space: nowrap;
   }
 
   .priority-p0 {
@@ -319,9 +391,33 @@ const milestones = [
     color: oklch(0.84 0.06 230);
   }
 
+  .priority-idea {
+    background: oklch(0.5 0.02 245 / 0.25);
+    color: var(--color-muted-foreground);
+  }
+
+  .effort-chip {
+    color: var(--color-muted-foreground);
+    background: oklch(0.17 0.01 245 / 0.85);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
   .status-chip {
     color: var(--color-muted-foreground);
     background: oklch(0.17 0.01 245 / 0.85);
+  }
+
+  .status-shipped {
+    background: oklch(0.6 0.13 150 / 0.18);
+    color: oklch(0.86 0.12 155);
+    border-color: oklch(0.6 0.13 150 / 0.4);
+  }
+
+  .status-next {
+    background: oklch(0.62 0.1 235 / 0.2);
+    color: oklch(0.87 0.07 230);
+    border-color: oklch(0.62 0.1 235 / 0.42);
   }
 
   .timeline-goals {
@@ -358,6 +454,7 @@ const milestones = [
     border-bottom: 1px solid oklch(1 0 0 / 0.09);
     text-align: left;
     font-size: 0.84rem;
+    vertical-align: middle;
   }
 
   .calendar-table thead th {
@@ -408,6 +505,12 @@ const milestones = [
   .feedback-secondary:hover {
     border-color: var(--color-border-hover);
     color: var(--color-foreground);
+  }
+
+  @media (min-width: 900px) {
+    .shipped-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   @media (min-width: 1100px) {
