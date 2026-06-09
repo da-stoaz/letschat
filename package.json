@@ -40,7 +40,6 @@
     "@tauri-apps/plugin-deep-link": "^2.4.9",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "framer-motion": "^12.38.0",
     "livekit-client": "^2.19.0",
     "lucide-react": "^1.14.0",
     "qrcode.react": "^4.2.0",

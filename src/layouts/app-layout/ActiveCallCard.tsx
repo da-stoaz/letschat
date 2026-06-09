@@ -38,7 +38,7 @@ import { useVoiceControlActions } from '../../features/voice/hooks/useVoiceContr
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { cn } from '../../lib/utils'
 import {
   DropdownMenu,

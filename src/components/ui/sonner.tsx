@@ -1,4 +1,4 @@
-import { Toaster as Sonner, type ToasterProps, toast } from 'sonner'
+import { Toaster as Sonner, type ToasterProps } from 'sonner'
 
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
@@ -19,4 +19,4 @@ const Toaster = ({ ...props }: ToasterProps) => {
   )
 }
 
-export { Toaster, toast }
+export { Toaster }

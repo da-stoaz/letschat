@@ -164,7 +164,7 @@ export function MessageBubble({
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{
-                              a: ({ ...props }) => <a {...props} target="_blank" rel="noreferrer noopener" />,
+                              a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer noopener">{children}</a>,
                             }}
                           >
                             {parsed.text}

@@ -31,7 +31,7 @@ import { ChannelBar } from './app-layout/ChannelBar'
 import { cn } from '../lib/utils'
 import { useIsMobile } from '../hooks/use-mobile'
 import { Card, CardContent } from '@/components/ui/card'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import type { Channel } from '../types/domain'
 
 const EMPTY_CHANNELS: Channel[] = []

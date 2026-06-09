@@ -146,6 +146,7 @@ export function ParticipantMediaTile({
             autoPlay
             playsInline
             muted
+            aria-label={tileType === 'screen' ? `${displayName} screen share` : `${displayName} video`}
             className={cn(
               'h-full w-full',
               tileType === 'screen' ? 'object-contain bg-black' : 'object-cover',
@@ -178,7 +179,7 @@ export function ParticipantMediaTile({
               ) : null}
             </div>
           </div>
-          {!isLocal ? <audio ref={audioRef} autoPlay data-letschat-audio="remote" /> : null}
+          {!isLocal ? <audio ref={audioRef} autoPlay aria-label={`${displayName} audio`} data-letschat-audio="remote" /> : null}
         </div>
       ) : (
         <div className={cn('relative aspect-video bg-muted/10', stageClassName)}>
@@ -229,7 +230,7 @@ export function ParticipantMediaTile({
               </div>
             )}
           </div>
-          {!isLocal ? <audio ref={audioRef} autoPlay data-letschat-audio="remote" /> : null}
+          {!isLocal ? <audio ref={audioRef} autoPlay aria-label={`${displayName} audio`} data-letschat-audio="remote" /> : null}
         </div>
       )}
     </article>
