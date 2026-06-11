@@ -35,7 +35,7 @@ Auto-discovery via `/.well-known/letschat.json` on the `connect.<domain>` subdom
 ### Prerequisites
 - Bun 1.3+, Rust 1.88+, Docker + Docker Compose
 - .NET 10 SDK — only needed to build/run `core-api`
-- SpacetimeDB CLI — install with `curl -sSf https://install.spacetimedb.com | sh`; update with `spacetime version upgrade`. Keep the CLI, the `spacetimedb` npm SDK, and the server image on the **same 2.2.x line** — a minor-version skew breaks the client connection.
+- SpacetimeDB CLI — install with `curl -sSf https://install.spacetimedb.com | sh`; update with `spacetime version upgrade`. Keep the CLI, the `spacetimedb` npm SDK, the `spacetimedb` crate, and the server image on the **same 2.4.x line** — a minor-version skew breaks the client connection.
 
 ### Start everything
 ```bash
