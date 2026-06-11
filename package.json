@@ -1,7 +1,7 @@
 {
   "name": "letschat",
   "private": true,
-  "version": "0.4.3",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "version:bump": "bun scripts/bump-version.ts",
@@ -16,11 +16,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:security": "vitest run tests/security",
-    "auth:dev": "APP_ENV=dev cargo run --manifest-path auth-service/Cargo.toml",
     "core-api:dev": "ASPNETCORE_ENVIRONMENT=Development dotnet run --project core-api/src/CoreApi/CoreApi.csproj",
     "core-api:dev:lan": "bun run scripts/core-api-lan.ts",
     "core-api:test": "dotnet test core-api/CoreApi.slnx",
-    "core-api:migrate": "dotnet run --project core-api/tools/CoreApi.Migrator -- --sqlite auth-service/auth.db",
+    "core-api:migrate": "dotnet run --project core-api/tools/CoreApi.Migrator -- --sqlite ./legacy-auth.db",
     "spacetime:generate": "spacetime generate --lang typescript --out-dir src/generated --module-path server --yes",
     "spacetime:publish": "spacetime publish --server http://localhost:4300 letschat --module-path server",
     "spacetime:reset": "spacetime publish --server http://localhost:4300 letschat --module-path server --delete-data --yes",
