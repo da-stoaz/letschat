@@ -63,20 +63,6 @@ jobs:
           cache-from: type=gha,scope=core-api-migrator
           cache-to: type=gha,scope=core-api-migrator,mode=max
 
-      # Legacy Rust auth-service. Kept buildable for rollback during the
-      # cutover release; remove after one stable release of core-api in prod.
-      - name: Build and push auth-service image (deprecated)
-        uses: docker/build-push-action@v6
-        with:
-          context: ./auth-service
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/letschat-auth:latest
-            ghcr.io/${{ github.repository_owner }}/letschat-auth:${{ steps.version.outputs.version }}
-            ghcr.io/${{ github.repository_owner }}/letschat-auth:sha-${{ steps.sha.outputs.short }}
-          cache-from: type=gha,scope=auth-service
-          cache-to: type=gha,scope=auth-service,mode=max
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown

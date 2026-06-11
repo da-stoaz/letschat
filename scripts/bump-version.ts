@@ -53,7 +53,6 @@ writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 const cargoFiles = [
   'src-tauri/Cargo.toml',
   'server/Cargo.toml',
-  'auth-service/Cargo.toml',
 ]
 
 for (const rel of cargoFiles) {

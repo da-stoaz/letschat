@@ -69,20 +69,6 @@ pub struct User {
     pub is_admin: bool,
 }
 
-#[spacetimedb::table(accessor = auth_credential)]
-pub struct AuthCredential {
-    #[primary_key]
-    pub username: String,
-    #[index(btree)]
-    pub identity: Identity,
-    pub password_salt: String,
-    pub password_hash: String,
-    pub token_iv: String,
-    pub token_cipher: String,
-    pub created_at: Timestamp,
-    pub updated_at: Timestamp,
-}
-
 // Private: clients read servers they're a member of (or that are discoverable)
 // through the `my_servers` view. The base table is owner/module-only so the
 // `/sql` endpoint and raw subscriptions can't enumerate every space.
