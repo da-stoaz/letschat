@@ -8,7 +8,7 @@ import {
   MessageSquareIcon,
   XIcon,
 } from 'lucide-react'
-import { reducers, resolveIdentityFromUsername } from '../../lib/spacetimedb'
+import { reducers } from '../../lib/spacetimedb'
 import { useFriendsStore } from '../../stores/friendsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { usePresenceStore } from '../../stores/presenceStore'
@@ -166,16 +166,11 @@ export function FriendsView() {
     setError(null)
     setSubmitting(true)
     try {
-      const targetIdentity = await resolveIdentityFromUsername(username)
-      if (!targetIdentity) {
-        setError(`No user found for username "${username}"`)
-        return
-      }
-      if (sameIdentity(targetIdentity, selfIdentity)) {
-        setError('You cannot add yourself as a friend.')
-        return
-      }
-      await reducers.sendFriendRequest(targetIdentity)
+      // The username → identity lookup runs server-side (the `user` table is
+      // private now), so this works even for people the caller can't see yet.
+      // The reducer rejects with a message for "no user found" / "cannot friend
+      // yourself" / "already friends" / "blocked", which we surface below.
+      await reducers.sendFriendRequestByUsername(username.trim())
       setUsername('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send friend request.')

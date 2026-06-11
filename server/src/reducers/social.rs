@@ -2,7 +2,7 @@ use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::helpers::{
     assert_or_err, block_key, dm_room_key, find_friend_row, friend_pair_key,
-    has_block_either_direction, ordered_pair,
+    has_block_either_direction, normalize_username, ordered_pair,
 };
 use crate::schema::*;
 
@@ -29,6 +29,24 @@ pub fn send_friend_request(ctx: &ReducerContext, target_identity: Identity) -> R
     });
 
     Ok(())
+}
+
+/// Send a friend request by username. The username → identity lookup happens
+/// here, server-side, so it works even though the `user` table is private and
+/// the caller can't see the target yet (the whole point of adding by username).
+#[spacetimedb::reducer]
+pub fn send_friend_request_by_username(
+    ctx: &ReducerContext,
+    username: String,
+) -> Result<(), String> {
+    let normalized = normalize_username(&username);
+    let target = ctx
+        .db
+        .user()
+        .username()
+        .find(&normalized)
+        .ok_or_else(|| format!("No user found for username \"{username}\""))?;
+    send_friend_request(ctx, target.identity)
 }
 
 #[spacetimedb::reducer]

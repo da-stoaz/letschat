@@ -10,18 +10,20 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 import {
-  ChannelKind,
+  InvitePolicy,
 } from "./types";
 
 
 export default __t.row({
-  id: __t.u64().primaryKey(),
-  serverId: __t.u64().name("server_id"),
+  id: __t.u64(),
   name: __t.string(),
-  get kind() {
-    return ChannelKind;
+  ownerIdentity: __t.identity().name("owner_identity"),
+  get invitePolicy() {
+    return InvitePolicy.name("invite_policy");
   },
-  position: __t.u32(),
-  moderatorOnly: __t.bool().name("moderator_only"),
-  section: __t.option(__t.string()),
+  iconUrl: __t.option(__t.string()).name("icon_url"),
+  createdAt: __t.timestamp().name("created_at"),
+  isDiscoverable: __t.bool().name("is_discoverable"),
+  description: __t.option(__t.string()),
+  tags: __t.option(__t.array(__t.string())),
 });

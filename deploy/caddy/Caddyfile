@@ -10,6 +10,15 @@
 }
 
 {$CHAT_DOMAIN} {
+  # Desktop clients talk to SpacetimeDB over the WebSocket /subscribe path only.
+  # The raw HTTP /sql endpoint is an unauthenticated read of every `public`
+  # table, so block it at the public edge. core-api reaches /sql over the
+  # internal Docker network (service name `spacetimedb`), not through Caddy, so
+  # this does not affect server-side reads. Defense-in-depth: the sensitive
+  # tables are also private at the data layer (see server/src/schema.rs).
+  @sql path */sql
+  respond @sql 403
+
   reverse_proxy spacetimedb:3000
 }
 

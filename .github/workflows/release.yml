@@ -22,6 +22,13 @@ jobs:
         id: version
         run: echo "version=$(jq -r '.version' package.json)" >> "$GITHUB_OUTPUT"
 
+      # Immutable, unique-per-build identity. Even if the human version tag is
+      # ever reused, `sha-<commit>` always pins the exact source this was built
+      # from.
+      - name: Short commit SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -39,6 +46,7 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/letschat-core-api:latest
             ghcr.io/${{ github.repository_owner }}/letschat-core-api:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/letschat-core-api:sha-${{ steps.sha.outputs.short }}
           cache-from: type=gha,scope=core-api
           cache-to: type=gha,scope=core-api,mode=max
 
@@ -51,21 +59,9 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/letschat-core-api-migrator:latest
             ghcr.io/${{ github.repository_owner }}/letschat-core-api-migrator:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/letschat-core-api-migrator:sha-${{ steps.sha.outputs.short }}
           cache-from: type=gha,scope=core-api-migrator
           cache-to: type=gha,scope=core-api-migrator,mode=max
-
-      # Legacy Rust auth-service. Kept buildable for rollback during the
-      # cutover release; remove after one stable release of core-api in prod.
-      - name: Build and push auth-service image (deprecated)
-        uses: docker/build-push-action@v6
-        with:
-          context: ./auth-service
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/letschat-auth:latest
-            ghcr.io/${{ github.repository_owner }}/letschat-auth:${{ steps.version.outputs.version }}
-          cache-from: type=gha,scope=auth-service
-          cache-to: type=gha,scope=auth-service,mode=max
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -87,6 +83,7 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/letschat-module:latest
             ghcr.io/${{ github.repository_owner }}/letschat-module:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/letschat-module:sha-${{ steps.sha.outputs.short }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

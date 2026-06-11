@@ -267,6 +267,8 @@ export const reducers = {
     }),
   sendFriendRequest: (targetIdentity: Identity) =>
     spacetimedbClient.call('sendFriendRequest', { targetIdentity: toReducerIdentity(targetIdentity) }),
+  sendFriendRequestByUsername: (username: string) =>
+    spacetimedbClient.call('sendFriendRequestByUsername', { username }),
   acceptFriendRequest: (requesterIdentity: Identity) =>
     spacetimedbClient.call('acceptFriendRequest', { requesterIdentity: toReducerIdentity(requesterIdentity) }),
   declineFriendRequest: (requesterIdentity: Identity) =>

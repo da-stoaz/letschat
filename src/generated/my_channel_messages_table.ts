@@ -11,9 +11,11 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  requestKey: __t.string().primaryKey().name("request_key"),
-  serverId: __t.u64().name("server_id"),
-  userIdentity: __t.identity().name("user_identity"),
-  createdAt: __t.timestamp().name("created_at"),
-  declined: __t.bool(),
+  id: __t.u64(),
+  channelId: __t.u64().name("channel_id"),
+  senderIdentity: __t.identity().name("sender_identity"),
+  content: __t.string(),
+  sentAt: __t.timestamp().name("sent_at"),
+  editedAt: __t.option(__t.timestamp()).name("edited_at"),
+  deleted: __t.bool(),
 });

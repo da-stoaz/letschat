@@ -11,10 +11,9 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  banKey: __t.string().primaryKey().name("ban_key"),
+  requestKey: __t.string().name("request_key"),
   serverId: __t.u64().name("server_id"),
   userIdentity: __t.identity().name("user_identity"),
-  bannedBy: __t.identity().name("banned_by"),
-  reason: __t.option(__t.string()),
-  bannedAt: __t.timestamp().name("banned_at"),
+  createdAt: __t.timestamp().name("created_at"),
+  declined: __t.bool(),
 });

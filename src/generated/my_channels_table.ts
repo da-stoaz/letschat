@@ -9,12 +9,19 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
+import {
+  ChannelKind,
+} from "./types";
+
 
 export default __t.row({
-  identity: __t.identity().primaryKey(),
-  username: __t.string(),
-  displayName: __t.string().name("display_name"),
-  avatarUrl: __t.option(__t.string()).name("avatar_url"),
-  createdAt: __t.timestamp().name("created_at"),
-  isAdmin: __t.bool().name("is_admin"),
+  id: __t.u64(),
+  serverId: __t.u64().name("server_id"),
+  name: __t.string(),
+  get kind() {
+    return ChannelKind;
+  },
+  position: __t.u32(),
+  moderatorOnly: __t.bool().name("moderator_only"),
+  section: __t.option(__t.string()),
 });

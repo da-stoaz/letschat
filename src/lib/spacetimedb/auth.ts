@@ -7,7 +7,6 @@ import { useSelfStore } from '../../stores/selfStore'
 import { authServiceLogin, authServiceRefreshSpacetimeToken, clearStoredAuthSessionToken } from '../authService'
 import { clearSignedDownloadUrlCache } from '../uploads'
 import { clearBadgeCount } from '../notifications'
-import type { Identity } from '../../types/domain'
 import type { DbConnection } from '../../generated'
 
 export async function initializeSpacetime(): Promise<void> {
@@ -54,7 +53,7 @@ async function ensureAuthenticatedUserRow(normalizedUsername: string, displayNam
     throw new Error('Login succeeded but no Spacetime identity is active.')
   }
 
-  const existingUsernameOwner = Array.from(conn.db.user.iter()).find(
+  const existingUsernameOwner = Array.from(conn.db.my_visible_users.iter()).find(
     (row) => row.username.toLowerCase() === normalizedUsername,
   )
   if (existingUsernameOwner) {
@@ -132,16 +131,4 @@ export async function loginWithPassword(username: string, password: string): Pro
   }
 
   await ensureAuthenticatedUserRow(normalized, auth.displayName)
-}
-
-export async function resolveIdentityFromUsername(username: string): Promise<Identity | null> {
-  if (!spacetimedbClient.connection) {
-    await connect()
-  }
-
-  const normalized = username.trim().toLowerCase()
-  const user = Array.from((spacetimedbClient.connection as DbConnection).db.user.iter()).find(
-    (row) => row.username.toLowerCase() === normalized,
-  )
-  return user ? toIdentityString(user.identity) : null
 }

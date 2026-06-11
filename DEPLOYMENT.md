@@ -8,11 +8,10 @@ Full tutorial (beginner step-by-step):
 Use this file as a compact operator reference.
 
 > **Backend service:** production runs **`core-api`** (.NET / ASP.NET Core
-> Identity + PostgreSQL). The legacy Rust `auth-service` (SQLite) is retained
-> only as a one-time data source for the migrator and is no longer wired into
-> these compose files. If you're upgrading from an `auth-service` deployment,
-> run the migration described in **First-time cutover** below before bringing
-> the new stack up.
+> Identity + PostgreSQL). The legacy Rust `auth-service` has been **removed**
+> from the repo; only its migrator (`CoreApi.Migrator`) remains. If you're
+> upgrading from an old `auth-service` deployment, hand its SQLite `auth.db` to
+> the migrator (**First-time cutover** below) before bringing the new stack up.
 
 ## Production Compose Entry Points
 

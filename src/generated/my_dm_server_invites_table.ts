@@ -10,20 +10,18 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 import {
-  InvitePolicy,
+  DmInviteStatus,
 } from "./types";
 
 
 export default __t.row({
-  id: __t.u64().primaryKey(),
-  name: __t.string(),
-  ownerIdentity: __t.identity().name("owner_identity"),
-  get invitePolicy() {
-    return InvitePolicy.name("invite_policy");
+  id: __t.u64(),
+  serverId: __t.u64().name("server_id"),
+  inviteToken: __t.string().name("invite_token"),
+  senderIdentity: __t.identity().name("sender_identity"),
+  recipientIdentity: __t.identity().name("recipient_identity"),
+  get status() {
+    return DmInviteStatus;
   },
-  iconUrl: __t.option(__t.string()).name("icon_url"),
   createdAt: __t.timestamp().name("created_at"),
-  isDiscoverable: __t.bool().name("is_discoverable"),
-  description: __t.option(__t.string()),
-  tags: __t.option(__t.array(__t.string())),
 });
