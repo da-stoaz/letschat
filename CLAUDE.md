@@ -63,6 +63,8 @@ bun run services:reset    # Stop containers and remove volumes (fresh state)
 | Build frontend | `bun run build` |
 | Build Tauri binary | `bun run tauri:build:local` |
 | Lint frontend | `bun run lint` |
+| Run security tests (SpacetimeDB table-visibility) | `bun run test:security` (needs services up) |
+| Run all Vitest tests | `bun run test` |
 | Publish SpacetimeDB module | `bun run spacetime:publish` |
 | Regenerate TS bindings | `bun run spacetime:generate` |
 | View service logs | `bun run services:logs` |
