@@ -11,7 +11,19 @@ This plan fixes both with one mechanism: a **PostgreSQL cold archive** kept as a
 
 This plan is **E2EE-agnostic**. It replicates and tiers opaque rows; it does not care whether `content` is plaintext (today) or ciphertext (after the E2EE plan). It is **plan 2 of 4** — implemented after `1-control-panel.md` and before `3-e2ee.md`.
 
-**Backend language:** the backend services here are built in .NET Core. The replication worker is a .NET Worker Service. The core-api's rebuild in .NET on ASP.NET Core Identity is owned by `1-control-panel.md` and is a **prerequisite** for this plan's archive endpoints.
+**Backend language:** the backend services here are built in .NET Core. The replication worker is a .NET Worker Service. The core-api rebuild in .NET on ASP.NET Core Identity (`1-control-panel.md`) is **done** — `core-api/` is live on .NET 10 + PostgreSQL, so this plan's archive endpoints land on an existing service.
+
+**Status note (2026-06-11 review):** the stack is now SpacetimeDB **2.4.1** (server image, CLI, TS SDK). The C# client SDK `SpacetimeDB.ClientSDK` 2.4.1 is on NuGet (released 2026-06-05) — pin the worker to the same 2.4.x line as everything else, and generate its bindings with `spacetime generate --lang csharp`.
+
+---
+
+## Open decisions
+
+**Scope note:** decision 1 blocks **Phase 4 (migration tooling / `archive_restore`) only**. Phases 1–3 (replication, eviction, archive reads) never insert explicit ids and are unaffected — they can ship while decision 1 is open.
+
+1. **`auto_inc` id collision after rebuild — DEFERRED (2026-06-12) until Phase 4.** SpacetimeDB sequences are NOT advanced by explicit-value inserts. After `archive_restore` re-inserts rows with their original ids into a fresh database, the sequence restarts at 1 and newly auto-generated ids collide with restored ids (unique-constraint failures on the very first new message). Affects every restored `#[auto_inc]` table: Message, DirectMessage, Server, Channel, DmServerInvite. Phases 1–3 are unaffected (no explicit-id inserts). Avenues verified closed (2026-06-11): the module ABI has `RawSequenceDefV10.start` but `#[auto_inc]` exposes no parameters; re-adding `auto_inc` over restored data fails the `CheckAddSequenceRangeValid` auto-migration precheck; no sequence-set API exists (`st_sequence` is a system table, not safely writable). **Default fix when Phase 4 starts:** drop `#[auto_inc]` on these tables (an always-allowed automatic migration) and allocate ids from a small module-managed counter table inside the send/create reducers; `archive_restore` then sets each counter to `max(restored id) + 1`. **In parallel:** file an upstream issue/PR for `#[auto_inc(start = ...)]` or a sequence-restart API (backup/restore use case) — if it lands first, the fix shrinks to one line in the migration runbook with no reducer changes.
+2. **Cascade deletes vs. cold archive — DECIDED (2026-06-11): purge immediately.** `delete_server` / `delete_channel` hard-delete all messages in scope from SpacetimeDB, but evicted (cold) rows for that scope exist only in PostgreSQL and receive no per-row delete events. The worker treats the disappearance of a channel/server row as a scoped purge: it deletes that scope's cold rows from the archive. No grace period.
+3. **DM "deleted by both" parity — DECIDED (2026-06-11): exact parity.** `delete_direct_message` hard-deletes the row once both sides have flagged it. The cold write-through path (§7) reimplements this exactly: when the second side deletes an evicted DM, core-api removes the PostgreSQL row.
 
 ---
 
@@ -51,24 +63,25 @@ This plan is **E2EE-agnostic**. It replicates and tiers opaque rows; it does not
 
 ### 1. PostgreSQL cold archive
 
-A new PostgreSQL service (added to Docker Compose). Holds a **full, current copy of every SpacetimeDB table** — the bounded tables (User, Server, Channel, ServerMember, …) so a rebuild can restore them, and the unbounded tables (Message, DirectMessage) which are the bulk.
+A new `archive` **database** on the PostgreSQL server that plan 1 already added to Docker Compose (dev: `letschat-dev-postgres`, port 5433, which already hosts the `auth` database). Holds a **full, current copy of every SpacetimeDB table** — the bounded tables (User, Server, Channel, ServerMember, …) so a rebuild can restore them, and the unbounded tables (Message, DirectMessage) which are the bulk.
 
 - Tables mirror SpacetimeDB tables column-for-column, storing rows **verbatim**: original primary keys, timestamps, every field. No transformation in steady state.
-- A `replication_state` table tracks the worker's progress / last-applied position.
+- A `replication_state` table tracks the worker's sync watermarks (last full snapshot, last reconcile) — SpacetimeDB exposes no resumable log position, so this is observability state, not a cursor.
 - Indexes for the read pattern: `(channel_id, sent_at)` on messages, `(conversation_key, sent_at)` on direct messages (`conversation_key` = sorted identity pair).
 - Capable of insert, update (edits), and delete (the mirror reflects all three).
-- **Retention: forever.** This is the full archive. Only *user-initiated* deletes remove rows from PostgreSQL; eviction does not (eviction only removes from SpacetimeDB).
+- **Retention: forever.** This is the full archive; eviction never removes rows from PostgreSQL. Note the actual delete semantics in the module: a user "delete" of a channel message is a **soft delete** (sets `deleted = true`, blanks `content`) — it mirrors as an *update*, and the redacted row stays in both tiers. Rows are hard-deleted from SpacetimeDB only by: DM deleted-by-both-sides, channel/server cascade deletes, and eviction. The worker propagates the first two to PostgreSQL; eviction it recognizes as its own and ignores.
 
-**The core-api moves to .NET and to this PostgreSQL instance.** The backend services are built in .NET Core. The core-api is rebuilt in .NET / ASP.NET Core on ASP.NET Core Identity — that rebuild is owned by `1-control-panel.md` and is a **prerequisite** for this plan's archive endpoints. Its data lives in a **separate database** (`auth`) on the same PostgreSQL server, distinct from the `archive` database. SQLite leaves the stack entirely. `auth` and `archive` stay as separate databases to isolate their very different workloads (auth: small, critical, frequent tiny reads; archive: large, append-mostly) while sharing one server to operate.
+**The core-api is already on .NET and this PostgreSQL server** (rebuild completed under `1-control-panel.md`). Its data lives in the **separate `auth` database**, distinct from the new `archive` database. `auth` and `archive` stay as separate databases to isolate their very different workloads (auth: small, critical, frequent tiny reads; archive: large, append-mostly) while sharing one server to operate.
 
 ### 2. Replication worker (`archive-worker/`)
 
-A new **.NET Worker Service** (a long-running .NET background-worker process). Authenticates to SpacetimeDB as a dedicated **service identity** with elevated rights.
+A new **.NET Worker Service** (a long-running .NET background-worker process, `SpacetimeDB.ClientSDK` 2.4.x, bindings from `spacetime generate --lang csharp`). Authenticates to SpacetimeDB as a dedicated **service identity**.
 
-- **Initial backfill**: on first run, read all rows from all tables, upsert into PostgreSQL by primary key (idempotent).
-- **Steady state**: subscribe to all SpacetimeDB tables; on each insert/update/delete event, apply the corresponding upsert/delete to PostgreSQL.
-- **Resilience**: on disconnect/restart, re-subscribe. SpacetimeDB delivers the current state of all subscribed rows on (re)subscribe; the worker upserts them. For deletions missed while offline, the worker reconciles **within the hot window only** (see below) — a row that is in PostgreSQL and within the hot window but absent from SpacetimeDB was user-deleted, and is deleted from PostgreSQL. Rows outside the hot window are assumed evicted, never "deleted".
-- **Idempotent throughout** — every operation keyed by primary key, safe to replay.
+- **Data access — via gated views, not raw tables.** All sensitive base tables are private (table-visibility lockdown) and private tables are *not emitted into generated client bindings at all* — the worker cannot subscribe to them directly. Instead, add **service-gated views** (`archive_messages`, `archive_direct_messages`, `archive_users`, …, one per mirrored table) in `server/src/views.rs` that return all rows when `ctx.sender()` is the service identity and an empty set otherwise — the same pattern the `my_*` views already use. View subscriptions deliver the initial snapshot plus incremental insert/update/delete events, exactly like the client's `my_*` subscriptions today. *(Phase 1 spike: confirm the C# SDK 2.4.x subscribes to views the same way the TS SDK does before building further.)*
+- **Initial backfill**: the first subscription's initial snapshot delivers all current rows; upsert into PostgreSQL by primary key (idempotent).
+- **Steady state**: on each insert/update/delete event, apply the corresponding upsert/delete to PostgreSQL. (Remember: user deletes of channel messages arrive as *updates* — soft delete.)
+- **Resilience**: on disconnect/restart, re-subscribe — SpacetimeDB has no resumable change-log position; every (re)subscribe delivers a fresh full snapshot, which the worker upserts. Hard-deletes missed while offline are reconciled by diffing: for **bounded tables** (small), full diff — any PostgreSQL row absent from the snapshot is deleted. For **Message/DirectMessage**, diff **within the hot window only** — a row in PostgreSQL, inside the hot window, absent from the snapshot was hard-deleted (DM-both-deleted or cascade) and is removed from PostgreSQL; rows outside the hot window are assumed evicted, never "deleted". A cascade is also detectable directly: the channel/server row disappearing triggers a scoped purge of its cold rows (per open decision 2).
+- **Idempotent throughout** — every operation keyed by primary key, safe to replay. `replication_state` records last-sync watermarks for observability (not a log position — none exists).
 - **Replication lag** is acceptable in steady state but must be drained to zero before a migration (§6).
 
 ### 3. Eviction
@@ -92,7 +105,8 @@ Authorization: JWT (same as other core-api endpoints). The endpoint verifies the
 ### 5. Client changes
 
 - When the user scrolls above the oldest **hot** message, the client fetches older pages from the archive API instead of expecting them from SpacetimeDB.
-- Recent messages still arrive via SpacetimeDB subscriptions, exactly as today. The client stitches the live (hot) range and the archive (cold) range.
+- Recent messages still arrive via SpacetimeDB subscriptions (the `my_channel_messages` / `my_direct_messages` views), exactly as today. No subscription change is needed for the hot window — eviction bounds what the views return. The client stitches the live (hot) range and the archive (cold) range.
+- **Eviction is visible to clients as row-removal events** on those subscriptions. The client's live-event handling must not treat these as deletions: user deletes of channel messages are soft (updates), so a removed message row whose channel still exists is *evicted* — keep it rendered if on-screen (it's now cold), drop it from the hot store. A removed row alongside its channel/server row removal is a cascade delete.
 - Cold-served ranges are **snapshots** — they do not live-update. This matches standard infinite-scroll chat behavior (Discord, Slack); scrolled-back history is not expected to update live.
 
 ### 6. Migration procedure — the payoff
@@ -117,7 +131,7 @@ A message old enough to have been evicted lives **only in PostgreSQL** — Space
 **Chosen — a write-through path:** the change is written *directly to PostgreSQL*, bypassing SpacetimeDB, because PostgreSQL is the only place the message exists.
 
 - The client knows whether a target message is hot (arrived via a SpacetimeDB subscription) or cold (arrived via an `/archive/*` fetch). For a cold message it calls an core-api endpoint — `PATCH /archive/messages/:id` or `DELETE /archive/messages/:id` — instead of a reducer.
-- The core-api checks authorization (own message, etc.) and applies the change to the PostgreSQL row.
+- The core-api checks authorization (own message, etc.) and applies the change to the PostgreSQL row. It resolves the caller's SpacetimeDB identity via the mirrored `user` table (username → identity), and must mirror the reducers' semantics: channel-message delete = set `deleted`, blank `content`; DM delete = set the caller's side flag, and remove the row when both flags are set (open decision 3).
 - **Tradeoff:** no SpacetimeDB broadcast, so other users viewing that same cold range do not see the change *live* — they see it on their next fetch of that range. Acceptable: cold ranges are already snapshots (standard infinite-scroll behavior), and a simultaneous second viewer of that exact old range is vanishingly rare.
 - **Boundary race:** if a message is evicted between the user opening the editor and saving, the reducer call fails with "row not found"; the client falls back to the write-through endpoint.
 
@@ -125,14 +139,15 @@ A message old enough to have been evicted lives **only in PostgreSQL** — Space
 
 ---
 
-## New SpacetimeDB reducers (`server/src/reducers/archive.rs`)
+## New SpacetimeDB reducers & views (`server/src/reducers/archive.rs`, `server/src/views.rs`)
 
-All authorized **only** to the worker's service identity:
+All gated **only** to the worker's service identity (stored module-side at provisioning, checked against `ctx.sender()` — same pattern as the existing admin gating):
 
-- `archive_evict(message_ids)` / `archive_evict_dm(ids)` — bulk hard-delete of aged rows from SpacetimeDB.
-- `archive_restore(rows)` — verbatim insert during rebuild: explicit primary keys (auto-inc honored only for the sentinel `0`; explicit ids preserved), explicit timestamps, all fields; bypasses normal validation and permission logic.
+- `archive_evict(message_ids)` / `archive_evict_dm(ids)` — bulk hard-delete of aged rows from SpacetimeDB (chunked; reducer-arg size limits apply).
+- `archive_restore(rows)` — insert during rebuild with explicit primary keys, explicit timestamps, all fields; bypasses normal validation and permission logic. **Requires resolving open decision 1 first** — explicit-id inserts do not advance `auto_inc` sequences, so without the counter-table change, post-rebuild inserts collide.
+- `archive_*` **views** — service-gated full-table views the worker subscribes to (§2).
 
-**No changes to existing tables.** This plan adds reducers and a service identity only — it triggers no schema migration itself.
+**Schema impact:** adding reducers and views is additive. If open decision 1 lands as recommended, dropping `#[auto_inc]` is also an always-allowed automatic migration, plus one new (additive) counter table — still no destructive migration.
 
 ---
 
@@ -140,23 +155,25 @@ All authorized **only** to the worker's service identity:
 
 | Path | Change |
 |---|---|
-| `archive-worker/` | New **.NET Worker Service**: backfill, steady-state CDC replication, eviction, rebuild mode |
-| `cold-archive/migrations/` | PostgreSQL schema + migrations for the mirrored tables |
+| `archive-worker/` | New **.NET Worker Service** (SpacetimeDB.ClientSDK 2.4.x + C# bindings): backfill, steady-state replication, eviction, rebuild mode |
+| `cold-archive/migrations/` | PostgreSQL schema + migrations for the mirrored tables (`archive` database) |
+| `server/src/views.rs` | New service-gated `archive_*` full-table views for the worker |
 | `server/src/reducers/archive.rs` | New `archive_evict*` and `archive_restore` reducers |
-| `server/src/lib.rs` | Register the archive reducers; provision the worker service identity |
-| `core-api/` (.NET rebuild) | Rebuilt in .NET on ASP.NET Core Identity + PostgreSQL — **owned by `1-control-panel.md`**, prerequisite here |
-| `core-api/` (archive) | New `/archive/*` read endpoints + evicted-message write-through (ASP.NET Core); cold-archive data access |
-| `src/lib/spacetimedb/connection.ts` | Subscribe to the hot window (last N per conversation) instead of all messages |
-| `src/lib/spacetimedb/sync.ts` | Historical-load path calls the archive API; stitch hot + cold ranges |
-| `docker-compose.dev.yml` / prod compose files | Add the PostgreSQL service and the `archive-worker` service |
+| `server/src/lib.rs` | Register the archive reducers/views; provision the worker service identity |
+| `server/src/schema.rs` + send/create reducers | (Open decision 1) drop `#[auto_inc]` on restored tables; counter-table id allocation |
+| `core-api/` (archive) | New `/archive/*` read endpoints + evicted-message write-through (ASP.NET Core); cold-archive data access. (The .NET rebuild itself is **done** — `1-control-panel.md`.) |
+| `src/lib/spacetimedb/sync.ts` / `events.ts` + message stores | Historical-load path calls the archive API; stitch hot + cold ranges; treat message row-removals as eviction, not deletion |
+| `docker-compose.dev.yml` / prod compose files | Add the `archive` database (PostgreSQL service already exists) and the `archive-worker` service |
 
 ---
 
 ## Implementation Phases
 
 ### Phase 1 — Cold archive + replication worker (days 1–10)
-- Stand up PostgreSQL; create the `archive` database + mirrored schema. (The `auth` database and the .NET core-api rebuild are a prerequisite — see `1-control-panel.md`.)
-- `archive-worker`: a .NET Worker Service — service-identity auth to SpacetimeDB, initial backfill, steady-state CDC for insert/update/delete, idempotent upserts, reconnect/reconcile logic, `replication_state` tracking.
+- **Day-1 spike:** C# SDK 2.4.x subscribing to a service-gated view end-to-end (generate bindings, connect, snapshot + live events). This de-risks the whole worker design.
+- Create the `archive` database + mirrored schema on the existing PostgreSQL service.
+- Add the service-gated `archive_*` views + service-identity provisioning to the module.
+- `archive-worker`: a .NET Worker Service — service-identity auth to SpacetimeDB, initial backfill from subscription snapshots, steady-state replication of insert/update/delete events, idempotent upserts, reconnect/reconcile logic, `replication_state` watermarks.
 - Verify: PostgreSQL matches SpacetimeDB row-for-row after inserts, edits, and deletes; the worker survives kill/restart with no loss or duplication.
 
 ### Phase 2 — Eviction (days 11–15)
@@ -169,6 +186,7 @@ All authorized **only** to the worker's service identity:
 - Verify: scrolling past the hot window loads old messages from PostgreSQL; recent messages stay real-time.
 
 ### Phase 4 — Migration tooling (days 21–25)
+- **Entry gate:** resolve open decision 1 (id allocation) — check upstream first; otherwise implement the counter-table default.
 - `archive_restore` reducer; worker rebuild mode; documented migration procedure.
 - Verify: perform a destructive test schema change → `--delete-data` → rebuild from PostgreSQL → primary keys, timestamps, and relationships preserved; only the hot set reloaded.
 
@@ -187,7 +205,8 @@ All authorized **only** to the worker's service identity:
 5. **Cold reads** — scroll past the hot window; old messages load from the archive API; recent stays live.
 6. **Migration rebuild** — run a destructive test migration end-to-end; verify ids/timestamps/relationships preserved and only the hot set reloaded.
 7. **Evicted-message edit/delete** — edit and delete an already-evicted message; changes reflect in PostgreSQL and to clients.
-8. **No confusion of evict vs delete** — an evicted message is still in PostgreSQL; a user-deleted message is gone from both.
+8. **No confusion of evict vs delete** — an evicted message is still in PostgreSQL; a soft-deleted channel message shows as redacted (`deleted = true`, content blanked) in both tiers; a DM deleted by both sides is gone from both tiers; a deleted channel/server leaves no messages in either tier (per open decision 2).
+9. **Post-rebuild id allocation** — after a rebuild, sending new messages / creating servers & channels works with no id collisions (open decision 1 resolved).
 
 ---
 
