@@ -1,0 +1,38 @@
+name: Version check
+
+# Every push to main triggers release.yml, which tags the Docker images and the
+# GitHub release with the package.json version. If the version isn't bumped, the
+# new build re-pushes an existing :version tag and clobbers it — so a version
+# like "0.4.2" stops referring to a single, fixed build. This guard makes a
+# version bump mandatory on every PR into main, while leaving the choice of
+# patch / minor / major to the author (run `bun run version:bump <kind>`).
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  version-bumped:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Require package.json version to increase vs base
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          base=$(git show FETCH_HEAD:package.json | jq -r .version)
+          head=$(jq -r .version package.json)
+          echo "base (${{ github.base_ref }}): $base"
+          echo "head (this PR):              $head"
+
+          if [ "$base" = "$head" ]; then
+            echo "::error file=package.json::Version is still $base — bump it before merging. Run: bun run version:bump patch  (or minor / major)."
+            exit 1
+          fi
+
+          highest=$(printf '%s\n%s\n' "$base" "$head" | sort -V | tail -n1)
+          if [ "$highest" != "$head" ]; then
+            echo "::error file=package.json::Version $head is not greater than base $base. Bump forward, don't go sideways/back."
+            exit 1
+          fi
+
+          echo "Version bumped $base -> $head ✓"
