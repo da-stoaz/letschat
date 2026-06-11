@@ -9,7 +9,6 @@ export {
   signOut,
   rotateIdentityForRegistration,
   loginWithPassword,
-  resolveIdentityFromUsername,
 } from './auth'
 export {
   handleIncomingMessage,

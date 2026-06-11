@@ -11,11 +11,12 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  id: __t.u64().primaryKey(),
-  channelId: __t.u64().name("channel_id"),
+  id: __t.u64(),
   senderIdentity: __t.identity().name("sender_identity"),
+  recipientIdentity: __t.identity().name("recipient_identity"),
   content: __t.string(),
   sentAt: __t.timestamp().name("sent_at"),
   editedAt: __t.option(__t.timestamp()).name("edited_at"),
-  deleted: __t.bool(),
+  deletedBySender: __t.bool().name("deleted_by_sender"),
+  deletedByRecipient: __t.bool().name("deleted_by_recipient"),
 });

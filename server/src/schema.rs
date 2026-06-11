@@ -46,7 +46,12 @@ pub struct SystemSettings {
     pub space_create_policy: SpaceCreatePolicy,
 }
 
-#[spacetimedb::table(accessor = user, public)]
+// Private: clients read the directory of people they can actually see (members
+// of shared spaces, friends, join-requesters they moderate, DM-invite
+// counterparties) through the `my_visible_users` view, instead of enumerating
+// every account on the instance. Username → identity lookups for adding friends
+// go through the `send_friend_request_by_username` reducer server-side.
+#[spacetimedb::table(accessor = user)]
 pub struct User {
     #[primary_key]
     pub identity: Identity,
@@ -78,7 +83,10 @@ pub struct AuthCredential {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(accessor = server, public)]
+// Private: clients read servers they're a member of (or that are discoverable)
+// through the `my_servers` view. The base table is owner/module-only so the
+// `/sql` endpoint and raw subscriptions can't enumerate every space.
+#[spacetimedb::table(accessor = server)]
 pub struct Server {
     #[primary_key]
     #[auto_inc]
@@ -91,6 +99,9 @@ pub struct Server {
     pub created_at: Timestamp,
     /// Opt-in: when true the space is listed on the "Discover" surface for
     /// non-members. Owner-controlled via `set_server_discovery`. Default off.
+    /// Indexed so the `my_servers` / `my_server_members` views can pull the
+    /// discoverable set without a full-table scan (view handles are index-only).
+    #[index(btree)]
     #[default(false)]
     pub is_discoverable: bool,
     /// Short blurb shown on the Discover card (≤280 chars, enforced at the
@@ -104,9 +115,11 @@ pub struct Server {
     pub tags: Option<Vec<String>>,
 }
 
+// Private: the `my_server_members` view exposes members of spaces the caller
+// belongs to (plus discoverable spaces, for Discover member counts). Keeps the
+// full membership graph off the public `/sql` surface.
 #[spacetimedb::table(
     accessor = server_member,
-    public,
     index(accessor = by_server_and_user, btree(columns = [server_id, user_identity]))
 )]
 pub struct ServerMember {
@@ -121,9 +134,11 @@ pub struct ServerMember {
     pub timeout_until: Option<Timestamp>,
 }
 
+// Private: enforced server-side in reducers; the `my_bans` view exposes a
+// space's ban list only to its moderators (the ban-list modal). Stays off the
+// public surface.
 #[spacetimedb::table(
     accessor = ban,
-    public,
     index(accessor = by_server_and_user, btree(columns = [server_id, user_identity]))
 )]
 pub struct Ban {
@@ -141,7 +156,10 @@ pub struct Ban {
 /// A non-member's pending request to join a discoverable, invite-only space.
 /// A row existing == the request is pending; approving creates a `ServerMember`
 /// and removes the row, declining/cancelling just removes it.
-#[spacetimedb::table(accessor = join_request, public)]
+// Private: the `my_join_requests` view returns the caller's own requests plus
+// requests for spaces they moderate. Stops anyone from listing who asked to
+// join where.
+#[spacetimedb::table(accessor = join_request)]
 pub struct JoinRequest {
     /// "{server_id}:{user_identity}" — one request per user per space.
     #[primary_key]
@@ -158,7 +176,11 @@ pub struct JoinRequest {
     pub declined: bool,
 }
 
-#[spacetimedb::table(accessor = invite, public)]
+// Private: invite tokens are bearer credentials. The `my_invites` view shows
+// invites for spaces the caller belongs to (management UI); joining happens via
+// the `use_invite` reducer with the token, so clients never need to read the
+// table to accept. Keeps tokens off the public `/sql` surface.
+#[spacetimedb::table(accessor = invite)]
 pub struct Invite {
     #[primary_key]
     pub token: String,
@@ -178,9 +200,10 @@ pub enum DmInviteStatus {
     Declined,
 }
 
+// Private: the `my_dm_server_invites` view returns invites the caller sent or
+// received.
 #[spacetimedb::table(
     accessor = dm_server_invite,
-    public,
     index(accessor = by_recipient, btree(columns = [recipient_identity])),
     index(accessor = by_sender, btree(columns = [sender_identity]))
 )]
@@ -196,9 +219,10 @@ pub struct DmServerInvite {
     pub created_at: Timestamp,
 }
 
+// Private: the `my_channels` view returns channels for spaces the caller is a
+// member of. Keeps every space's channel layout off the public surface.
 #[spacetimedb::table(
     accessor = channel,
-    public,
     index(accessor = by_server_and_position, btree(columns = [server_id, position]))
 )]
 pub struct Channel {
@@ -215,9 +239,11 @@ pub struct Channel {
     pub section: Option<String>,
 }
 
+// Private: clients read messages for channels in spaces they belong to via the
+// `my_channel_messages` view. The base table is module-only so neither raw
+// subscriptions nor `/sql` can read every channel's history.
 #[spacetimedb::table(
     accessor = message,
-    public,
     index(accessor = by_channel_and_sent_at, btree(columns = [channel_id, sent_at]))
 )]
 pub struct Message {
@@ -233,9 +259,10 @@ pub struct Message {
     pub deleted: bool,
 }
 
+// Private: the `my_voice_participants` view returns voice presence for channels
+// in spaces the caller belongs to.
 #[spacetimedb::table(
     accessor = voice_participant,
-    public,
     index(accessor = by_channel_and_user, btree(columns = [channel_id, user_identity]))
 )]
 pub struct VoiceParticipant {
@@ -275,16 +302,21 @@ pub struct Block {
     pub created_at: Timestamp,
 }
 
+// Private: DMs are the most sensitive rows in the system. The
+// `my_direct_messages` view returns only conversations the caller is a party to
+// (sender or recipient). The standalone sender/recipient indexes let that view
+// filter without scanning the whole table.
 #[spacetimedb::table(
     accessor = direct_message,
-    public,
     index(accessor = by_sender_recipient_sent_at, btree(columns = [sender_identity, recipient_identity, sent_at]))
 )]
 pub struct DirectMessage {
     #[primary_key]
     #[auto_inc]
     pub id: u64,
+    #[index(btree)]
     pub sender_identity: Identity,
+    #[index(btree)]
     pub recipient_identity: Identity,
     pub content: String,
     pub sent_at: Timestamp,

@@ -199,22 +199,23 @@ async function connectWithUri(uri: string, database: string, reportErrors: boole
         rejectIfPending(new Error('Subscription failed'))
       })
       .subscribe([
-        tables.user,
-        tables.server,
-        tables.server_member,
-        tables.channel,
-        tables.message,
-        tables.voice_participant,
+        tables.my_visible_users,
+        tables.my_servers,
+        tables.my_server_members,
+        tables.my_channels,
+        tables.my_channel_messages,
+        tables.my_voice_participants,
         tables.my_friends,
         tables.my_blocks,
-        tables.direct_message,
+        tables.my_direct_messages,
         tables.my_dm_voice_participants,
         tables.my_presence_states,
         tables.my_typing_states,
         tables.my_read_states,
-        tables.invite,
-        tables.join_request,
-        tables.dm_server_invite,
+        tables.my_invites,
+        tables.my_join_requests,
+        tables.my_dm_server_invites,
+        tables.my_bans,
       ])
 
     await firstSyncApplied

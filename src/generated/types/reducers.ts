@@ -47,6 +47,7 @@ import RespondDmServerInviteReducer from "../respond_dm_server_invite_reducer";
 import SendDirectMessageReducer from "../send_direct_message_reducer";
 import SendDmServerInviteReducer from "../send_dm_server_invite_reducer";
 import SendFriendRequestReducer from "../send_friend_request_reducer";
+import SendFriendRequestByUsernameReducer from "../send_friend_request_by_username_reducer";
 import SendMessageReducer from "../send_message_reducer";
 import SetChannelSectionReducer from "../set_channel_section_reducer";
 import SetMemberRoleReducer from "../set_member_role_reducer";
@@ -110,6 +111,7 @@ export type RespondDmServerInviteParams = __Infer<typeof RespondDmServerInviteRe
 export type SendDirectMessageParams = __Infer<typeof SendDirectMessageReducer>;
 export type SendDmServerInviteParams = __Infer<typeof SendDmServerInviteReducer>;
 export type SendFriendRequestParams = __Infer<typeof SendFriendRequestReducer>;
+export type SendFriendRequestByUsernameParams = __Infer<typeof SendFriendRequestByUsernameReducer>;
 export type SendMessageParams = __Infer<typeof SendMessageReducer>;
 export type SetChannelSectionParams = __Infer<typeof SetChannelSectionReducer>;
 export type SetMemberRoleParams = __Infer<typeof SetMemberRoleReducer>;

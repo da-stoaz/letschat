@@ -9,19 +9,12 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
-import {
-  DmInviteStatus,
-} from "./types";
-
 
 export default __t.row({
-  id: __t.u64().primaryKey(),
+  banKey: __t.string().name("ban_key"),
   serverId: __t.u64().name("server_id"),
-  inviteToken: __t.string().name("invite_token"),
-  senderIdentity: __t.identity().name("sender_identity"),
-  recipientIdentity: __t.identity().name("recipient_identity"),
-  get status() {
-    return DmInviteStatus;
-  },
-  createdAt: __t.timestamp().name("created_at"),
+  userIdentity: __t.identity().name("user_identity"),
+  bannedBy: __t.identity().name("banned_by"),
+  reason: __t.option(__t.string()),
+  bannedAt: __t.timestamp().name("banned_at"),
 });
