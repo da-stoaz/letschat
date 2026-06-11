@@ -11,11 +11,12 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  token: __t.string().primaryKey(),
-  serverId: __t.u64().name("server_id"),
-  createdBy: __t.identity().name("created_by"),
-  expiresAt: __t.timestamp().name("expires_at"),
-  maxUses: __t.option(__t.u32()).name("max_uses"),
-  useCount: __t.u32().name("use_count"),
-  allowedUsernames: __t.array(__t.string()).name("allowed_usernames"),
+  voiceKey: __t.string().name("voice_key"),
+  channelId: __t.u64().name("channel_id"),
+  userIdentity: __t.identity().name("user_identity"),
+  joinedAt: __t.timestamp().name("joined_at"),
+  muted: __t.bool(),
+  deafened: __t.bool(),
+  sharingScreen: __t.bool().name("sharing_screen"),
+  sharingCamera: __t.bool().name("sharing_camera"),
 });

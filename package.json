@@ -13,6 +13,9 @@
     "downloads:sync": "bun scripts/sync-downloads.ts",
     "preview": "vite preview",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:security": "vitest run tests/security",
     "auth:dev": "APP_ENV=dev cargo run --manifest-path auth-service/Cargo.toml",
     "core-api:dev": "ASPNETCORE_ENVIRONMENT=Development dotnet run --project core-api/src/CoreApi/CoreApi.csproj",
     "core-api:dev:lan": "bun run scripts/core-api-lan.ts",
@@ -72,6 +75,7 @@
     "tailwindcss": "^4.3.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.59.3",
-    "vite": "^8.0.12"
+    "vite": "^8.0.12",
+    "vitest": "^4.1.8"
   }
 }

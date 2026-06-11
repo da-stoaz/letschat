@@ -52,7 +52,7 @@ export function joinedServerIds(conn: DbConnection): Set<number> {
   if (!me) return new Set<number>()
 
   const joined = new Set<number>()
-  for (const member of conn.db.server_member.iter()) {
+  for (const member of conn.db.my_server_members.iter()) {
     if (sameIdentity(toIdentityString(member.userIdentity), me)) {
       joined.add(toU64Number(member.serverId))
     }
@@ -138,7 +138,7 @@ export function recomputeUnreadStateFromReadCursors(): void {
 // ─── Sync functions ───────────────────────────────────────────────────────────
 
 export function syncUsers(conn: DbConnection): User[] {
-  const users = Array.from(conn.db.user.iter()).map(mapUser)
+  const users = Array.from(conn.db.my_visible_users.iter()).map(mapUser)
   useUsersStore.getState().setUsers(users)
   const selfIdentity = useConnectionStore.getState().identity
 
@@ -151,7 +151,7 @@ export function syncUsers(conn: DbConnection): User[] {
 
 export function syncServers(conn: DbConnection): void {
   const allowedServerIds = joinedServerIds(conn)
-  const servers = Array.from(conn.db.server.iter())
+  const servers = Array.from(conn.db.my_servers.iter())
     .map(mapServer)
     .filter((server) => allowedServerIds.has(server.id))
   useServersStore.getState().setServers(servers)
@@ -164,12 +164,12 @@ export function syncDiscover(conn: DbConnection): void {
   // a discover card can show how many people are in a space the caller hasn't
   // joined.
   const memberCounts = new Map<number, number>()
-  for (const member of conn.db.server_member.iter()) {
+  for (const member of conn.db.my_server_members.iter()) {
     const sid = toU64Number(member.serverId)
     memberCounts.set(sid, (memberCounts.get(sid) ?? 0) + 1)
   }
 
-  const servers = Array.from(conn.db.server.iter())
+  const servers = Array.from(conn.db.my_servers.iter())
     .map(mapServer)
     .filter((server) => server.isDiscoverable && !joined.has(server.id))
     .map((server) => ({
@@ -192,7 +192,7 @@ export function syncJoinRequests(conn: DbConnection, users: User[] = syncUsers(c
   // Spaces the caller moderates (Owner/Moderator) — they see incoming requests.
   const moderated = new Set<number>()
   if (me) {
-    for (const row of conn.db.server_member.iter()) {
+    for (const row of conn.db.my_server_members.iter()) {
       const member = mapServerMember(row)
       if (
         sameIdentity(member.userIdentity, me) &&
@@ -206,7 +206,7 @@ export function syncJoinRequests(conn: DbConnection, users: User[] = syncUsers(c
   const usersByIdentity = new Map(users.map((user) => [normalizeIdentity(user.identity), user]))
   const mine: Record<number, JoinRequestStatus> = {}
   const byServer: Record<number, JoinRequestWithUser[]> = {}
-  for (const row of conn.db.join_request.iter()) {
+  for (const row of conn.db.my_join_requests.iter()) {
     const request = mapJoinRequest(row)
     if (me && sameIdentity(request.userIdentity, me)) {
       mine[request.serverId] = request.declined ? 'declined' : 'pending'
@@ -229,7 +229,7 @@ export function syncJoinRequests(conn: DbConnection, users: User[] = syncUsers(c
 export function syncMembers(conn: DbConnection, users: User[] = syncUsers(conn)): void {
   const allowedServerIds = joinedServerIds(conn)
   const usersByIdentity = new Map(users.map((user) => [user.identity, user]))
-  const members = Array.from(conn.db.server_member.iter())
+  const members = Array.from(conn.db.my_server_members.iter())
     .map(mapServerMember)
     .filter((member) => allowedServerIds.has(member.serverId))
   const grouped = new Map<number, ServerMemberWithUser[]>()
@@ -255,7 +255,7 @@ export function syncMembers(conn: DbConnection, users: User[] = syncUsers(conn))
 
 export function syncChannels(conn: DbConnection): void {
   const allowedServerIds = joinedServerIds(conn)
-  const channels = Array.from(conn.db.channel.iter())
+  const channels = Array.from(conn.db.my_channels.iter())
     .map(mapChannel)
     .filter((channel) => allowedServerIds.has(channel.serverId))
   const grouped = new Map<number, Channel[]>()
@@ -280,7 +280,7 @@ export function syncChannels(conn: DbConnection): void {
 }
 
 export function syncMessages(conn: DbConnection): void {
-  const messages = Array.from(conn.db.message.iter()).map(mapMessage)
+  const messages = Array.from(conn.db.my_channel_messages.iter()).map(mapMessage)
   const grouped = new Map<number, typeof messages>()
   for (const message of messages) {
     const byChannel = grouped.get(message.channelId) ?? []
@@ -296,7 +296,7 @@ export function syncMessages(conn: DbConnection): void {
 }
 
 export function syncVoiceParticipants(conn: DbConnection): void {
-  const participants = Array.from(conn.db.voice_participant.iter()).map(mapVoiceParticipant)
+  const participants = Array.from(conn.db.my_voice_participants.iter()).map(mapVoiceParticipant)
   const grouped = new Map<number, typeof participants>()
   for (const participant of participants) {
     const byChannel = grouped.get(participant.channelId) ?? []
@@ -333,7 +333,7 @@ export function syncFriends(conn: DbConnection): void {
 }
 
 export function syncDirectMessages(conn: DbConnection): void {
-  const directMessages = Array.from(conn.db.direct_message.iter()).map(mapDirectMessage)
+  const directMessages = Array.from(conn.db.my_direct_messages.iter()).map(mapDirectMessage)
   const me = useConnectionStore.getState().identity
   if (!me) return
 
@@ -391,7 +391,7 @@ export function syncReadStates(conn: DbConnection): void {
 
 export function syncInvites(conn: DbConnection): void {
   const allowedServerIds = joinedServerIds(conn)
-  const inviteRows = Array.from(conn.db.invite.iter())
+  const inviteRows = Array.from(conn.db.my_invites.iter())
     .map(mapInvite)
     .filter((inv) => allowedServerIds.has(inv.serverId))
     .filter(isInviteActive)
@@ -420,7 +420,7 @@ export function syncInvites(conn: DbConnection): void {
 }
 
 export function syncDmServerInvites(conn: DbConnection): void {
-  const rows = Array.from(conn.db.dm_server_invite.iter()).map(mapDmServerInvite)
+  const rows = Array.from(conn.db.my_dm_server_invites.iter()).map(mapDmServerInvite)
   useDmServerInvitesStore.getState().setInvites(rows)
 }
 

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { HammerIcon } from 'lucide-react'
-import { reducers } from '../../lib/spacetimedb'
+import { reducers, spacetimedbClient } from '../../lib/spacetimedb'
+import { mapBan } from '../../lib/spacetimedb/mappers'
 import { useUsersStore } from '../../stores/usersStore'
 import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -22,39 +23,22 @@ export function BanListModal({ serverId, onClose }: BanListModalProps) {
   const [error, setError] = useState<string | null>(null)
   const [unbanningId, setUnbanningId] = useState<string | null>(null)
   const usersByIdentity = useUsersStore((s) => s.byIdentity)
-  const [bans, setBans] = useState<BanRow[]>([])
-
-  useEffect(() => {
-    try {
-      const conn = (window as unknown as Record<string, unknown>).__stdb_conn as {
-        db: {
-          ban: {
-            iter: () => Iterable<{
-              serverId: unknown
-              userIdentity: { toHexString?: () => string; toString: () => string }
-              reason: string | null
-              bannedAt: { toDate?: () => Date }
-            }>
-          }
-        }
-      } | undefined
-
-      if (conn?.db?.ban) {
-        const banRows = Array.from(conn.db.ban.iter())
-          .filter((row) => Number(row.serverId) === serverId)
-          .map((row) => ({
-            identity: typeof row.userIdentity.toHexString === 'function'
-              ? row.userIdentity.toHexString()
-              : row.userIdentity.toString(),
-            reason: row.reason,
-            bannedAt: row.bannedAt.toDate?.().toISOString() ?? new Date().toISOString(),
-          }))
-        setBans(banRows)
-      }
-    } catch {
-      // Ignore if ban rows are unavailable
-    }
-  }, [serverId])
+  // Snapshot the ban list once when the modal opens. The `my_bans` view is
+  // subscribed globally and only returns bans for spaces the caller moderates,
+  // so this is empty for non-moderators. Snapshot-on-open is fine for a
+  // moderation list — the unban handler updates this state optimistically.
+  const [bans, setBans] = useState<BanRow[]>(() => {
+    const conn = spacetimedbClient.connection
+    if (!conn) return []
+    return Array.from(conn.db.my_bans.iter())
+      .map(mapBan)
+      .filter((ban) => ban.serverId === serverId)
+      .map((ban) => ({
+        identity: ban.userIdentity,
+        reason: ban.reason,
+        bannedAt: ban.bannedAt,
+      }))
+  })
 
   const handleUnban = async (identity: string) => {
     setUnbanningId(identity)

@@ -195,20 +195,20 @@ export function handleFriendAccepted(username: string): void {
 // ─── Live table watcher ───────────────────────────────────────────────────────
 
 export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void {
-  conn.db.user.onInsert(() => syncUsers(conn))
-  conn.db.user.onUpdate(() => syncUsers(conn))
-  conn.db.server.onInsert(() => syncServerScopedState(conn))
-  conn.db.server.onUpdate(() => syncServerScopedState(conn))
-  conn.db.server.onDelete(() => syncServerScopedState(conn))
-  conn.db.server_member.onInsert(() => syncServerScopedState(conn))
-  conn.db.server_member.onUpdate(() => syncServerScopedState(conn))
-  conn.db.server_member.onDelete(() => syncServerScopedState(conn))
-  conn.db.channel.onInsert(() => syncChannels(conn))
-  conn.db.channel.onUpdate(() => syncChannels(conn))
-  conn.db.channel.onDelete(() => syncChannels(conn))
-  conn.db.voice_participant.onInsert(() => syncVoiceParticipants(conn))
-  conn.db.voice_participant.onUpdate(() => syncVoiceParticipants(conn))
-  conn.db.voice_participant.onDelete(() => syncVoiceParticipants(conn))
+  conn.db.my_visible_users.onInsert(() => syncUsers(conn))
+  conn.db.my_visible_users.onUpdate(() => syncUsers(conn))
+  conn.db.my_servers.onInsert(() => syncServerScopedState(conn))
+  conn.db.my_servers.onUpdate(() => syncServerScopedState(conn))
+  conn.db.my_servers.onDelete(() => syncServerScopedState(conn))
+  conn.db.my_server_members.onInsert(() => syncServerScopedState(conn))
+  conn.db.my_server_members.onUpdate(() => syncServerScopedState(conn))
+  conn.db.my_server_members.onDelete(() => syncServerScopedState(conn))
+  conn.db.my_channels.onInsert(() => syncChannels(conn))
+  conn.db.my_channels.onUpdate(() => syncChannels(conn))
+  conn.db.my_channels.onDelete(() => syncChannels(conn))
+  conn.db.my_voice_participants.onInsert(() => syncVoiceParticipants(conn))
+  conn.db.my_voice_participants.onUpdate(() => syncVoiceParticipants(conn))
+  conn.db.my_voice_participants.onDelete(() => syncVoiceParticipants(conn))
   conn.db.my_friends.onInsert((_ctx, row) => {
     syncFriends(conn)
     if (!isLive()) return
@@ -235,18 +235,18 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
   conn.db.my_friends.onDelete(() => syncFriends(conn))
   conn.db.my_blocks.onInsert(() => syncFriends(conn))
   conn.db.my_blocks.onDelete(() => syncFriends(conn))
-  conn.db.direct_message.onInsert((_ctx, row) => {
+  conn.db.my_direct_messages.onInsert((_ctx, row) => {
     syncDirectMessages(conn)
     recomputeUnreadStateFromReadCursors()
     if (!isLive()) return
     const message = mapDirectMessage(row)
     handleIncomingDirectMessage(message)
   })
-  conn.db.direct_message.onUpdate(() => {
+  conn.db.my_direct_messages.onUpdate(() => {
     syncDirectMessages(conn)
     recomputeUnreadStateFromReadCursors()
   })
-  conn.db.direct_message.onDelete(() => {
+  conn.db.my_direct_messages.onDelete(() => {
     syncDirectMessages(conn)
     recomputeUnreadStateFromReadCursors()
   })
@@ -271,10 +271,10 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
     syncReadStates(conn)
     recomputeUnreadStateFromReadCursors()
   })
-  conn.db.invite.onInsert(() => syncInvites(conn))
-  conn.db.invite.onUpdate(() => syncInvites(conn))
-  conn.db.invite.onDelete(() => syncInvites(conn))
-  conn.db.dm_server_invite.onInsert((_ctx, row) => {
+  conn.db.my_invites.onInsert(() => syncInvites(conn))
+  conn.db.my_invites.onUpdate(() => syncInvites(conn))
+  conn.db.my_invites.onDelete(() => syncInvites(conn))
+  conn.db.my_dm_server_invites.onInsert((_ctx, row) => {
     syncDmServerInvites(conn)
     if (!isLive()) return
     const me = useConnectionStore.getState().identity
@@ -289,9 +289,9 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
       })
     }
   })
-  conn.db.dm_server_invite.onUpdate(() => syncDmServerInvites(conn))
-  conn.db.dm_server_invite.onDelete(() => syncDmServerInvites(conn))
-  conn.db.message.onInsert((_ctx, row) => {
+  conn.db.my_dm_server_invites.onUpdate(() => syncDmServerInvites(conn))
+  conn.db.my_dm_server_invites.onDelete(() => syncDmServerInvites(conn))
+  conn.db.my_channel_messages.onInsert((_ctx, row) => {
     syncMessages(conn)
     recomputeUnreadStateFromReadCursors()
     if (!isLive()) return
@@ -299,11 +299,11 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
     const message = mapMessage(row)
     handleIncomingMessage(message)
   })
-  conn.db.message.onUpdate(() => {
+  conn.db.my_channel_messages.onUpdate(() => {
     syncMessages(conn)
     recomputeUnreadStateFromReadCursors()
   })
-  conn.db.message.onDelete(() => {
+  conn.db.my_channel_messages.onDelete(() => {
     syncMessages(conn)
     recomputeUnreadStateFromReadCursors()
   })

@@ -15,7 +15,7 @@ import {
 
 
 export default __t.row({
-  memberKey: __t.string().primaryKey().name("member_key"),
+  memberKey: __t.string().name("member_key"),
   serverId: __t.u64().name("server_id"),
   userIdentity: __t.identity().name("user_identity"),
   get role() {

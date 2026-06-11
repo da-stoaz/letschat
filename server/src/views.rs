@@ -3,10 +3,35 @@ use std::collections::HashSet;
 use spacetimedb::{Identity, ViewContext};
 
 use crate::schema::{
-    Block, DmVoiceParticipant, Friend, FriendStatus, PresenceState, ReadState, TypingState,
-    block__view, channel__view, dm_voice_participant__view, friend__view, presence_state__view,
-    read_state__view, server_member__view, typing_state__view,
+    Ban, Block, Channel, DirectMessage, DmServerInvite, DmVoiceParticipant, Friend, FriendStatus,
+    Invite, JoinRequest, Message, PresenceState, ReadState, Role, Server, ServerMember, TypingState,
+    User, VoiceParticipant, ban__view, block__view, channel__view, direct_message__view,
+    dm_server_invite__view, dm_voice_participant__view, friend__view, invite__view,
+    join_request__view, message__view, presence_state__view, read_state__view, server__view,
+    server_member__view, typing_state__view, user__view, voice_participant__view,
 };
+
+/// Server ids the caller is a member of. Shared by several scoped views below.
+fn my_server_ids(ctx: &ViewContext) -> HashSet<u64> {
+    ctx.db
+        .server_member()
+        .user_identity()
+        .filter(ctx.sender())
+        .map(|member| member.server_id)
+        .collect()
+}
+
+/// Server ids the caller moderates (Owner or Moderator). Shared by the views
+/// that expose moderation surfaces (join requests, ban list, visible users).
+fn moderated_server_ids(ctx: &ViewContext) -> HashSet<u64> {
+    ctx.db
+        .server_member()
+        .user_identity()
+        .filter(ctx.sender())
+        .filter(|member| member.role == Role::Owner || member.role == Role::Moderator)
+        .map(|member| member.server_id)
+        .collect()
+}
 
 fn normalize_identity(value: &str) -> String {
     value.trim().to_lowercase()
@@ -169,4 +194,202 @@ pub fn my_typing_states(ctx: &ViewContext) -> Vec<TypingState> {
 #[spacetimedb::view(accessor = my_read_states, public)]
 pub fn my_read_states(ctx: &ViewContext) -> Vec<ReadState> {
     ctx.db.read_state().by_user().filter(ctx.sender()).collect()
+}
+
+// ─── Space-scoped views (replace the formerly-public base tables) ──────────────
+
+/// Spaces the caller can see: ones they're a member of, plus any space opted in
+/// to Discover. Mirrors what the client already filters for `syncServers`
+/// (joined) and `syncDiscover` (discoverable, not-joined).
+#[spacetimedb::view(accessor = my_servers, public)]
+pub fn my_servers(ctx: &ViewContext) -> Vec<Server> {
+    let mut rows = Vec::<Server>::new();
+    let mut seen = HashSet::<u64>::new();
+    // Spaces the caller belongs to (looked up by id).
+    for server_id in my_server_ids(ctx) {
+        if let Some(server) = ctx.db.server().id().find(server_id) {
+            if seen.insert(server.id) {
+                rows.push(server);
+            }
+        }
+    }
+    // Spaces opted in to Discover.
+    for server in ctx.db.server().is_discoverable().filter(true) {
+        if seen.insert(server.id) {
+            rows.push(server);
+        }
+    }
+    rows
+}
+
+/// Members of spaces the caller belongs to, plus members of discoverable spaces
+/// (so Discover cards can show member counts for spaces the caller hasn't
+/// joined). A superset of every membership view the client builds.
+#[spacetimedb::view(accessor = my_server_members, public)]
+pub fn my_server_members(ctx: &ViewContext) -> Vec<ServerMember> {
+    let mut visible = my_server_ids(ctx);
+    for server in ctx.db.server().is_discoverable().filter(true) {
+        visible.insert(server.id);
+    }
+
+    let mut rows = Vec::<ServerMember>::new();
+    for server_id in &visible {
+        rows.extend(ctx.db.server_member().server_id().filter(*server_id));
+    }
+    rows
+}
+
+/// Channel messages for spaces the caller is a member of.
+#[spacetimedb::view(accessor = my_channel_messages, public)]
+pub fn my_channel_messages(ctx: &ViewContext) -> Vec<Message> {
+    let mine = my_server_ids(ctx);
+    let mut rows = Vec::<Message>::new();
+    for server_id in &mine {
+        for channel in ctx.db.channel().server_id().filter(*server_id) {
+            rows.extend(ctx.db.message().channel_id().filter(channel.id));
+        }
+    }
+    rows
+}
+
+/// Direct messages the caller sent or received.
+#[spacetimedb::view(accessor = my_direct_messages, public)]
+pub fn my_direct_messages(ctx: &ViewContext) -> Vec<DirectMessage> {
+    let me = ctx.sender();
+    let mut rows: Vec<DirectMessage> =
+        ctx.db.direct_message().sender_identity().filter(me).collect();
+    rows.extend(ctx.db.direct_message().recipient_identity().filter(me));
+    rows
+}
+
+/// Invites for spaces the caller belongs to (management UI). Joining uses the
+/// `use_invite` reducer with the token, so non-members never need to read this.
+#[spacetimedb::view(accessor = my_invites, public)]
+pub fn my_invites(ctx: &ViewContext) -> Vec<Invite> {
+    let mine = my_server_ids(ctx);
+    let mut rows = Vec::<Invite>::new();
+    for server_id in &mine {
+        rows.extend(ctx.db.invite().server_id().filter(*server_id));
+    }
+    rows
+}
+
+/// Join requests the caller made, plus requests for spaces they moderate.
+#[spacetimedb::view(accessor = my_join_requests, public)]
+pub fn my_join_requests(ctx: &ViewContext) -> Vec<JoinRequest> {
+    let me = ctx.sender();
+    let moderated = moderated_server_ids(ctx);
+
+    // The caller's own requests.
+    let mut rows: Vec<JoinRequest> = ctx.db.join_request().user_identity().filter(me).collect();
+    // Requests for spaces the caller moderates (skip their own to avoid dupes).
+    for server_id in &moderated {
+        for request in ctx.db.join_request().server_id().filter(*server_id) {
+            if request.user_identity != me {
+                rows.push(request);
+            }
+        }
+    }
+    rows
+}
+
+/// DM-delivered space invites the caller sent or received.
+#[spacetimedb::view(accessor = my_dm_server_invites, public)]
+pub fn my_dm_server_invites(ctx: &ViewContext) -> Vec<DmServerInvite> {
+    let me = ctx.sender();
+    let mut rows: Vec<DmServerInvite> =
+        ctx.db.dm_server_invite().by_sender().filter(me).collect();
+    rows.extend(ctx.db.dm_server_invite().by_recipient().filter(me));
+    rows
+}
+
+/// Channels for spaces the caller is a member of.
+#[spacetimedb::view(accessor = my_channels, public)]
+pub fn my_channels(ctx: &ViewContext) -> Vec<Channel> {
+    let mine = my_server_ids(ctx);
+    let mut rows = Vec::<Channel>::new();
+    for server_id in &mine {
+        rows.extend(ctx.db.channel().server_id().filter(*server_id));
+    }
+    rows
+}
+
+/// Voice presence for channels in spaces the caller is a member of.
+#[spacetimedb::view(accessor = my_voice_participants, public)]
+pub fn my_voice_participants(ctx: &ViewContext) -> Vec<VoiceParticipant> {
+    let mine = my_server_ids(ctx);
+    let mut rows = Vec::<VoiceParticipant>::new();
+    for server_id in &mine {
+        for channel in ctx.db.channel().server_id().filter(*server_id) {
+            rows.extend(ctx.db.voice_participant().channel_id().filter(channel.id));
+        }
+    }
+    rows
+}
+
+/// The directory of people the caller can actually see — instead of every
+/// account on the instance. The union covers everyone the UI can render a name
+/// or avatar for: members of shared spaces, friends (pending or accepted),
+/// people who requested to join spaces the caller moderates, and DM space-invite
+/// counterparties. A missing identity degrades to a truncated id in the UI, not
+/// an error, so an over-tight set fails safe.
+#[spacetimedb::view(accessor = my_visible_users, public)]
+pub fn my_visible_users(ctx: &ViewContext) -> Vec<User> {
+    let me = ctx.sender();
+    let mut allowed = HashSet::<Identity>::new();
+    allowed.insert(me);
+
+    // Members of spaces the caller belongs to.
+    let mine = my_server_ids(ctx);
+    for server_id in &mine {
+        for member in ctx.db.server_member().server_id().filter(*server_id) {
+            allowed.insert(member.user_identity);
+        }
+    }
+
+    // Friends (pending requests render too, so include both directions).
+    for friend in ctx.db.friend().user_a().filter(me) {
+        allowed.insert(friend.user_b);
+    }
+    for friend in ctx.db.friend().user_b().filter(me) {
+        allowed.insert(friend.user_a);
+    }
+
+    // People tied to spaces the caller moderates: join-requesters (not members
+    // yet) and banned users (no longer members) — so both lists render names.
+    for server_id in &moderated_server_ids(ctx) {
+        for request in ctx.db.join_request().server_id().filter(*server_id) {
+            allowed.insert(request.user_identity);
+        }
+        for ban in ctx.db.ban().server_id().filter(*server_id) {
+            allowed.insert(ban.user_identity);
+        }
+    }
+
+    // DM space-invite counterparties.
+    for invite in ctx.db.dm_server_invite().by_sender().filter(me) {
+        allowed.insert(invite.recipient_identity);
+    }
+    for invite in ctx.db.dm_server_invite().by_recipient().filter(me) {
+        allowed.insert(invite.sender_identity);
+    }
+
+    let mut rows = Vec::<User>::new();
+    for identity in allowed {
+        if let Some(user) = ctx.db.user().identity().find(identity) {
+            rows.push(user);
+        }
+    }
+    rows
+}
+
+/// Bans for spaces the caller moderates (Owner/Moderator) — powers the ban-list
+/// moderation modal. Non-moderators get an empty set.
+#[spacetimedb::view(accessor = my_bans, public)]
+pub fn my_bans(ctx: &ViewContext) -> Vec<Ban> {
+    let mut rows = Vec::<Ban>::new();
+    for server_id in &moderated_server_ids(ctx) {
+        rows.extend(ctx.db.ban().server_id().filter(*server_id));
+    }
+    rows
 }

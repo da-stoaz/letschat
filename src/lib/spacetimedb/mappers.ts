@@ -4,6 +4,7 @@ import {
   type Timestamp as SpacetimeTimestamp,
 } from 'spacetimedb'
 import type {
+  Ban,
   Block,
   Channel,
   ChannelKind,
@@ -228,6 +229,16 @@ export function mapBlock(row: DbRow): Block {
     blocker: toIdentityString(row.blocker),
     blocked: toIdentityString(row.blocked),
     createdAt: toIsoString(row.createdAt),
+  }
+}
+
+export function mapBan(row: DbRow): Ban {
+  return {
+    serverId: toU64Number(row.serverId),
+    userIdentity: toIdentityString(row.userIdentity),
+    bannedBy: toIdentityString(row.bannedBy),
+    reason: rowString(row, 'reason') || null,
+    bannedAt: toIsoString(row.bannedAt),
   }
 }
 
