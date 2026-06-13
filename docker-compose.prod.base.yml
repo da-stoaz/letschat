@@ -43,8 +43,12 @@ services:
     restart: unless-stopped
 
   # ── core-api (.NET / ASP.NET Core Identity) ─────────────────────────────────
-  # Public HTTP listener (AUTH_BIND) is reached via the reverse proxy on the
-  # auth.<domain> and connect.<domain> hostnames — not via a host port.
+  # Public HTTP listener (AUTH_BIND) is published on a host LOOPBACK port
+  # (127.0.0.1:8787). The bundled cloudflared/Caddy reach it over the Docker
+  # network by service name and don't need this; it exists so a reverse proxy
+  # or tunnel running NATIVELY ON THE HOST (e.g. an existing cloudflared serving
+  # other apps) can point its ingress at http://localhost:8787. Loopback-only,
+  # so it is never directly exposed to the internet.
   #
   # Admin Razor pages (ADMIN_BIND) are bound to a SEPARATE container port and
   # the host mapping is loopback-only (127.0.0.1:48788). Reach the panel from
@@ -55,6 +59,7 @@ services:
     image: ghcr.io/da-stoaz/letschat-core-api:latest
     container_name: letschat-core-api
     ports:
+      - "127.0.0.1:8787:8787"
       - "127.0.0.1:48788:8788"
     environment:
       AUTH_BIND: "0.0.0.0:8787"

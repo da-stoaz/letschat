@@ -55,6 +55,23 @@ curl -4 ifconfig.me`}</code></pre>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
+        <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--accent-blue)">Already run cloudflared (or another reverse proxy) on this host?</p>
+        <h2 class="text-xl font-medium">Use your existing connector — don't run the bundled one</h2>
+        <p class="text-sm text-muted-foreground">The bundled <code class="text-xs">cloudflared</code> in <code class="text-xs">docker-compose.prod.tunnel.yml</code> only works because it sits <span class="italic">on the Docker network</span> and can resolve service names like <code class="text-xs">core-api:8787</code>. A <strong>native</strong> cloudflared running on the host (serving your other apps) cannot resolve those names — and you should never run two connectors for one tunnel. So in this topology:</p>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li><strong>Don't use <code class="text-xs">docker-compose.prod.tunnel.yml</code> at all.</strong> Run the base stack only: <code class="text-xs">docker compose -f docker-compose.prod.base.yml up -d</code>. There's no bundled cloudflared, so <code class="text-xs">CLOUDFLARE_TUNNEL_TOKEN</code> is irrelevant — leave it blank. Your host cloudflared already holds its own credentials.</li>
+          <li><strong>Reuse the tunnel you already have.</strong> No new tunnel, no DNS re-creation — just add the LetsChat public hostnames to it, each pointing at a <code class="text-xs">localhost</code> port the base stack publishes:</li>
+        </ul>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`auth.example.com     ->  http://localhost:8787    # core-api
+connect.example.com  ->  http://localhost:8787    # core-api (discovery)
+chat.example.com     ->  http://localhost:44300   # SpacetimeDB  (enable WebSocket)
+files.example.com    ->  http://localhost:44390   # MinIO
+lk.example.com       ->  http://localhost:44380   # LiveKit signalling (enable WebSocket)`}</code></pre>
+        <p class="text-sm text-muted-foreground">Then fill <code class="text-xs">.env</code> as in Step 3 (the <code class="text-xs">DISCOVERY_*</code> URLs are still your public <code class="text-xs">https://</code>/<code class="text-xs">wss://</code> addresses), configure LiveKit (Step 4), and forward the media ports (Step 6). <strong>Skip</strong> Step 1, the bundled-cloudflared half of Step 2, and the tunnel-overlay flags in Step 5.</p>
+        <p class="text-xs text-muted-foreground">Same recipe for nginx / Caddy / Traefik running on the host: terminate TLS there and proxy to the <code class="text-xs">localhost</code> ports above, keeping <code class="text-xs">chat</code> and <code class="text-xs">lk</code> as WebSocket upgrades. Everything below assumes the <span class="italic">bundled</span> connector — follow it only if you're letting Compose run cloudflared for you.</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
         <h2 class="text-xl font-medium">Step 0: Get Shared Files</h2>
         <p class="text-sm text-muted-foreground">Download the shared base compose file and LiveKit config:</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`mkdir letschat && cd letschat
