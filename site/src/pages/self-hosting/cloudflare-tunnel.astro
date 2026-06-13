@@ -67,8 +67,16 @@ connect.example.com  ->  http://localhost:8787    # core-api (discovery)
 chat.example.com     ->  http://localhost:44300   # SpacetimeDB  (enable WebSocket)
 files.example.com    ->  http://localhost:44390   # MinIO
 lk.example.com       ->  http://localhost:44380   # LiveKit signalling (enable WebSocket)`}</code></pre>
-        <p class="text-sm text-muted-foreground">Then fill <code class="text-xs">.env</code> as in Step 3 (the <code class="text-xs">DISCOVERY_*</code> URLs are still your public <code class="text-xs">https://</code>/<code class="text-xs">wss://</code> addresses), configure LiveKit (Step 4), and forward the media ports (Step 6). <strong>Skip</strong> Step 1, the bundled-cloudflared half of Step 2, and the tunnel-overlay flags in Step 5.</p>
-        <p class="text-xs text-muted-foreground">Same recipe for nginx / Caddy / Traefik running on the host: terminate TLS there and proxy to the <code class="text-xs">localhost</code> ports above, keeping <code class="text-xs">chat</code> and <code class="text-xs">lk</code> as WebSocket upgrades. Everything below assumes the <span class="italic">bundled</span> connector — follow it only if you're letting Compose run cloudflared for you.</p>
+        <p class="text-sm text-muted-foreground">Your exact sequence through the steps below (the rest assume the bundled connector):</p>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li><strong>Step 0</strong> — get the base compose + LiveKit config (you still need these).</li>
+          <li><strong>Step 1</strong> — download <span class="italic">only</span> the env file; you do <strong>not</strong> need the tunnel overlay:<pre class="rounded-lg border border-border bg-background p-3 mt-1 overflow-x-auto text-xs"><code>{`wget -O .env https://raw.githubusercontent.com/da-stoaz/letschat/main/.env.production.tunnel.example`}</code></pre></li>
+          <li><strong>Step 2</strong> — skip the tunnel-ingress instructions; add the five hostnames above to your existing tunnel instead.</li>
+          <li><strong>Step 3</strong> — fill <code class="text-xs">.env</code> normally (leave <code class="text-xs">CLOUDFLARE_TUNNEL_TOKEN</code> blank; <code class="text-xs">DISCOVERY_*</code> are still your public <code class="text-xs">https://</code>/<code class="text-xs">wss://</code> URLs). <strong>Step 4</strong> — configure LiveKit.</li>
+          <li><strong>Step 5</strong> — start with the base file only: <code class="text-xs">docker compose -f docker-compose.prod.base.yml up -d</code>. The <code class="text-xs">module-init</code> container (part of base) still auto-publishes the SpacetimeDB module — no manual <code class="text-xs">spacetime publish</code> needed.</li>
+          <li><strong>Step 6</strong> — forward the media ports on your router (still required). <strong>Step 7</strong> — validate.</li>
+        </ul>
+        <p class="text-xs text-muted-foreground">Same recipe for nginx / Caddy / Traefik on the host: terminate TLS there and proxy to the <code class="text-xs">localhost</code> ports above, keeping <code class="text-xs">chat</code> and <code class="text-xs">lk</code> as WebSocket upgrades.</p>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
