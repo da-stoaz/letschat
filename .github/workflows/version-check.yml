@@ -1,11 +1,15 @@
 name: Version check
 
-# Every push to main triggers release.yml, which tags the Docker images and the
-# GitHub release with the package.json version. If the version isn't bumped, the
-# new build re-pushes an existing :version tag and clobbers it — so a version
-# like "0.4.2" stops referring to a single, fixed build. This guard makes a
-# version bump mandatory on every PR into main, while leaving the choice of
-# patch / minor / major to the author (run `bun run version:bump <kind>`).
+# release.yml re-pushes the :version Docker tags and cuts a GitHub release on
+# every QUALIFYING push to main (see its paths-ignore). Each such build needs a
+# fresh version or it clobbers an existing tag. This guard makes a version bump
+# mandatory — but ONLY when the PR changes something that actually ships. A
+# docs / site / deploy-config-only PR is exempt, so it can merge without bumping
+# the app version and without triggering a release.
+#
+# The check always runs (so it stays a satisfiable required status check) and
+# decides internally whether a bump is needed. The "non_app" matcher below MUST
+# mirror the paths-ignore list in release.yml.
 on:
   pull_request:
     branches: [main]
@@ -16,16 +20,37 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Require package.json version to increase vs base
+      - name: Require an app version bump only when app code changed
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+
+          changed=$(git diff --name-only FETCH_HEAD)
+          echo "Changed files:"
+          echo "$changed"
+
+          # Files that never go into a built artifact — keep in sync with the
+          # paths-ignore list in release.yml. A PR touching ONLY these needs no
+          # app version bump.
+          non_app='(^site/)|(^livekit/)|(^deploy/)|(^\.claude/)|(^graphify-out/)|(^docker-compose)|(^\.env.*\.example$)|(^\.github/workflows/(react-doctor|version-check)\.yml$)|(^\.gitignore$)|(^LICENSE$)|(\.md$)'
+
+          app_changed=$(echo "$changed" | grep -vE "$non_app" || true)
+          if [ -z "$app_changed" ]; then
+            echo "Only docs / site / deploy-config files changed — no app version bump required. ✓"
+            exit 0
+          fi
+
+          echo "App files changed:"
+          echo "$app_changed"
+
           base=$(git show FETCH_HEAD:package.json | jq -r .version)
           head=$(jq -r .version package.json)
-          echo "base (${{ github.base_ref }}): $base"
-          echo "head (this PR):              $head"
+          echo "base ($BASE_REF): $base"
+          echo "head (this PR):  $head"
 
           if [ "$base" = "$head" ]; then
-            echo "::error file=package.json::Version is still $base — bump it before merging. Run: bun run version:bump patch  (or minor / major)."
+            echo "::error file=package.json::App code changed but version is still $base — bump it before merging. Run: bun run version:bump patch  (or minor / major)."
             exit 1
           fi
 

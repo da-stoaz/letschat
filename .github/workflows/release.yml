@@ -4,6 +4,25 @@ on:
   push:
     branches:
       - main
+    # Only release when something that goes into a built artifact changes.
+    # A push touching ONLY these paths is skipped — no image rebuild, no GitHub
+    # release, no version churn. Keep in sync with the "non_app" matcher in
+    # version-check.yml: a PR must bump the version exactly when it would
+    # trigger a release here.
+    paths-ignore:
+      - 'site/**'
+      - '**/*.md'
+      - 'docker-compose*.yml'
+      - '.env*.example'
+      - 'livekit/**'
+      - 'deploy/**'
+      - '.github/workflows/react-doctor.yml'
+      - '.github/workflows/version-check.yml'
+      - '.claude/**'
+      - 'graphify-out/**'
+      - '.gitignore'
+      - 'LICENSE'
+  # Manual escape hatch: release on demand even for an ignored-path change.
   workflow_dispatch:
 
 permissions:
