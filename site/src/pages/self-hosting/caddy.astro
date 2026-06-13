@@ -40,7 +40,7 @@ import { GITHUB_REPO } from "@/lib/site";
           <li>Ubuntu host with Docker Engine + Compose plugin.</li>
           <li>Cloudflare DNS records set to your host public IP (DNS-only mode for ACME issuance).</li>
           <li>A routable public IPv4, <strong>not</strong> CGNAT. This track exposes the host directly, so CGNAT breaks everything, not just voice. Step 2 shows how to check.</li>
-          <li>Router/firewall forwards to the host's LAN IP: <code class="text-xs">80/tcp</code> + <code class="text-xs">443/tcp</code> (Caddy TLS/HTTP) and <code class="text-xs">44381/tcp+udp</code> + <code class="text-xs">44382/udp</code> (LiveKit media). All a manual router step.</li>
+          <li>Router/firewall forwards to the host's LAN IP: <code class="text-xs">80/tcp</code> + <code class="text-xs">443/tcp</code> (Caddy TLS/HTTP) and <code class="text-xs">44382/udp</code> + <code class="text-xs">44381/tcp</code> (LiveKit media). All a manual router step.</li>
         </ul>
       </article>
 
@@ -91,7 +91,7 @@ wget -O deploy/caddy/Caddyfile \\
         <p class="text-sm text-muted-foreground">Give the server a static DHCP reservation, then forward these on your router/firewall to its LAN IP:</p>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
           <li><code class="text-xs">80/tcp</code> and <code class="text-xs">443/tcp</code> → Caddy (HTTP + TLS for all web services)</li>
-          <li><code class="text-xs">44382/udp</code>, plus <code class="text-xs">44381/udp</code> and <code class="text-xs">44381/tcp</code> → LiveKit media</li>
+          <li><code class="text-xs">44382/udp</code> (primary media) and <code class="text-xs">44381/tcp</code> (fallback) → LiveKit media</li>
         </ul>
         <p class="text-xs text-muted-foreground">Port <code class="text-xs">44380</code> (LiveKit signalling) does <strong>not</strong> need forwarding — Caddy proxies it on 443 as <code class="text-xs">wss://lk.example.com</code>.</p>
       </article>

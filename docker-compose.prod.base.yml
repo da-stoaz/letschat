@@ -147,8 +147,10 @@ services:
     restart: on-failure
 
   # ── LiveKit ──────────────────────────────────────────────────────────────────
-  # Port 44380 is signaling (HTTP/WS). Media uses 44381 TCP/UDP and 44382 UDP.
-  # Router port forwarding is required for media traffic.
+  # Port 44380 is signaling (HTTP/WS). Media uses 44382/udp (primary, udp_port)
+  # and 44381/tcp (fallback, tcp_port) — see livekit/config.prod.yaml.
+  # Router port forwarding of the two media ports is required (signaling is
+  # fronted by the tunnel/Caddy, so it does not need forwarding).
   livekit:
     image: livekit/livekit-server:latest
     container_name: letschat-livekit
@@ -156,7 +158,6 @@ services:
     ports:
       - "44380:44380"
       - "44381:44381"
-      - "44381:44381/udp"
       - "44382:44382/udp"
     volumes:
       - ./livekit/config.prod.yaml:/etc/livekit.yaml:ro
