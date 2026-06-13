@@ -4,10 +4,10 @@ services:
   # chat subdomain through either tunnel or reverse proxy.
   spacetimedb:
     # Pinned (not :latest) so prod runs a known server version. Must stay on the
-    # same 2.2.x line as the `spacetimedb` crate the module is built against and
+    # same 2.4.x line as the `spacetimedb` crate the module is built against and
     # the `spacetimedb` npm SDK — a minor-version skew breaks module load and
     # the client connection. `:latest` is cached per-host and never auto-refreshes.
-    image: clockworklabs/spacetime:v2.2.1
+    image: clockworklabs/spacetime:v2.4.1
     command: start
     container_name: letschat-spacetimedb
     ports:
