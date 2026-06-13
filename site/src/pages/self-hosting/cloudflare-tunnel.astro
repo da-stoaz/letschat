@@ -126,7 +126,7 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml
 
       <article class="step-card rounded-xl p-6 space-y-3">
         <h2 class="text-xl font-medium">Step 6: Forward LiveKit Media Ports on Your Router</h2>
-        <p class="text-sm text-muted-foreground">The tunnel carries everything <em>except</em> voice/video media. That media is raw UDP/TCP and must reach your server directly, so you forward it on your router. <strong>This is the one step the tunnel cannot do for you</strong> — skip it and text chat works fine but voice channels connect with no audio.</p>
+        <p class="text-sm text-muted-foreground">The tunnel carries everything <span class="italic">except</span> voice/video media. That media is raw UDP/TCP and must reach your server directly, so you forward it on your router. <strong>This is the one step the tunnel cannot do for you</strong> — skip it and text chat works fine but voice channels connect with no audio.</p>
 
         <p class="text-sm text-muted-foreground"><strong>6a. First check you are not behind CGNAT.</strong> Carrier-grade NAT (common on some fibre/cable plans, and on mobile/Starlink) makes port forwarding impossible. Compare your true public IP to your router's WAN IP:</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -4 ifconfig.me        # your true public IP, as seen from the internet`}</code></pre>
@@ -135,7 +135,7 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml
         <p class="text-sm text-muted-foreground"><strong>6b. Find the server's LAN IP</strong> and give it a static DHCP reservation in your router so it never moves:</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`ip -4 -o addr show scope global | awk '{print $2, $4}'   # e.g. eth0 192.168.1.50/24`}</code></pre>
 
-        <p class="text-sm text-muted-foreground"><strong>6c. In your router's <em>Port Forwarding</em> section</strong>, forward all of these to that LAN IP:</p>
+        <p class="text-sm text-muted-foreground"><strong>6c. In your router's <span class="italic">Port Forwarding</span> section</strong>, forward all of these to that LAN IP:</p>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
           <li><code class="text-xs">44382/udp</code> → primary voice/video media (SRTP)</li>
           <li><code class="text-xs">44381/udp</code> <strong>and</strong> <code class="text-xs">44381/tcp</code> → fallback path for clients on UDP-hostile networks</li>
@@ -171,7 +171,7 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
           <li><strong>TURN on a cheap public-IP VPS</strong> — relays media through a box with a stable, routable IP. Solves CGNAT and a dynamic home IP at once. All call media flows through it, so size its bandwidth accordingly.</li>
           <li><strong>Cloudflare Realtime (TURN)</strong> — managed relay at Cloudflare's edge; also hides your origin IP. Billed per GB of media.</li>
         </ul>
-        <p class="text-xs text-muted-foreground">A dynamic public IP on its own (no CGNAT) does not need TURN: signalling rides the tunnel, and LiveKit re-detects the public IP for media on each restart. Only an IP change <em>during</em> a session needs a LiveKit restart to recover.</p>
+        <p class="text-xs text-muted-foreground">A dynamic public IP on its own (no CGNAT) does not need TURN: signalling rides the tunnel, and LiveKit re-detects the public IP for media on each restart. Only an IP change <span class="italic">during</span> a session needs a LiveKit restart to recover.</p>
       </article>
 
     </section>
