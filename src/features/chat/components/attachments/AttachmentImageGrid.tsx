@@ -32,39 +32,48 @@ export function AttachmentImageGrid({ items, onOpen, onRetry }: AttachmentImageG
       </div>
 
       <div className="grid grid-cols-2 gap-1.5">
-        {items.map((item, index) => (
-          <button
-            key={item.storageKey}
-            type="button"
-            className={tileClassName(items.length, index)}
-            onClick={() => onOpen(index)}
-          >
-            {item.url ? (
-              <img
-                src={item.url}
-                alt={item.fileName}
-                className="h-full w-full object-cover transition-transform duration-150 group-hover:scale-[1.015]"
-              />
-            ) : (
+        {items.map((item, index) => {
+          const className = tileClassName(items.length, index)
+
+          // Only a successfully-loaded image is openable, so only that case is a
+          // button. Loading/error tiles render as a plain <div> — which keeps the
+          // Retry <button> from being nested inside another button (the browser
+          // would otherwise auto-close the outer one and break clicks/focus/AT).
+          if (item.url) {
+            return (
+              <button
+                key={item.storageKey}
+                type="button"
+                className={className}
+                onClick={() => onOpen(index)}
+              >
+                <img
+                  src={item.url}
+                  alt={item.fileName}
+                  className="h-full w-full object-cover transition-transform duration-150 group-hover:scale-[1.015]"
+                />
+              </button>
+            )
+          }
+
+          return (
+            <div key={item.storageKey} className={className}>
               <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-3 text-center">
                 {item.loading ? <Loader2Icon className="size-4 animate-spin text-muted-foreground" /> : <ImageIcon className="size-4 text-muted-foreground" />}
                 <p className="line-clamp-2 text-xs text-muted-foreground">{item.loading ? 'Loading image…' : item.error ?? 'Image unavailable'}</p>
                 {item.error ? (
                   <button
                     type="button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onRetry(item.storageKey)
-                    }}
+                    onClick={() => onRetry(item.storageKey)}
                     className="rounded border border-border/70 px-2 py-0.5 text-[11px] text-foreground"
                   >
                     Retry
                   </button>
                 ) : null}
               </div>
-            )}
-          </button>
-        ))}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

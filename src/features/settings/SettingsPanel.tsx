@@ -14,7 +14,7 @@ import { useConnectionStore } from '../../stores/connectionStore'
 import { useSelfStore } from '../../stores/selfStore'
 import { useUiStore } from '../../stores/uiStore'
 import { useServerConfigStore } from '../../stores/serverConfigStore'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -317,6 +317,7 @@ export function SettingsPanel() {
                       ref={avatarInputRef}
                       type="file"
                       accept="image/*"
+                      aria-label="Upload profile picture"
                       className="hidden"
                       onChange={(event) => {
                         const file = event.target.files?.[0] ?? null

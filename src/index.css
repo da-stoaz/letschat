@@ -183,3 +183,18 @@
     background: var(--app-scrollbar-thumb-hover);
   }
 }
+
+/* Honor the OS "reduce motion" setting for everyone who asks for it (WCAG 2.3.3).
+   The app animates almost entirely via CSS — Tailwind transitions, `animate-spin`,
+   and tw-animate-css — so this global guard collapses non-essential motion to
+   near-instant instead of removing it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

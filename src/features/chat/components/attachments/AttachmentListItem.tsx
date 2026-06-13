@@ -56,9 +56,9 @@ export function AttachmentListItem({ attachment, resolution, onRetry, onOpenImag
               <img src={resolution.url ?? ''} alt={attachment.fileName} className="max-h-56 w-full object-contain" />
             </button>
           ) : kind === 'video' ? (
-            <video src={resolution.url ?? ''} controls className="max-h-56 w-full bg-black" />
+            <video src={resolution.url ?? ''} controls aria-label={attachment.fileName} className="max-h-56 w-full bg-black" />
           ) : (
-            <audio src={resolution.url ?? ''} controls className="w-full p-1.5" />
+            <audio src={resolution.url ?? ''} controls aria-label={attachment.fileName} className="w-full p-1.5" />
           )}
         </div>
       ) : null}
