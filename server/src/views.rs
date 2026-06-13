@@ -1,14 +1,15 @@
 use std::collections::HashSet;
+use std::ops::Bound;
 
-use spacetimedb::{Identity, ViewContext};
+use spacetimedb::{Identity, Timestamp, ViewContext};
 
 use crate::schema::{
     Ban, Block, Channel, DirectMessage, DmServerInvite, DmVoiceParticipant, Friend, FriendStatus,
     Invite, JoinRequest, Message, PresenceState, ReadState, Role, Server, ServerMember, TypingState,
-    User, VoiceParticipant, ban__view, block__view, channel__view, direct_message__view,
-    dm_server_invite__view, dm_voice_participant__view, friend__view, invite__view,
-    join_request__view, message__view, presence_state__view, read_state__view, server__view,
-    server_member__view, typing_state__view, user__view, voice_participant__view,
+    User, VoiceParticipant, archive_service__view, ban__view, block__view, channel__view,
+    direct_message__view, dm_server_invite__view, dm_voice_participant__view, friend__view,
+    invite__view, join_request__view, message__view, presence_state__view, read_state__view,
+    server__view, server_member__view, typing_state__view, user__view, voice_participant__view,
 };
 
 /// Server ids the caller is a member of. Shared by several scoped views below.
@@ -392,4 +393,145 @@ pub fn my_bans(ctx: &ViewContext) -> Vec<Ban> {
         rows.extend(ctx.db.ban().server_id().filter(*server_id));
     }
     rows
+}
+
+// ─── Archive replication views (storage-tiering, plan 2 phase 1) ───────────────
+//
+// Full-table views gated to the registered archive worker identity. Every
+// sensitive base table is private, and private tables are not emitted into the
+// generated client bindings at all — so the worker cannot subscribe to them
+// directly. These views give the worker (and ONLY the worker) a complete,
+// live-maintained copy of each durable table to mirror into PostgreSQL. For any
+// other caller they return an empty set, exactly like the `my_*` views do for
+// rows outside the caller's scope.
+//
+// Scope: durable domain data only. The ephemeral runtime tables — presence,
+// typing, and voice participants — are intentionally NOT archived: they are
+// reconstructed by clients on reconnect, carry no archival value, and (typing
+// especially) would generate pathological write churn into the cold store.
+
+/// Singleton-id used by [`crate::schema::ArchiveService`]. Mirrors the constant
+/// in `reducers/archive.rs` (kept local to avoid a cross-module pub constant).
+const ARCHIVE_SERVICE_ID: u8 = 1;
+
+/// True if the subscribing identity is the registered archive worker.
+fn is_archive_service(ctx: &ViewContext) -> bool {
+    ctx.db
+        .archive_service()
+        .id()
+        .find(ARCHIVE_SERVICE_ID)
+        .map(|row| row.service_identity == ctx.sender())
+        .unwrap_or(false)
+}
+
+/// An unbounded range over a btree-indexed column — i.e. "every row". View
+/// handles are read-only and deliberately do NOT implement `Table`, so `iter()`
+/// is unavailable; a full scan is expressed as an unbounded index range instead.
+/// Every row is present in every btree index, so this returns the whole table.
+fn all<T>() -> (Bound<T>, Bound<T>) {
+    (Bound::Unbounded, Bound::Unbounded)
+}
+
+#[spacetimedb::view(accessor = archive_users, public)]
+pub fn archive_users(ctx: &ViewContext) -> Vec<User> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.user().created_at().filter(all::<Timestamp>()).collect()
+}
+
+#[spacetimedb::view(accessor = archive_servers, public)]
+pub fn archive_servers(ctx: &ViewContext) -> Vec<Server> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.server().is_discoverable().filter(all::<bool>()).collect()
+}
+
+#[spacetimedb::view(accessor = archive_server_members, public)]
+pub fn archive_server_members(ctx: &ViewContext) -> Vec<ServerMember> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.server_member().server_id().filter(all::<u64>()).collect()
+}
+
+#[spacetimedb::view(accessor = archive_bans, public)]
+pub fn archive_bans(ctx: &ViewContext) -> Vec<Ban> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.ban().server_id().filter(all::<u64>()).collect()
+}
+
+#[spacetimedb::view(accessor = archive_join_requests, public)]
+pub fn archive_join_requests(ctx: &ViewContext) -> Vec<JoinRequest> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.join_request().server_id().filter(all::<u64>()).collect()
+}
+
+#[spacetimedb::view(accessor = archive_invites, public)]
+pub fn archive_invites(ctx: &ViewContext) -> Vec<Invite> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.invite().server_id().filter(all::<u64>()).collect()
+}
+
+#[spacetimedb::view(accessor = archive_dm_server_invites, public)]
+pub fn archive_dm_server_invites(ctx: &ViewContext) -> Vec<DmServerInvite> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.dm_server_invite().by_sender().filter(all::<Identity>()).collect()
+}
+
+#[spacetimedb::view(accessor = archive_channels, public)]
+pub fn archive_channels(ctx: &ViewContext) -> Vec<Channel> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.channel().server_id().filter(all::<u64>()).collect()
+}
+
+#[spacetimedb::view(accessor = archive_messages, public)]
+pub fn archive_messages(ctx: &ViewContext) -> Vec<Message> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.message().channel_id().filter(all::<u64>()).collect()
+}
+
+#[spacetimedb::view(accessor = archive_direct_messages, public)]
+pub fn archive_direct_messages(ctx: &ViewContext) -> Vec<DirectMessage> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.direct_message().sender_identity().filter(all::<Identity>()).collect()
+}
+
+#[spacetimedb::view(accessor = archive_friends, public)]
+pub fn archive_friends(ctx: &ViewContext) -> Vec<Friend> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.friend().user_a().filter(all::<Identity>()).collect()
+}
+
+#[spacetimedb::view(accessor = archive_blocks, public)]
+pub fn archive_blocks(ctx: &ViewContext) -> Vec<Block> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.block().blocker().filter(all::<Identity>()).collect()
+}
+
+#[spacetimedb::view(accessor = archive_read_states, public)]
+pub fn archive_read_states(ctx: &ViewContext) -> Vec<ReadState> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.read_state().updated_at().filter(all::<Timestamp>()).collect()
 }

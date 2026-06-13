@@ -1,3 +1,4 @@
+mod archive;
 mod channels;
 mod direct_messages;
 mod dm_voice;

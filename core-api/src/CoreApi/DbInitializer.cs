@@ -1,5 +1,6 @@
 using CoreApi.Configuration;
 using CoreApi.Data;
+using CoreApi.Data.Archive;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,6 +34,20 @@ public static class DbInitializer
         {
             await db.Database.EnsureCreatedAsync();
             logger.LogInformation("Non-relational schema created from model.");
+        }
+
+        // The cold-archive schema (storage-tiering, plan 2) lives in a separate
+        // database; MigrateAsync creates it if missing. core-api owns it so the
+        // archive-worker can connect to an already-migrated schema.
+        var archive = services.GetRequiredService<ArchiveDbContext>();
+        if (archive.Database.IsRelational())
+        {
+            await archive.Database.MigrateAsync();
+            logger.LogInformation("Archive database migrations applied.");
+        }
+        else
+        {
+            await archive.Database.EnsureCreatedAsync();
         }
 
         // Load (seeding on first run) the runtime-editable system configuration.

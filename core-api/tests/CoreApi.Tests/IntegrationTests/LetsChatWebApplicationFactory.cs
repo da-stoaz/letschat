@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using CoreApi.Configuration;
 using CoreApi.Data;
+using CoreApi.Data.Archive;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -92,6 +93,7 @@ public sealed class LetsChatWebApplicationFactory : WebApplicationFactory<Progra
             {
                 var type = services[i].ServiceType;
                 if (type == typeof(DbContextOptions<AppDbContext>)
+                    || type == typeof(DbContextOptions<ArchiveDbContext>)
                     || type == typeof(DbContextOptions)
                     || type.FullName?.StartsWith(
                         "Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration",
@@ -108,6 +110,15 @@ public sealed class LetsChatWebApplicationFactory : WebApplicationFactory<Progra
             services.AddDbContext<AppDbContext>(opts =>
             {
                 opts.UseInMemoryDatabase(_databaseName);
+                opts.UseInternalServiceProvider(internalSp);
+            });
+
+            // The archive context (storage-tiering) is Postgres in prod; swap it to
+            // InMemory too so tests don't need a second database. DbInitializer
+            // detects this via Database.IsRelational and skips MigrateAsync.
+            services.AddDbContext<ArchiveDbContext>(opts =>
+            {
+                opts.UseInMemoryDatabase($"{_databaseName}-archive");
                 opts.UseInternalServiceProvider(internalSp);
             });
         });

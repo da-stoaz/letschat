@@ -46,6 +46,25 @@ pub struct SystemSettings {
     pub space_create_policy: SpaceCreatePolicy,
 }
 
+/// Records the identity of the archive replication worker (storage-tiering,
+/// plan 2). Singleton, primary key fixed at 1; a row existing == a worker
+/// identity is registered. The `archive_*` views and (later) the eviction /
+/// restore reducers recognise this identity and serve it the full dataset that
+/// the scoped `my_*` views deliberately withhold.
+///
+/// Public so the gated views can read it to compare against `ctx.sender()`.
+/// The identity is not a secret (identities are public); only the worker's
+/// *token* grants the identity, and that lives outside the module. Set by an
+/// instance admin via `set_archive_service_identity` once the worker has
+/// connected and reported its identity — same bootstrap shape as the core-api
+/// service token.
+#[spacetimedb::table(accessor = archive_service, public)]
+pub struct ArchiveService {
+    #[primary_key]
+    pub id: u8,
+    pub service_identity: Identity,
+}
+
 // Private: clients read the directory of people they can actually see (members
 // of shared spaces, friends, join-requesters they moderate, DM-invite
 // counterparties) through the `my_visible_users` view, instead of enumerating

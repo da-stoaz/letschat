@@ -8,6 +8,17 @@ namespace CoreApi.Configuration;
 public sealed class ServiceOptions
 {
     public required string ConnectionString { get; init; }
+
+    /// <summary>
+    /// Npgsql connection string for the <c>archive</c> database (storage-tiering,
+    /// plan 2). core-api owns this schema via <c>ArchiveDbContext</c> + EF
+    /// migrations — applied on startup, exactly like the <c>auth</c> context — and
+    /// the archive-worker connects to the already-migrated schema. Defaults to a
+    /// sibling <c>archive</c> database on the same dev Postgres server as
+    /// <see cref="ConnectionString"/>.
+    /// </summary>
+    public required string ArchiveConnectionString { get; init; }
+
     public required string Bind { get; init; }
 
     /// <summary>
@@ -120,6 +131,9 @@ public sealed class ServiceOptions
             ConnectionString = Get(
                 "AUTH_DATABASE_URL",
                 "Host=localhost;Port=5432;Database=auth;Username=letschat;Password=letschat"),
+            ArchiveConnectionString = Get(
+                "ARCHIVE_DATABASE_URL",
+                "Host=localhost;Port=5432;Database=archive;Username=letschat;Password=letschat"),
             Bind = Get("AUTH_BIND", "127.0.0.1:8787"),
             AdminBind = Get("ADMIN_BIND", "127.0.0.1:8788"),
             JwtSecret = Get(
