@@ -5,7 +5,13 @@ services:
   #   chat.<domain>    -> http://spacetimedb:3000  (WebSocket enabled)
   #   files.<domain>   -> http://minio:44390
   #   connect.<domain> -> http://core-api:8787
-  # livekit.<domain> is NOT tunnelled for media; keep 44381/44382 forwarded.
+  #   lk.<domain>      -> http://livekit:44380     (WebSocket enabled)
+  # LiveKit's *signalling* (WebSocket, 44380) IS tunnelled via the lk.<domain>
+  # ingress above, so it inherits Cloudflare TLS — set DISCOVERY_LIVEKIT_URL to
+  # wss://lk.<domain>. LiveKit *media* (SRTP) cannot ride the tunnel: keep
+  # 44381/tcp+udp and 44382/udp forwarded straight to the host. Media stays
+  # DTLS-SRTP encrypted regardless; tunnelling signalling closes the plaintext
+  # SDP/ICE/token channel an active MITM would otherwise use.
   # The core-api admin panel on port 8788 must NOT be added to the tunnel —
   # reach it via SSH port-forward from an operator workstation.
   cloudflared:

@@ -188,12 +188,25 @@ gating).
 
 LiveKit scheme by track:
 
-- Tunnel track: usually `ws://lk.<domain>:44380`
-- Caddy track: usually `wss://lk.<domain>`
+- Tunnel track: `wss://lk.<domain>` — LiveKit's WebSocket **signalling** is
+  tunnelled through Cloudflare (TLS terminated at the edge). The SRTP **media**
+  ports (44381/44382) are not tunnelled and stay force-forwarded to the host;
+  clients reach them directly via the host's public IP in the ICE candidates,
+  so media does not depend on the `lk.<domain>` DNS record.
+- Caddy track: `wss://lk.<domain>` — Caddy terminates TLS and proxies signalling
+  to `livekit:44380`; media ports forwarded the same way.
+
+> **Why both tracks are `wss://`.** WebRTC media is always DTLS-SRTP encrypted,
+> so a passive sniffer can't reconstruct a call. But the signalling channel
+> carries the SDP, ICE candidates, DTLS fingerprints, and the LiveKit join
+> token in cleartext over plain `ws://` — enough for an active MITM to swap
+> fingerprints and relay the media, or to replay the token. Putting signalling
+> behind TLS (`wss://`) on both tracks closes that gap.
 
 Public routing:
 
-- Tunnel track: add `connect.<domain> -> http://core-api:8787` ingress in
+- Tunnel track: add `connect.<domain> -> http://core-api:8787` and
+  `lk.<domain> -> http://livekit:44380` (WebSocket enabled) ingress rules in
   Cloudflare Tunnel.
 - Caddy track: set `CONNECT_DOMAIN` and ensure DNS points to host IP.
 
