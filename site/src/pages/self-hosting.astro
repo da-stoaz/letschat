@@ -87,7 +87,7 @@ import SiteFooter from "@/components/SiteFooter.astro";
       <div class="grid md:grid-cols-2 gap-4">
         <a href="/self-hosting/cloudflare-tunnel" class="track-card tunnel rounded-xl p-5 space-y-2">
           <p class="text-lg font-medium">Path A: Cloudflare Tunnel</p>
-          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Routes <code class="text-xs">auth/chat/files/connect</code> over Cloudflare Tunnel; LiveKit media remains direct via forwarded ports.</p>
+          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Routes <code class="text-xs">auth/chat/files/connect</code> and LiveKit signalling over Cloudflare Tunnel; only LiveKit media stays direct via forwarded ports.</p>
           <p class="text-sm text-muted-foreground"><strong class="text-foreground">Why:</strong> Keeps web services off direct public IP while still supporting voice traffic.</p>
           <p class="text-sm text-muted-foreground"><strong class="text-foreground">Best for:</strong> Home servers where you want Cloudflare ingress control without exposing 80/443 directly.</p>
           <div class="flex flex-wrap gap-2 pt-1">
@@ -130,7 +130,7 @@ import SiteFooter from "@/components/SiteFooter.astro";
             <tr>
               <td class="p-3">Setup discovery fails</td>
               <td class="p-3"><code class="text-xs">connect.&lt;domain&gt;</code> not routed to discovery container</td>
-              <td class="p-3">Tunnel: <code class="text-xs">connect → discovery:80</code>; Caddy: set <code class="text-xs">CONNECT_DOMAIN</code> correctly</td>
+              <td class="p-3">Tunnel: <code class="text-xs">connect → core-api:8787</code>; Caddy: set <code class="text-xs">CONNECT_DOMAIN</code> correctly</td>
             </tr>
             <tr>
               <td class="p-3">Upload/download errors</td>
@@ -144,8 +144,8 @@ import SiteFooter from "@/components/SiteFooter.astro";
             </tr>
             <tr>
               <td class="p-3">LiveKit setup fails immediately</td>
-              <td class="p-3">Wrong signaling scheme (<code class="text-xs">ws://</code> vs <code class="text-xs">wss://</code>)</td>
-              <td class="p-3">Tunnel often uses <code class="text-xs">ws://lk...:44380</code>; Caddy usually uses <code class="text-xs">wss://lk...</code></td>
+              <td class="p-3">Wrong signalling scheme (<code class="text-xs">ws://</code> vs <code class="text-xs">wss://</code>)</td>
+              <td class="p-3">Both tracks use <code class="text-xs">wss://lk...</code> — signalling is TLS-terminated (Cloudflare tunnel ingress or Caddy). Plain <code class="text-xs">ws://</code> is dev-only</td>
             </tr>
             <tr>
               <td class="p-3">Spacetime connect timeout</td>

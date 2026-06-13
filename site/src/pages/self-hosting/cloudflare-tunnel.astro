@@ -22,8 +22,8 @@ import { GITHUB_REPO } from "@/lib/site";
       </nav>
       <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Path A: Cloudflare Tunnel</h1>
       <p class="text-muted-foreground max-w-2xl leading-relaxed pt-1">
-        Routes <code class="text-xs">auth/chat/files/connect</code> services over Cloudflare Tunnel so your host is never directly exposed on ports 80/443.
-        LiveKit media still requires direct port forwarding for UDP voice traffic.
+        Routes <code class="text-xs">auth/chat/files/connect</code> plus LiveKit <strong>signalling</strong> over Cloudflare Tunnel so your host is never directly exposed on ports 80/443, and signalling inherits Cloudflare TLS.
+        LiveKit <strong>media</strong> (UDP/TCP SRTP) still requires direct port forwarding — it cannot ride the tunnel.
       </p>
       <div class="flex flex-wrap gap-2 text-xs pt-2">
         <span class="mini-pill">Zero Trust Ingress</span>
@@ -50,7 +50,8 @@ curl -4 ifconfig.me`}</code></pre>
       <article class="step-card rounded-xl p-6 space-y-3">
         <h2 class="text-xl font-medium">How This Path Works</h2>
         <p class="text-sm text-muted-foreground">Cloudflare Tunnel proxies HTTP/WebSocket services (<code class="text-xs">auth/chat/files/connect</code>) from Cloudflare to your Docker network.</p>
-        <p class="text-sm text-muted-foreground">LiveKit media is different: raw UDP/TCP media must still be reachable directly on your host via router forwarding.</p>
+        <p class="text-sm text-muted-foreground">LiveKit signalling (the WebSocket on port 44380) is also proxied — add an <code class="text-xs">lk.example.com</code> ingress rule so it gets <code class="text-xs">wss://</code> with Cloudflare TLS.</p>
+        <p class="text-sm text-muted-foreground">LiveKit media is different: raw UDP/TCP SRTP must still be reachable directly on your host via router forwarding. Clients learn the host's public IP from the ICE candidates, so media does not depend on the <code class="text-xs">lk.example.com</code> DNS record.</p>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
@@ -79,11 +80,11 @@ wget -O .env \\
         <h2 class="text-xl font-medium">Step 2: DNS + Tunnel Ingress</h2>
         <p class="text-sm text-muted-foreground">Create these hostnames in Cloudflare Zero Trust and configure tunnel ingress rules:</p>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li><code class="text-xs">auth.example.com</code> → <code class="text-xs">http://auth-service:44301</code></li>
+          <li><code class="text-xs">auth.example.com</code> → <code class="text-xs">http://core-api:8787</code></li>
           <li><code class="text-xs">chat.example.com</code> → <code class="text-xs">http://spacetimedb:3000</code> (enable WebSocket support)</li>
           <li><code class="text-xs">files.example.com</code> → <code class="text-xs">http://minio:44390</code></li>
-          <li><code class="text-xs">connect.example.com</code> → <code class="text-xs">http://discovery:80</code></li>
-          <li><code class="text-xs">lk.example.com</code> → A record pointing to your host public IP (media is not tunnelled)</li>
+          <li><code class="text-xs">connect.example.com</code> → <code class="text-xs">http://core-api:8787</code></li>
+          <li><code class="text-xs">lk.example.com</code> → <code class="text-xs">http://livekit:44380</code> (enable WebSocket support — this is LiveKit signalling only; media reaches the host directly via the forwarded ports)</li>
         </ul>
         <p class="text-sm text-muted-foreground">Copy the tunnel token from the Zero Trust dashboard — you will need it in the next step.</p>
       </article>
@@ -102,7 +103,7 @@ MINIO_SECRET_KEY=         # generate with openssl
 MINIO_PUBLIC_ENDPOINT=https://files.example.com
 DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
 DISCOVERY_AUTH_URL=https://auth.example.com
-DISCOVERY_LIVEKIT_URL=ws://lk.example.com:44380
+DISCOVERY_LIVEKIT_URL=wss://lk.example.com
 CLOUDFLARE_TUNNEL_TOKEN=  # from Zero Trust dashboard`}</code></pre>
       </article>
 
@@ -138,10 +139,10 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
   "spacetimedb": "wss://chat.example.com",
   "auth": "https://auth.example.com",
-  "livekit": "ws://lk.example.com:44380",
+  "livekit": "wss://lk.example.com",
   "database": "letschat"
 }`}</code></pre>
-        <p class="text-sm text-muted-foreground">Use <code class="text-xs">wss://lk...</code> only if you add TLS in front of LiveKit signaling.</p>
+        <p class="text-sm text-muted-foreground">Signalling uses <code class="text-xs">wss://</code> because the <code class="text-xs">lk.example.com</code> tunnel ingress terminates TLS at Cloudflare. Media stays direct on the forwarded ports and is DTLS-SRTP encrypted independently.</p>
       </article>
 
     </section>
