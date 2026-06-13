@@ -179,6 +179,9 @@ All gated **only** to the worker's service identity (stored module-side at provi
 ### Phase 2 — Eviction (days 11–15)
 - Hotness rule (last N per conversation); `archive_evict*` reducers; worker eviction loop with copy-confirmed-before-delete ordering.
 - Verify: SpacetimeDB RAM stays flat as message volume grows; the hot set is exactly last N per conversation.
+- **Phase 1 carry-over (must address here):**
+  - `Replication.ReconcileAll` currently does a *full* diff for Message/DirectMessage — correct only while nothing is evicted. Once eviction lands it **must** be scoped to the hot window, or reconcile will delete evicted rows from the archive. Flagged in `archive-worker/Replication.cs` (`ReconcileAll` doc comment).
+  - The `OnDelete` handler scans `handle.Iter()` per delete (O(n)) to distinguish an in-place update's stale half from a real delete — fine for rare deletes, but O(n²) under bulk eviction. Rework the eviction-delete path to bypass this scan (eviction already knows the row is gone). See `archive-worker/Replication.cs` (`Wire` `OnDelete`).
 
 ### Phase 3 — Archive read API + client (days 16–20)
 - core-api `/archive/*` endpoints with membership authorization; PostgreSQL access layer.
@@ -193,6 +196,12 @@ All gated **only** to the worker's service identity (stored module-side at provi
 ### Phase 5 — Edge cases & hardening (days 26–30)
 - Edit/delete-through path for evicted messages; worker offline/reconnect/reconcile hardening; replication-lag monitoring.
 - Verify: editing/deleting an evicted message reflects in PostgreSQL and to clients; worker reconciles correctly after extended downtime.
+- **Phase 1 carry-over (address with monitoring/hardening):**
+  - `replication_state.row_count` / watermarks update only on (re)subscribe-time reconcile, not on steady-state writes — so the table lags between resubscribes. Fold real lag metrics in here (it's observability, not a cursor).
+  - Worker has no healthcheck and (in dev) auto-issues + persists its own token; for prod prefer an explicit `ARCHIVE_WORKER_TOKEN` so the service identity is reproducible, and add a container healthcheck.
+- **Not yet wired (Phase 1 completeness, do when deploying the tier):** the `archive-worker` exists only in `docker-compose.dev.yml`; add it (+ `ARCHIVE_DATABASE_URL`) to the prod compose files and `.env.production.*.example`, give it a CI image build (`release.yml` / GHCR), and put it in a .NET solution so it isn't an orphan project.
+
+> **Note:** the Phase 1 core-api crash-loop (unguarded archive migration) is **already fixed** — the archive is now strictly opt-in via `ARCHIVE_DATABASE_URL` and a failed/absent archive never takes down auth. See `DbInitializer.cs` / `Program.cs` / `ServiceOptions.cs`.
 
 ---
 

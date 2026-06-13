@@ -39,11 +39,34 @@ public static class DbInitializer
         // The cold-archive schema (storage-tiering, plan 2) lives in a separate
         // database; MigrateAsync creates it if missing. core-api owns it so the
         // archive-worker can connect to an already-migrated schema.
-        var archive = services.GetRequiredService<ArchiveDbContext>();
-        if (archive.Database.IsRelational())
+        //
+        // The archive is an OPTIONAL background replica and must never take down
+        // the essential auth service. Two guards encode that priority:
+        //   1. Not configured (ARCHIVE_DATABASE_URL unset → context not
+        //      registered): GetService returns null and we skip it entirely.
+        //   2. Configured but unreachable (Postgres still starting, archive DB
+        //      not yet created, transient network fault): log loudly and carry
+        //      on, rather than letting the throw crash-loop the whole service.
+        // The auth MigrateAsync above is deliberately NOT wrapped this way — if
+        // auth's DB is down, core-api genuinely can't function and should fail.
+        var archive = services.GetService<ArchiveDbContext>();
+        if (archive is null)
         {
-            await archive.Database.MigrateAsync();
-            logger.LogInformation("Archive database migrations applied.");
+            logger.LogInformation(
+                "Archive database not configured (ARCHIVE_DATABASE_URL unset); archive features disabled.");
+        }
+        else if (archive.Database.IsRelational())
+        {
+            try
+            {
+                await archive.Database.MigrateAsync();
+                logger.LogInformation("Archive database migrations applied.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "Archive database migration failed; archive features disabled, auth continues.");
+            }
         }
         else
         {
