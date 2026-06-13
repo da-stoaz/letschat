@@ -203,6 +203,15 @@ LiveKit scheme by track:
 > fingerprints and relay the media, or to replay the token. Putting signalling
 > behind TLS (`wss://`) on both tracks closes that gap.
 
+> **Media reachability (both tracks).** The SRTP ports (`44382/udp`, plus
+> `44381/udp`+`44381/tcp` fallback) must be **port-forwarded on the router to
+> the host's LAN IP** — this is a manual step the tunnel does not perform.
+> `use_external_ip: true` STUN-detects the public IP at container start, so a
+> dynamic public IP only needs a LiveKit restart to pick up a change; signalling
+> is unaffected (Caddy/tunnel-fronted). **CGNAT** (where `curl -4 ifconfig.me`
+> ≠ the router's WAN IP) makes direct media impossible — those deployments need
+> a TURN relay on a public-IP VPS (or Cloudflare Realtime).
+
 Public routing:
 
 - Tunnel track: add `connect.<domain> -> http://core-api:8787` and
