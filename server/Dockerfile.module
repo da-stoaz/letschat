@@ -1,2 +1,6 @@
-FROM clockworklabs/spacetime:latest
+# Pin to the same line as the SpacetimeDB server image (docker-compose.prod.base.yml).
+# An unpinned `:latest` lets the bundled `spacetime` CLI drift ahead of the server,
+# which both breaks the publish wire-protocol and silently changes `spacetime publish`
+# argument grammar (the wasm is now passed via --bin-path, not as a positional).
+FROM clockworklabs/spacetime:v2.2.1
 COPY target/wasm32-unknown-unknown/release/letschat_server.wasm /module/letschat_server.wasm
