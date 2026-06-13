@@ -26,6 +26,16 @@ Topology overlays:
 - Cloudflare Tunnel: `docker-compose.prod.tunnel.yml`
 - Caddy reverse proxy: `docker-compose.prod.caddy.yml`
 
+> **Already run a reverse proxy / `cloudflared` natively on the host?** Use
+> **neither overlay** — run the base stack alone (`docker compose -f
+> docker-compose.prod.base.yml up -d`) and point your existing proxy/connector
+> at the host loopback ports it publishes: core-api `127.0.0.1:8787`,
+> SpacetimeDB `127.0.0.1:44300`, MinIO `127.0.0.1:44390`, LiveKit signalling
+> `127.0.0.1:44380` (keep `chat`/`lk` as WebSocket upgrades). The bundled
+> `cloudflared` resolves Docker service names and can't share a connector with
+> a host-level one, which is why a host-managed proxy skips the overlay. In
+> that setup `CLOUDFLARE_TUNNEL_TOKEN` is unused.
+
 ### Tunnel track
 
 ```bash

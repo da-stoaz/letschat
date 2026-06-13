@@ -1,7 +1,8 @@
 services:
   # ── SpacetimeDB ─────────────────────────────────────────────────────────────
-  # Host port 44300 is optional admin access. Public clients should use the
-  # chat subdomain through either tunnel or reverse proxy.
+  # Host port is LOOPBACK-only (127.0.0.1:44300) — for `spacetime publish` and
+  # a host-level reverse proxy. Public clients reach the chat subdomain through
+  # the tunnel/Caddy (which use the Docker service name, not this host port).
   spacetimedb:
     # Pinned (not :latest) so prod runs a known server version. Must stay on the
     # same 2.2.x line as the `spacetimedb` crate the module is built against and
@@ -11,7 +12,7 @@ services:
     command: start
     container_name: letschat-spacetimedb
     ports:
-      - "44300:3000"
+      - "127.0.0.1:44300:3000"
     volumes:
       - spacetimedb_home:/home/spacetime
     healthcheck:
@@ -43,8 +44,12 @@ services:
     restart: unless-stopped
 
   # ── core-api (.NET / ASP.NET Core Identity) ─────────────────────────────────
-  # Public HTTP listener (AUTH_BIND) is reached via the reverse proxy on the
-  # auth.<domain> and connect.<domain> hostnames — not via a host port.
+  # Public HTTP listener (AUTH_BIND) is published on a host LOOPBACK port
+  # (127.0.0.1:8787). The bundled cloudflared/Caddy reach it over the Docker
+  # network by service name and don't need this; it exists so a reverse proxy
+  # or tunnel running NATIVELY ON THE HOST (e.g. an existing cloudflared serving
+  # other apps) can point its ingress at http://localhost:8787. Loopback-only,
+  # so it is never directly exposed to the internet.
   #
   # Admin Razor pages (ADMIN_BIND) are bound to a SEPARATE container port and
   # the host mapping is loopback-only (127.0.0.1:48788). Reach the panel from
@@ -55,6 +60,7 @@ services:
     image: ghcr.io/da-stoaz/letschat-core-api:latest
     container_name: letschat-core-api
     ports:
+      - "127.0.0.1:8787:8787"
       - "127.0.0.1:48788:8788"
     environment:
       AUTH_BIND: "0.0.0.0:8787"
@@ -147,16 +153,16 @@ services:
     restart: on-failure
 
   # ── LiveKit ──────────────────────────────────────────────────────────────────
-  # Port 44380 is signaling (HTTP/WS). Media uses 44382/udp (primary, udp_port)
-  # and 44381/tcp (fallback, tcp_port) — see livekit/config.prod.yaml.
-  # Router port forwarding of the two media ports is required (signaling is
-  # fronted by the tunnel/Caddy, so it does not need forwarding).
+  # Signalling (44380, HTTP/WS) is LOOPBACK-only — fronted by the tunnel/Caddy
+  # (Docker service name) or a host proxy (127.0.0.1:44380), never public.
+  # Media MUST stay publicly reachable and router-forwarded: 44382/udp (primary,
+  # udp_port) and 44381/tcp (fallback, tcp_port) — see livekit/config.prod.yaml.
   livekit:
     image: livekit/livekit-server:latest
     container_name: letschat-livekit
     command: --config /etc/livekit.yaml
     ports:
-      - "44380:44380"
+      - "127.0.0.1:44380:44380"
       - "44381:44381"
       - "44382:44382/udp"
     volumes:
@@ -164,15 +170,16 @@ services:
     restart: unless-stopped
 
   # ── MinIO (file storage) ─────────────────────────────────────────────────────
-  # 44390 is S3 API for presigned file upload/download URLs.
-  # 44391 is MinIO console (admin) and should be access-restricted.
+  # Both host ports are LOOPBACK-only. 44390 (S3 API) is reached by clients via
+  # presigned URLs on the files.<domain> proxy route, not this host port; a host
+  # proxy uses 127.0.0.1:44390. 44391 (admin console) must never be public.
   minio:
     image: minio/minio:latest
     container_name: letschat-minio
     command: server /data --address ":44390" --console-address ":44391"
     ports:
-      - "44390:44390"
-      - "44391:44391"
+      - "127.0.0.1:44390:44390"
+      - "127.0.0.1:44391:44391"
     environment:
       MINIO_ROOT_USER: "${MINIO_ACCESS_KEY}"
       MINIO_ROOT_PASSWORD: "${MINIO_SECRET_KEY}"

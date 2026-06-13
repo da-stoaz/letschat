@@ -55,6 +55,31 @@ curl -4 ifconfig.me`}</code></pre>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
+        <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--accent-blue)">Already run cloudflared (or another reverse proxy) on this host?</p>
+        <h2 class="text-xl font-medium">Use your existing connector — don't run the bundled one</h2>
+        <p class="text-sm text-muted-foreground">The bundled <code class="text-xs">cloudflared</code> in <code class="text-xs">docker-compose.prod.tunnel.yml</code> only works because it sits <span class="italic">on the Docker network</span> and can resolve service names like <code class="text-xs">core-api:8787</code>. A <strong>native</strong> cloudflared running on the host (serving your other apps) cannot resolve those names — and you should never run two connectors for one tunnel. So in this topology:</p>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li><strong>Don't use <code class="text-xs">docker-compose.prod.tunnel.yml</code> at all.</strong> Run the base stack only: <code class="text-xs">docker compose -f docker-compose.prod.base.yml up -d</code>. There's no bundled cloudflared, so <code class="text-xs">CLOUDFLARE_TUNNEL_TOKEN</code> is irrelevant — leave it blank. Your host cloudflared already holds its own credentials.</li>
+          <li><strong>Reuse the tunnel you already have.</strong> No new tunnel, no DNS re-creation — just add the LetsChat public hostnames to it, each pointing at a <code class="text-xs">localhost</code> port the base stack publishes:</li>
+        </ul>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`auth.example.com     ->  http://localhost:8787    # core-api
+connect.example.com  ->  http://localhost:8787    # core-api (discovery)
+chat.example.com     ->  http://localhost:44300   # SpacetimeDB  (enable WebSocket)
+files.example.com    ->  http://localhost:44390   # MinIO
+lk.example.com       ->  http://localhost:44380   # LiveKit signalling (enable WebSocket)`}</code></pre>
+        <p class="text-sm text-muted-foreground">Your exact sequence through the steps below (the rest assume the bundled connector):</p>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li><strong>Step 0</strong> — get the base compose + LiveKit config (you still need these).</li>
+          <li><strong>Step 1</strong> — download <span class="italic">only</span> the env file; you do <strong>not</strong> need the tunnel overlay:<pre class="rounded-lg border border-border bg-background p-3 mt-1 overflow-x-auto text-xs"><code>{`wget -O .env https://raw.githubusercontent.com/da-stoaz/letschat/main/.env.production.tunnel.example`}</code></pre></li>
+          <li><strong>Step 2</strong> — skip the tunnel-ingress instructions; add the five hostnames above to your existing tunnel instead.</li>
+          <li><strong>Step 3</strong> — fill <code class="text-xs">.env</code> normally (leave <code class="text-xs">CLOUDFLARE_TUNNEL_TOKEN</code> blank; <code class="text-xs">DISCOVERY_*</code> are still your public <code class="text-xs">https://</code>/<code class="text-xs">wss://</code> URLs). <strong>Step 4</strong> — configure LiveKit.</li>
+          <li><strong>Step 5</strong> — start with the base file only: <code class="text-xs">docker compose -f docker-compose.prod.base.yml up -d</code>. The <code class="text-xs">module-init</code> container (part of base) still auto-publishes the SpacetimeDB module — no manual <code class="text-xs">spacetime publish</code> needed.</li>
+          <li><strong>Step 6</strong> — forward the media ports on your router (still required). <strong>Step 7</strong> — validate.</li>
+        </ul>
+        <p class="text-xs text-muted-foreground">Same recipe for nginx / Caddy / Traefik on the host: terminate TLS there and proxy to the <code class="text-xs">localhost</code> ports above, keeping <code class="text-xs">chat</code> and <code class="text-xs">lk</code> as WebSocket upgrades.</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
         <h2 class="text-xl font-medium">Step 0: Get Shared Files</h2>
         <p class="text-sm text-muted-foreground">Download the shared base compose file and LiveKit config:</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`mkdir letschat && cd letschat
@@ -94,17 +119,35 @@ wget -O .env \\
         <p class="text-sm text-muted-foreground">Open <code class="text-xs">.env</code> and replace every placeholder. Generate secrets with:</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
 openssl rand -base64 32   # for LIVEKIT_API_SECRET`}</code></pre>
-        <p class="text-sm text-muted-foreground">Key fields to fill in:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`AUTH_JWT_SECRET=          # generate with openssl
-LIVEKIT_API_KEY=letschat-prod
-LIVEKIT_API_SECRET=       # generate with openssl
-MINIO_ACCESS_KEY=         # any username you choose
-MINIO_SECRET_KEY=         # generate with openssl
+        <p class="text-sm text-muted-foreground"><strong>Every field below must be set</strong> — the stack will not start without <code class="text-xs">POSTGRES_PASSWORD</code>, and you cannot sign in without the bootstrap admin. Grouped by purpose:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`# Secrets — generate each one
+AUTH_JWT_SECRET=            # openssl rand -hex 32
+POSTGRES_PASSWORD=         # openssl rand -hex 32
+LIVEKIT_API_SECRET=        # openssl rand -base64 32
+MINIO_ACCESS_KEY=          # any username you choose
+MINIO_SECRET_KEY=          # openssl rand -hex 32
+CLOUDFLARE_TUNNEL_TOKEN=   # from the Zero Trust dashboard
+
+# First admin account — created on first start, change the password after
+ADMIN_BOOTSTRAP_USERNAME=admin
+ADMIN_BOOTSTRAP_PASSWORD=  # a strong password
+ADMIN_BOOTSTRAP_EMAIL=you@example.com
+
+# Public endpoints — your domains
 MINIO_PUBLIC_ENDPOINT=https://files.example.com
 DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
 DISCOVERY_AUTH_URL=https://auth.example.com
 DISCOVERY_LIVEKIT_URL=wss://lk.example.com
-CLOUDFLARE_TUNNEL_TOKEN=  # from Zero Trust dashboard`}</code></pre>
+
+# Outbound email — required because EMAIL_SENDER defaults to smtp and
+# email confirmation is on by default
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+EMAIL_FROM_ADDRESS=no-reply@example.com`}</code></pre>
+        <p class="text-sm text-muted-foreground"><strong>Don't want to set up SMTP yet?</strong> Set <code class="text-xs">REQUIRE_EMAIL_CONFIRMATION=false</code> and <code class="text-xs">EMAIL_SENDER=log</code> — accounts then work without email (links are written to the container log instead).</p>
+        <p class="text-sm text-muted-foreground">Everything else in <code class="text-xs">.env</code> already has a working default and is documented inline — <code class="text-xs">LIVEKIT_API_KEY</code> (must match <code class="text-xs">livekit/config.prod.yaml</code>), <code class="text-xs">POSTGRES_USER</code>/<code class="text-xs">POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them.</p>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
