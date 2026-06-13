@@ -1,7 +1,7 @@
 {
   "name": "letschat",
   "private": true,
-  "version": "0.5.7",
+  "version": "0.5.8",
   "type": "module",
   "scripts": {
     "version:bump": "bun scripts/bump-version.ts",

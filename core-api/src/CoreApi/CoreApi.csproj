@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- Kept in lock-step with package.json by scripts/bump-version.ts.
          CI can still override at build time via -p:Version=x.y.z. -->
-    <Version>0.5.7</Version>
+    <Version>0.5.8</Version>
     <!-- Dev-only secrets (e.g. SPACETIMEDB_SERVICE_TOKEN) live in user-secrets,
          not in committed appsettings. Loaded automatically in Development. -->
     <UserSecretsId>letschat-core-api</UserSecretsId>
