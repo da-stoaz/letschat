@@ -27,6 +27,10 @@ dist-ssr
 auth-service/target
 auth-service/*.db
 
+# .NET build output (core-api, archive-worker, tools, …)
+**/bin/
+**/obj/
+
 # Environment files — gitignore everything with real secrets.
 # Only the *.example templates are committed:
 #   .env.example, .env.development.example,
