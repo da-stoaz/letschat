@@ -1,5 +1,6 @@
 ---
 import { GITHUB_BASE, GITHUB_OWNER, GITHUB_REPO_NAME } from "@/lib/site";
+import { githubHeaders } from "@/lib/github";
 
 interface Props {
   active?: "home" | "roadmap" | "changes" | "architecture" | "self-hosting" | "download";
@@ -17,7 +18,7 @@ const formatStars = (value: number): string => {
 let githubStars = "--";
 try {
   const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO_NAME}`, {
-    headers: { Accept: "application/vnd.github+json" },
+    headers: githubHeaders(),
   });
   if (response.ok) {
     const repo = (await response.json()) as { stargazers_count?: number };
