@@ -39,8 +39,8 @@ import { GITHUB_REPO } from "@/lib/site";
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
           <li>Ubuntu host with Docker Engine + Compose plugin.</li>
           <li>Cloudflare-managed domain plus Zero Trust access (to create a tunnel token).</li>
-          <li>Router access for LiveKit media port forwarding (<code class="text-xs">44381/tcp+udp</code>, <code class="text-xs">44382/udp</code>).</li>
-          <li>Public IPv4 (or ISP config) for reliable media. CGNAT can break voice.</li>
+          <li>Admin access to your router to port-forward LiveKit media (<code class="text-xs">44382/udp</code> and <code class="text-xs">44381/tcp</code>) — this is a manual step, covered in Step 6.</li>
+          <li>A routable public IPv4, <strong>not</strong> CGNAT. Step 6a shows how to check; CGNAT users need a TURN relay (note after Step 8).</li>
         </ul>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker --version
 docker compose version
@@ -125,15 +125,34 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 6: Validate Public Endpoints</h2>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
-curl -i https://files.example.com/minio/health/live
-curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
-        <p class="text-sm text-muted-foreground">Confirm router forwarding to host: <code class="text-xs">44381/tcp</code>, <code class="text-xs">44381/udp</code>, <code class="text-xs">44382/udp</code>.</p>
+        <h2 class="text-xl font-medium">Step 6: Forward LiveKit Media Ports on Your Router</h2>
+        <p class="text-sm text-muted-foreground">The tunnel carries everything <span class="italic">except</span> voice/video media. That media is raw UDP/TCP and must reach your server directly, so you forward it on your router. <strong>This is the one step the tunnel cannot do for you</strong> — skip it and text chat works fine but voice channels connect with no audio.</p>
+
+        <p class="text-sm text-muted-foreground"><strong>6a. First check you are not behind CGNAT.</strong> Carrier-grade NAT (common on some fibre/cable plans, and on mobile/Starlink) makes port forwarding impossible. Compare your true public IP to your router's WAN IP:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -4 ifconfig.me        # your true public IP, as seen from the internet`}</code></pre>
+        <p class="text-sm text-muted-foreground">Open your router's status page and find its WAN / Internet IP. <strong>If they match</strong>, forwarding will work — continue. <strong>If they differ</strong>, your ISP has you behind CGNAT and no router setting will fix it; you need a TURN relay (see the note after Step 8).</p>
+
+        <p class="text-sm text-muted-foreground"><strong>6b. Find the server's LAN IP</strong> and give it a static DHCP reservation in your router so it never moves:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`ip -4 -o addr show scope global | awk '{print $2, $4}'   # e.g. eth0 192.168.1.50/24`}</code></pre>
+
+        <p class="text-sm text-muted-foreground"><strong>6c. In your router's <span class="italic">Port Forwarding</span> section</strong>, forward all of these to that LAN IP:</p>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li><code class="text-xs">44382/udp</code> → primary voice/video media (SRTP); almost every call uses only this</li>
+          <li><code class="text-xs">44381/tcp</code> → fallback path for clients on networks that block UDP</li>
+        </ul>
+        <p class="text-xs text-muted-foreground">Do <strong>not</strong> forward <code class="text-xs">44380</code> (signalling) — it goes through the Cloudflare tunnel, not your router. Your public IP being dynamic is fine: signalling rides the tunnel, and LiveKit re-detects the public IP for media each time the container restarts.</p>
       </article>
 
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 7: Client Onboarding</h2>
+        <h2 class="text-xl font-medium">Step 7: Validate Public Endpoints</h2>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
+curl -i https://files.example.com/minio/health/live
+curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
+        <p class="text-sm text-muted-foreground">Then make a test voice call between two clients. If they connect but no audio flows, the media ports from Step 6 are not reaching the host — recheck the forwards and the CGNAT test.</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Step 8: Client Onboarding</h2>
         <p class="text-sm text-muted-foreground">Users enter <code class="text-xs">https://connect.example.com</code> in startup and LetsChat will auto-discover backend URLs.</p>
         <p class="text-sm text-muted-foreground">Discovery JSON example:</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
@@ -143,6 +162,16 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
   "database": "letschat"
 }`}</code></pre>
         <p class="text-sm text-muted-foreground">Signalling uses <code class="text-xs">wss://</code> because the <code class="text-xs">lk.example.com</code> tunnel ingress terminates TLS at Cloudflare. Media stays direct on the forwarded ports and is DTLS-SRTP encrypted independently.</p>
+      </article>
+
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-medium">Note: Voice behind CGNAT or a dynamic IP</h2>
+        <p class="text-sm text-muted-foreground">If the CGNAT check in Step 6a showed <strong>different</strong> IPs, port forwarding cannot reach your host and voice will not work direct. The fix is a <strong>TURN relay</strong> that both sides reach outbound, so neither needs an inbound-reachable IP:</p>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li><strong>TURN on a cheap public-IP VPS</strong> — relays media through a box with a stable, routable IP. Solves CGNAT and a dynamic home IP at once. All call media flows through it, so size its bandwidth accordingly.</li>
+          <li><strong>Cloudflare Realtime (TURN)</strong> — managed relay at Cloudflare's edge; also hides your origin IP. Billed per GB of media.</li>
+        </ul>
+        <p class="text-xs text-muted-foreground">A dynamic public IP on its own (no CGNAT) does not need TURN: signalling rides the tunnel, and LiveKit re-detects the public IP for media on each restart. Only an IP change <span class="italic">during</span> a session needs a LiveKit restart to recover.</p>
       </article>
 
     </section>
