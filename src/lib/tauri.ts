@@ -26,7 +26,7 @@ function isInvalidAuthSessionError(error: unknown): boolean {
   return error.message.trim().toLowerCase() === 'invalid auth session.'
 }
 
-function forceWebSignOutForExpiredSession(): void {
+function forceSignOutForExpiredSession(): void {
   if (typeof window === 'undefined') return
   clearStoredAuthSessionToken()
   clearSignedDownloadUrlCache()
@@ -36,10 +36,30 @@ function forceWebSignOutForExpiredSession(): void {
   }, 0)
 }
 
-async function generateWebLivekitToken(room: string, identity: Identity): Promise<string> {
+/**
+ * Resolves the LiveKit URL of the space the client is currently connected to.
+ *
+ * Both desktop and web read this from the discovered server config so voice
+ * always targets the same space the user joined. We deliberately do NOT fall
+ * back to a hardcoded localhost URL: doing so masks a missing/invalid config as
+ * a confusing "Failed to fetch" deep inside livekit-client.
+ */
+function resolveLivekitUrl(): string {
+  const livekitUrl = useServerConfigStore.getState().config?.livekitUrl
+  if (!livekitUrl) {
+    throw new Error('Voice is unavailable: no LiveKit URL is configured for this space. Reconnect to the space and try again.')
+  }
+  return livekitUrl
+}
+
+/**
+ * Mints a LiveKit access token via the space's auth service, which signs it
+ * with that server's real LiveKit secret. Used by both desktop and web.
+ */
+async function generateLivekitToken(room: string, identity: Identity): Promise<string> {
   const sessionToken = getStoredAuthSessionToken()
   if (!sessionToken) {
-    throw new Error('Voice on web requires a valid auth session. Please log in again.')
+    throw new Error('Voice requires a valid session. Please log in again.')
   }
   try {
     return await authServiceGenerateLivekitToken({
@@ -49,22 +69,17 @@ async function generateWebLivekitToken(room: string, identity: Identity): Promis
     })
   } catch (error) {
     if (isInvalidAuthSessionError(error)) {
-      forceWebSignOutForExpiredSession()
-      throw new Error('Auth session expired. Please log in again.')
+      forceSignOutForExpiredSession()
+      throw new Error('Session expired. Please log in again.')
     }
     throw error
   }
 }
 
 export const tauriCommands = {
-  getLivekitUrl: async () =>
-    isTauriRuntime()
-      ? invoke<string>('get_livekit_url')
-      : (useServerConfigStore.getState().config?.livekitUrl ?? 'http://127.0.0.1:7880'),
-  generateLivekitToken: async (room: string, identity: string) =>
-    isTauriRuntime()
-      ? invoke<string>('generate_livekit_token', { room, identity })
-      : generateWebLivekitToken(room, identity),
+  getLivekitUrl: async () => resolveLivekitUrl(),
+  generateLivekitToken: async (room: string, identity: Identity) =>
+    generateLivekitToken(room, identity),
   openUrl: async (url: string) => {
     if (isTauriRuntime()) return invoke<void>('open_url', { url })
     window.open(url, '_blank', 'noopener,noreferrer')

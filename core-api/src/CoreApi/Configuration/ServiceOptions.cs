@@ -7,6 +7,14 @@ namespace CoreApi.Configuration;
 /// </summary>
 public sealed class ServiceOptions
 {
+    // Public dev defaults. These are checked-in, well-known values used for local
+    // development. They are referenced both as the fallbacks in
+    // <see cref="FromConfiguration"/> and by <see cref="FindInsecureDefaults"/>,
+    // so a default can never silently drift out of the production guard.
+    internal const string DevJwtSecret = "w7Qk9R2mN5xH3cV8pL4tJ6dF1sA0zB7uY2gE5nK8qM3rT9hC";
+    internal const string DevLiveKitApiSecret = "devsecret0123456789devsecret0123456789";
+    internal const string DevMinioSecretKey = "minioadmin";
+
     public required string ConnectionString { get; init; }
     public required string Bind { get; init; }
 
@@ -122,21 +130,17 @@ public sealed class ServiceOptions
                 "Host=localhost;Port=5432;Database=auth;Username=letschat;Password=letschat"),
             Bind = Get("AUTH_BIND", "127.0.0.1:8787"),
             AdminBind = Get("ADMIN_BIND", "127.0.0.1:8788"),
-            JwtSecret = Get(
-                "AUTH_JWT_SECRET",
-                "w7Qk9R2mN5xH3cV8pL4tJ6dF1sA0zB7uY2gE5nK8qM3rT9hC"),
+            JwtSecret = Get("AUTH_JWT_SECRET", DevJwtSecret),
             AdminApiKey = GetOptional("AUTH_ADMIN_API_KEY"),
 
             MinioAccessKey = Get("MINIO_ACCESS_KEY", "minioadmin"),
-            MinioSecretKey = Get("MINIO_SECRET_KEY", "minioadmin"),
+            MinioSecretKey = Get("MINIO_SECRET_KEY", DevMinioSecretKey),
             MinioBucket = Get("MINIO_BUCKET", "letschat-files"),
             MinioInternalEndpoint = minioInternal,
             MinioPublicEndpoint = Get("MINIO_PUBLIC_ENDPOINT", minioInternal),
 
             LiveKitApiKey = Get("LIVEKIT_API_KEY", "devkey"),
-            LiveKitApiSecret = Get(
-                "LIVEKIT_API_SECRET",
-                "devsecret0123456789devsecret0123456789"),
+            LiveKitApiSecret = Get("LIVEKIT_API_SECRET", DevLiveKitApiSecret),
 
             DiscoverySpacetimeDbUri = Get("DISCOVERY_SPACETIMEDB_URI", "ws://localhost:4300"),
             DiscoveryAuthUrl = Get("DISCOVERY_AUTH_URL", "http://localhost:8787"),
@@ -165,5 +169,31 @@ public sealed class ServiceOptions
             SpacetimeModuleName = Get("SPACETIMEDB_MODULE_NAME", "letschat"),
             SpacetimeServiceToken = GetOptional("SPACETIMEDB_SERVICE_TOKEN"),
         };
+    }
+
+    /// <summary>
+    /// Returns the names of secrets still set to their public dev default. A
+    /// default secret is exploitable — anyone can forge session / LiveKit tokens
+    /// or reach object storage with the checked-in key — so callers should refuse
+    /// to start outside Development when this is non-empty. The danger is that the
+    /// system otherwise keeps working, masking the misconfiguration.
+    /// </summary>
+    public IReadOnlyList<string> FindInsecureDefaults()
+    {
+        var issues = new List<string>();
+
+        void Check(string envVar, string value, string devDefault)
+        {
+            if (string.Equals(value, devDefault, StringComparison.Ordinal))
+            {
+                issues.Add(envVar);
+            }
+        }
+
+        Check("AUTH_JWT_SECRET", JwtSecret, DevJwtSecret);
+        Check("LIVEKIT_API_SECRET", LiveKitApiSecret, DevLiveKitApiSecret);
+        Check("MINIO_SECRET_KEY", MinioSecretKey, DevMinioSecretKey);
+
+        return issues;
     }
 }

@@ -138,6 +138,11 @@ builder.Services.AddRazorPages();
 
 var app = builder.Build();
 
+// Fail fast: outside Development, refuse to boot on any secret left at its public
+// dev default. A silently-accepted dev secret is the worst failure mode — auth
+// and voice keep working, but anyone can forge tokens with the well-known key.
+EnsureSecretsAreProductionSafe(app);
+
 // ── Listener-scope guard ─────────────────────────────────────────────────────
 // Each listener is mutually exclusive about what it serves:
 //   • The admin listener serves ONLY /admin/* and the admin panel's own static
@@ -234,6 +239,27 @@ app.Logger.LogInformation(
     "core-api — public API on http://{Bind}, admin panel on http://{AdminBind}",
     options.Bind, options.AdminBind);
 app.Run();
+
+// Reads the resolved options from DI so we validate exactly what the app uses
+// (the integration-test host rebuilds ServiceOptions after Program.cs runs).
+static void EnsureSecretsAreProductionSafe(WebApplication app)
+{
+    if (app.Environment.IsDevelopment())
+    {
+        return;
+    }
+
+    var insecureDefaults = app.Services.GetRequiredService<ServiceOptions>().FindInsecureDefaults();
+    if (insecureDefaults.Count == 0)
+    {
+        return;
+    }
+
+    throw new InvalidOperationException(
+        $"Refusing to start in the '{app.Environment.EnvironmentName}' environment: " +
+        $"these secrets are still set to their public dev defaults: {string.Join(", ", insecureDefaults)}. " +
+        "Set strong random values (e.g. `openssl rand -base64 32`) before deploying.");
+}
 
 static async Task WriteError(HttpContext context, HttpStatusCode status, string message)
 {
