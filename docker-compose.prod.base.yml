@@ -146,7 +146,7 @@ services:
   module-init:
     image: ghcr.io/da-stoaz/letschat-module:latest
     container_name: letschat-module-init
-    command: "publish --server http://spacetimedb:3000 letschat /module/letschat_server.wasm --yes"
+    command: "publish --server http://spacetimedb:3000 letschat --bin-path /module/letschat_server.wasm --yes"
     depends_on:
       spacetimedb:
         condition: service_healthy

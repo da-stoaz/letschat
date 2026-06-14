@@ -6,222 +6,307 @@ import { GITHUB_REPO } from "@/lib/site";
 ---
 
 <Layout
-  title="Path A: Cloudflare Tunnel — LetsChat Self-Hosting"
-  description="Deploy LetsChat using Cloudflare Tunnel for zero-trust HTTP ingress with LiveKit media via direct port forwarding."
+  title="Cloudflare Tunnel — LetsChat Self-Hosting"
+  description="Put your LetsChat server online through a Cloudflare Tunnel — no open inbound ports except the two needed for voice. Plain-English, step-by-step."
 >
   <SiteHeader active="self-hosting" />
 
-  <main class="relative max-w-6xl mx-auto px-6 py-16 space-y-10 overflow-hidden">
+  <main class="relative max-w-3xl mx-auto px-6 py-16 space-y-8 overflow-hidden">
     <div class="hero-glow hero-glow-a"></div>
 
-    <div class="relative z-10 space-y-2">
+    <div class="relative z-10 space-y-3">
       <nav class="flex items-center gap-2 text-xs text-muted-foreground">
         <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
         <span>/</span>
-        <span class="text-foreground">Path A: Cloudflare Tunnel</span>
+        <span class="text-foreground">Cloudflare Tunnel</span>
       </nav>
-      <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Path A: Cloudflare Tunnel</h1>
-      <p class="text-muted-foreground max-w-2xl leading-relaxed pt-1">
-        Routes <code class="text-xs">auth/chat/files/connect</code> plus LiveKit <strong>signalling</strong> over Cloudflare Tunnel so your host is never directly exposed on ports 80/443, and signalling inherits Cloudflare TLS.
-        LiveKit <strong>media</strong> (UDP/TCP SRTP) still requires direct port forwarding — it cannot ride the tunnel.
+      <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Cloudflare Tunnel</h1>
+      <p class="text-muted-foreground leading-relaxed pt-1">
+        Put your home server online through Cloudflare without opening any inbound ports —
+        except the two that voice/video physically needs. This is the easiest path if your
+        domain is on Cloudflare. Allow ~20 minutes.
       </p>
-      <div class="flex flex-wrap gap-2 text-xs pt-2">
-        <span class="mini-pill">Zero Trust Ingress</span>
-        <span class="mini-pill">Lower Host Exposure</span>
-        <span class="mini-pill">Cloudflare-managed domain required</span>
-      </div>
     </div>
 
+    <!-- ── Concept ─────────────────────────────────────────────────────── -->
     <section class="space-y-6">
-
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Requirements (Read First)</h2>
+        <h2 class="text-xl font-medium">First, what a tunnel actually is</h2>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          LetsChat runs as a handful of services on your server, but they're only reachable on
+          your home network. The old way to expose them is to open ports <code class="text-xs">80</code>/<code class="text-xs">443</code>
+          on your router and point your domain at your home IP — which publishes your address and
+          opens your machine to the whole internet.
+        </p>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          A Cloudflare Tunnel flips that around. A small program — <code class="text-xs">cloudflared</code> —
+          runs next to LetsChat and makes <strong>one outbound connection up to Cloudflare</strong>, then holds it
+          open. When someone visits <code class="text-xs">chat.yourdomain.com</code>, the request arrives at Cloudflare
+          and is piped <span class="italic">back down that connection</span> to your server. You never open an inbound
+          port, your home IP is never published, and Cloudflare gives you HTTPS for free.
+        </p>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          You'll point five subdomains at five services through that tunnel:
+        </p>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li>Ubuntu host with Docker Engine + Compose plugin.</li>
-          <li>Cloudflare-managed domain plus Zero Trust access (to create a tunnel token).</li>
-          <li>Admin access to your router to port-forward LiveKit media (<code class="text-xs">44382/udp</code> and <code class="text-xs">44381/tcp</code>) — this is a manual step, covered in Step 6.</li>
-          <li>A routable public IPv4, <strong>not</strong> CGNAT. Step 6a shows how to check; CGNAT users need a TURN relay (note after Step 8).</li>
+          <li><code class="text-xs">auth</code> — login &amp; tokens &nbsp;·&nbsp; <code class="text-xs">connect</code> — first-run discovery</li>
+          <li><code class="text-xs">chat</code> — realtime database &nbsp;·&nbsp; <code class="text-xs">files</code> — uploads &nbsp;·&nbsp; <code class="text-xs">lk</code> — voice signalling</li>
         </ul>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker --version
-docker compose version
-curl -4 ifconfig.me`}</code></pre>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          <strong>The one exception:</strong> the live voice/video audio itself is real-time UDP and
+          <strong>cannot</strong> travel through the tunnel. That single kind of traffic reaches your server
+          directly, on two ports you forward on your router (Step 7). Skip that and text chat works
+          perfectly — voice calls just connect with no sound.
+        </p>
       </article>
 
+      <!-- ── The plan ──────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">How This Path Works</h2>
-        <p class="text-sm text-muted-foreground">Cloudflare Tunnel proxies HTTP/WebSocket services (<code class="text-xs">auth/chat/files/connect</code>) from Cloudflare to your Docker network.</p>
-        <p class="text-sm text-muted-foreground">LiveKit signalling (the WebSocket on port 44380) is also proxied — add an <code class="text-xs">lk.example.com</code> ingress rule so it gets <code class="text-xs">wss://</code> with Cloudflare TLS.</p>
-        <p class="text-sm text-muted-foreground">LiveKit media is different: raw UDP/TCP SRTP must still be reachable directly on your host via router forwarding. Clients learn the host's public IP from the ICE candidates, so media does not depend on the <code class="text-xs">lk.example.com</code> DNS record.</p>
+        <h2 class="text-xl font-medium">The plan</h2>
+        <ol class="list-decimal pl-5 text-sm text-muted-foreground space-y-1">
+          <li>Create a tunnel and copy its token</li>
+          <li>Download the files</li>
+          <li>Fill in your <code class="text-xs">.env</code></li>
+          <li>Set the LiveKit secret</li>
+          <li>Map the five subdomains</li>
+          <li>Start the stack</li>
+          <li>Forward the two voice ports</li>
+          <li>Open the app</li>
+        </ol>
       </article>
 
+      <!-- ── Prerequisites ─────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-6 space-y-3">
-        <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--accent-blue)">Already run cloudflared (or another reverse proxy) on this host?</p>
-        <h2 class="text-xl font-medium">Use your existing connector — don't run the bundled one</h2>
-        <p class="text-sm text-muted-foreground">The bundled <code class="text-xs">cloudflared</code> in <code class="text-xs">docker-compose.prod.tunnel.yml</code> only works because it sits <span class="italic">on the Docker network</span> and can resolve service names like <code class="text-xs">core-api:8787</code>. A <strong>native</strong> cloudflared running on the host (serving your other apps) cannot resolve those names — and you should never run two connectors for one tunnel. So in this topology:</p>
+        <h2 class="text-xl font-medium">Before you start</h2>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li><strong>Don't use <code class="text-xs">docker-compose.prod.tunnel.yml</code> at all.</strong> Run the base stack only: <code class="text-xs">docker compose -f docker-compose.prod.base.yml up -d</code>. There's no bundled cloudflared, so <code class="text-xs">CLOUDFLARE_TUNNEL_TOKEN</code> is irrelevant — leave it blank. Your host cloudflared already holds its own credentials.</li>
-          <li><strong>Reuse the tunnel you already have.</strong> No new tunnel, no DNS re-creation — just add the LetsChat public hostnames to it, each pointing at a <code class="text-xs">localhost</code> port the base stack publishes:</li>
+          <li>A domain whose DNS is managed by Cloudflare (free plan is fine).</li>
+          <li>Cloudflare <strong>Zero Trust</strong> enabled on your account (free).</li>
+          <li>An Ubuntu server with Docker Engine + the Compose plugin.</li>
+          <li>Admin access to your home router (for the two voice ports in Step 7).</li>
         </ul>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`auth.example.com     ->  http://localhost:8787    # core-api
-connect.example.com  ->  http://localhost:8787    # core-api (discovery)
-chat.example.com     ->  http://localhost:44300   # SpacetimeDB  (enable WebSocket)
-files.example.com    ->  http://localhost:44390   # MinIO
-lk.example.com       ->  http://localhost:44380   # LiveKit signalling (enable WebSocket)`}</code></pre>
-        <p class="text-sm text-muted-foreground">Your exact sequence through the steps below (the rest assume the bundled connector):</p>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li><strong>Step 0</strong> — get the base compose + LiveKit config (you still need these).</li>
-          <li><strong>Step 1</strong> — download <span class="italic">only</span> the env file; you do <strong>not</strong> need the tunnel overlay:<pre class="rounded-lg border border-border bg-background p-3 mt-1 overflow-x-auto text-xs"><code>{`wget -O .env https://raw.githubusercontent.com/da-stoaz/letschat/main/.env.production.tunnel.example`}</code></pre></li>
-          <li><strong>Step 2</strong> — skip the tunnel-ingress instructions; add the five hostnames above to your existing tunnel instead.</li>
-          <li><strong>Step 3</strong> — fill <code class="text-xs">.env</code> normally (leave <code class="text-xs">CLOUDFLARE_TUNNEL_TOKEN</code> blank; <code class="text-xs">DISCOVERY_*</code> are still your public <code class="text-xs">https://</code>/<code class="text-xs">wss://</code> URLs). <strong>Step 4</strong> — configure LiveKit.</li>
-          <li><strong>Step 5</strong> — start with the base file only: <code class="text-xs">docker compose -f docker-compose.prod.base.yml up -d</code>. The <code class="text-xs">module-init</code> container (part of base) still auto-publishes the SpacetimeDB module — no manual <code class="text-xs">spacetime publish</code> needed.</li>
-          <li><strong>Step 6</strong> — forward the media ports on your router (still required). <strong>Step 7</strong> — validate.</li>
-        </ul>
-        <p class="text-xs text-muted-foreground">Same recipe for nginx / Caddy / Traefik on the host: terminate TLS there and proxy to the <code class="text-xs">localhost</code> ports above, keeping <code class="text-xs">chat</code> and <code class="text-xs">lk</code> as WebSocket upgrades.</p>
+        <p class="text-sm text-muted-foreground leading-relaxed pt-1">
+          <strong>30-second voice check.</strong> Voice needs a real public IP. Run this on the server and
+          compare the result to the WAN / Internet IP shown on your router's status page:
+        </p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -4 ifconfig.me`}</code></pre>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          <strong>Same IP</strong> → you're good. <strong>Different</strong> → your ISP puts you behind CGNAT; text chat
+          and everything else still works, but voice will need a relay (see <a href="#cgnat" class="underline hover:text-foreground">Voice behind CGNAT</a> at the end).
+        </p>
       </article>
 
+      <!-- ── Step 1 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 0: Get Shared Files</h2>
-        <p class="text-sm text-muted-foreground">Download the shared base compose file and LiveKit config:</p>
+        <div class="flex items-center gap-3"><span class="step-num">1</span><h2 class="text-xl font-medium">Create the tunnel &amp; copy the token</h2></div>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          In the Cloudflare dashboard: <strong>Zero Trust → Networks → Tunnels → Create a tunnel →
+          Cloudflared</strong>. Name it (e.g. <code class="text-xs">letschat</code>) and save.
+        </p>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          The next screen shows an install command containing <code class="text-xs">--token &lt;LONG-STRING&gt;</code>.
+          <strong>Copy that token</strong> — it's the connector's password and the only thing you need from this page.
+          Leave the tab open; you'll add the subdomains in Step 5.
+        </p>
+        <p class="text-xs text-muted-foreground">
+          Already run <code class="text-xs">cloudflared</code> on this server for other apps? Don't create a second
+          connector — skip to <a href="#existing" class="underline hover:text-foreground">Already running cloudflared</a> at the bottom.
+        </p>
+      </article>
+
+      <!-- ── Step 2 ────────────────────────────────────────────────────── -->
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <div class="flex items-center gap-3"><span class="step-num">2</span><h2 class="text-xl font-medium">Download the files</h2></div>
+        <p class="text-sm text-muted-foreground">On the server, in a fresh folder:</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`mkdir letschat && cd letschat
 
+# the stack + the cloudflared connector overlay
 wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
+wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.tunnel.yml
 
+# the LiveKit config
 mkdir livekit
 wget -O livekit/config.prod.yaml \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml`}</code></pre>
-        <p class="text-sm text-muted-foreground">All images are pre-built — no Rust or Node toolchains needed on the server.</p>
-      </article>
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml
 
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 1: Download Path A Files</h2>
-        <p class="text-sm text-muted-foreground">Inside the <code class="text-xs">letschat</code> directory:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.tunnel.yml
-
+# your settings file
 wget -O .env \\
   https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.tunnel.example`}</code></pre>
+        <p class="text-xs text-muted-foreground">All images are pre-built — no Rust/Node toolchains needed on the server.</p>
       </article>
 
+      <!-- ── Step 3 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 2: DNS + Tunnel Ingress</h2>
-        <p class="text-sm text-muted-foreground">Create these hostnames in Cloudflare Zero Trust and configure tunnel ingress rules:</p>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li><code class="text-xs">auth.example.com</code> → <code class="text-xs">http://core-api:8787</code></li>
-          <li><code class="text-xs">chat.example.com</code> → <code class="text-xs">http://spacetimedb:3000</code> (enable WebSocket support)</li>
-          <li><code class="text-xs">files.example.com</code> → <code class="text-xs">http://minio:44390</code></li>
-          <li><code class="text-xs">connect.example.com</code> → <code class="text-xs">http://core-api:8787</code></li>
-          <li><code class="text-xs">lk.example.com</code> → <code class="text-xs">http://livekit:44380</code> (enable WebSocket support — this is LiveKit signalling only; media reaches the host directly via the forwarded ports)</li>
-        </ul>
-        <p class="text-sm text-muted-foreground">Copy the tunnel token from the Zero Trust dashboard — you will need it in the next step.</p>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 3: Configure Secrets and Endpoints</h2>
-        <p class="text-sm text-muted-foreground">Open <code class="text-xs">.env</code> and replace every placeholder. Generate secrets with:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
-openssl rand -base64 32   # for LIVEKIT_API_SECRET`}</code></pre>
-        <p class="text-sm text-muted-foreground"><strong>Every field below must be set</strong> — the stack will not start without <code class="text-xs">POSTGRES_PASSWORD</code>, and you cannot sign in without the bootstrap admin. Grouped by purpose:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`# Secrets — generate each one
+        <div class="flex items-center gap-3"><span class="step-num">3</span><h2 class="text-xl font-medium">Fill in your <code class="text-base">.env</code></h2></div>
+        <p class="text-sm text-muted-foreground">Generate the secrets first:</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`openssl rand -hex 32      # AUTH_JWT_SECRET, POSTGRES_PASSWORD, MINIO_SECRET_KEY
+openssl rand -base64 32   # LIVEKIT_API_SECRET`}</code></pre>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          Open <code class="text-xs">.env</code> and set <strong>every field in this block</strong> — the stack won't start
+          without <code class="text-xs">POSTGRES_PASSWORD</code>, and you can't sign in without the admin account.
+          Replace <code class="text-xs">example.com</code> with your domain throughout:
+        </p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`# Secrets
 AUTH_JWT_SECRET=            # openssl rand -hex 32
 POSTGRES_PASSWORD=         # openssl rand -hex 32
 LIVEKIT_API_SECRET=        # openssl rand -base64 32
-MINIO_ACCESS_KEY=          # any username you choose
+MINIO_ACCESS_KEY=          # any username you choose, e.g. letschat-minio
 MINIO_SECRET_KEY=          # openssl rand -hex 32
-CLOUDFLARE_TUNNEL_TOKEN=   # from the Zero Trust dashboard
+CLOUDFLARE_TUNNEL_TOKEN=   # the token you copied in Step 1
 
-# First admin account — created on first start, change the password after
+# First admin account (created on first start — change the password after)
 ADMIN_BOOTSTRAP_USERNAME=admin
 ADMIN_BOOTSTRAP_PASSWORD=  # a strong password
 ADMIN_BOOTSTRAP_EMAIL=you@example.com
 
-# Public endpoints — your domains
+# Your public URLs
 MINIO_PUBLIC_ENDPOINT=https://files.example.com
 DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
 DISCOVERY_AUTH_URL=https://auth.example.com
-DISCOVERY_LIVEKIT_URL=wss://lk.example.com
-
-# Outbound email — required because EMAIL_SENDER defaults to smtp and
-# email confirmation is on by default
-SMTP_HOST=smtp.example.com
+DISCOVERY_LIVEKIT_URL=wss://lk.example.com`}</code></pre>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          <strong>Email.</strong> By default LetsChat sends confirmation emails, so it needs SMTP. Using a Gmail
+          account? Enable 2-Step Verification, create an <strong>App Password</strong> (Google Account → Security →
+          App passwords — a 16-char code, <span class="italic">not</span> your normal password), and set:
+        </p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USER=
-SMTP_PASSWORD=
-EMAIL_FROM_ADDRESS=no-reply@example.com`}</code></pre>
-        <p class="text-sm text-muted-foreground"><strong>Don't want to set up SMTP yet?</strong> Set <code class="text-xs">REQUIRE_EMAIL_CONFIRMATION=false</code> and <code class="text-xs">EMAIL_SENDER=log</code> — accounts then work without email (links are written to the container log instead).</p>
-        <p class="text-sm text-muted-foreground">Everything else in <code class="text-xs">.env</code> already has a working default and is documented inline — <code class="text-xs">LIVEKIT_API_KEY</code> (must match <code class="text-xs">livekit/config.prod.yaml</code>), <code class="text-xs">POSTGRES_USER</code>/<code class="text-xs">POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them.</p>
+SMTP_USER=you@gmail.com
+SMTP_PASSWORD=         # the 16-char App Password
+EMAIL_FROM_ADDRESS=you@gmail.com`}</code></pre>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          <strong>No email yet?</strong> Set <code class="text-xs">REQUIRE_EMAIL_CONFIRMATION=false</code> and
+          <code class="text-xs">EMAIL_SENDER=log</code> — accounts then work without SMTP.
+        </p>
+        <p class="text-xs text-muted-foreground">
+          Everything else in the file has a working default and is documented inline — leave it alone unless
+          you have a reason. (One to know about: <code class="text-xs">SPACETIMEDB_SERVICE_TOKEN</code> is optional;
+          blank is fine — it only makes one admin-panel card editable.)
+        </p>
       </article>
 
+      <!-- ── Step 4 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 4: Configure LiveKit</h2>
-        <p class="text-sm text-muted-foreground">Open <code class="text-xs">livekit/config.prod.yaml</code> and replace the key/secret placeholder so it matches your <code class="text-xs">.env</code>:</p>
+        <div class="flex items-center gap-3"><span class="step-num">4</span><h2 class="text-xl font-medium">Set the LiveKit secret</h2></div>
+        <p class="text-sm text-muted-foreground">Open <code class="text-xs">livekit/config.prod.yaml</code> and paste the same secret you put in <code class="text-xs">.env</code>:</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`keys:
   letschat-prod: <paste LIVEKIT_API_SECRET here>`}</code></pre>
-        <p class="text-xs text-muted-foreground">The rest of the file (ports, <code class="text-xs">use_external_ip: true</code>) can stay as-is for most home server setups.</p>
+        <p class="text-xs text-muted-foreground">Leave the rest of the file (ports, <code class="text-xs">use_external_ip: true</code>) as-is.</p>
       </article>
 
+      <!-- ── Step 5 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 5: Pull Images and Start</h2>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml ps`}</code></pre>
-        <p class="text-sm text-muted-foreground"><code class="text-xs">module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker logs letschat-module-init`}</code></pre>
+        <div class="flex items-center gap-3"><span class="step-num">5</span><h2 class="text-xl font-medium">Map the five subdomains</h2></div>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          Back on your tunnel's page, open <strong>Public Hostnames</strong> and add one entry per subdomain.
+          The connector runs <span class="italic">inside Docker</span> next to the services, so the targets are the internal
+          service names (not <code class="text-xs">localhost</code>):
+        </p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`auth.example.com     ->  http://core-api:8787
+connect.example.com  ->  http://core-api:8787
+chat.example.com     ->  http://spacetimedb:3000     # enable WebSocket
+files.example.com    ->  http://minio:44390
+lk.example.com       ->  http://livekit:44380        # enable WebSocket`}</code></pre>
+        <p class="text-xs text-muted-foreground">
+          For <code class="text-xs">chat</code> and <code class="text-xs">lk</code>, turn on <strong>Additional settings → enable WebSocket</strong>.
+          Cloudflare creates the DNS records for you automatically.
+        </p>
       </article>
 
+      <!-- ── Step 6 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 6: Forward LiveKit Media Ports on Your Router</h2>
-        <p class="text-sm text-muted-foreground">The tunnel carries everything <span class="italic">except</span> voice/video media. That media is raw UDP/TCP and must reach your server directly, so you forward it on your router. <strong>This is the one step the tunnel cannot do for you</strong> — skip it and text chat works fine but voice channels connect with no audio.</p>
+        <div class="flex items-center gap-3"><span class="step-num">6</span><h2 class="text-xl font-medium">Start the stack</h2></div>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d`}</code></pre>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          The <code class="text-xs">module-init</code> container publishes the SpacetimeDB schema automatically once the
+          database is healthy — no manual <code class="text-xs">spacetime publish</code>. Watch it finish with:
+        </p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker logs -f letschat-module-init`}</code></pre>
+      </article>
 
-        <p class="text-sm text-muted-foreground"><strong>6a. First check you are not behind CGNAT.</strong> Carrier-grade NAT (common on some fibre/cable plans, and on mobile/Starlink) makes port forwarding impossible. Compare your true public IP to your router's WAN IP:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -4 ifconfig.me        # your true public IP, as seen from the internet`}</code></pre>
-        <p class="text-sm text-muted-foreground">Open your router's status page and find its WAN / Internet IP. <strong>If they match</strong>, forwarding will work — continue. <strong>If they differ</strong>, your ISP has you behind CGNAT and no router setting will fix it; you need a TURN relay (see the note after Step 8).</p>
-
-        <p class="text-sm text-muted-foreground"><strong>6b. Find the server's LAN IP</strong> and give it a static DHCP reservation in your router so it never moves:</p>
+      <!-- ── Step 7 ────────────────────────────────────────────────────── -->
+      <article class="step-card rounded-xl p-6 space-y-3">
+        <div class="flex items-center gap-3"><span class="step-num">7</span><h2 class="text-xl font-medium">Forward the two voice ports</h2></div>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          This is the one step the tunnel can't do — voice media must reach your server directly.
+          First find the server's LAN IP and give it a <strong>static DHCP reservation</strong> in your router so it
+          never changes:
+        </p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`ip -4 -o addr show scope global | awk '{print $2, $4}'   # e.g. eth0 192.168.1.50/24`}</code></pre>
-
-        <p class="text-sm text-muted-foreground"><strong>6c. In your router's <span class="italic">Port Forwarding</span> section</strong>, forward all of these to that LAN IP:</p>
+        <p class="text-sm text-muted-foreground">Then, in your router's <span class="italic">Port Forwarding</span> section, forward both of these to that LAN IP:</p>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li><code class="text-xs">44382/udp</code> → primary voice/video media (SRTP); almost every call uses only this</li>
-          <li><code class="text-xs">44381/tcp</code> → fallback path for clients on networks that block UDP</li>
+          <li><code class="text-xs">44382/udp</code> — the voice/video media (almost every call uses only this)</li>
+          <li><code class="text-xs">44381/tcp</code> — fallback for callers on networks that block UDP</li>
         </ul>
-        <p class="text-xs text-muted-foreground">Do <strong>not</strong> forward <code class="text-xs">44380</code> (signalling) — it goes through the Cloudflare tunnel, not your router. Your public IP being dynamic is fine: signalling rides the tunnel, and LiveKit re-detects the public IP for media each time the container restarts.</p>
+        <p class="text-xs text-muted-foreground">
+          Don't forward <code class="text-xs">44380</code> — that's signalling, and it already goes through the tunnel.
+          A dynamic public IP is fine; only an IP change mid-call needs a LiveKit restart to recover.
+        </p>
       </article>
 
+      <!-- ── Step 8 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 7: Validate Public Endpoints</h2>
+        <div class="flex items-center gap-3"><span class="step-num">8</span><h2 class="text-xl font-medium">Open the app</h2></div>
+        <p class="text-sm text-muted-foreground">Confirm the public endpoints answer (from anywhere):</p>
         <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
-curl -i https://files.example.com/minio/health/live
 curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
-        <p class="text-sm text-muted-foreground">Then make a test voice call between two clients. If they connect but no audio flows, the media ports from Step 6 are not reaching the host — recheck the forwards and the CGNAT test.</p>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          In the LetsChat desktop app, enter <code class="text-xs">connect.example.com</code> as the server — it auto-discovers
+          the rest. Sign in with the admin account from Step 3, then make a test voice call between two clients.
+        </p>
+        <p class="text-xs text-muted-foreground">
+          Call connects but no audio? The Step 7 ports aren't reaching the host — recheck the forwards and the
+          voice check from "Before you start".
+        </p>
       </article>
 
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 8: Client Onboarding</h2>
-        <p class="text-sm text-muted-foreground">Users enter <code class="text-xs">https://connect.example.com</code> in startup and LetsChat will auto-discover backend URLs.</p>
-        <p class="text-sm text-muted-foreground">Discovery JSON example:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
-  "spacetimedb": "wss://chat.example.com",
-  "auth": "https://auth.example.com",
-  "livekit": "wss://lk.example.com",
-  "database": "letschat"
-}`}</code></pre>
-        <p class="text-sm text-muted-foreground">Signalling uses <code class="text-xs">wss://</code> because the <code class="text-xs">lk.example.com</code> tunnel ingress terminates TLS at Cloudflare. Media stays direct on the forwarded ports and is DTLS-SRTP encrypted independently.</p>
-      </article>
-
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Note: Voice behind CGNAT or a dynamic IP</h2>
-        <p class="text-sm text-muted-foreground">If the CGNAT check in Step 6a showed <strong>different</strong> IPs, port forwarding cannot reach your host and voice will not work direct. The fix is a <strong>TURN relay</strong> that both sides reach outbound, so neither needs an inbound-reachable IP:</p>
+      <!-- ── Alternative: existing connector ───────────────────────────── -->
+      <article id="existing" class="step-card alt-card rounded-xl p-6 space-y-3 scroll-mt-24">
+        <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--accent-blue)">Alternative setup</p>
+        <h2 class="text-xl font-medium">Already running cloudflared (or nginx/Caddy) on this host?</h2>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          If you already run a connector natively on the server for other apps, don't run a second one and don't
+          use the bundled overlay. Two changes to the path above:
+        </p>
         <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li><strong>TURN on a cheap public-IP VPS</strong> — relays media through a box with a stable, routable IP. Solves CGNAT and a dynamic home IP at once. All call media flows through it, so size its bandwidth accordingly.</li>
-          <li><strong>Cloudflare Realtime (TURN)</strong> — managed relay at Cloudflare's edge; also hides your origin IP. Billed per GB of media.</li>
+          <li><strong>Step 1 &amp; 6:</strong> skip the bundled connector. Start with the base file only —
+            <code class="text-xs">docker compose -f docker-compose.prod.base.yml up -d</code> — and in Step 2 you don't need
+            <code class="text-xs">docker-compose.prod.tunnel.yml</code>. Leave <code class="text-xs">CLOUDFLARE_TUNNEL_TOKEN</code> blank;
+            your existing connector has its own credentials.</li>
+          <li><strong>Step 5:</strong> add the hostnames to your <span class="italic">existing</span> tunnel, pointing at the host's
+            <code class="text-xs">localhost</code> ports instead of Docker names:</li>
         </ul>
-        <p class="text-xs text-muted-foreground">A dynamic public IP on its own (no CGNAT) does not need TURN: signalling rides the tunnel, and LiveKit re-detects the public IP for media on each restart. Only an IP change <span class="italic">during</span> a session needs a LiveKit restart to recover.</p>
+        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`auth.example.com     ->  http://localhost:8787
+connect.example.com  ->  http://localhost:8787
+chat.example.com     ->  http://localhost:44300     # enable WebSocket
+files.example.com    ->  http://localhost:44390
+lk.example.com       ->  http://localhost:44380     # enable WebSocket`}</code></pre>
+        <p class="text-xs text-muted-foreground">
+          Everything else (the <code class="text-xs">.env</code>, LiveKit secret, voice-port forwarding) is identical.
+          Same idea for nginx / Caddy / Traefik on the host — terminate TLS there and proxy to those
+          <code class="text-xs">localhost</code> ports, keeping <code class="text-xs">chat</code> and <code class="text-xs">lk</code> as WebSocket upgrades.
+        </p>
+      </article>
+
+      <!-- ── CGNAT note ────────────────────────────────────────────────── -->
+      <article id="cgnat" class="step-card alt-card rounded-xl p-6 space-y-3 scroll-mt-24">
+        <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--accent-blue)">If the voice check failed</p>
+        <h2 class="text-xl font-medium">Voice behind CGNAT</h2>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          If your public IP and your router's WAN IP <strong>differ</strong>, your ISP has you behind carrier-grade NAT —
+          port forwarding can't reach you, so voice won't work directly (text, chat and files are unaffected). The
+          fix is a <strong>TURN relay</strong> both sides connect outbound to:
+        </p>
+        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+          <li><strong>TURN on a cheap public-IP VPS</strong> — relays media through a box with a stable, routable IP. All call media flows through it, so size its bandwidth accordingly.</li>
+          <li><strong>Cloudflare Realtime (TURN)</strong> — a managed relay at Cloudflare's edge, billed per GB.</li>
+        </ul>
       </article>
 
     </section>
 
     <div class="flex items-center justify-between pt-4 border-t border-border text-sm">
       <a href="/self-hosting" class="text-muted-foreground hover:text-foreground transition-colors">← Back to overview</a>
-      <a href="/self-hosting/caddy" class="text-muted-foreground hover:text-foreground transition-colors">Path B: Caddy →</a>
+      <a href="/self-hosting/caddy" class="text-muted-foreground hover:text-foreground transition-colors">Prefer Caddy? →</a>
     </div>
   </main>
   <SiteFooter />
@@ -245,17 +330,6 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
     animation: drift 12s ease-in-out infinite;
   }
 
-  .mini-pill {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 9999px;
-    padding: 0.28rem 0.55rem;
-    border: 1px solid oklch(1 0 0 / 0.16);
-    font-size: 0.68rem;
-    color: var(--color-muted-foreground);
-    background: oklch(0.16 0 0 / 0.6);
-  }
-
   .step-card {
     border: 1px solid oklch(1 0 0 / 0.12);
     background:
@@ -264,10 +338,31 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
     box-shadow: 0 14px 34px oklch(0 0 0 / 0.2);
   }
 
+  /* Alternative / aside cards: warmer accent stripe so they read as off-path. */
+  .alt-card {
+    background:
+      linear-gradient(180deg, oklch(0.21 0 0 / 0.82), oklch(0.175 0 0 / 0.8)),
+      linear-gradient(90deg, oklch(0.7 0.16 200 / 0.28) 0 4px, transparent 4px 100%);
+  }
+
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    flex: none;
+    border-radius: 9999px;
+    background: oklch(0.49 0.23 264.3 / 0.28);
+    border: 1px solid oklch(0.62 0.2 264.3 / 0.55);
+    color: white;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
   @keyframes drift {
     0% { transform: translate3d(0, 0, 0) scale(1); }
     50% { transform: translate3d(8px, -12px, 0) scale(1.04); }
     100% { transform: translate3d(0, 0, 0) scale(1); }
   }
 </style>
-

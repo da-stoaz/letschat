@@ -1,12 +1,11 @@
 [package]
 name = "letschat_tauri"
-version = "0.5.7"
+version = "0.6.0"
 edition = "2024"
 description = "LetsChat Tauri shell"
 authors = ["LetsChat Team"]
 
 [dependencies]
-jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
 futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 rfd = "0.15"

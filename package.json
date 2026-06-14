@@ -1,7 +1,7 @@
 {
   "name": "letschat",
   "private": true,
-  "version": "0.5.7",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "version:bump": "bun scripts/bump-version.ts",
@@ -15,7 +15,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:security": "vitest run tests/security",
+    "test:unit": "vitest run --project unit",
+    "test:security": "vitest run --project security",
     "core-api:dev": "ASPNETCORE_ENVIRONMENT=Development dotnet run --project core-api/src/CoreApi/CoreApi.csproj",
     "core-api:dev:lan": "bun run scripts/core-api-lan.ts",
     "core-api:test": "dotnet test core-api/CoreApi.slnx",
