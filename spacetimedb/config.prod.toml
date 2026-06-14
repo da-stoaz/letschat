@@ -1,0 +1,16 @@
+# SpacetimeDB standalone server config (production).
+# Mounted into the spacetimedb container at the server's data directory as
+# config.toml — see docker-compose.prod.base.yml.
+#
+# Docs: https://spacetimedb.com/docs/cli-reference/standalone-config/
+# Values are humantime strings ("20s", "120s", "250ms", ...).
+
+[websocket]
+# How often the server sends WebSocket Ping frames. Must stay < idle-timeout.
+ping-interval = "20s"
+# How long the server waits for ANY client data (incl. Pong) before closing the
+# socket. The stock 30s is aggressive behind a tunnel/proxy where Pong frames
+# can be delayed — a long file upload would let it lapse and the server would
+# drop the chat connection. The client also heartbeats every 25s (touch_presence)
+# so this mainly buys slack for transient delays.
+idle-timeout = "120s"
