@@ -18,6 +18,9 @@ public sealed class ApiException(HttpStatusCode status, string message)
     public static ApiException Unauthorized(string message) =>
         new(HttpStatusCode.Unauthorized, message);
 
+    public static ApiException Forbidden(string message) =>
+        new(HttpStatusCode.Forbidden, message);
+
     public static ApiException Conflict(string message) =>
         new(HttpStatusCode.Conflict, message);
 

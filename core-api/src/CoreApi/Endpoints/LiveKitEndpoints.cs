@@ -21,7 +21,9 @@ public static class LiveKitEndpoints
         LivekitTokenRequest request,
         UserManager<ApplicationUser> users,
         TokenService tokens,
-        LiveKitTokenService livekit)
+        LiveKitTokenService livekit,
+        SpacetimeClient spacetime,
+        CancellationToken ct)
     {
         var room = Validation.Required(request.Room, "Room is required.");
         var identity = Validation.Required(request.Identity, "Identity is required.");
@@ -39,6 +41,22 @@ public static class LiveKitEndpoints
         {
             throw ApiException.Unauthorized(
                 "Session user does not match requested voice identity.");
+        }
+
+        if (!VoiceRoom.TryParse(room, out var voiceRoom))
+        {
+            throw ApiException.BadRequest("Unrecognised voice room.");
+        }
+
+        // Authorize the room against the membership SpacetimeDB already enforces.
+        // Authenticating as the session is not enough — without this anyone could
+        // mint a publish/subscribe token for any room (any channel, any DM) just
+        // by naming it.
+        var admitted = await spacetime.HasVoicePresenceAsync(
+            user.SpacetimeToken, user.SpacetimeIdentity, voiceRoom, ct);
+        if (!admitted)
+        {
+            throw ApiException.Forbidden("You are not a participant in this voice room.");
         }
 
         return new LivekitTokenResponse(livekit.GenerateToken(identity, room));

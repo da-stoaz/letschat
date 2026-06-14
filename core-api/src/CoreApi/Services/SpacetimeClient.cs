@@ -44,6 +44,130 @@ public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptio
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.SpacetimeServiceToken);
 
+    /// <summary>
+    /// Authorizes a LiveKit voice room by checking — <em>as the user</em> — that
+    /// the module admitted them. The <c>join_voice_channel</c> /
+    /// <c>join_dm_voice</c> reducers enforce membership, moderator-only, friend
+    /// and block rules and insert a voice-presence row only for callers they
+    /// admit; that row is visible to the user through the public
+    /// <c>my_voice_participants</c> / <c>my_dm_voice_participants</c> views. No
+    /// row → the user was never admitted, so no token is minted.
+    ///
+    /// <para>
+    /// Queries SpacetimeDB's <c>/sql</c> endpoint with the user's own access
+    /// token so row-level visibility is exactly what the client sees. Fails
+    /// closed (returns <c>false</c>) on any missing token, transport error or
+    /// non-success response — we never issue a token we couldn't authorize.
+    /// </para>
+    /// </summary>
+    public async Task<bool> HasVoicePresenceAsync(
+        string? userSpacetimeToken,
+        string userIdentity,
+        VoiceRoom room,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(userSpacetimeToken))
+        {
+            return false;
+        }
+
+        // room.ChannelId is numeric and room.RoomKey is validated by VoiceRoom,
+        // so neither can carry SQL injection.
+        var sql = room.IsDm
+            ? $"SELECT user_identity FROM my_dm_voice_participants WHERE room_key = '{room.RoomKey}'"
+            : $"SELECT user_identity FROM my_voice_participants WHERE channel_id = {room.ChannelId}";
+
+        var http = httpFactory.CreateClient(ClientName);
+        var url = $"{options.SpacetimeHttpUrl.TrimEnd('/')}/v1/database/{options.SpacetimeModuleName}/sql";
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(sql),
+        };
+        request.Headers.Authorization = new("Bearer", userSpacetimeToken);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await http.SendAsync(request, ct);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return false;
+        }
+
+        // SpacetimeDB /sql returns one result object per statement:
+        // [{ "schema": …, "rows": [[<col>, …], …], "stats": … }]. An Identity
+        // column comes back wrapped as a single-element array, e.g. ["0x<hex>"].
+        var results = await response.Content.ReadFromJsonAsync<List<SqlStatementResult>>(JsonOpts, ct);
+        var rows = results?.FirstOrDefault()?.Rows;
+        if (rows is null)
+        {
+            return false;
+        }
+
+        var me = NormalizeIdentityHex(userIdentity);
+        foreach (var row in rows)
+        {
+            if (row.Count > 0 && NormalizeIdentityHex(IdentityText(row[0])) == me)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>One statement's result from the SpacetimeDB <c>/sql</c> endpoint.</summary>
+    private sealed record SqlStatementResult(List<List<JsonElement>>? Rows);
+
+    /// <summary>
+    /// Pulls the hex string out of a SpacetimeDB <c>Identity</c> SQL value, which
+    /// arrives wrapped as a single-element array (<c>["0x.."]</c>); also tolerant
+    /// of a bare string or object-wrapped form.
+    /// </summary>
+    private static string IdentityText(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.String:
+                return element.GetString() ?? string.Empty;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    var text = IdentityText(item);
+                    if (text.Length > 0)
+                    {
+                        return text;
+                    }
+                }
+                return string.Empty;
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    var text = IdentityText(property.Value);
+                    if (text.Length > 0)
+                    {
+                        return text;
+                    }
+                }
+                return string.Empty;
+            default:
+                return element.GetRawText();
+        }
+    }
+
+    /// <summary>Lower-cases, trims and drops a leading <c>0x</c> so identities compare regardless of form.</summary>
+    private static string NormalizeIdentityHex(string raw)
+    {
+        var value = raw.Trim().ToLowerInvariant();
+        return value.StartsWith("0x", StringComparison.Ordinal) ? value[2..] : value;
+    }
+
     /// <summary>Reads the current <c>space_create_policy</c> from the module's settings row.</summary>
     public async Task<SpaceCreatePolicy> GetSpaceCreatePolicyAsync(CancellationToken ct = default)
     {
