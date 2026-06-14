@@ -100,11 +100,7 @@ public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptio
             return false;
         }
 
-        // SpacetimeDB /sql returns one result object per statement:
-        // [{ "schema": …, "rows": [[<col>, …], …], "stats": … }]. An Identity
-        // column comes back wrapped as a single-element array, e.g. ["0x<hex>"].
-        var results = await response.Content.ReadFromJsonAsync<List<SqlStatementResult>>(JsonOpts, ct);
-        var rows = results?.FirstOrDefault()?.Rows;
+        var rows = await ReadSqlRowsAsync(response, ct);
         if (rows is null)
         {
             return false;
@@ -124,6 +120,25 @@ public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptio
 
     /// <summary>One statement's result from the SpacetimeDB <c>/sql</c> endpoint.</summary>
     private sealed record SqlStatementResult(List<List<JsonElement>>? Rows);
+
+    /// <summary>
+    /// Reads the first statement's rows from a SpacetimeDB <c>/sql</c> response,
+    /// which is <c>[{ "schema": …, "rows": [[<col>, …], …], … }]</c>. Returns
+    /// <c>null</c> (so callers fail safe) on a malformed body.
+    /// </summary>
+    private static async Task<List<List<JsonElement>>?> ReadSqlRowsAsync(
+        HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            var results = await response.Content.ReadFromJsonAsync<List<SqlStatementResult>>(JsonOpts, ct);
+            return results?.FirstOrDefault()?.Rows;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Pulls the hex string out of a SpacetimeDB <c>Identity</c> SQL value, which
@@ -174,29 +189,59 @@ public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptio
         // system_settings is a public table — readable without auth.
         var http = httpFactory.CreateClient(ClientName);
         var url = $"{options.SpacetimeHttpUrl.TrimEnd('/')}/v1/database/{options.SpacetimeModuleName}/sql";
-        var response = await http.PostAsync(
-            url,
-            new StringContent("SELECT space_create_policy FROM system_settings"),
-            ct);
+        HttpResponseMessage response;
+        try
+        {
+            response = await http.PostAsync(
+                url,
+                new StringContent("SELECT space_create_policy FROM system_settings"),
+                ct);
+        }
+        catch
+        {
+            return SpaceCreatePolicy.Anyone;
+        }
+
         if (!response.IsSuccessStatusCode)
         {
             return SpaceCreatePolicy.Anyone;
         }
 
-        var rows = await response.Content.ReadFromJsonAsync<List<List<JsonElement>>>(JsonOpts, ct);
-        var raw = rows?.FirstOrDefault()?.FirstOrDefault();
-        if (raw is null) return SpaceCreatePolicy.Anyone;
+        var rows = await ReadSqlRowsAsync(response, ct);
+        var value = rows?.FirstOrDefault()?.FirstOrDefault();
+        return value is null ? SpaceCreatePolicy.Anyone : ParseSpaceCreatePolicy(value.Value);
+    }
 
-        // The enum comes back as `{ "anyone": [] }` or `{ "adminsOnly": [] }`
-        // under SpacetimeDB's algebraic-type JSON encoding.
-        if (raw.Value.ValueKind == JsonValueKind.Object)
+    /// <summary>
+    /// Decodes the <c>space_create_policy</c> column. SpacetimeDB's SATS-JSON
+    /// encodes a sum (enum) value as <c>[tag, body]</c>, and the module declares
+    /// the variants in the order <c>[anyone, adminsOnly]</c> — so tag 1 is
+    /// admins-only. Older SpacetimeDB builds used a named-object form
+    /// (<c>{ "adminsOnly": [] }</c>), which is still accepted.
+    /// </summary>
+    private static SpaceCreatePolicy ParseSpaceCreatePolicy(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Array)
         {
-            foreach (var prop in raw.Value.EnumerateObject())
+            foreach (var tag in value.EnumerateArray())
+            {
+                if (tag.ValueKind == JsonValueKind.Number && tag.TryGetInt32(out var index))
+                {
+                    return index == 1 ? SpaceCreatePolicy.AdminsOnly : SpaceCreatePolicy.Anyone;
+                }
+
+                break;
+            }
+        }
+        else if (value.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in value.EnumerateObject())
             {
                 if (prop.NameEquals("adminsOnly")) return SpaceCreatePolicy.AdminsOnly;
                 if (prop.NameEquals("anyone")) return SpaceCreatePolicy.Anyone;
             }
         }
+
         return SpaceCreatePolicy.Anyone;
     }
 
