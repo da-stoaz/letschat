@@ -6,7 +6,6 @@ description = "LetsChat Tauri shell"
 authors = ["LetsChat Team"]
 
 [dependencies]
-jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
 futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 rfd = "0.15"
