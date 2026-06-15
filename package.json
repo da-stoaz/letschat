@@ -1,7 +1,7 @@
 {
   "name": "letschat",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.1",
   "type": "module",
   "scripts": {
     "version:bump": "bun scripts/bump-version.ts",
@@ -36,6 +36,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/geist": "^5.2.9",
+    "@livekit/krisp-noise-filter": "^0.4.3",
     "@tanstack/react-query": "^5.101.0",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.2",

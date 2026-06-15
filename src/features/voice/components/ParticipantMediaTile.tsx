@@ -43,14 +43,6 @@ function pickVideoPublication(
   return null
 }
 
-function pickAudioPublication(
-  publications: Map<string, TrackPublication>,
-): TrackPublication | null {
-  const withTracks = Array.from(publications.values()).filter((publication) => Boolean(publication.track))
-  if (withTracks.length === 0) return null
-  return withTracks[0]
-}
-
 export function ParticipantMediaTile({
   displayName,
   avatarUrl = null,
@@ -69,7 +61,6 @@ export function ParticipantMediaTile({
   sharingCamera,
 }: ParticipantMediaTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const screenTrack = participant?.getTrackPublication(Track.Source.ScreenShare)?.videoTrack ?? null
   const cameraTrack = participant?.getTrackPublication(Track.Source.Camera)?.videoTrack ?? null
@@ -77,15 +68,8 @@ export function ParticipantMediaTile({
   const primaryVideoTrack =
     tileType === 'screen' ? screenTrack : cameraTrack ?? fallbackVideoTrack
 
-  const microphoneAudioTrack =
-    participant?.getTrackPublication(Track.Source.Microphone)?.audioTrack ?? null
-  const screenShareAudioTrack =
-    participant?.getTrackPublication(Track.Source.ScreenShareAudio)?.audioTrack ?? null
-  const fallbackAudioTrack = participant ? pickAudioPublication(participant.audioTrackPublications)?.track ?? null : null
-  const audioTrack =
-    tileType === 'screen'
-      ? screenShareAudioTrack
-      : microphoneAudioTrack ?? fallbackAudioTrack
+  // Remote audio is rendered by the app-shell-level CallAudioRenderer (so it
+  // survives view navigation), not per-tile — keep this component video-only.
 
   useEffect(() => {
     const videoElement = videoRef.current
@@ -105,25 +89,6 @@ export function ParticipantMediaTile({
       videoElement.srcObject = null
     }
   }, [primaryVideoTrack])
-
-  useEffect(() => {
-    const audioElement = audioRef.current
-    if (!audioElement) return
-
-    if (isLocal || !audioTrack || audioTrack.kind !== Track.Kind.Audio) {
-      audioElement.srcObject = null
-      return
-    }
-
-    audioTrack.attach(audioElement)
-    audioElement.muted = false
-    void audioElement.play().catch(() => undefined)
-
-    return () => {
-      audioTrack.detach(audioElement)
-      audioElement.srcObject = null
-    }
-  }, [audioTrack, isLocal])
 
   const showVideo = Boolean(primaryVideoTrack && primaryVideoTrack.kind === Track.Kind.Video)
   const showActivity = tileType === 'screen' ? isScreenAudioActive : isSpeaking
@@ -146,11 +111,15 @@ export function ParticipantMediaTile({
             autoPlay
             playsInline
             muted
+            aria-label={tileType === 'screen' ? `${displayName} screen share` : `${displayName} camera`}
             className={cn(
               'h-full w-full',
               tileType === 'screen' ? 'object-contain bg-black' : 'object-cover',
             )}
-          />
+          >
+            {/* Live WebRTC video has no caption source; satisfies media-caption a11y rules. */}
+            <track kind="captions" />
+          </video>
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/65 via-black/5 to-black/30 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between gap-2 p-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
             <div className="min-w-0">
@@ -178,7 +147,6 @@ export function ParticipantMediaTile({
               ) : null}
             </div>
           </div>
-          {!isLocal ? <audio ref={audioRef} autoPlay data-letschat-audio="remote" /> : null}
         </div>
       ) : (
         <div className={cn('relative aspect-video bg-muted/10', stageClassName)}>
@@ -229,7 +197,6 @@ export function ParticipantMediaTile({
               </div>
             )}
           </div>
-          {!isLocal ? <audio ref={audioRef} autoPlay data-letschat-audio="remote" /> : null}
         </div>
       )}
     </article>

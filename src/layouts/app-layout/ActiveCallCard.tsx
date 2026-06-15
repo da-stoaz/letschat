@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ConnectionState } from 'livekit-client'
 import {
-  AudioLinesIcon,
   ChevronDownIcon,
   LogOutIcon,
   MicIcon,
@@ -35,6 +34,8 @@ import { useVoiceStore } from '../../stores/voiceStore'
 import { normalizeIdentity } from './helpers'
 import { encodeDmSystemMessage, getCallDurationSeconds } from '../../features/dm/systemMessages'
 import { useVoiceControlActions } from '../../features/voice/hooks/useVoiceControlActions'
+import { CallLatencyBadge } from '../../features/voice/components/CallLatencyBadge'
+import { NoiseFilterToggle } from '../../features/voice/components/NoiseFilterToggle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -170,7 +171,7 @@ export function ActiveCallCard({
   const mode: CallMode | null = hasServerSession ? 'server' : hasDmSession ? 'dm' : null
 
   const activeRoom = mode === 'server' ? voiceRoom : mode === 'dm' ? dmRoom : null
-  const { activeSpeakerIds, connectionState, remoteParticipants } = useLiveKitRoom(activeRoom)
+  const { connectionState, remoteParticipants } = useLiveKitRoom(activeRoom)
 
   const serverChannelById = useMemo(() => {
     const map = new Map<number, { channelName: string; serverName: string }>()
@@ -269,6 +270,9 @@ export function ActiveCallCard({
         listLivekitDevices('videoinput', true),
       ])
       if (cancelled) return
+      // Re-detect output-switching support for each new room (a prior call may
+      // have flipped it off after a failed switch attempt).
+      setAudioOutputSwitchSupported(supportsAudioOutputSwitching())
       setAudioInputs(nextAudioInputs)
       setAudioOutputs(nextAudioOutputs)
       setVideoInputs(nextVideoInputs)
@@ -318,17 +322,14 @@ export function ActiveCallCard({
   ])
 
   useEffect(() => {
-    if (mode === null) {
-      setEntered(false)
-      return
-    }
+    if (mode === null) return
     const frame = requestAnimationFrame(() => setEntered(true))
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(frame)
+      // Reset so the card re-animates the next time a call becomes active.
+      setEntered(false)
+    }
   }, [mode])
-
-  useEffect(() => {
-    setAudioOutputSwitchSupported(supportsAudioOutputSwitching())
-  }, [activeRoom])
 
   const setCurrentError = (message: string | null) => {
     if (message && isUserAgentPermissionContextError(message)) {
@@ -487,7 +488,6 @@ export function ActiveCallCard({
     leaveErrorMessage: 'Could not leave voice call.',
   })
 
-  const hasSpeakingActivity = activeSpeakerIds.size > 0
   const statusLabel = getStatusLabel(connected, connecting)
   const micLabel = shortLabel(selectedDeviceLabel(audioInputId, audioInputs, 'Mic'))
   const cameraLabel = shortLabel(selectedDeviceLabel(videoInputId, videoInputs, 'Camera'))
@@ -516,11 +516,15 @@ export function ActiveCallCard({
                 {participants.length} participant{participants.length === 1 ? '' : 's'}
               </p>
             </div>
-            <div className="flex items-center gap-1">
-              <Badge variant={connected ? 'default' : connecting ? 'outline' : 'secondary'} className="px-2 py-0.5 text-[11px]">
-                {statusLabel}
-              </Badge>
-              <AudioLinesIcon className={`size-4 ${hasSpeakingActivity ? 'text-emerald-400' : 'text-muted-foreground'}`} />
+            <div className="flex items-center gap-1.5">
+              {connected ? (
+                <CallLatencyBadge room={activeRoom} compact />
+              ) : (
+                <Badge variant={connecting ? 'outline' : 'secondary'} className="px-2 py-0.5 text-[11px]">
+                  {statusLabel}
+                </Badge>
+              )}
+              <NoiseFilterToggle compact />
             </div>
           </div>
 
@@ -652,10 +656,12 @@ export function ActiveCallCard({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant={connected ? 'default' : connecting ? 'outline' : 'secondary'}>
-              {statusLabel}
-            </Badge>
-            <AudioLinesIcon className={`size-5 ${hasSpeakingActivity ? 'text-emerald-400' : 'text-muted-foreground'}`} />
+            {connected ? (
+              <CallLatencyBadge room={activeRoom} />
+            ) : (
+              <Badge variant={connecting ? 'outline' : 'secondary'}>{statusLabel}</Badge>
+            )}
+            <NoiseFilterToggle />
           </div>
         </div>
 

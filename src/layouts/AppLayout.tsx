@@ -26,6 +26,7 @@ import { ComposeDmDialog } from './app-layout/ComposeDmDialog'
 import { LayoutModals, type MemberActionModal } from './app-layout/LayoutModals'
 import { MemberPanel } from './app-layout/MemberPanel'
 import { ActiveCallCard } from './app-layout/ActiveCallCard'
+import { CallAudioRenderer } from '../features/voice/components/CallAudioRenderer'
 import { AppRail } from './app-layout/AppRail'
 import { ChannelBar } from './app-layout/ChannelBar'
 import { cn } from '../lib/utils'
@@ -492,6 +493,8 @@ export function AppLayout() {
 
   return (
     <>
+      {/* Persistent call audio sinks — keep audio playing across view navigation. */}
+      <CallAudioRenderer />
       <main
         className="relative h-full overflow-hidden bg-background p-1 text-foreground"
         style={{ ['--channel-bar-width' as string]: `${channelBarWidth}px` }}
