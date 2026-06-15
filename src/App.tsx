@@ -15,6 +15,8 @@ import { useConnectionStore } from './stores/connectionStore'
 import { useUiStore } from './stores/uiStore'
 import { useServerConfigStore } from './stores/serverConfigStore'
 import { useDeepLink } from './hooks/useDeepLink'
+import { useWebAutoConfig } from './hooks/useWebAutoConfig'
+import { WebJoinPage } from './pages/WebJoinPage'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
 import { useVoiceStateReconciler } from './hooks/useVoiceStateReconciler'
 import { ensureNotificationPermission } from './lib/notifications'
@@ -24,6 +26,7 @@ import { LoaderCircleIcon } from 'lucide-react'
 
 function App() {
   useDeepLink()
+  const webAutoConfig = useWebAutoConfig()
   usePresenceLifecycle()
   useVoiceStateReconciler()
   const user = useSelfStore((s) => s.user)
@@ -34,6 +37,7 @@ function App() {
   const location = useLocation()
   const onAuthRoute = location.pathname.startsWith('/auth')
   const onSetupRoute = location.pathname.startsWith('/setup')
+  const onJoinRoute = location.pathname.startsWith('/join')
 
   useEffect(() => {
     if (!notificationsEnabled) return
@@ -44,7 +48,14 @@ function App() {
     return <SplashScreen />
   }
 
-  if (!isConfigured && !onSetupRoute) {
+  // Hosted-web build auto-discovering its own instance: show the splash while
+  // discovery is in flight instead of flashing the desktop Setup screen. A
+  // `failed` status falls through to the Setup redirect below.
+  if (webAutoConfig === 'discovering' && !isConfigured) {
+    return <SplashScreen />
+  }
+
+  if (!isConfigured && !onSetupRoute && !onJoinRoute) {
     return <Navigate to="/setup" replace />
   }
 
@@ -67,6 +78,7 @@ function App() {
   return (
     <Routes>
       <Route path="/setup" element={isConfigured ? <Navigate to="/" replace /> : <SetupPage />} />
+      <Route path="/join" element={<WebJoinPage />} />
       <Route path="/" element={<Navigate to={user ? '/app' : '/auth'} replace />} />
       <Route path="/auth" element={user ? <Navigate to="/app" replace /> : <AuthPage />} />
       <Route path="/invite/:token" element={<InvitePage />} />

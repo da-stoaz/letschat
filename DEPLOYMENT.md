@@ -18,8 +18,8 @@ Use this file as a compact operator reference.
 Shared core services:
 
 - `docker-compose.prod.base.yml` — `spacetimedb`, `postgres`, `core-api`,
-  `module-init`, `livekit`, `minio`, `minio-init`, plus the profile-gated
-  `core-api-migrator` one-shot.
+  `module-init`, `livekit`, `minio`, `minio-init`, `web` (hosted browser SPA),
+  plus the profile-gated `core-api-migrator` one-shot.
 
 Topology overlays:
 
@@ -56,6 +56,36 @@ Validate config before start:
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml config >/tmp/letschat-tunnel-config.yml
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml config >/tmp/letschat-caddy-config.yml
 ```
+
+## Hosted web client (`app.<domain>`)
+
+The `web` service builds the React/Vite bundle and serves it as static files, so
+users can reach LetsChat from a browser without installing the desktop app. It is
+**single-tenant**: the bundle is built with `VITE_WEB_CONNECT_URL` baked in, so a
+browser hitting `app.<domain>` auto-discovers this instance via
+`connect.<domain>/.well-known/letschat.json` and goes straight to login — no
+setup screen. Desktop builds are unaffected (the var is unset there).
+
+Required env (see the `.env.production.*.example` files):
+
+- `APP_DOMAIN=app.example.com` — Caddy hostname (Caddy track only).
+- `VITE_WEB_CONNECT_URL=https://connect.example.com` — baked into the bundle.
+- `VITE_WEB_WS_COMPRESSION=gzip` — DB WebSocket compression in browsers
+  (`gzip` default, or `none`). The client auto-downgrades to `none` if a gzip
+  socket fails to establish, so this never strands a user.
+- `MINIO_CORS_ALLOW_ORIGIN=https://app.example.com` — lets the browser
+  `fetch()` presigned download URLs (`*` also works).
+
+Routing:
+
+- **Caddy track**: handled automatically — the `{$APP_DOMAIN}` block proxies to
+  `web:80`. Point `app.<domain>` DNS at the host.
+- **Tunnel track**: add an ingress rule `app.<domain> -> http://web:80` in the
+  Cloudflare Zero Trust dashboard (WebSocket not required — static files only).
+
+> The bundle is built at image-build time, so **after changing
+> `VITE_WEB_CONNECT_URL` you must rebuild**: `docker compose ... build web` then
+> `up -d web`.
 
 ## First-time cutover from `auth-service`
 

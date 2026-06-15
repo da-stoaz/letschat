@@ -1,0 +1,21 @@
+# Static file server for the LetsChat web SPA (inside the `web` container).
+# TLS + public exposure are handled upstream by the reverse proxy / tunnel; this
+# listens plain HTTP on :80 and is reached by service name `web:80`.
+
+:80 {
+	root * /srv
+	encode zstd gzip
+
+	# Content-hashed bundle assets are immutable — cache them aggressively.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	# The HTML entry must never be cached, so new deploys are picked up at once.
+	@html path / /index.html
+	header @html Cache-Control "no-cache"
+
+	# SPA fallback: unknown paths (client-side routes like /app, /join) serve the
+	# app shell so BrowserRouter can take over.
+	try_files {path} /index.html
+	file_server
+}

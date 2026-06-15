@@ -4,6 +4,7 @@ import { syncAll, resetClientState } from './sync'
 import { notify } from '../notifications'
 import { useConnectionStore, type ConnectionStatus } from '../../stores/connectionStore'
 import { useServerConfigStore } from '../../stores/serverConfigStore'
+import { isDesktopTauriRuntime } from '../tauri'
 
 export type SpacetimeDBClient = {
   connection: DbConnection | null
@@ -33,11 +34,30 @@ let reconnectAttempts = 0
 // automatic reconnect that would otherwise fire on the resulting close.
 let intentionalDisconnect = false
 
+// Reliability-first WS compression (web only). The SDK's gzip path decodes via
+// the browser DecompressionStream API; real browsers support it (a bandwidth
+// win), but Tauri's WKWebView does not — there compression must stay 'none'.
+// On web we attempt 'gzip' but, if a compressed socket ever fails to ESTABLISH,
+// we downgrade to 'none' for the rest of the session and reconnect — so an
+// exotic browser/proxy that mangles gzip frames can never strand the client.
+// Bounded to one downgrade per session; never flaps back to gzip.
+let webCompressionDowngraded = false
+
 // Comfortably under the server's 30s default `idle_timeout` and a typical ~100s
 // proxy idle cull, with margin for a slow round-trip.
 const HEARTBEAT_INTERVAL_MS = 25_000
 const RECONNECT_BASE_DELAY_MS = 1_000
 const RECONNECT_MAX_DELAY_MS = 30_000
+
+// Picks the WebSocket compression mode for the next connection attempt.
+// Desktop (WKWebView): always 'none'. Web: 'gzip' by default, unless an operator
+// forces it off via VITE_WEB_WS_COMPRESSION='none' or a prior gzip connect
+// failed and we auto-downgraded this session.
+function pickCompression(): 'gzip' | 'none' {
+  if (isDesktopTauriRuntime()) return 'none'
+  if (import.meta.env.VITE_WEB_WS_COMPRESSION === 'none') return 'none'
+  return webCompressionDowngraded ? 'none' : 'gzip'
+}
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -187,13 +207,14 @@ async function connectWithUri(uri: string, database: string, reportErrors: boole
       .withUri(uri)
       .withDatabaseName(database)
       .withLightMode(false)
-      // Disable WebSocket message compression. The SDK's default ("gzip")
-      // decompresses by async-iterating a DecompressionStream, which Tauri's
-      // WKWebView runtime does not support — every incoming message throws
+      // WebSocket message compression. Desktop stays 'none' because the SDK's
+      // gzip path decompresses by async-iterating a DecompressionStream, which
+      // Tauri's WKWebView does not support — every incoming message throws
       // `undefined is not a function (near '...chunk of decompressedStream...')`
-      // and the connection never completes. "none" makes the server send
-      // uncompressed frames, which the SDK returns directly.
-      .withCompression('none')
+      // and the connection never completes. Real browsers support it, so web
+      // uses 'gzip' (with a one-shot auto-downgrade in connect()). See
+      // pickCompression().
+      .withCompression(pickCompression())
       .withToken(getStoredToken())
       .onConnect((_conn, identity, token) => {
         const identityString =
@@ -346,32 +367,51 @@ export async function connect(): Promise<void> {
 
   connectPromise = (async () => {
     setStatus('connecting')
-    const uriCandidates = buildSpacetimeUriCandidates(SPACETIMEDB_URI)
-    const errors: string[] = []
 
-    for (const [index, candidate] of uriCandidates.entries()) {
-      const isLastCandidate = index === uriCandidates.length - 1
-      try {
-        await connectWithUri(candidate, SPACETIMEDB_DATABASE, isLastCandidate)
+    const tryAllCandidates = async (): Promise<void> => {
+      const uriCandidates = buildSpacetimeUriCandidates(SPACETIMEDB_URI)
+      const errors: string[] = []
 
-        if (candidate !== SPACETIMEDB_URI) {
-          const currentConfig = useServerConfigStore.getState().config
-          if (currentConfig && currentConfig.spacetimedbUri === SPACETIMEDB_URI) {
-            useServerConfigStore.getState().setConfig({
-              ...currentConfig,
-              spacetimedbUri: candidate,
-            })
+      for (const [index, candidate] of uriCandidates.entries()) {
+        const isLastCandidate = index === uriCandidates.length - 1
+        try {
+          await connectWithUri(candidate, SPACETIMEDB_DATABASE, isLastCandidate)
+
+          if (candidate !== SPACETIMEDB_URI) {
+            const currentConfig = useServerConfigStore.getState().config
+            if (currentConfig && currentConfig.spacetimedbUri === SPACETIMEDB_URI) {
+              useServerConfigStore.getState().setConfig({
+                ...currentConfig,
+                spacetimedbUri: candidate,
+              })
+            }
           }
+          return
+        } catch (error) {
+          errors.push(`${candidate} -> ${getConnectionErrorDetails(error)}`)
         }
-        return
-      } catch (error) {
-        errors.push(`${candidate} -> ${getConnectionErrorDetails(error)}`)
       }
+
+      throw new Error(
+        `SpacetimeDB connection failed at ${SPACETIMEDB_URI}. Tried ${uriCandidates.length} URI(s): ${errors.join('; ')}`,
+      )
     }
 
-    throw new Error(
-      `SpacetimeDB connection failed at ${SPACETIMEDB_URI}. Tried ${uriCandidates.length} URI(s): ${errors.join('; ')}`,
-    )
+    try {
+      await tryAllCandidates()
+    } catch (error) {
+      // Reliability net: if a web client just failed to establish a COMPRESSED
+      // socket, downgrade to uncompressed once and retry the whole connect — so
+      // a gzip path an exotic browser/proxy can't handle never strands us. Only
+      // fires on web, only when we were actually using gzip, only once.
+      if (!isDesktopTauriRuntime() && !webCompressionDowngraded && pickCompression() === 'gzip') {
+        webCompressionDowngraded = true
+        console.warn('[spacetimedb] compressed connect failed; retrying without WebSocket compression')
+        await tryAllCandidates()
+      } else {
+        throw error
+      }
+    }
   })()
 
   try {
