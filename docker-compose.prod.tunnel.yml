@@ -1,10 +1,9 @@
 services:
   # ── Cloudflare Tunnel track ─────────────────────────────────────────────────
   # Ingress should map:
-  #   auth.<domain>    -> http://core-api:8787
+  #   auth.<domain>    -> http://core-api:8787     (also serves /.well-known discovery)
   #   chat.<domain>    -> http://spacetimedb:3000  (WebSocket enabled)
   #   files.<domain>   -> http://minio:44390
-  #   connect.<domain> -> http://core-api:8787
   #   app.<domain>     -> http://web:80            (hosted browser SPA)
   #   lk.<domain>      -> http://livekit:44380     (WebSocket enabled)
   # LiveKit's *signalling* (WebSocket, 44380) IS tunnelled via the lk.<domain>

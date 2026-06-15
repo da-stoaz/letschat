@@ -28,7 +28,7 @@ LetsChat is a Tauri-based desktop chat application with a distributed backend. T
   └─→ MinIO (S3 API) — file upload/download via presigned URLs
 ```
 
-Auto-discovery via `/.well-known/letschat.json` on the `connect.<domain>` subdomain lets the client find service endpoints.
+Auto-discovery via `/.well-known/letschat.json` on the `auth.<domain>` subdomain lets the client find service endpoints.
 
 ## Local Development
 

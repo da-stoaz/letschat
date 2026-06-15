@@ -7,7 +7,7 @@ import { isHostedWebBuild } from '../lib/tauri'
 export type WebAutoConfigStatus = 'inactive' | 'discovering' | 'done' | 'failed'
 
 /**
- * The connect URL baked into a hosted-web build (e.g. https://connect.example.com).
+ * The connect URL baked into a hosted-web build (e.g. https://auth.example.com).
  * Unset on desktop builds and local dev, where the normal Setup flow is used.
  */
 const WEB_CONNECT_URL = (import.meta.env.VITE_WEB_CONNECT_URL as string | undefined)?.trim() || undefined

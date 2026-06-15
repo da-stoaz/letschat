@@ -2,6 +2,8 @@
 import Layout from "@/layouts/Layout.astro";
 import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
+import CodeBlock from "@/components/CodeBlock.astro";
+import Callout from "@/components/Callout.astro";
 import { GITHUB_REPO } from "@/lib/site";
 ---
 
@@ -11,98 +13,114 @@ import { GITHUB_REPO } from "@/lib/site";
 >
   <SiteHeader active="self-hosting" />
 
-  <main class="relative max-w-6xl mx-auto px-6 py-16 space-y-10 overflow-hidden">
+  <main class="relative max-w-4xl mx-auto px-6 py-16 space-y-9 overflow-hidden">
     <div class="hero-glow hero-glow-b"></div>
 
-    <div class="relative z-10 space-y-2">
-      <nav class="flex items-center gap-2 text-xs text-muted-foreground">
+    <div class="relative z-10 space-y-4">
+      <nav class="flex items-center gap-2 text-sm text-muted-foreground">
         <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
         <span>/</span>
         <span class="text-foreground">Path B: Caddy</span>
       </nav>
       <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Path B: Caddy Reverse Proxy</h1>
-      <p class="text-muted-foreground max-w-2xl leading-relaxed pt-1">
+      <p class="guide-lead max-w-2xl">
         Caddy runs on your host, terminates HTTPS automatically, and routes by hostname to internal Docker services.
         Simpler moving parts than a tunnel — but your host directly exposes ports 80 and 443.
       </p>
-      <div class="flex flex-wrap gap-2 text-xs pt-2">
+      <div class="flex flex-wrap gap-2 text-xs pt-1">
         <span class="mini-pill">Direct HTTPS</span>
         <span class="mini-pill">Classic Reverse Proxy</span>
         <span class="mini-pill">Auto TLS via ACME</span>
       </div>
     </div>
 
-    <section class="space-y-6">
+    <section class="space-y-7">
 
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Requirements (Read First)</h2>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">Requirements (read first)</h2>
+        <ul class="list-disc pl-5 guide-prose space-y-1.5">
           <li>Ubuntu host with Docker Engine + Compose plugin.</li>
           <li>Cloudflare DNS records set to your host public IP (DNS-only mode for ACME issuance).</li>
           <li>A routable public IPv4, <strong>not</strong> CGNAT. This track exposes the host directly, so CGNAT breaks everything, not just voice. Step 2 shows how to check.</li>
-          <li>Router/firewall forwards to the host's LAN IP: <code class="text-xs">80/tcp</code> + <code class="text-xs">443/tcp</code> (Caddy TLS/HTTP) and <code class="text-xs">44382/udp</code> + <code class="text-xs">44381/tcp</code> (LiveKit media). All a manual router step.</li>
+          <li>Router/firewall forwards to the host's LAN IP: <code>80/tcp</code> + <code>443/tcp</code> (Caddy TLS/HTTP) and <code>44382/udp</code> + <code>44381/tcp</code> (LiveKit media). All a manual router step.</li>
         </ul>
       </article>
 
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">How This Path Works</h2>
-        <p class="text-sm text-muted-foreground">Caddy runs on your host, terminates HTTPS, and routes by hostname to internal Docker services.</p>
-        <p class="text-sm text-muted-foreground">This removes Cloudflare Tunnel complexity, but your host directly exposes <code class="text-xs">80/443</code> to the internet.</p>
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">How this path works</h2>
+        <p class="guide-prose">Caddy runs on your host, terminates HTTPS, and routes by hostname to internal Docker services. This removes Cloudflare Tunnel complexity, but your host directly exposes <code>80/443</code> to the internet.</p>
+        <p class="guide-prose">You'll publish these hostnames — five if you host the browser client, four without it:</p>
+        <ul class="domain-list">
+          <li><code>auth</code> <span>login, tokens &amp; first-run discovery</span></li>
+          <li><code>chat</code> <span>realtime database</span></li>
+          <li><code>files</code> <span>uploads &amp; downloads</span></li>
+          <li><code>lk</code> <span>voice signalling</span></li>
+          <li><code>app</code> <span>browser client (optional)</span></li>
+        </ul>
+        <Callout type="note" title="Desktop and browser, same stack">
+          Users can install the <strong>desktop app</strong> (and paste <code>auth.example.com</code> as the server) or
+          just open the <strong>hosted browser client</strong> at <code>app.example.com</code> — no install, voice
+          included. The browser client is optional; leave <code>app</code> out and the desktop app still works.
+          There is no separate <code>connect</code> subdomain — <code>auth</code> is the discovery entrypoint.
+        </Callout>
       </article>
 
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 0: Get Shared Files</h2>
-        <p class="text-sm text-muted-foreground">Download the shared base compose file and LiveKit config:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`mkdir letschat && cd letschat
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">Step 0: Get shared files</h2>
+        <p class="guide-prose">Download the shared base compose file and LiveKit config:</p>
+        <CodeBlock label="terminal" code={`mkdir letschat && cd letschat
 
 wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
 
 mkdir livekit
 wget -O livekit/config.prod.yaml \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml`}</code></pre>
-        <p class="text-sm text-muted-foreground">All images are pre-built — no Rust or Node toolchains needed on the server.</p>
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml`} />
+        <p class="guide-prose text-sm">All images are pre-built — no Rust or Node toolchains needed on the server (the browser client compiles itself in the <code>web</code> container on first start).</p>
       </article>
 
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 1: Download Path B Files</h2>
-        <p class="text-sm text-muted-foreground">Inside the <code class="text-xs">letschat</code> directory:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.caddy.yml
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">Step 1: Download Path B files</h2>
+        <p class="guide-prose">Inside the <code>letschat</code> directory:</p>
+        <CodeBlock label="terminal" code={`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.caddy.yml
 
 wget -O .env \\
   https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.caddy.example
 
 mkdir -p deploy/caddy
 wget -O deploy/caddy/Caddyfile \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/deploy/caddy/Caddyfile`}</code></pre>
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/deploy/caddy/Caddyfile`} />
       </article>
 
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 2: DNS + Network Setup</h2>
-        <p class="text-sm text-muted-foreground">Point these A records to your host public IP (DNS-only, no Cloudflare proxy):</p>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li><code class="text-xs">auth.example.com</code></li>
-          <li><code class="text-xs">chat.example.com</code></li>
-          <li><code class="text-xs">files.example.com</code></li>
-          <li><code class="text-xs">lk.example.com</code></li>
-          <li><code class="text-xs">connect.example.com</code></li>
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">Step 2: DNS + network setup</h2>
+        <p class="guide-prose">Point these A records to your host public IP (DNS-only, no Cloudflare proxy):</p>
+        <ul class="list-disc pl-5 guide-prose space-y-1">
+          <li><code>auth.example.com</code></li>
+          <li><code>chat.example.com</code></li>
+          <li><code>files.example.com</code></li>
+          <li><code>lk.example.com</code></li>
+          <li><code>app.example.com</code> <span class="text-sm">— only if you host the browser client</span></li>
         </ul>
-        <p class="text-sm text-muted-foreground"><strong>First confirm you are not behind CGNAT</strong> — compare your true public IP to your router's WAN IP. If they differ, this track cannot work at all (you'd need the Cloudflare Tunnel track, or a public-IP VPS):</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -4 ifconfig.me        # compare to the WAN IP on your router's status page`}</code></pre>
-        <p class="text-sm text-muted-foreground">Give the server a static DHCP reservation, then forward these on your router/firewall to its LAN IP:</p>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li><code class="text-xs">80/tcp</code> and <code class="text-xs">443/tcp</code> → Caddy (HTTP + TLS for all web services)</li>
-          <li><code class="text-xs">44382/udp</code> (primary media) and <code class="text-xs">44381/tcp</code> (fallback) → LiveKit media</li>
+        <Callout type="warning" title="First confirm you are not behind CGNAT">
+          Compare your true public IP to your router's WAN IP. If they differ, this track cannot work at all
+          (you'd need the Cloudflare Tunnel track, or a public-IP VPS):
+          <CodeBlock label="terminal" code={`curl -4 ifconfig.me        # compare to the WAN IP on your router's status page`} />
+        </Callout>
+        <p class="guide-prose">Give the server a static DHCP reservation, then forward these on your router/firewall to its LAN IP:</p>
+        <ul class="list-disc pl-5 guide-prose space-y-1.5">
+          <li><code>80/tcp</code> and <code>443/tcp</code> → Caddy (HTTP + TLS for all web services)</li>
+          <li><code>44382/udp</code> (primary media) and <code>44381/tcp</code> (fallback) → LiveKit media</li>
         </ul>
-        <p class="text-xs text-muted-foreground">Port <code class="text-xs">44380</code> (LiveKit signalling) does <strong>not</strong> need forwarding — Caddy proxies it on 443 as <code class="text-xs">wss://lk.example.com</code>.</p>
+        <p class="guide-prose text-sm">Port <code>44380</code> (LiveKit signalling) does <strong>not</strong> need forwarding — Caddy proxies it on 443 as <code>wss://lk.example.com</code>.</p>
       </article>
 
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 3: Configure Secrets and Domains</h2>
-        <p class="text-sm text-muted-foreground">Open <code class="text-xs">.env</code> and replace every placeholder. Generate secrets with:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
-openssl rand -base64 32   # for LIVEKIT_API_SECRET`}</code></pre>
-        <p class="text-sm text-muted-foreground"><strong>Every field below must be set</strong> — the stack will not start without <code class="text-xs">POSTGRES_PASSWORD</code>, and you cannot sign in without the bootstrap admin. Grouped by purpose:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`# Secrets — generate each one
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">Step 3: Configure secrets and domains</h2>
+        <p class="guide-prose">Open <code>.env</code> and replace every placeholder. Generate secrets with:</p>
+        <CodeBlock label="terminal" code={`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
+openssl rand -base64 32   # for LIVEKIT_API_SECRET`} />
+        <p class="guide-prose"><strong>Every field below must be set</strong> — the stack will not start without <code>POSTGRES_PASSWORD</code>, and you cannot sign in without the bootstrap admin. Grouped by purpose:</p>
+        <CodeBlock label=".env" code={`# Secrets — generate each one
 AUTH_JWT_SECRET=            # openssl rand -hex 32
 POSTGRES_PASSWORD=         # openssl rand -hex 32
 LIVEKIT_API_SECRET=        # openssl rand -base64 32
@@ -114,7 +132,7 @@ ADMIN_BOOTSTRAP_USERNAME=admin
 ADMIN_BOOTSTRAP_PASSWORD=  # a strong password
 ADMIN_BOOTSTRAP_EMAIL=you@example.com
 
-# Public endpoints — your domains
+# Public endpoints — your domains (auth.<domain> also serves discovery)
 MINIO_PUBLIC_ENDPOINT=https://files.example.com
 DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
 DISCOVERY_AUTH_URL=https://auth.example.com
@@ -125,7 +143,7 @@ AUTH_DOMAIN=auth.example.com
 CHAT_DOMAIN=chat.example.com
 FILES_DOMAIN=files.example.com
 LIVEKIT_DOMAIN=lk.example.com
-CONNECT_DOMAIN=connect.example.com
+APP_DOMAIN=app.example.com
 
 # Outbound email — required because EMAIL_SENDER defaults to smtp and
 # email confirmation is on by default
@@ -133,44 +151,72 @@ SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_USER=
 SMTP_PASSWORD=
-EMAIL_FROM_ADDRESS=no-reply@example.com`}</code></pre>
-        <p class="text-sm text-muted-foreground"><strong>Don't want to set up SMTP yet?</strong> Set <code class="text-xs">REQUIRE_EMAIL_CONFIRMATION=false</code> and <code class="text-xs">EMAIL_SENDER=log</code> — accounts then work without email (links are written to the container log instead).</p>
-        <p class="text-sm text-muted-foreground">Everything else in <code class="text-xs">.env</code> already has a working default and is documented inline — <code class="text-xs">LIVEKIT_API_KEY</code> (must match <code class="text-xs">livekit/config.prod.yaml</code>), <code class="text-xs">POSTGRES_USER</code>/<code class="text-xs">POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them.</p>
+EMAIL_FROM_ADDRESS=no-reply@example.com`} />
+
+        <h3 class="text-lg font-medium pt-1">Hosting the browser client (optional)</h3>
+        <p class="guide-prose">
+          For the browser client at <code>app.example.com</code>, also set these. Skip them (and the
+          <code>APP_DOMAIN</code> above) to serve the desktop app only.
+        </p>
+        <CodeBlock label=".env" code={`# Baked into the browser bundle at build time so it auto-connects to THIS
+# instance. Point at auth.<domain>, which serves the discovery document.
+VITE_WEB_CONNECT_URL=https://auth.example.com
+
+# Let the browser fetch presigned download URLs from MinIO.
+MINIO_CORS_ALLOW_ORIGIN=https://app.example.com
+
+# DB WebSocket compression in the browser: "gzip" (default) or "none".
+VITE_WEB_WS_COMPRESSION=gzip`} />
+
+        <Callout type="tip" title="Don't want to set up SMTP yet?">
+          Set <code>REQUIRE_EMAIL_CONFIRMATION=false</code> and <code>EMAIL_SENDER=log</code> — accounts then
+          work without email (links are written to the container log instead).
+        </Callout>
+        <p class="guide-prose text-sm">Everything else in <code>.env</code> already has a working default and is documented inline — <code>LIVEKIT_API_KEY</code> (must match <code>livekit/config.prod.yaml</code>), <code>POSTGRES_USER</code>/<code>POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them.</p>
       </article>
 
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 4: Configure LiveKit</h2>
-        <p class="text-sm text-muted-foreground">Open <code class="text-xs">livekit/config.prod.yaml</code> and replace the key/secret placeholder so it matches your <code class="text-xs">.env</code>:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`keys:
-  letschat-prod: <paste LIVEKIT_API_SECRET here>`}</code></pre>
-        <p class="text-xs text-muted-foreground">The rest of the file (ports, <code class="text-xs">use_external_ip: true</code>) can stay as-is for most home server setups.</p>
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">Step 4: Configure LiveKit</h2>
+        <p class="guide-prose">Open <code>livekit/config.prod.yaml</code> and replace the key/secret placeholder so it matches your <code>.env</code>:</p>
+        <CodeBlock label="livekit/config.prod.yaml" code={`keys:
+  letschat-prod: <paste LIVEKIT_API_SECRET here>`} />
+        <p class="guide-prose text-sm">The rest of the file (ports, <code>use_external_ip: true</code>) can stay as-is for most home server setups.</p>
       </article>
 
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 5: Pull Images and Start</h2>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">Step 5: Pull images and start</h2>
+        <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`}</code></pre>
-        <p class="text-sm text-muted-foreground"><code class="text-xs">module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker logs letschat-module-init`}</code></pre>
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`} />
+        <p class="guide-prose"><code>module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
+        <CodeBlock label="terminal" code={`docker logs letschat-module-init`} />
+        <Callout type="note">
+          Hosting the browser client? The <code>web</code> container builds the React bundle on first start —
+          give it a couple of minutes. If you change <code>VITE_WEB_CONNECT_URL</code> later, rebuild with
+          <code>docker compose … build web && docker compose … up -d web</code>.
+        </Callout>
       </article>
 
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 6: Validate Public Endpoints</h2>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">Step 6: Validate public endpoints</h2>
+        <CodeBlock label="terminal" code={`curl -i https://auth.example.com/health
 curl -i https://files.example.com/minio/health/live
-curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
+curl -i https://auth.example.com/.well-known/letschat.json`} />
       </article>
 
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Step 7: Client Onboarding</h2>
-        <p class="text-sm text-muted-foreground">Users enter <code class="text-xs">https://connect.example.com</code> in startup. Discovery JSON should point to your public endpoints:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`{
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">Step 7: Client onboarding</h2>
+        <p class="guide-prose">
+          <strong>Desktop:</strong> users enter <code>https://auth.example.com</code> in the setup screen.
+          <strong>Browser:</strong> users open <code>https://app.example.com</code> and go straight to login.
+          Both read the same discovery document, which should point to your public endpoints:
+        </p>
+        <CodeBlock label="auth.example.com/.well-known/letschat.json" code={`{
   "spacetimedb": "wss://chat.example.com",
   "auth": "https://auth.example.com",
   "livekit": "wss://lk.example.com",
   "database": "letschat"
-}`}</code></pre>
+}`} />
       </article>
 
     </section>
@@ -205,9 +251,9 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
     display: inline-flex;
     align-items: center;
     border-radius: 9999px;
-    padding: 0.28rem 0.55rem;
+    padding: 0.3rem 0.6rem;
     border: 1px solid oklch(1 0 0 / 0.16);
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     color: var(--color-muted-foreground);
     background: oklch(0.16 0 0 / 0.6);
   }
@@ -220,10 +266,31 @@ curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
     box-shadow: 0 14px 34px oklch(0 0 0 / 0.2);
   }
 
+  .domain-list {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .domain-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.7rem;
+    font-size: 1rem;
+    color: var(--color-muted-foreground);
+  }
+
+  .domain-list li code {
+    flex: none;
+    min-width: 3.4rem;
+    text-align: center;
+  }
+
   @keyframes drift {
     0% { transform: translate3d(0, 0, 0) scale(1); }
     50% { transform: translate3d(8px, -12px, 0) scale(1.04); }
     100% { transform: translate3d(0, 0, 0) scale(1); }
   }
 </style>
-

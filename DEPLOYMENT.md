@@ -63,13 +63,14 @@ The `web` service builds the React/Vite bundle and serves it as static files, so
 users can reach LetsChat from a browser without installing the desktop app. It is
 **single-tenant**: the bundle is built with `VITE_WEB_CONNECT_URL` baked in, so a
 browser hitting `app.<domain>` auto-discovers this instance via
-`connect.<domain>/.well-known/letschat.json` and goes straight to login — no
+`auth.<domain>/.well-known/letschat.json` and goes straight to login — no
 setup screen. Desktop builds are unaffected (the var is unset there).
 
 Required env (see the `.env.production.*.example` files):
 
 - `APP_DOMAIN=app.example.com` — Caddy hostname (Caddy track only).
-- `VITE_WEB_CONNECT_URL=https://connect.example.com` — baked into the bundle.
+- `VITE_WEB_CONNECT_URL=https://auth.example.com` — baked into the bundle
+  (auth.<domain> serves the discovery document).
 - `VITE_WEB_WS_COMPRESSION=gzip` — DB WebSocket compression in browsers
   (`gzip` default, or `none`). The client auto-downgrades to `none` if a gzip
   socket fails to establish, so this never strands a user.
@@ -208,7 +209,7 @@ unset those env vars on the next deploy.
 | MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT` | Public endpoint is used in presigned URLs |
 | Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_DATABASE` | Served by core-api at `/.well-known/letschat.json` |
 | Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
-| Caddy only | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `CONNECT_DOMAIN` | Used by `deploy/caddy/Caddyfile` |
+| Caddy only | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | Used by `deploy/caddy/Caddyfile` |
 
 ## Discovery Contract (`/.well-known/letschat.json`)
 
@@ -260,10 +261,11 @@ LiveKit scheme by track:
 
 Public routing:
 
-- Tunnel track: add `connect.<domain> -> http://core-api:8787` and
-  `lk.<domain> -> http://livekit:44380` (WebSocket enabled) ingress rules in
-  Cloudflare Tunnel.
-- Caddy track: set `CONNECT_DOMAIN` and ensure DNS points to host IP.
+- Tunnel track: add `auth.<domain> -> http://core-api:8787` (also serves
+  `/.well-known/letschat.json`) and `lk.<domain> -> http://livekit:44380`
+  (WebSocket enabled) ingress rules in Cloudflare Tunnel.
+- Caddy track: `auth.<domain>` serves discovery automatically; ensure its DNS
+  points to the host IP.
 
 ## Configuration lifecycle (env vs admin panel)
 
