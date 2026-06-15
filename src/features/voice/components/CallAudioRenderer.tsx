@@ -9,6 +9,7 @@ import { useDmVoiceStore } from '../../../stores/dmVoiceStore'
 import { useMediaDeviceStore } from '../../../stores/mediaDeviceStore'
 import { useVoiceSessionStore } from '../../../stores/voiceSessionStore'
 import { useVoiceStore } from '../../../stores/voiceStore'
+import { useKrispNoiseFilter } from '../hooks/useKrispNoiseFilter'
 
 type SinkCapableElement = HTMLAudioElement & {
   setSinkId?: (sinkId: string) => Promise<void>
@@ -122,6 +123,11 @@ export function CallAudioRenderer() {
   const participantsByChannel = useVoiceStore((s) => s.participantsByChannel)
   const participantsByDmRoom = useDmVoiceStore((s) => s.participantsByRoom)
   const audioOutputId = useMediaDeviceStore((s) => s.audioOutputId)
+
+  // Keep the Krisp noise filter applied to the local mic of whichever call is
+  // active, regardless of which view is mounted.
+  useKrispNoiseFilter(voiceRoom)
+  useKrispNoiseFilter(dmRoom)
 
   const serverDeafened = useMemo(() => {
     if (!selfIdentity || joinedVoiceChannelId === null) return false
