@@ -2,6 +2,8 @@
 import Layout from "@/layouts/Layout.astro";
 import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
+import CodeBlock from "@/components/CodeBlock.astro";
+import Callout from "@/components/Callout.astro";
 import { GITHUB_REPO } from "@/lib/site";
 ---
 
@@ -11,17 +13,17 @@ import { GITHUB_REPO } from "@/lib/site";
 >
   <SiteHeader active="self-hosting" />
 
-  <main class="relative max-w-3xl mx-auto px-6 py-16 space-y-8 overflow-hidden">
+  <main class="relative max-w-4xl mx-auto px-6 py-16 space-y-9 overflow-hidden">
     <div class="hero-glow hero-glow-a"></div>
 
-    <div class="relative z-10 space-y-3">
-      <nav class="flex items-center gap-2 text-xs text-muted-foreground">
+    <div class="relative z-10 space-y-4">
+      <nav class="flex items-center gap-2 text-sm text-muted-foreground">
         <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
         <span>/</span>
         <span class="text-foreground">Cloudflare Tunnel</span>
       </nav>
       <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Cloudflare Tunnel</h1>
-      <p class="text-muted-foreground leading-relaxed pt-1">
+      <p class="guide-lead max-w-2xl">
         Put your home server online through Cloudflare without opening any inbound ports —
         except the two that voice/video physically needs. This is the easiest path if your
         domain is on Cloudflare. Allow ~20 minutes.
@@ -29,95 +31,124 @@ import { GITHUB_REPO } from "@/lib/site";
     </div>
 
     <!-- ── Concept ─────────────────────────────────────────────────────── -->
-    <section class="space-y-6">
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">First, what a tunnel actually is</h2>
-        <p class="text-sm text-muted-foreground leading-relaxed">
+    <section class="space-y-7">
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">First, what a tunnel actually is</h2>
+        <p class="guide-prose">
           LetsChat runs as a handful of services on your server, but they're only reachable on
-          your home network. The old way to expose them is to open ports <code class="text-xs">80</code>/<code class="text-xs">443</code>
+          your home network. The old way to expose them is to open ports <code>80</code>/<code>443</code>
           on your router and point your domain at your home IP — which publishes your address and
           opens your machine to the whole internet.
         </p>
-        <p class="text-sm text-muted-foreground leading-relaxed">
-          A Cloudflare Tunnel flips that around. A small program — <code class="text-xs">cloudflared</code> —
+        <p class="guide-prose">
+          A Cloudflare Tunnel flips that around. A small program — <code>cloudflared</code> —
           runs next to LetsChat and makes <strong>one outbound connection up to Cloudflare</strong>, then holds it
-          open. When someone visits <code class="text-xs">chat.yourdomain.com</code>, the request arrives at Cloudflare
+          open. When someone visits <code>app.yourdomain.com</code>, the request arrives at Cloudflare
           and is piped <span class="italic">back down that connection</span> to your server. You never open an inbound
           port, your home IP is never published, and Cloudflare gives you HTTPS for free.
         </p>
-        <p class="text-sm text-muted-foreground leading-relaxed">
-          You'll point five subdomains at five services through that tunnel:
-        </p>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li><code class="text-xs">auth</code> — login &amp; tokens &nbsp;·&nbsp; <code class="text-xs">connect</code> — first-run discovery</li>
-          <li><code class="text-xs">chat</code> — realtime database &nbsp;·&nbsp; <code class="text-xs">files</code> — uploads &nbsp;·&nbsp; <code class="text-xs">lk</code> — voice signalling</li>
+        <p class="guide-prose">You'll point four subdomains at four services through that tunnel:</p>
+        <ul class="domain-list">
+          <li><code>auth</code> <span>login, tokens &amp; first-run discovery</span></li>
+          <li><code>chat</code> <span>realtime database</span></li>
+          <li><code>files</code> <span>uploads &amp; downloads</span></li>
+          <li><code>lk</code> <span>voice signalling</span></li>
         </ul>
-        <p class="text-sm text-muted-foreground leading-relaxed">
-          <strong>The one exception:</strong> the live voice/video audio itself is real-time UDP and
-          <strong>cannot</strong> travel through the tunnel. That single kind of traffic reaches your server
-          directly, on two ports you forward on your router (Step 7). Skip that and text chat works
-          perfectly — voice calls just connect with no sound.
+        <p class="guide-prose">
+          Plus a fifth — <code>app</code> — if you want the <strong>browser client</strong> (more on that just below).
+        </p>
+
+        <Callout type="warning" title="The one exception — voice media">
+          The live voice/video audio itself is real-time UDP and <strong>cannot</strong> travel through the
+          tunnel. That single kind of traffic reaches your server directly, on two ports you forward on
+          your router (Step&nbsp;7). Skip that and text chat works perfectly — voice calls just connect with
+          no sound.
+        </Callout>
+      </article>
+
+      <!-- ── Browser vs desktop ────────────────────────────────────────── -->
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">Desktop app or browser — your call</h2>
+        <p class="guide-prose">
+          LetsChat ships <strong>two ways to connect</strong>, and this stack serves both:
+        </p>
+        <ul class="list-disc pl-5 guide-prose space-y-1.5">
+          <li>
+            <strong>Desktop app</strong> (macOS / Windows / Linux) — users paste your
+            <code>auth.yourdomain.com</code> address into the "pick a server" screen and it auto-discovers the rest.
+          </li>
+          <li>
+            <strong>Browser</strong> — the stack includes a hosted web client at <code>app.yourdomain.com</code>.
+            Open that URL in any modern browser and you go straight to login. <strong>No install required</strong>,
+            voice and video included.
+          </li>
+        </ul>
+        <p class="guide-prose">
+          The browser client is baked at build time with <em>your</em> server address
+          (<code>VITE_WEB_CONNECT_URL</code>), so it's locked to this one instance and skips the setup
+          screen entirely. Hosting it is optional — leave <code>app</code> out and the desktop app still works.
+          This guide sets up both; the browser-only bits are clearly marked.
         </p>
       </article>
 
       <!-- ── The plan ──────────────────────────────────────────────────── -->
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">The plan</h2>
-        <ol class="list-decimal pl-5 text-sm text-muted-foreground space-y-1">
+      <article class="step-card rounded-xl p-7 space-y-3">
+        <h2 class="text-2xl font-semibold tracking-tight">The plan</h2>
+        <ol class="list-decimal pl-5 guide-prose space-y-1.5">
           <li>Create a tunnel and copy its token</li>
           <li>Download the files</li>
-          <li>Fill in your <code class="text-xs">.env</code></li>
+          <li>Fill in your <code>.env</code></li>
           <li>Set the LiveKit secret</li>
-          <li>Map the five subdomains</li>
+          <li>Map the subdomains</li>
           <li>Start the stack</li>
           <li>Forward the two voice ports</li>
-          <li>Open the app</li>
+          <li>Open the app — desktop or browser</li>
         </ol>
       </article>
 
       <!-- ── Prerequisites ─────────────────────────────────────────────── -->
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <h2 class="text-xl font-medium">Before you start</h2>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <h2 class="text-2xl font-semibold tracking-tight">Before you start</h2>
+        <ul class="list-disc pl-5 guide-prose space-y-1.5">
           <li>A domain whose DNS is managed by Cloudflare (free plan is fine).</li>
           <li>Cloudflare <strong>Zero Trust</strong> enabled on your account (free).</li>
           <li>An Ubuntu server with Docker Engine + the Compose plugin.</li>
           <li>Admin access to your home router (for the two voice ports in Step 7).</li>
         </ul>
-        <p class="text-sm text-muted-foreground leading-relaxed pt-1">
+        <p class="guide-prose">
           <strong>30-second voice check.</strong> Voice needs a real public IP. Run this on the server and
           compare the result to the WAN / Internet IP shown on your router's status page:
         </p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -4 ifconfig.me`}</code></pre>
-        <p class="text-sm text-muted-foreground leading-relaxed">
+        <CodeBlock label="terminal" code={`curl -4 ifconfig.me`} />
+        <p class="guide-prose">
           <strong>Same IP</strong> → you're good. <strong>Different</strong> → your ISP puts you behind CGNAT; text chat
-          and everything else still works, but voice will need a relay (see <a href="#cgnat" class="underline hover:text-foreground">Voice behind CGNAT</a> at the end).
+          and everything else still works, but voice will need a relay (see <a href="#cgnat" class="link">Voice behind CGNAT</a> at the end).
         </p>
       </article>
 
       <!-- ── Step 1 ────────────────────────────────────────────────────── -->
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <div class="flex items-center gap-3"><span class="step-num">1</span><h2 class="text-xl font-medium">Create the tunnel &amp; copy the token</h2></div>
-        <p class="text-sm text-muted-foreground leading-relaxed">
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <div class="step-head"><span class="step-num">1</span><h2 class="text-2xl font-semibold tracking-tight">Create the tunnel &amp; copy the token</h2></div>
+        <p class="guide-prose">
           In the Cloudflare dashboard: <strong>Zero Trust → Networks → Tunnels → Create a tunnel →
-          Cloudflared</strong>. Name it (e.g. <code class="text-xs">letschat</code>) and save.
+          Cloudflared</strong>. Name it (e.g. <code>letschat</code>) and save.
         </p>
-        <p class="text-sm text-muted-foreground leading-relaxed">
-          The next screen shows an install command containing <code class="text-xs">--token &lt;LONG-STRING&gt;</code>.
+        <p class="guide-prose">
+          The next screen shows an install command containing <code>--token &lt;LONG-STRING&gt;</code>.
           <strong>Copy that token</strong> — it's the connector's password and the only thing you need from this page.
           Leave the tab open; you'll add the subdomains in Step 5.
         </p>
-        <p class="text-xs text-muted-foreground">
-          Already run <code class="text-xs">cloudflared</code> on this server for other apps? Don't create a second
-          connector — skip to <a href="#existing" class="underline hover:text-foreground">Already running cloudflared</a> at the bottom.
-        </p>
+        <Callout type="tip" title="Already running cloudflared?">
+          If you already run <code>cloudflared</code> on this server for other apps, don't create a second
+          connector — skip to <a href="#existing" class="link">Already running cloudflared</a> at the bottom.
+        </Callout>
       </article>
 
       <!-- ── Step 2 ────────────────────────────────────────────────────── -->
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <div class="flex items-center gap-3"><span class="step-num">2</span><h2 class="text-xl font-medium">Download the files</h2></div>
-        <p class="text-sm text-muted-foreground">On the server, in a fresh folder:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`mkdir letschat && cd letschat
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <div class="step-head"><span class="step-num">2</span><h2 class="text-2xl font-semibold tracking-tight">Download the files</h2></div>
+        <p class="guide-prose">On the server, in a fresh folder:</p>
+        <CodeBlock label="terminal" code={`mkdir letschat && cd letschat
 
 # the stack + the cloudflared connector overlay
 wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
@@ -130,22 +161,26 @@ wget -O livekit/config.prod.yaml \\
 
 # your settings file
 wget -O .env \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.tunnel.example`}</code></pre>
-        <p class="text-xs text-muted-foreground">All images are pre-built — no Rust/Node toolchains needed on the server.</p>
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.tunnel.example`} />
+        <Callout type="note">
+          All images are pre-built — no Rust/Node toolchains needed on the server. The one exception is
+          the browser client, which is compiled from source in the <code>web</code> container on first start
+          (it bakes in your server address). That build is automatic.
+        </Callout>
       </article>
 
       <!-- ── Step 3 ────────────────────────────────────────────────────── -->
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <div class="flex items-center gap-3"><span class="step-num">3</span><h2 class="text-xl font-medium">Fill in your <code class="text-base">.env</code></h2></div>
-        <p class="text-sm text-muted-foreground">Generate the secrets first:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`openssl rand -hex 32      # AUTH_JWT_SECRET, POSTGRES_PASSWORD, MINIO_SECRET_KEY
-openssl rand -base64 32   # LIVEKIT_API_SECRET`}</code></pre>
-        <p class="text-sm text-muted-foreground leading-relaxed">
-          Open <code class="text-xs">.env</code> and set <strong>every field in this block</strong> — the stack won't start
-          without <code class="text-xs">POSTGRES_PASSWORD</code>, and you can't sign in without the admin account.
-          Replace <code class="text-xs">example.com</code> with your domain throughout:
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <div class="step-head"><span class="step-num">3</span><h2 class="text-2xl font-semibold tracking-tight">Fill in your <code class="text-xl">.env</code></h2></div>
+        <p class="guide-prose">Generate the secrets first:</p>
+        <CodeBlock label="terminal" code={`openssl rand -hex 32      # AUTH_JWT_SECRET, POSTGRES_PASSWORD, MINIO_SECRET_KEY
+openssl rand -base64 32   # LIVEKIT_API_SECRET`} />
+        <p class="guide-prose">
+          Open <code>.env</code> and set <strong>every field in this block</strong> — the stack won't start
+          without <code>POSTGRES_PASSWORD</code>, and you can't sign in without the admin account.
+          Replace <code>example.com</code> with your domain throughout:
         </p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`# Secrets
+        <CodeBlock label=".env" code={`# Secrets
 AUTH_JWT_SECRET=            # openssl rand -hex 32
 POSTGRES_PASSWORD=         # openssl rand -hex 32
 LIVEKIT_API_SECRET=        # openssl rand -base64 32
@@ -158,145 +193,180 @@ ADMIN_BOOTSTRAP_USERNAME=admin
 ADMIN_BOOTSTRAP_PASSWORD=  # a strong password
 ADMIN_BOOTSTRAP_EMAIL=you@example.com
 
-# Your public URLs
+# Your public URLs (auth.<domain> also serves the discovery document)
 MINIO_PUBLIC_ENDPOINT=https://files.example.com
 DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
 DISCOVERY_AUTH_URL=https://auth.example.com
-DISCOVERY_LIVEKIT_URL=wss://lk.example.com`}</code></pre>
-        <p class="text-sm text-muted-foreground leading-relaxed">
-          <strong>Email.</strong> By default LetsChat sends confirmation emails, so it needs SMTP. Using a Gmail
-          account? Enable 2-Step Verification, create an <strong>App Password</strong> (Google Account → Security →
-          App passwords — a 16-char code, <span class="italic">not</span> your normal password), and set:
+DISCOVERY_LIVEKIT_URL=wss://lk.example.com`} />
+
+        <h3 class="text-lg font-medium pt-1">Hosting the browser client (optional)</h3>
+        <p class="guide-prose">
+          Want people to use LetsChat from a browser at <code>app.example.com</code>? Set these three.
+          Skip them and only the desktop app is served — everything else is unaffected.
         </p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`SMTP_HOST=smtp.gmail.com
+        <CodeBlock label=".env" code={`# Browser client — baked into the bundle at build time, so it auto-connects
+# to THIS instance. Point it at auth.<domain>, which serves discovery.
+VITE_WEB_CONNECT_URL=https://auth.example.com
+
+# Let the browser fetch presigned download URLs from MinIO. Pin to the web
+# origin (or "*" to allow any).
+MINIO_CORS_ALLOW_ORIGIN=https://app.example.com
+
+# DB WebSocket compression in the browser: "gzip" (default) or "none".
+VITE_WEB_WS_COMPRESSION=gzip`} />
+
+        <h3 class="text-lg font-medium pt-1">Email</h3>
+        <p class="guide-prose">
+          By default LetsChat sends confirmation emails, so it needs SMTP. Using a Gmail account? Enable
+          2-Step Verification, create an <strong>App Password</strong> (Google Account → Security → App passwords —
+          a 16-char code, <span class="italic">not</span> your normal password), and set:
+        </p>
+        <CodeBlock label=".env" code={`SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=you@gmail.com
 SMTP_PASSWORD=         # the 16-char App Password
-EMAIL_FROM_ADDRESS=you@gmail.com`}</code></pre>
-        <p class="text-sm text-muted-foreground leading-relaxed">
-          <strong>No email yet?</strong> Set <code class="text-xs">REQUIRE_EMAIL_CONFIRMATION=false</code> and
-          <code class="text-xs">EMAIL_SENDER=log</code> — accounts then work without SMTP.
-        </p>
-        <p class="text-xs text-muted-foreground">
+EMAIL_FROM_ADDRESS=you@gmail.com`} />
+        <Callout type="tip" title="No email yet?">
+          Set <code>REQUIRE_EMAIL_CONFIRMATION=false</code> and <code>EMAIL_SENDER=log</code> — accounts then
+          work without SMTP.
+        </Callout>
+        <p class="guide-prose text-sm">
           Everything else in the file has a working default and is documented inline — leave it alone unless
-          you have a reason. (One to know about: <code class="text-xs">SPACETIMEDB_SERVICE_TOKEN</code> is optional;
+          you have a reason. (One to know about: <code>SPACETIMEDB_SERVICE_TOKEN</code> is optional;
           blank is fine — it only makes one admin-panel card editable.)
         </p>
       </article>
 
       <!-- ── Step 4 ────────────────────────────────────────────────────── -->
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <div class="flex items-center gap-3"><span class="step-num">4</span><h2 class="text-xl font-medium">Set the LiveKit secret</h2></div>
-        <p class="text-sm text-muted-foreground">Open <code class="text-xs">livekit/config.prod.yaml</code> and paste the same secret you put in <code class="text-xs">.env</code>:</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`keys:
-  letschat-prod: <paste LIVEKIT_API_SECRET here>`}</code></pre>
-        <p class="text-xs text-muted-foreground">Leave the rest of the file (ports, <code class="text-xs">use_external_ip: true</code>) as-is.</p>
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <div class="step-head"><span class="step-num">4</span><h2 class="text-2xl font-semibold tracking-tight">Set the LiveKit secret</h2></div>
+        <p class="guide-prose">Open <code>livekit/config.prod.yaml</code> and paste the same secret you put in <code>.env</code>:</p>
+        <CodeBlock label="livekit/config.prod.yaml" code={`keys:
+  letschat-prod: <paste LIVEKIT_API_SECRET here>`} />
+        <p class="guide-prose text-sm">Leave the rest of the file (ports, <code>use_external_ip: true</code>) as-is.</p>
       </article>
 
       <!-- ── Step 5 ────────────────────────────────────────────────────── -->
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <div class="flex items-center gap-3"><span class="step-num">5</span><h2 class="text-xl font-medium">Map the five subdomains</h2></div>
-        <p class="text-sm text-muted-foreground leading-relaxed">
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <div class="step-head"><span class="step-num">5</span><h2 class="text-2xl font-semibold tracking-tight">Map the subdomains</h2></div>
+        <p class="guide-prose">
           Back on your tunnel's page, open <strong>Public Hostnames</strong> and add one entry per subdomain.
           The connector runs <span class="italic">inside Docker</span> next to the services, so the targets are the internal
-          service names (not <code class="text-xs">localhost</code>):
+          service names (not <code>localhost</code>):
         </p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`auth.example.com     ->  http://core-api:8787
-connect.example.com  ->  http://core-api:8787
-chat.example.com     ->  http://spacetimedb:3000     # enable WebSocket
-files.example.com    ->  http://minio:44390
-lk.example.com       ->  http://livekit:44380        # enable WebSocket`}</code></pre>
-        <p class="text-xs text-muted-foreground">
-          For <code class="text-xs">chat</code> and <code class="text-xs">lk</code>, turn on <strong>Additional settings → enable WebSocket</strong>.
-          Cloudflare creates the DNS records for you automatically.
-        </p>
+        <CodeBlock label="cloudflare public hostnames" code={`auth.example.com   ->  http://core-api:8787       # also serves /.well-known discovery
+chat.example.com   ->  http://spacetimedb:3000     # enable WebSocket
+files.example.com  ->  http://minio:44390
+lk.example.com     ->  http://livekit:44380        # enable WebSocket
+app.example.com    ->  http://web:80               # browser client (omit if not hosting it)`} />
+        <Callout type="note">
+          For <code>chat</code> and <code>lk</code>, turn on <strong>Additional settings → enable WebSocket</strong>.
+          <code>app</code> serves static files, so it needs no WebSocket toggle. Cloudflare creates the DNS
+          records for you automatically. There is no separate <code>connect</code> subdomain — <code>auth</code> is the
+          discovery entrypoint.
+        </Callout>
       </article>
 
       <!-- ── Step 6 ────────────────────────────────────────────────────── -->
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <div class="flex items-center gap-3"><span class="step-num">6</span><h2 class="text-xl font-medium">Start the stack</h2></div>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d`}</code></pre>
-        <p class="text-sm text-muted-foreground leading-relaxed">
-          The <code class="text-xs">module-init</code> container publishes the SpacetimeDB schema automatically once the
-          database is healthy — no manual <code class="text-xs">spacetime publish</code>. Watch it finish with:
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <div class="step-head"><span class="step-num">6</span><h2 class="text-2xl font-semibold tracking-tight">Start the stack</h2></div>
+        <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d`} />
+        <p class="guide-prose">
+          The <code>module-init</code> container publishes the SpacetimeDB schema automatically once the
+          database is healthy — no manual <code>spacetime publish</code>. Watch it finish with:
         </p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`docker logs -f letschat-module-init`}</code></pre>
+        <CodeBlock label="terminal" code={`docker logs -f letschat-module-init`} />
+        <Callout type="note" title="First start is slower">
+          If you're hosting the browser client, the <code>web</code> container compiles the React bundle on
+          first build — give it a couple of minutes. Changed <code>VITE_WEB_CONNECT_URL</code> later? Rebuild it
+          with <code>docker compose … build web && docker compose … up -d web</code>.
+        </Callout>
       </article>
 
       <!-- ── Step 7 ────────────────────────────────────────────────────── -->
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <div class="flex items-center gap-3"><span class="step-num">7</span><h2 class="text-xl font-medium">Forward the two voice ports</h2></div>
-        <p class="text-sm text-muted-foreground leading-relaxed">
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <div class="step-head"><span class="step-num">7</span><h2 class="text-2xl font-semibold tracking-tight">Forward the two voice ports</h2></div>
+        <p class="guide-prose">
           This is the one step the tunnel can't do — voice media must reach your server directly.
           First find the server's LAN IP and give it a <strong>static DHCP reservation</strong> in your router so it
           never changes:
         </p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`ip -4 -o addr show scope global | awk '{print $2, $4}'   # e.g. eth0 192.168.1.50/24`}</code></pre>
-        <p class="text-sm text-muted-foreground">Then, in your router's <span class="italic">Port Forwarding</span> section, forward both of these to that LAN IP:</p>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-          <li><code class="text-xs">44382/udp</code> — the voice/video media (almost every call uses only this)</li>
-          <li><code class="text-xs">44381/tcp</code> — fallback for callers on networks that block UDP</li>
+        <CodeBlock label="terminal" code={`ip -4 -o addr show scope global | awk '{print $2, $4}'   # e.g. eth0 192.168.1.50/24`} />
+        <p class="guide-prose">Then, in your router's <span class="italic">Port Forwarding</span> section, forward both of these to that LAN IP:</p>
+        <ul class="list-disc pl-5 guide-prose space-y-1.5">
+          <li><code>44382/udp</code> — the voice/video media (almost every call uses only this)</li>
+          <li><code>44381/tcp</code> — fallback for callers on networks that block UDP</li>
         </ul>
-        <p class="text-xs text-muted-foreground">
-          Don't forward <code class="text-xs">44380</code> — that's signalling, and it already goes through the tunnel.
+        <p class="guide-prose text-sm">
+          Don't forward <code>44380</code> — that's signalling, and it already goes through the tunnel.
           A dynamic public IP is fine; only an IP change mid-call needs a LiveKit restart to recover.
         </p>
       </article>
 
       <!-- ── Step 8 ────────────────────────────────────────────────────── -->
-      <article class="step-card rounded-xl p-6 space-y-3">
-        <div class="flex items-center gap-3"><span class="step-num">8</span><h2 class="text-xl font-medium">Open the app</h2></div>
-        <p class="text-sm text-muted-foreground">Confirm the public endpoints answer (from anywhere):</p>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`curl -i https://auth.example.com/health
-curl -i https://connect.example.com/.well-known/letschat.json`}</code></pre>
-        <p class="text-sm text-muted-foreground leading-relaxed">
-          In the LetsChat desktop app, enter <code class="text-xs">connect.example.com</code> as the server — it auto-discovers
-          the rest. Sign in with the admin account from Step 3, then make a test voice call between two clients.
+      <article class="step-card rounded-xl p-7 space-y-4">
+        <div class="step-head"><span class="step-num">8</span><h2 class="text-2xl font-semibold tracking-tight">Open the app — desktop or browser</h2></div>
+        <p class="guide-prose">Confirm the public endpoints answer (from anywhere):</p>
+        <CodeBlock label="terminal" code={`curl -i https://auth.example.com/health
+curl -i https://auth.example.com/.well-known/letschat.json`} />
+        <p class="guide-prose">Then pick how you connect:</p>
+        <ul class="list-disc pl-5 guide-prose space-y-1.5">
+          <li>
+            <strong>Desktop app</strong> — enter <code>auth.example.com</code> as the server; it auto-discovers
+            the rest.
+          </li>
+          <li>
+            <strong>Browser</strong> — open <code>https://app.example.com</code>; it connects to this instance
+            automatically.
+          </li>
+        </ul>
+        <p class="guide-prose">
+          Sign in with the admin account from Step 3, then make a test voice call between two clients.
         </p>
-        <p class="text-xs text-muted-foreground">
-          Call connects but no audio? The Step 7 ports aren't reaching the host — recheck the forwards and the
-          voice check from "Before you start".
-        </p>
+        <Callout type="warning" title="Call connects but no audio?">
+          The Step 7 ports aren't reaching the host — recheck the forwards and the voice check from
+          "Before you start".
+        </Callout>
       </article>
 
       <!-- ── Alternative: existing connector ───────────────────────────── -->
-      <article id="existing" class="step-card alt-card rounded-xl p-6 space-y-3 scroll-mt-24">
-        <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--accent-blue)">Alternative setup</p>
-        <h2 class="text-xl font-medium">Already running cloudflared (or nginx/Caddy) on this host?</h2>
-        <p class="text-sm text-muted-foreground leading-relaxed">
+      <article id="existing" class="step-card alt-card rounded-xl p-7 space-y-4 scroll-mt-24">
+        <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--accent-blue)">Alternative setup</p>
+        <h2 class="text-2xl font-semibold tracking-tight">Already running cloudflared (or nginx/Caddy) on this host?</h2>
+        <p class="guide-prose">
           If you already run a connector natively on the server for other apps, don't run a second one and don't
           use the bundled overlay. Two changes to the path above:
         </p>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+        <ul class="list-disc pl-5 guide-prose space-y-1.5">
           <li><strong>Step 1 &amp; 6:</strong> skip the bundled connector. Start with the base file only —
-            <code class="text-xs">docker compose -f docker-compose.prod.base.yml up -d</code> — and in Step 2 you don't need
-            <code class="text-xs">docker-compose.prod.tunnel.yml</code>. Leave <code class="text-xs">CLOUDFLARE_TUNNEL_TOKEN</code> blank;
+            <code>docker compose -f docker-compose.prod.base.yml up -d</code> — and in Step 2 you don't need
+            <code>docker-compose.prod.tunnel.yml</code>. Leave <code>CLOUDFLARE_TUNNEL_TOKEN</code> blank;
             your existing connector has its own credentials.</li>
           <li><strong>Step 5:</strong> add the hostnames to your <span class="italic">existing</span> tunnel, pointing at the host's
-            <code class="text-xs">localhost</code> ports instead of Docker names:</li>
+            <code>localhost</code> ports instead of Docker names:</li>
         </ul>
-        <pre class="rounded-lg border border-border bg-background p-4 overflow-x-auto text-xs"><code>{`auth.example.com     ->  http://localhost:8787
-connect.example.com  ->  http://localhost:8787
-chat.example.com     ->  http://localhost:44300     # enable WebSocket
-files.example.com    ->  http://localhost:44390
-lk.example.com       ->  http://localhost:44380     # enable WebSocket`}</code></pre>
-        <p class="text-xs text-muted-foreground">
-          Everything else (the <code class="text-xs">.env</code>, LiveKit secret, voice-port forwarding) is identical.
+        <CodeBlock label="cloudflare public hostnames" code={`auth.example.com   ->  http://localhost:8787
+chat.example.com   ->  http://localhost:44300     # enable WebSocket
+files.example.com  ->  http://localhost:44390
+lk.example.com     ->  http://localhost:44380     # enable WebSocket
+app.example.com    ->  http://localhost:44310     # browser client (omit if not hosting it)`} />
+        <p class="guide-prose text-sm">
+          Everything else (the <code>.env</code>, LiveKit secret, voice-port forwarding) is identical.
           Same idea for nginx / Caddy / Traefik on the host — terminate TLS there and proxy to those
-          <code class="text-xs">localhost</code> ports, keeping <code class="text-xs">chat</code> and <code class="text-xs">lk</code> as WebSocket upgrades.
+          <code>localhost</code> ports, keeping <code>chat</code> and <code>lk</code> as WebSocket upgrades.
         </p>
       </article>
 
       <!-- ── CGNAT note ────────────────────────────────────────────────── -->
-      <article id="cgnat" class="step-card alt-card rounded-xl p-6 space-y-3 scroll-mt-24">
-        <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--accent-blue)">If the voice check failed</p>
-        <h2 class="text-xl font-medium">Voice behind CGNAT</h2>
-        <p class="text-sm text-muted-foreground leading-relaxed">
+      <article id="cgnat" class="step-card alt-card rounded-xl p-7 space-y-4 scroll-mt-24">
+        <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--accent-blue)">If the voice check failed</p>
+        <h2 class="text-2xl font-semibold tracking-tight">Voice behind CGNAT</h2>
+        <p class="guide-prose">
           If your public IP and your router's WAN IP <strong>differ</strong>, your ISP has you behind carrier-grade NAT —
           port forwarding can't reach you, so voice won't work directly (text, chat and files are unaffected). The
           fix is a <strong>TURN relay</strong> both sides connect outbound to:
         </p>
-        <ul class="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+        <ul class="list-disc pl-5 guide-prose space-y-1.5">
           <li><strong>TURN on a cheap public-IP VPS</strong> — relays media through a box with a stable, routable IP. All call media flows through it, so size its bandwidth accordingly.</li>
           <li><strong>Cloudflare Realtime (TURN)</strong> — a managed relay at Cloudflare's edge, billed per GB.</li>
         </ul>
@@ -345,19 +415,59 @@ lk.example.com       ->  http://localhost:44380     # enable WebSocket`}</code><
       linear-gradient(90deg, oklch(0.7 0.16 200 / 0.28) 0 4px, transparent 4px 100%);
   }
 
+  .step-head {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
   .step-num {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
+    width: 2rem;
+    height: 2rem;
     flex: none;
     border-radius: 9999px;
     background: oklch(0.49 0.23 264.3 / 0.28);
     border: 1px solid oklch(0.62 0.2 264.3 / 0.55);
     color: white;
-    font-size: 0.82rem;
+    font-size: 0.92rem;
     font-weight: 600;
+  }
+
+  .link {
+    color: var(--color-foreground);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: oklch(0.62 0.18 250 / 0.6);
+  }
+
+  .link:hover {
+    text-decoration-color: currentColor;
+  }
+
+  /* Service → role list in the concept section. */
+  .domain-list {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .domain-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.7rem;
+    font-size: 1rem;
+    color: var(--color-muted-foreground);
+  }
+
+  .domain-list li code {
+    flex: none;
+    min-width: 3.4rem;
+    text-align: center;
   }
 
   @keyframes drift {

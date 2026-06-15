@@ -18,27 +18,32 @@ import SiteFooter from "@/components/SiteFooter.astro";
       <div class="space-y-4">
         <p class="inline-flex text-xs px-3 py-1 rounded-full border border-border text-muted-foreground">Beginner-first production tutorial (Ubuntu + Docker Compose)</p>
         <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Self-host the LetsChat backend</h1>
-        <p class="text-muted-foreground max-w-3xl leading-relaxed">
+        <p class="guide-prose max-w-3xl">
           LetsChat is not a single server. It is a small backend stack: chat state, auth, voice signaling, file storage,
           and startup discovery. This guide explains what each part does, why it matters, and then walks you through one
           of two deployment paths.
+        </p>
+        <p class="guide-prose max-w-3xl">
+          The same stack serves <strong>both ways to connect</strong>: the installable <strong>desktop app</strong> and a
+          hosted <strong>browser client</strong> at <code class="text-xs">app.&lt;domain&gt;</code> — no install required, voice included.
         </p>
         <div class="flex flex-wrap gap-2 text-xs">
           <span class="pill">SpacetimeDB</span>
           <span class="pill">Auth Service</span>
           <span class="pill">LiveKit</span>
           <span class="pill">MinIO</span>
+          <span class="pill">Browser Client</span>
           <span class="pill">Discovery URL</span>
         </div>
       </div>
       <aside class="frost p-5 rounded-2xl space-y-4">
         <p class="text-sm font-medium text-foreground">Architecture At A Glance</p>
         <div class="space-y-2 text-sm">
-          <div class="flow-chip"><span>Client App</span><span class="flow-dot"></span><span>connect.example.com</span></div>
+          <div class="flow-chip"><span>Desktop or Browser</span><span class="flow-dot"></span><span>auth.example.com</span></div>
           <div class="flow-chip"><span>Discovery JSON</span><span class="flow-dot"></span><span>auth/chat/lk/files URLs</span></div>
-          <div class="flow-chip"><span>Runtime Services</span><span class="flow-dot"></span><span>Auth + Spacetime + LiveKit + MinIO</span></div>
+          <div class="flow-chip"><span>Runtime Services</span><span class="flow-dot"></span><span>Auth + Spacetime + LiveKit + MinIO + Web</span></div>
         </div>
-        <p class="text-xs text-muted-foreground">If discovery is reachable, startup can auto-configure backend endpoints without manual join links.</p>
+        <p class="text-xs text-muted-foreground"><code class="text-xs">auth.&lt;domain&gt;</code> doubles as the discovery entrypoint — startup auto-configures backend endpoints with no manual join links.</p>
       </aside>
     </section>
 
@@ -65,10 +70,13 @@ import SiteFooter from "@/components/SiteFooter.astro";
           <p class="font-medium">Module Init</p>
           <p class="text-muted-foreground">One-shot container that publishes the SpacetimeDB WASM module on startup. Runs automatically and exits cleanly.</p>
         </article>
+        <article class="service-card rounded-xl p-4 space-y-1">
+          <p class="font-medium">Web Client (<code class="text-xs">app.&lt;domain&gt;</code>)</p>
+          <p class="text-muted-foreground">Optional hosted browser SPA. Builds the React bundle pinned to this instance, so users can run LetsChat in a browser — voice included — without installing the desktop app.</p>
+        </article>
         <article class="service-card rounded-xl p-4 space-y-1 md:col-span-2 lg:col-span-1">
           <p class="font-medium">Discovery Endpoint (<code class="text-xs">/.well-known/letschat.json</code>)</p>
-          <p class="text-muted-foreground">Lets app startup auto-discover your backend from one URL (for example <code class="text-xs">https://connect.example.com</code>).
-          Without this, users must paste a full join link manually.</p>
+          <p class="text-muted-foreground">Served by core-api on <code class="text-xs">auth.&lt;domain&gt;</code>, so app startup auto-discovers your backend from one URL (for example <code class="text-xs">https://auth.example.com</code>). No separate <code class="text-xs">connect</code> subdomain. Without this, users must paste a full join link manually.</p>
         </article>
       </div>
     </section>
@@ -87,7 +95,7 @@ import SiteFooter from "@/components/SiteFooter.astro";
       <div class="grid md:grid-cols-2 gap-4">
         <a href="/self-hosting/cloudflare-tunnel" class="track-card tunnel rounded-xl p-5 space-y-2">
           <p class="text-lg font-medium">Path A: Cloudflare Tunnel</p>
-          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Routes <code class="text-xs">auth/chat/files/connect</code> and LiveKit signalling over Cloudflare Tunnel; only LiveKit media stays direct via forwarded ports.</p>
+          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Routes <code class="text-xs">auth/chat/files/app</code> and LiveKit signalling over Cloudflare Tunnel; only LiveKit media stays direct via forwarded ports.</p>
           <p class="text-sm text-muted-foreground"><strong class="text-foreground">Why:</strong> Keeps web services off direct public IP while still supporting voice traffic.</p>
           <p class="text-sm text-muted-foreground"><strong class="text-foreground">Best for:</strong> Home servers where you want Cloudflare ingress control without exposing 80/443 directly.</p>
           <div class="flex flex-wrap gap-2 pt-1">
@@ -98,7 +106,7 @@ import SiteFooter from "@/components/SiteFooter.astro";
         </a>
         <a href="/self-hosting/caddy" class="track-card caddy rounded-xl p-5 space-y-2">
           <p class="text-lg font-medium">Path B: Caddy Reverse Proxy</p>
-          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Caddy terminates TLS on your host and proxies <code class="text-xs">auth/chat/files/lk/connect</code> locally.</p>
+          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Caddy terminates TLS on your host and proxies <code class="text-xs">auth/chat/files/lk/app</code> locally.</p>
           <p class="text-sm text-muted-foreground"><strong class="text-foreground">Why:</strong> Simple standard architecture with fewer external moving parts.</p>
           <p class="text-sm text-muted-foreground"><strong class="text-foreground">Best for:</strong> Operators comfortable exposing 80/443 and managing direct DNS to host IP.</p>
           <div class="flex flex-wrap gap-2 pt-1">
@@ -129,8 +137,13 @@ import SiteFooter from "@/components/SiteFooter.astro";
             </tr>
             <tr>
               <td class="p-3">Setup discovery fails</td>
-              <td class="p-3"><code class="text-xs">connect.&lt;domain&gt;</code> not routed to discovery container</td>
-              <td class="p-3">Tunnel: <code class="text-xs">connect → core-api:8787</code>; Caddy: set <code class="text-xs">CONNECT_DOMAIN</code> correctly</td>
+              <td class="p-3"><code class="text-xs">auth.&lt;domain&gt;</code> not serving <code class="text-xs">/.well-known/letschat.json</code></td>
+              <td class="p-3">Tunnel: <code class="text-xs">auth → core-api:8787</code>; Caddy: set <code class="text-xs">AUTH_DOMAIN</code> + DNS</td>
+            </tr>
+            <tr>
+              <td class="p-3">Browser client can't download files</td>
+              <td class="p-3"><code class="text-xs">MINIO_CORS_ALLOW_ORIGIN</code> doesn't match the web origin</td>
+              <td class="p-3">Set it to <code class="text-xs">https://app.&lt;domain&gt;</code> (or <code class="text-xs">*</code>)</td>
             </tr>
             <tr>
               <td class="p-3">Upload/download errors</td>
