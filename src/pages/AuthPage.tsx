@@ -9,6 +9,7 @@ import { ConfirmEmailScreen } from '../features/auth/ConfirmEmailScreen'
 import { CredentialsForm } from '../features/auth/CredentialsForm'
 import { ForgotPasswordForm } from '../features/auth/ForgotPasswordForm'
 import { useEmailConfirmationPoll } from '../features/auth/useEmailConfirmationPoll'
+import { isHostedWebBuild } from '../lib/tauri'
 import {
   clearPendingRegistration,
   persistPendingRegistration,
@@ -32,6 +33,9 @@ export function AuthPage() {
 
   const [view, setView] = useState<'credentials' | 'forgot'>('credentials')
   const [connectionSheetOpen, setConnectionSheetOpen] = useState(false)
+  // The hosted web build is locked to its own instance — there is no server to
+  // pick or change — so the desktop connection/change-server affordance is hidden.
+  const showConnectionControls = !isHostedWebBuild()
   const [forgotEmail, setForgotEmail] = useState('')
   const [returnUsername, setReturnUsername] = useState('')
 
@@ -81,28 +85,32 @@ export function AuthPage() {
         : 'Sign in with your persisted account credentials.'
 
   return (
-    <section className="relative grid min-h-screen place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/25),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/20),transparent)] p-4">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="absolute top-4 left-4 gap-1.5 border-border/70 bg-background/70 text-xs font-medium text-foreground/80 backdrop-blur-sm hover:bg-background hover:text-foreground"
-        title="Connection settings"
-        onClick={() => setConnectionSheetOpen(true)}
-      >
-        <PlugZapIcon className="size-3.5" />
-        Connection
-      </Button>
-      <Sheet open={connectionSheetOpen} onOpenChange={setConnectionSheetOpen}>
-        <SheetContent side="right" className="overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Connection</SheetTitle>
-          </SheetHeader>
-          <div className="px-4 pb-4">
-            <ConnectionTab />
-          </div>
-        </SheetContent>
-      </Sheet>
+      <section className="relative grid min-h-full place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,--theme(--color-blue-500/25),transparent),radial-gradient(900px_700px_at_100%_0%,--theme(--color-cyan-500/20),transparent)] p-4">
+      {showConnectionControls && (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="absolute top-4 left-4 gap-1.5 border-border/70 bg-background/70 text-xs font-medium text-foreground/80 backdrop-blur-sm hover:bg-background hover:text-foreground"
+            title="Connection settings"
+            onClick={() => setConnectionSheetOpen(true)}
+          >
+            <PlugZapIcon className="size-3.5" />
+            Connection
+          </Button>
+          <Sheet open={connectionSheetOpen} onOpenChange={setConnectionSheetOpen}>
+            <SheetContent side="right" className="overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle>Connection</SheetTitle>
+              </SheetHeader>
+              <div className="px-4 pb-4">
+                <ConnectionTab />
+              </div>
+            </SheetContent>
+          </Sheet>
+        </>
+      )}
       <Card className="w-full max-w-md border-border/70 bg-card/90 backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="text-2xl">LetsChat</CardTitle>

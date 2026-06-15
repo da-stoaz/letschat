@@ -368,14 +368,19 @@ export async function connect(): Promise<void> {
   connectPromise = (async () => {
     setStatus('connecting')
 
-    const tryAllCandidates = async (): Promise<void> => {
+    // `reportErrors` controls whether a final-candidate failure surfaces a
+    // user-facing "Connection Error" notification. We suppress it on the first
+    // (gzip) pass when a silent compression downgrade can still recover, so the
+    // reliability fallback stays transparent — the user only sees an error if
+    // the uncompressed retry also fails.
+    const tryAllCandidates = async (reportErrors: boolean): Promise<void> => {
       const uriCandidates = buildSpacetimeUriCandidates(SPACETIMEDB_URI)
       const errors: string[] = []
 
       for (const [index, candidate] of uriCandidates.entries()) {
         const isLastCandidate = index === uriCandidates.length - 1
         try {
-          await connectWithUri(candidate, SPACETIMEDB_DATABASE, isLastCandidate)
+          await connectWithUri(candidate, SPACETIMEDB_DATABASE, isLastCandidate && reportErrors)
 
           if (candidate !== SPACETIMEDB_URI) {
             const currentConfig = useServerConfigStore.getState().config
@@ -397,17 +402,19 @@ export async function connect(): Promise<void> {
       )
     }
 
+    // Reliability net: if a web client fails to establish a COMPRESSED socket,
+    // we downgrade to uncompressed once and retry the whole connect — so a gzip
+    // path an exotic browser/proxy can't handle never strands us. Only on web,
+    // only while still using gzip, only once. Because that retry can still
+    // recover, the first (gzip) pass suppresses the user-facing error toast.
+    const canDowngrade = !isDesktopTauriRuntime() && !webCompressionDowngraded && pickCompression() === 'gzip'
     try {
-      await tryAllCandidates()
+      await tryAllCandidates(!canDowngrade)
     } catch (error) {
-      // Reliability net: if a web client just failed to establish a COMPRESSED
-      // socket, downgrade to uncompressed once and retry the whole connect — so
-      // a gzip path an exotic browser/proxy can't handle never strands us. Only
-      // fires on web, only when we were actually using gzip, only once.
-      if (!isDesktopTauriRuntime() && !webCompressionDowngraded && pickCompression() === 'gzip') {
+      if (canDowngrade) {
         webCompressionDowngraded = true
         console.warn('[spacetimedb] compressed connect failed; retrying without WebSocket compression')
-        await tryAllCandidates()
+        await tryAllCandidates(true)
       } else {
         throw error
       }

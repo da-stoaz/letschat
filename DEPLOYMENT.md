@@ -129,6 +129,11 @@ until step 7 specifically to make this safe.
 
 ## SpacetimeDB Publish (Production)
 
+> **Version lockstep:** the operator's `spacetime` CLI, the `spacetimedb` npm SDK,
+> the `spacetimedb` Rust crate, and the server image must all be on the **2.5.x**
+> line. Upgrade the CLI with `spacetime version upgrade`. A minor-version skew
+> breaks module load and the client connection.
+
 After the stack is up, publish the module:
 
 ```bash

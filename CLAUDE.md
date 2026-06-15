@@ -8,7 +8,7 @@ LetsChat is a Tauri-based desktop chat application with a distributed backend. T
 
 - **Frontend**: React 19 + TypeScript, Vite, Tailwind CSS 4, shadcn/ui (via @base-ui/react), Zustand 5 (18 stores), React Router 7, React Query 5
 - **Desktop shell**: Tauri 2 (wraps the Vite frontend)
-- **Real-time database**: SpacetimeDB 2.2 — Rust WASM module defines schema and reducers; clients connect via WebSocket
+- **Real-time database**: SpacetimeDB 2.5 — Rust WASM module defines schema and reducers; clients connect via WebSocket
 - **Backend service**: `core-api` — .NET 10 / ASP.NET Core Identity + PostgreSQL. Public API on `127.0.0.1:8787`; admin Razor pages on the separate `127.0.0.1:8788` listener.
 - **Voice/video**: LiveKit (`livekit-client` 2.19)
 - **File storage**: MinIO (S3-compatible), presigned URLs for client access
@@ -35,7 +35,7 @@ Auto-discovery via `/.well-known/letschat.json` on the `connect.<domain>` subdom
 ### Prerequisites
 - Bun 1.3+, Rust 1.88+, Docker + Docker Compose
 - .NET 10 SDK — only needed to build/run `core-api`
-- SpacetimeDB CLI — install with `curl -sSf https://install.spacetimedb.com | sh`; update with `spacetime version upgrade`. Keep the CLI, the `spacetimedb` npm SDK, and the server image on the **same 2.2.x line** — a minor-version skew breaks the client connection.
+- SpacetimeDB CLI — install with `curl -sSf https://install.spacetimedb.com | sh`; update with `spacetime version upgrade`. Keep the CLI, the `spacetimedb` npm SDK, the `spacetimedb` Rust crate, and the server image on the **same 2.5.x line** — a minor-version skew breaks module load and the client connection.
 
 ### Start everything
 ```bash

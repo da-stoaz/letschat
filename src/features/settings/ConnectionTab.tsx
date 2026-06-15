@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { buildJoinLink, useServerConfigStore } from '../../stores/serverConfigStore'
+import { isHostedWebBuild } from '../../lib/tauri'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CopyIcon, CheckIcon, LinkIcon, QrCodeIcon, ServerIcon, PlugZapIcon } from 'lucide-react'
@@ -111,16 +112,20 @@ export function ConnectionTab() {
         </div>
       </div>
 
-      <div className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-        <p className="text-sm font-medium">Change server</p>
-        <p className="text-xs text-muted-foreground">
-          Clears the current server connection and returns to setup. You will be signed out.
-        </p>
-        <Button type="button" variant="destructive" size="sm" onClick={handleChangeServer}>
-          <PlugZapIcon className="size-3.5" />
-          Change server
-        </Button>
-      </div>
+      {/* Hosted web is locked to its own instance — changing server would clear
+          the config and strand the locked-instance bootstrap, so it is hidden. */}
+      {!isHostedWebBuild() && (
+        <div className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+          <p className="text-sm font-medium">Change server</p>
+          <p className="text-xs text-muted-foreground">
+            Clears the current server connection and returns to setup. You will be signed out.
+          </p>
+          <Button type="button" variant="destructive" size="sm" onClick={handleChangeServer}>
+            <PlugZapIcon className="size-3.5" />
+            Change server
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

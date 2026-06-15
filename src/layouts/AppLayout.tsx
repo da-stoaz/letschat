@@ -493,7 +493,7 @@ export function AppLayout() {
   return (
     <>
       <main
-        className="relative h-screen overflow-hidden bg-background p-1 text-foreground"
+        className="relative h-full overflow-hidden bg-background p-1 text-foreground"
         style={{ ['--channel-bar-width' as string]: `${channelBarWidth}px` }}
       >
         <div

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useServerConfigStore } from '../stores/serverConfigStore'
 import { discoverConfig } from '../lib/discovery'
 import { initializeSpacetime } from '../lib/spacetimedb'
-import { isDesktopTauriRuntime } from '../lib/tauri'
+import { isHostedWebBuild } from '../lib/tauri'
 
 export type WebAutoConfigStatus = 'inactive' | 'discovering' | 'done' | 'failed'
 
@@ -31,7 +31,7 @@ export function useWebAutoConfig(): WebAutoConfigStatus {
   const hasHydrated = useServerConfigStore((s) => s.hasHydrated)
   const setConfig = useServerConfigStore((s) => s.setConfig)
 
-  const isHostedWeb = !isDesktopTauriRuntime() && WEB_CONNECT_URL !== undefined
+  const isHostedWeb = isHostedWebBuild() && WEB_CONNECT_URL !== undefined
 
   const [status, setStatus] = useState<WebAutoConfigStatus>(isHostedWeb ? 'discovering' : 'inactive')
 

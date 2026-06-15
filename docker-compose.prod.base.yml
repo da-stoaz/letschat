@@ -37,7 +37,7 @@ services:
   # The WebSocket tuning (raised idle-timeout) keeps the chat connection alive
   # through tunnel/proxy Pong delays — see spacetimedb/config.prod.toml.
   spacetimedb-config-init:
-    image: clockworklabs/spacetime:v2.2.1
+    image: clockworklabs/spacetime:v2.5.0
     container_name: letschat-spacetimedb-config-init
     entrypoint: ["/bin/sh", "-c"]
     command:

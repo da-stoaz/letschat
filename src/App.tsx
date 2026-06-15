@@ -18,6 +18,7 @@ import { useDeepLink } from './hooks/useDeepLink'
 import { useWebAutoConfig } from './hooks/useWebAutoConfig'
 import { WebJoinPage } from './pages/WebJoinPage'
 import { WebConnectErrorPage } from './pages/WebConnectErrorPage'
+import { DesktopAppBanner } from './features/web/DesktopAppBanner'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
 import { useVoiceStateReconciler } from './hooks/useVoiceStateReconciler'
 import { ensureNotificationPermission } from './lib/notifications'
@@ -79,7 +80,10 @@ function App() {
   }
 
   return (
-    <Routes>
+    <div className="flex h-screen flex-col">
+      <DesktopAppBanner />
+      <div className="min-h-0 flex-1">
+        <Routes>
       <Route path="/setup" element={isConfigured ? <Navigate to="/" replace /> : <SetupPage />} />
       <Route path="/join" element={<WebJoinPage />} />
       <Route path="/" element={<Navigate to={user ? '/app' : '/auth'} replace />} />
@@ -95,7 +99,9 @@ function App() {
         <Route path=":serverId" element={<ServerChannelPage />} />
         <Route path=":serverId/:channelId" element={<ServerChannelPage />} />
       </Route>
-    </Routes>
+        </Routes>
+      </div>
+    </div>
   )
 }
 
