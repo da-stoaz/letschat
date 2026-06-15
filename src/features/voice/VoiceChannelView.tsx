@@ -25,6 +25,7 @@ import { VoiceControlBar } from './components/VoiceControlBar'
 import { useLegacyCallControlsVisible } from './hooks/useLegacyCallControls'
 import { useVoiceControlActions } from './hooks/useVoiceControlActions'
 import { VoiceMediaStage, type VoiceMediaTile } from './components/VoiceMediaStage'
+import { CallLatencyBadge } from './components/CallLatencyBadge'
 import { buildVoiceMediaTiles } from './mediaTiles'
 import { ActiveCallCard } from '../../layouts/app-layout/ActiveCallCard'
 import { Badge } from '@/components/ui/badge'
@@ -264,16 +265,9 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   }, [isPanelFullscreen])
 
   useEffect(() => {
-    if (!isPanelFullscreen) {
-      setShowFullscreenDock(false)
-      if (fullscreenDockHideTimerRef.current) {
-        clearTimeout(fullscreenDockHideTimerRef.current)
-        fullscreenDockHideTimerRef.current = null
-      }
-      return
-    }
+    if (!isPanelFullscreen) return
 
-    revealFullscreenDock()
+    const frame = requestAnimationFrame(() => revealFullscreenDock())
 
     const onMouseMove = (event: MouseEvent) => {
       if (event.clientY >= window.innerHeight - 160) {
@@ -283,11 +277,14 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
 
     window.addEventListener('mousemove', onMouseMove, { passive: true })
     return () => {
+      cancelAnimationFrame(frame)
       window.removeEventListener('mousemove', onMouseMove)
       if (fullscreenDockHideTimerRef.current) {
         clearTimeout(fullscreenDockHideTimerRef.current)
         fullscreenDockHideTimerRef.current = null
       }
+      // Reset on leaving fullscreen so the dock re-animates next time.
+      setShowFullscreenDock(false)
     }
   }, [isPanelFullscreen, revealFullscreenDock])
 
@@ -332,6 +329,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {joined ? <CallLatencyBadge room={roomForChannel} /> : null}
           <Badge variant={statusVariant}>{statusBadge}</Badge>
           <Button size="sm" variant="outline" onClick={togglePanelFullscreen}>
             {isPanelFullscreen ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}

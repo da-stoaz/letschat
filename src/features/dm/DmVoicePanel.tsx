@@ -19,6 +19,7 @@ import { useUsersStore } from '../../stores/usersStore'
 import type { DmVoiceParticipant, Identity } from '../../types/domain'
 import { VoiceControlBar } from '../voice/components/VoiceControlBar'
 import { VoiceMediaStage, type VoiceMediaTile } from '../voice/components/VoiceMediaStage'
+import { CallLatencyBadge } from '../voice/components/CallLatencyBadge'
 import { useLegacyCallControlsVisible } from '../voice/hooks/useLegacyCallControls'
 import { useVoiceControlActions } from '../voice/hooks/useVoiceControlActions'
 import { buildVoiceMediaTiles } from '../voice/mediaTiles'
@@ -234,7 +235,10 @@ export function DmVoicePanel({
       {showHeader ? (
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-sm">DM Voice Call</CardTitle>
-          <Badge variant={statusVariant}>{statusBadge}</Badge>
+          <div className="flex items-center gap-2">
+            {joined ? <CallLatencyBadge room={roomForPartner} compact /> : null}
+            <Badge variant={statusVariant}>{statusBadge}</Badge>
+          </div>
         </CardHeader>
       ) : null}
       <CardContent className={showHeader ? 'space-y-2' : 'space-y-2 px-0'}>
