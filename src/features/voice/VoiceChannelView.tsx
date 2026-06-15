@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { LocalParticipant, RemoteParticipant } from 'livekit-client'
 import {
@@ -264,14 +264,16 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     }
   }, [isPanelFullscreen])
 
+  const revealDock = useEffectEvent(() => revealFullscreenDock())
+
   useEffect(() => {
     if (!isPanelFullscreen) return
 
-    const frame = requestAnimationFrame(() => revealFullscreenDock())
+    const frame = requestAnimationFrame(() => revealDock())
 
     const onMouseMove = (event: MouseEvent) => {
       if (event.clientY >= window.innerHeight - 160) {
-        revealFullscreenDock()
+        revealDock()
       }
     }
 
@@ -279,14 +281,15 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('mousemove', onMouseMove)
-      if (fullscreenDockHideTimerRef.current) {
-        clearTimeout(fullscreenDockHideTimerRef.current)
+      const hideTimer = fullscreenDockHideTimerRef.current
+      if (hideTimer) {
+        clearTimeout(hideTimer)
         fullscreenDockHideTimerRef.current = null
       }
       // Reset on leaving fullscreen so the dock re-animates next time.
       setShowFullscreenDock(false)
     }
-  }, [isPanelFullscreen, revealFullscreenDock])
+  }, [isPanelFullscreen])
 
   const onJoin = async () => {
     if (channelId === null) return

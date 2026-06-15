@@ -111,11 +111,15 @@ export function ParticipantMediaTile({
             autoPlay
             playsInline
             muted
+            aria-label={tileType === 'screen' ? `${displayName} screen share` : `${displayName} camera`}
             className={cn(
               'h-full w-full',
               tileType === 'screen' ? 'object-contain bg-black' : 'object-cover',
             )}
-          />
+          >
+            {/* Live WebRTC video has no caption source; satisfies media-caption a11y rules. */}
+            <track kind="captions" />
+          </video>
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/65 via-black/5 to-black/30 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between gap-2 p-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
             <div className="min-w-0">

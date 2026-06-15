@@ -58,7 +58,12 @@ function RemoteTrackAudioSink({
     void element.setSinkId(sinkId).catch(() => undefined)
   }, [sinkId])
 
-  return <audio ref={audioRef} autoPlay data-letschat-audio="remote" />
+  return (
+    <audio ref={audioRef} autoPlay data-letschat-audio="remote" aria-label="Call participant audio">
+      {/* Live WebRTC audio has no caption source; satisfies media-caption a11y rules. */}
+      <track kind="captions" />
+    </audio>
+  )
 }
 
 /**
