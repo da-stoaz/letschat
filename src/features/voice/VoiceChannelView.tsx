@@ -281,11 +281,8 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('mousemove', onMouseMove)
-      const hideTimer = fullscreenDockHideTimerRef.current
-      if (hideTimer) {
-        clearTimeout(hideTimer)
-        fullscreenDockHideTimerRef.current = null
-      }
+      // The auto-hide timer is owned/cleared by revealFullscreenDock; a pending
+      // one just hides the (already-hidden) dock, so no teardown needed here.
       // Reset on leaving fullscreen so the dock re-animates next time.
       setShowFullscreenDock(false)
     }
