@@ -2,7 +2,7 @@ services:
 
   # ── SpacetimeDB ─────────────────────────────────────────────────────────────
   spacetimedb:
-    image: clockworklabs/spacetime:v2.2.1
+    image: clockworklabs/spacetime:v2.5.0
     container_name: letschat-dev-spacetimedb
     command: start
     ports:

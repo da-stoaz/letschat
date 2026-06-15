@@ -5,6 +5,7 @@ services:
   #   chat.<domain>    -> http://spacetimedb:3000  (WebSocket enabled)
   #   files.<domain>   -> http://minio:44390
   #   connect.<domain> -> http://core-api:8787
+  #   app.<domain>     -> http://web:80            (hosted browser SPA)
   #   lk.<domain>      -> http://livekit:44380     (WebSocket enabled)
   # LiveKit's *signalling* (WebSocket, 44380) IS tunnelled via the lk.<domain>
   # ingress above, so it inherits Cloudflare TLS — set DISCOVERY_LIVEKIT_URL to
@@ -24,4 +25,5 @@ services:
       - core-api
       - spacetimedb
       - minio
+      - web
     restart: unless-stopped

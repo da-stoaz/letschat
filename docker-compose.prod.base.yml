@@ -5,16 +5,21 @@ services:
   # the tunnel/Caddy (which use the Docker service name, not this host port).
   spacetimedb:
     # Pinned (not :latest) so prod runs a known server version. Must stay on the
-    # same 2.2.x line as the `spacetimedb` crate the module is built against and
+    # same 2.5.x line as the `spacetimedb` crate the module is built against and
     # the `spacetimedb` npm SDK — a minor-version skew breaks module load and
     # the client connection. `:latest` is cached per-host and never auto-refreshes.
-    image: clockworklabs/spacetime:v2.2.1
+    image: clockworklabs/spacetime:v2.5.0
     command: start
     container_name: letschat-spacetimedb
     ports:
       - "127.0.0.1:44300:3000"
     volumes:
       - spacetimedb_home:/home/spacetime
+    # spacetimedb-config-init drops our WebSocket keepalive config.toml into the
+    # data dir (in the shared volume) before the server starts.
+    depends_on:
+      spacetimedb-config-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/3000'"]
       interval: 10s
@@ -22,6 +27,27 @@ services:
       retries: 10
       start_period: 30s
     restart: unless-stopped
+
+  # ── SpacetimeDB config init ──────────────────────────────────────────────────
+  # One-shot: installs config.prod.toml as {data-dir}/config.toml in the shared
+  # spacetimedb_home volume, then exits. Runs as the image's `spacetime` user so
+  # the file lands with correct ownership. This indirection is required because a
+  # direct bind mount of config.toml would make Docker create the parent dirs as
+  # root, and the non-root server then can't create its log dir (startup panic).
+  # The WebSocket tuning (raised idle-timeout) keeps the chat connection alive
+  # through tunnel/proxy Pong delays — see spacetimedb/config.prod.toml.
+  spacetimedb-config-init:
+    image: clockworklabs/spacetime:v2.5.0
+    container_name: letschat-spacetimedb-config-init
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mkdir -p /home/spacetime/.local/share/spacetime/data &&
+        cp /config/config.toml /home/spacetime/.local/share/spacetime/data/config.toml
+    volumes:
+      - spacetimedb_home:/home/spacetime
+      - ./spacetimedb/config.prod.toml:/config/config.toml:ro
+    restart: "no"
 
   # ── PostgreSQL (auth database) ──────────────────────────────────────────────
   # Backs core-api's ASP.NET Core Identity store. Only reachable on the
@@ -183,6 +209,10 @@ services:
     environment:
       MINIO_ROOT_USER: "${MINIO_ACCESS_KEY}"
       MINIO_ROOT_PASSWORD: "${MINIO_SECRET_KEY}"
+      # Browser clients on app.<domain> fetch() presigned URLs from files.<domain>;
+      # that cross-origin read needs CORS. Default "*" works; pin it to the web
+      # origin (e.g. https://app.example.com) to lock it down. Desktop is unaffected.
+      MINIO_API_CORS_ALLOW_ORIGIN: "${MINIO_CORS_ALLOW_ORIGIN:-*}"
     volumes:
       - minio_data:/data
     restart: unless-stopped
@@ -206,6 +236,24 @@ services:
         echo 'bucket ready';
       "
     restart: "no"
+
+  # ── Web client (hosted browser SPA) ──────────────────────────────────────────
+  # Builds the React/Vite bundle with this deployment's connect URL baked in
+  # (VITE_WEB_CONNECT_URL) so a browser visiting app.<domain> auto-discovers the
+  # instance and skips the desktop "pick a server" setup. Self-contained static
+  # file server (no SSR runtime to crash) — reached by service name `web:80`
+  # from Caddy or the Cloudflare Tunnel. Loopback-only host port for debugging.
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web/Dockerfile
+      args:
+        VITE_WEB_CONNECT_URL: "${VITE_WEB_CONNECT_URL}"
+        VITE_WEB_WS_COMPRESSION: "${VITE_WEB_WS_COMPRESSION:-gzip}"
+    container_name: letschat-web
+    ports:
+      - "127.0.0.1:44310:80"
+    restart: unless-stopped
 
 volumes:
   spacetimedb_home:

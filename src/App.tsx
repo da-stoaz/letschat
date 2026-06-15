@@ -15,6 +15,10 @@ import { useConnectionStore } from './stores/connectionStore'
 import { useUiStore } from './stores/uiStore'
 import { useServerConfigStore } from './stores/serverConfigStore'
 import { useDeepLink } from './hooks/useDeepLink'
+import { useWebAutoConfig } from './hooks/useWebAutoConfig'
+import { WebJoinPage } from './pages/WebJoinPage'
+import { WebConnectErrorPage } from './pages/WebConnectErrorPage'
+import { DesktopAppBanner } from './features/web/DesktopAppBanner'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
 import { useVoiceStateReconciler } from './hooks/useVoiceStateReconciler'
 import { ensureNotificationPermission } from './lib/notifications'
@@ -24,6 +28,7 @@ import { LoaderCircleIcon } from 'lucide-react'
 
 function App() {
   useDeepLink()
+  const webAutoConfig = useWebAutoConfig()
   usePresenceLifecycle()
   useVoiceStateReconciler()
   const user = useSelfStore((s) => s.user)
@@ -34,6 +39,7 @@ function App() {
   const location = useLocation()
   const onAuthRoute = location.pathname.startsWith('/auth')
   const onSetupRoute = location.pathname.startsWith('/setup')
+  const onJoinRoute = location.pathname.startsWith('/join')
 
   useEffect(() => {
     if (!notificationsEnabled) return
@@ -44,7 +50,16 @@ function App() {
     return <SplashScreen />
   }
 
-  if (!isConfigured && !onSetupRoute) {
+  // Hosted-web build: single-tenant, locked to its own instance. It must NEVER
+  // show the desktop "pick a server" Setup screen. While discovery is in flight
+  // show the splash; if it fails show a locked retry screen — not the picker.
+  const isHostedWeb = webAutoConfig !== 'inactive'
+  if (isHostedWeb && !isConfigured) {
+    return webAutoConfig === 'failed' ? <WebConnectErrorPage /> : <SplashScreen />
+  }
+
+  // Desktop / local dev only: unconfigured clients pick a server via Setup.
+  if (!isHostedWeb && !isConfigured && !onSetupRoute && !onJoinRoute) {
     return <Navigate to="/setup" replace />
   }
 
@@ -65,8 +80,12 @@ function App() {
   }
 
   return (
-    <Routes>
+    <div className="flex h-screen flex-col">
+      <DesktopAppBanner />
+      <div className="min-h-0 flex-1">
+        <Routes>
       <Route path="/setup" element={isConfigured ? <Navigate to="/" replace /> : <SetupPage />} />
+      <Route path="/join" element={<WebJoinPage />} />
       <Route path="/" element={<Navigate to={user ? '/app' : '/auth'} replace />} />
       <Route path="/auth" element={user ? <Navigate to="/app" replace /> : <AuthPage />} />
       <Route path="/invite/:token" element={<InvitePage />} />
@@ -80,7 +99,9 @@ function App() {
         <Route path=":serverId" element={<ServerChannelPage />} />
         <Route path=":serverId/:channelId" element={<ServerChannelPage />} />
       </Route>
-    </Routes>
+        </Routes>
+      </div>
+    </div>
   )
 }
 

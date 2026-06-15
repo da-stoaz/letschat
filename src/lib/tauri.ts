@@ -21,6 +21,17 @@ export function isDesktopTauriRuntime(): boolean {
   return isTauriRuntime()
 }
 
+/**
+ * True for the hosted browser build: running in a real browser (not the Tauri
+ * desktop shell) with a connect URL baked in at build time. Such a build is
+ * single-tenant — locked to its own deployment — so server-picker / change-server
+ * affordances must be hidden (it would strand the locked-instance bootstrap).
+ */
+export function isHostedWebBuild(): boolean {
+  const connectUrl = (import.meta.env.VITE_WEB_CONNECT_URL as string | undefined)?.trim()
+  return !isDesktopTauriRuntime() && !!connectUrl
+}
+
 function isInvalidAuthSessionError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   return error.message.trim().toLowerCase() === 'invalid auth session.'

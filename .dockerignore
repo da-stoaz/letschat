@@ -1,0 +1,15 @@
+# Keep Docker build contexts lean (used by the web SPA image, deploy/web/Dockerfile).
+node_modules
+dist
+dist-ssr
+.git
+target
+**/target
+**/bin
+**/obj
+src-tauri/target
+graphify-out
+*.log
+.env
+.env.*
+!.env.production.*.example

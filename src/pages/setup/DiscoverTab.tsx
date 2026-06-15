@@ -1,42 +1,11 @@
 import { useState } from 'react'
 import type { ServerConfig } from '../../stores/serverConfigStore'
+import { discoverConfig } from '../../lib/discovery'
 import { ConfigPreview } from './ConfigPreview'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { GlobeIcon, LoaderCircleIcon } from 'lucide-react'
-
-interface WellKnown {
-  spacetimedb?: string
-  auth?: string
-  livekit?: string
-  database?: string
-}
-
-function normalizeUrl(input: string): string {
-  const trimmed = input.trim().replace(/\/+$/, '')
-  return trimmed.includes('://') ? trimmed : `http://${trimmed}`
-}
-
-async function discoverConfig(serverUrl: string): Promise<ServerConfig> {
-  const base = normalizeUrl(serverUrl)
-  const res = await fetch(`${base}/.well-known/letschat.json`, { signal: AbortSignal.timeout(8000) })
-  if (!res.ok) {
-    throw new Error(`Discovery failed (${res.status}). Is /.well-known/letschat.json hosted at ${base}?`)
-  }
-  const json = (await res.json()) as WellKnown
-  const missing: string[] = []
-  if (!json.spacetimedb) missing.push('spacetimedb')
-  if (!json.auth) missing.push('auth')
-  if (!json.livekit) missing.push('livekit')
-  if (missing.length) throw new Error(`letschat.json is missing fields: ${missing.join(', ')}`)
-  return {
-    spacetimedbUri: json.spacetimedb!,
-    authServiceUrl: json.auth!,
-    livekitUrl: json.livekit!,
-    spacetimedbDatabase: json.database ?? 'letschat',
-  }
-}
 
 interface Props {
   onConnect: (config: ServerConfig) => Promise<void>

@@ -14,6 +14,7 @@ services:
       FILES_DOMAIN: "${FILES_DOMAIN}"
       LIVEKIT_DOMAIN: "${LIVEKIT_DOMAIN}"
       CONNECT_DOMAIN: "${CONNECT_DOMAIN}"
+      APP_DOMAIN: "${APP_DOMAIN}"
     volumes:
       - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -23,6 +24,7 @@ services:
       - spacetimedb
       - minio
       - livekit
+      - web
     restart: unless-stopped
 
 volumes:
