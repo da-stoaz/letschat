@@ -13,7 +13,6 @@ services:
       CHAT_DOMAIN: "${CHAT_DOMAIN}"
       FILES_DOMAIN: "${FILES_DOMAIN}"
       LIVEKIT_DOMAIN: "${LIVEKIT_DOMAIN}"
-      CONNECT_DOMAIN: "${CONNECT_DOMAIN}"
       APP_DOMAIN: "${APP_DOMAIN}"
     volumes:
       - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro

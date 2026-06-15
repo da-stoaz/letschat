@@ -5,6 +5,11 @@
 # pages on 8788. Only 8787 is fronted by Caddy; the admin port stays bound
 # to 127.0.0.1 on the host and is reached over SSH port-forward.
 
+# core-api fronts everything on one host: the public auth/token API, the
+# /.well-known/letschat.json discovery document the app fetches at first run,
+# the public landing page, and the /downloads/{os} installer resolver. There is
+# no separate `connect` subdomain — auth.<domain> IS the discovery entrypoint
+# that users paste into the desktop "pick a server" screen.
 {$AUTH_DOMAIN} {
   reverse_proxy core-api:8787
 }
@@ -30,14 +35,8 @@
   reverse_proxy livekit:44380
 }
 
-# Serves the public landing page, /.well-known/letschat.json discovery, and
-# /downloads/{os} installer resolver. Same upstream as auth.<domain>.
-{$CONNECT_DOMAIN} {
-  reverse_proxy core-api:8787
-}
-
 # Hosted web client (browser SPA). Static files served by the `web` container;
-# it self-discovers this instance via the connect.<domain> route above.
+# it self-discovers this instance via auth.<domain>/.well-known/letschat.json.
 {$APP_DOMAIN} {
   reverse_proxy web:80
 }
