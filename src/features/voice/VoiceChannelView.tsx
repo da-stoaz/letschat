@@ -25,10 +25,8 @@ import { VoiceControlBar } from './components/VoiceControlBar'
 import { useLegacyCallControlsVisible } from './hooks/useLegacyCallControls'
 import { useVoiceControlActions } from './hooks/useVoiceControlActions'
 import { VoiceMediaStage, type VoiceMediaTile } from './components/VoiceMediaStage'
-import { CallLatencyBadge } from './components/CallLatencyBadge'
 import { buildVoiceMediaTiles } from './mediaTiles'
 import { ActiveCallCard } from '../../layouts/app-layout/ActiveCallCard'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -194,8 +192,6 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     }
   }, [joined, deafened, remoteParticipants])
 
-  const statusBadge = connectingToRoom ? 'Joining...' : joined ? 'Joined' : selfParticipant ? 'Syncing...' : 'Not joined'
-  const statusVariant = connectingToRoom ? 'outline' : joined ? 'default' : selfParticipant ? 'outline' : 'secondary'
   const channelName = useMemo(() => {
     if (channelId === null) return null
     for (const channels of Object.values(channelsByServer)) {
@@ -323,14 +319,11 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
       <header className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">{channelName ? `Voice • ${channelName}` : `Voice Channel ${channelId}`}</h2>
-          <p className="text-sm text-muted-foreground">
-            {participants.length}/15 participants
-            {ongoingCallDuration ? ` • Ongoing call since ${ongoingCallDuration}` : ''}
-          </p>
+          {ongoingCallDuration ? (
+            <p className="text-sm text-muted-foreground">Ongoing call since {ongoingCallDuration}</p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
-          {joined ? <CallLatencyBadge room={roomForChannel} /> : null}
-          <Badge variant={statusVariant}>{statusBadge}</Badge>
           <Button size="sm" variant="outline" onClick={togglePanelFullscreen}>
             {isPanelFullscreen ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}
             {isPanelFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
