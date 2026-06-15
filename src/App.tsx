@@ -17,6 +17,7 @@ import { useServerConfigStore } from './stores/serverConfigStore'
 import { useDeepLink } from './hooks/useDeepLink'
 import { useWebAutoConfig } from './hooks/useWebAutoConfig'
 import { WebJoinPage } from './pages/WebJoinPage'
+import { WebConnectErrorPage } from './pages/WebConnectErrorPage'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
 import { useVoiceStateReconciler } from './hooks/useVoiceStateReconciler'
 import { ensureNotificationPermission } from './lib/notifications'
@@ -48,14 +49,16 @@ function App() {
     return <SplashScreen />
   }
 
-  // Hosted-web build auto-discovering its own instance: show the splash while
-  // discovery is in flight instead of flashing the desktop Setup screen. A
-  // `failed` status falls through to the Setup redirect below.
-  if (webAutoConfig === 'discovering' && !isConfigured) {
-    return <SplashScreen />
+  // Hosted-web build: single-tenant, locked to its own instance. It must NEVER
+  // show the desktop "pick a server" Setup screen. While discovery is in flight
+  // show the splash; if it fails show a locked retry screen — not the picker.
+  const isHostedWeb = webAutoConfig !== 'inactive'
+  if (isHostedWeb && !isConfigured) {
+    return webAutoConfig === 'failed' ? <WebConnectErrorPage /> : <SplashScreen />
   }
 
-  if (!isConfigured && !onSetupRoute && !onJoinRoute) {
+  // Desktop / local dev only: unconfigured clients pick a server via Setup.
+  if (!isHostedWeb && !isConfigured && !onSetupRoute && !onJoinRoute) {
     return <Navigate to="/setup" replace />
   }
 
