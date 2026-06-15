@@ -85,9 +85,6 @@
   html {
     height: 100%;
     min-height: 100%;
-    /* Bump the root size so every rem-based Tailwind text utility reads a touch
-       larger and more comfortable than the cramped 16px default. */
-    font-size: 17px;
     font-family: var(--font-sans);
     color: var(--foreground);
     background:
@@ -96,12 +93,6 @@
       var(--background);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-  }
-
-  @media (max-width: 640px) {
-    html {
-      font-size: 16px;
-    }
   }
 
   body {
