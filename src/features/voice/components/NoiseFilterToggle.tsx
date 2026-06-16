@@ -18,8 +18,11 @@ export function NoiseFilterToggle({
 }) {
   const noiseFilterEnabled = useMediaDeviceStore((s) => s.noiseFilterEnabled)
   const toggleNoiseFilter = useMediaDeviceStore((s) => s.toggleNoiseFilter)
-  const supported = supportsNoiseFilter()
-  const active = supported && noiseFilterEnabled
+  const active = noiseFilterEnabled
+
+  // Krisp is a desktop-only feature, so the control doesn't render on the hosted
+  // web build (see `supportsNoiseFilter`).
+  if (!supportsNoiseFilter()) return null
 
   return (
     <TooltipProvider delay={500}>
@@ -30,7 +33,6 @@ export function NoiseFilterToggle({
               type="button"
               size={compact ? 'icon-xs' : 'icon-sm'}
               variant="outline"
-              disabled={!supported}
               aria-pressed={active}
               aria-label={active ? 'Turn noise filter off' : 'Turn noise filter on'}
               onClick={() => toggleNoiseFilter()}
@@ -51,9 +53,7 @@ export function NoiseFilterToggle({
           <div className="space-y-0.5">
             <p className="font-semibold">Noise filter: {active ? 'on' : 'off'}</p>
             <p className="text-background/80">
-              {supported
-                ? 'Removes background noise from your mic so people hear your voice clearly.'
-                : "Background noise removal isn't available in this browser."}
+              Removes background noise from your mic so people hear your voice clearly.
             </p>
           </div>
         </TooltipContent>

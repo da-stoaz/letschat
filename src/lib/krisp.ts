@@ -1,5 +1,6 @@
 import { Track, type LocalAudioTrack, type Room } from 'livekit-client'
 import type { KrispNoiseFilterProcessor } from '@livekit/krisp-noise-filter'
+import { isDesktopTauriRuntime } from './tauri'
 
 const NOISE_FILTER_PROCESSOR_NAME = 'livekit-noise-filter'
 
@@ -20,9 +21,18 @@ function loadKrisp(): Promise<KrispModule> {
  * pulling in the heavy Krisp module. The authoritative check
  * (`isKrispNoiseFilterSupported`) runs in {@link syncNoiseFilter} before a
  * processor is actually created.
+ *
+ * Krisp is a **desktop-only** feature. Its multi-threaded WASM model needs
+ * `SharedArrayBuffer`, which browsers only expose on cross-origin-isolated pages
+ * (COOP `same-origin` + COEP). Serving those headers on the hosted web build
+ * would break cross-origin avatar/attachment loads (and WebKit doesn't support
+ * the `credentialless` variant that would avoid that), so rather than ship a
+ * broken toggle we keep the noise filter off the web client entirely. Returning
+ * `false` here also means `syncNoiseFilter` never dynamically imports the
+ * multi-MB Krisp module, so web users never download it.
  */
 export function supportsNoiseFilter(): boolean {
-  if (typeof window === 'undefined') return false
+  if (!isDesktopTauriRuntime()) return false
   return typeof AudioWorkletNode !== 'undefined' && typeof WebAssembly !== 'undefined'
 }
 
