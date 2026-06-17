@@ -4,7 +4,7 @@ import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
 import { GITHUB_DISCUSSIONS, GITHUB_ISSUE_NEW } from "@/lib/site";
 
-const updatedAt = "June 7, 2026";
+const updatedAt = "June 16, 2026";
 
 // Delivered and merged to main.
 const shipped = [
@@ -30,67 +30,133 @@ const shipped = [
       "Per-owner anti-spam quota and instance-admin moderation (un-list any space).",
     ],
   },
+  {
+    id: "Plan 1.6",
+    focus: "Hosted Web Client & SpacetimeDB 2.5",
+    blurb: "LetsChat in the browser, plus the realtime engine moved onto the current release line.",
+    items: [
+      "Hosted browser client at app.<domain> — single-tenant, auto-discovers its instance, no install.",
+      "Reliability-first WebSocket compression with automatic downgrade so a browser can never get stranded.",
+      "SpacetimeDB bumped 2.2 → 2.5 in lockstep (CLI, npm SDK, Rust crate, server image).",
+      "MinIO browser CORS, web join links, and a dismissable \"also on desktop\" prompt.",
+    ],
+  },
 ];
 
-// Sequenced ahead — each builds on the one before it.
+// Sequenced ahead — roughly in priority order. Direction: Spaces with
+// Discord-like behaviour (community servers, not team workspaces).
 const upcoming = [
   {
+    id: "Windows Code Signing",
+    focus: "Signed Windows installers",
+    priority: "P0",
+    status: "Now",
+    effort: "~days",
+    goals: [
+      "Sign the Windows build so SmartScreen/AV stop flagging LetsChat as malware.",
+      "Wire signing into the release CI; verify macOS notarization parity.",
+      "Highest-leverage adoption fix — done before storage tiering starts.",
+    ],
+  },
+  {
     id: "Plan 2",
-    focus: "Storage Tiering — hot/cold split",
+    focus: "Storage Tiering & Data Safety",
     priority: "P0",
     status: "Next",
     effort: "~5 weeks",
     goals: [
       "Keep only a bounded hot working set in SpacetimeDB to cap server RAM.",
-      "Mirror everything to a PostgreSQL cold archive via a .NET replication worker.",
-      "Serve older history from the archive; turn destructive migrations into wipe-and-rebuild.",
+      "Mirror everything to a PostgreSQL cold archive via a .NET replication worker; serve old history from it.",
+      "Turn destructive schema migrations into safe wipe-and-rebuild, and add scheduled backups of all data.",
+    ],
+  },
+  {
+    id: "OTA Updates",
+    focus: "Client & server auto-update",
+    priority: "P1",
+    status: "Planned",
+    effort: "~1–2 weeks",
+    goals: [
+      "Tauri auto-updater for the desktop client over a signed update feed (builds on Windows code signing).",
+      "Automate the self-hosted server upgrade — today it's 100% manual (docker compose pull + spacetime publish); make it a one-command, safe update.",
+      "Staged rollout with version gating (already exposed in /.well-known); scheduled right after Plan 2.",
     ],
   },
   {
     id: "Plan 3",
-    focus: "End-to-End Encryption",
+    focus: "Voice & Media Quality",
     priority: "P1",
     status: "Planned",
-    effort: "Multi-week",
+    effort: "~2 weeks",
     goals: [
-      "Encrypt DMs, channel messages, and attachments — the server stores only ciphertext.",
-      "Per-conversation symmetric keys, wrapped per device; all decryption happens on-device.",
-      "Key epochs rotate on membership change for re-readable, multi-device history.",
+      "Adaptive/simulcast video resolution that auto-downscales for weak connections.",
+      "Per-user and master audio volume controls.",
+      "Extend noise suppression to the web client (Krisp already ships on desktop).",
     ],
   },
   {
     id: "Plan 4",
-    focus: "Client-Side Local Cache & Search",
-    priority: "P2",
-    status: "Optional",
-    effort: "~2 weeks",
+    focus: "Space Operations & Limits",
+    priority: "P1",
+    status: "Planned",
+    effort: "Multi-week",
     goals: [
-      "On-device SQLite cache for offline history and faster cold start.",
-      "Local search across cached conversations.",
-      "Pure optimization layer — built after tiering and E2EE, or skipped.",
+      "Chunked/multipart MinIO uploads so large files aren't capped by the proxy body limit.",
+      "Per-space role & access management (Discord-style roles) plus per-space/instance storage quotas.",
+      "Drop the core-api↔SpacetimeDB admin-identity coupling; add operator-facing server logging.",
     ],
   },
   {
     id: "Plan 5",
-    focus: "Multi-Instance Client",
+    focus: "Search & Group DMs",
+    priority: "P2",
+    status: "Planned",
+    effort: "~3 weeks",
+    goals: [
+      "Full-text search across spaces and DMs — wiring up the currently-stubbed search UI.",
+      "Group direct messages.",
+    ],
+  },
+  {
+    id: "Plan 6",
+    focus: "Full UI Redesign",
+    priority: "P2",
+    status: "Planned",
+    effort: "Multi-week",
+    goals: [
+      "Deliberate ground-up visual redesign rather than incremental patches.",
+      "Profile popup cards, right-click context menus, and a custom window header rail.",
+      "UI and notification sounds.",
+    ],
+  },
+  {
+    id: "Plan 7",
+    focus: "End-to-End Encryption",
+    priority: "P2",
+    status: "Planned",
+    effort: "Multi-week",
+    goals: [
+      "Encrypt DMs first, then attachments and calls (LiveKit insertable streams), then spaces.",
+      "Per-conversation keys wrapped per device; all decryption happens on-device.",
+      "Key epochs rotate on membership change for re-readable, multi-device history.",
+    ],
+  },
+  {
+    id: "Later / Ideas",
+    focus: "Scheduled later or idea-stage",
     priority: "Idea",
     status: "Deferred",
-    effort: "~4–6 weeks",
+    effort: "Unscheduled",
     goals: [
-      "Connect to many instances at once, with their spaces shown side-by-side.",
-      "Refactor the store/connection layer away from single-instance assumptions.",
-      "Idea-stage — captured from product discussion, not yet scheduled.",
+      "Localisation (i18n) — agreed, scheduled for a later milestone.",
+      "Native mobile app, public integration API, and MCP integration.",
+      "Multi-instance client and an on-device offline cache.",
     ],
   },
 ];
-
-const sequence = [
-  ...shipped.map((m) => ({ id: m.id, focus: m.focus, status: "Shipped", effort: "Delivered" })),
-  ...upcoming.map((m) => ({ id: m.id, focus: m.focus, status: m.status, effort: m.effort })),
-];
 ---
 
-<Layout title="LetsChat Roadmap | Plans and Delivery" description="LetsChat roadmap: shipped milestones and the sequenced plans ahead — storage tiering, end-to-end encryption, local cache, and multi-instance.">
+<Layout title="LetsChat Roadmap | Plans and Delivery" description="LetsChat roadmap: shipped milestones and the sequenced plans ahead — Windows code signing, storage tiering, OTA updates, voice quality, a full UI redesign, and end-to-end encryption.">
   <SiteHeader active="roadmap" />
 
   <main class="max-w-7xl mx-auto px-5 sm:px-6 py-14 space-y-10">
@@ -107,7 +173,7 @@ const sequence = [
 
       <div class="roadmap-kpis">
         <article>
-          <p class="kpi-value">2</p>
+          <p class="kpi-value">3</p>
           <p class="kpi-label">Plans shipped</p>
         </article>
         <article>
@@ -115,7 +181,7 @@ const sequence = [
           <p class="kpi-label">Next up</p>
         </article>
         <article>
-          <p class="kpi-value">3</p>
+          <p class="kpi-value">8</p>
           <p class="kpi-label">Planned &amp; later</p>
         </article>
       </div>
@@ -182,32 +248,6 @@ const sequence = [
             </ul>
           </article>
         ))}
-      </div>
-    </section>
-
-    <section class="calendar-box">
-      <h2 class="text-xl font-semibold mb-3">Plan sequence at a glance</h2>
-      <div class="calendar-table-wrap">
-        <table class="calendar-table">
-          <thead>
-            <tr>
-              <th>Plan</th>
-              <th>Focus</th>
-              <th>Status</th>
-              <th>Effort</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sequence.map((row) => (
-              <tr>
-                <td>{row.id}</td>
-                <td>{row.focus}</td>
-                <td><span class={`status-chip status-${row.status.toLowerCase()}`}>{row.status}</span></td>
-                <td>{row.effort}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </section>
 
@@ -427,46 +467,6 @@ const sequence = [
     gap: 0.35rem;
     color: var(--color-muted-foreground);
     font-size: 0.85rem;
-  }
-
-  .calendar-box {
-    border: 1px solid oklch(1 0 0 / 0.11);
-    border-radius: 1rem;
-    padding: 1rem;
-    background: oklch(0.19 0.01 245 / 0.9);
-  }
-
-  .calendar-table-wrap {
-    overflow-x: auto;
-    border-radius: 0.75rem;
-    border: 1px solid oklch(1 0 0 / 0.11);
-  }
-
-  .calendar-table {
-    width: 100%;
-    border-collapse: collapse;
-    min-width: 620px;
-  }
-
-  .calendar-table th,
-  .calendar-table td {
-    padding: 0.72rem 0.8rem;
-    border-bottom: 1px solid oklch(1 0 0 / 0.09);
-    text-align: left;
-    font-size: 0.84rem;
-    vertical-align: middle;
-  }
-
-  .calendar-table thead th {
-    font-size: 0.74rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-muted-foreground);
-    background: oklch(0.17 0.01 245 / 0.85);
-  }
-
-  .calendar-table tbody tr:last-child td {
-    border-bottom: 0;
   }
 
   .feedback-strip {
