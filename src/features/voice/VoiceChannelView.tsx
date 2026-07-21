@@ -22,7 +22,7 @@ import { Maximize2Icon, Minimize2Icon, PhoneCallIcon, PhoneOffIcon } from 'lucid
 import { warnOnce } from '../../lib/devWarnings'
 import { useOngoingCallDuration } from './hooks/useOngoingCallDuration'
 import { VoiceControlBar } from './components/VoiceControlBar'
-import { useLegacyCallControlsVisible } from './hooks/useLegacyCallControls'
+import { useInlineCallControlsVisible } from './hooks/useInlineCallControls'
 import { useVoiceControlActions } from './hooks/useVoiceControlActions'
 import { VoiceMediaStage, type VoiceMediaTile } from './components/VoiceMediaStage'
 import { buildVoiceMediaTiles } from './mediaTiles'
@@ -122,7 +122,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const connectedToRoom = roomForChannel !== null && connectionState === ConnectionState.Connected
   const connectingToRoom = joining || (roomForChannel !== null && connectionState === ConnectionState.Connecting)
   const joined = connectedToRoom
-  const showLegacyControls = useLegacyCallControlsVisible()
+  const showInlineControls = useInlineCallControlsVisible()
   const displayParticipants = !selfIdentity
     ? participants
     : participants.filter((participant) => joined || !sameIdentity(participant.userIdentity, selfIdentity))
@@ -356,7 +356,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
 
       <VoiceMediaStage tiles={mediaTiles} className="min-h-0" showFullscreenToggle={false} />
 
-      {showLegacyControls ? (
+      {showInlineControls ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
           <VoiceControlBar
             joined={joined}

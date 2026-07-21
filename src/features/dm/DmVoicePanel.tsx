@@ -20,7 +20,7 @@ import type { DmVoiceParticipant, Identity } from '../../types/domain'
 import { VoiceControlBar } from '../voice/components/VoiceControlBar'
 import { VoiceMediaStage, type VoiceMediaTile } from '../voice/components/VoiceMediaStage'
 import { CallLatencyBadge } from '../voice/components/CallLatencyBadge'
-import { useLegacyCallControlsVisible } from '../voice/hooks/useLegacyCallControls'
+import { useInlineCallControlsVisible } from '../voice/hooks/useInlineCallControls'
 import { useVoiceControlActions } from '../voice/hooks/useVoiceControlActions'
 import { buildVoiceMediaTiles } from '../voice/mediaTiles'
 import { Badge } from '@/components/ui/badge'
@@ -60,7 +60,7 @@ export function DmVoicePanel({
   const audioInputId = useMediaDeviceStore((s) => s.audioInputId)
   const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
   const staleCleanupMarker = useRef<string | null>(null)
-  const showLegacyControls = useLegacyCallControlsVisible()
+  const showInlineControls = useInlineCallControlsVisible()
 
   const roomKey = selfIdentity ? dmVoiceRoomKey(selfIdentity, partnerIdentity) : null
   const participants = roomKey ? (participantsByRoom[roomKey] ?? EMPTY_PARTICIPANTS) : EMPTY_PARTICIPANTS
@@ -248,7 +248,7 @@ export function DmVoicePanel({
           emptyStateText="No participants are sharing media in this call."
         />
 
-        {showLegacyControls && joined ? (
+        {showInlineControls && joined ? (
           <div className="flex flex-wrap items-center gap-2">
             <VoiceControlBar
               joined={joined}

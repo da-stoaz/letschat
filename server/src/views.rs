@@ -4,11 +4,12 @@ use spacetimedb::{Identity, ViewContext};
 
 use crate::schema::{
     Ban, Block, Channel, DirectMessage, DmServerInvite, DmVoiceParticipant, Friend, FriendStatus,
-    Invite, JoinRequest, Message, PresenceState, ReadState, Role, Server, ServerMember, TypingState,
-    User, VoiceParticipant, ban__view, block__view, channel__view, direct_message__view,
-    dm_server_invite__view, dm_voice_participant__view, friend__view, invite__view,
-    join_request__view, message__view, presence_state__view, read_state__view, server__view,
-    server_member__view, typing_state__view, user__view, voice_participant__view,
+    Invite, JoinRequest, Message, PinnedMessage, PresenceState, ReadState, Role, Server,
+    ServerMember, TypingState, User, VoiceParticipant, ban__view, block__view, channel__view,
+    direct_message__view, dm_server_invite__view, dm_voice_participant__view, friend__view,
+    invite__view, join_request__view, message__view, pinned_message__view, presence_state__view,
+    read_state__view, server__view, server_member__view, typing_state__view, user__view,
+    voice_participant__view,
 };
 
 /// Server ids the caller is a member of. Shared by several scoped views below.
@@ -247,6 +248,19 @@ pub fn my_channel_messages(ctx: &ViewContext) -> Vec<Message> {
     for server_id in &mine {
         for channel in ctx.db.channel().server_id().filter(*server_id) {
             rows.extend(ctx.db.message().channel_id().filter(channel.id));
+        }
+    }
+    rows
+}
+
+/// Pinned messages for channels in spaces the caller is a member of.
+#[spacetimedb::view(accessor = my_pinned_messages, public)]
+pub fn my_pinned_messages(ctx: &ViewContext) -> Vec<PinnedMessage> {
+    let mine = my_server_ids(ctx);
+    let mut rows = Vec::<PinnedMessage>::new();
+    for server_id in &mine {
+        for channel in ctx.db.channel().server_id().filter(*server_id) {
+            rows.extend(ctx.db.pinned_message().channel_id().filter(channel.id));
         }
     }
     rows

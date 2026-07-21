@@ -9,6 +9,7 @@ import {
   mapDmServerInvite,
   mapChannel,
   mapMessage,
+  mapPinnedMessage,
   mapVoiceParticipant,
   mapFriend,
   mapBlock,
@@ -31,6 +32,7 @@ import { useDmVoiceSessionStore } from '../../stores/dmVoiceSessionStore'
 import { useFriendsStore } from '../../stores/friendsStore'
 import { useMembersStore } from '../../stores/membersStore'
 import { useMessagesStore } from '../../stores/messagesStore'
+import { usePinsStore } from '../../stores/pinsStore'
 import { useSelfStore } from '../../stores/selfStore'
 import { useServersStore } from '../../stores/serversStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -295,6 +297,30 @@ export function syncMessages(conn: DbConnection): void {
   }
 }
 
+export function syncPins(conn: DbConnection): void {
+  const pins = Array.from(conn.db.my_pinned_messages.iter()).map(mapPinnedMessage)
+  const grouped = new Map<number, typeof pins>()
+  for (const pin of pins) {
+    const byChannel = grouped.get(pin.channelId) ?? []
+    byChannel.push(pin)
+    grouped.set(pin.channelId, byChannel)
+  }
+
+  const store = usePinsStore.getState()
+  const existingChannelIds = Object.keys(store.pinsByChannel).map(Number)
+  for (const channelId of existingChannelIds) {
+    if (!grouped.has(channelId)) {
+      store.setChannelPins(channelId, [])
+    }
+  }
+
+  for (const [channelId, rows] of grouped.entries()) {
+    // Newest pins first.
+    rows.sort((a, b) => b.pinnedAt.localeCompare(a.pinnedAt))
+    store.setChannelPins(channelId, rows)
+  }
+}
+
 export function syncVoiceParticipants(conn: DbConnection): void {
   const participants = Array.from(conn.db.my_voice_participants.iter()).map(mapVoiceParticipant)
   const grouped = new Map<number, typeof participants>()
@@ -437,6 +463,7 @@ export function syncAll(conn: DbConnection): void {
   const users = syncUsers(conn)
   syncServerScopedState(conn, users)
   syncMessages(conn)
+  syncPins(conn)
   syncVoiceParticipants(conn)
   syncFriends(conn)
   syncDirectMessages(conn)
@@ -468,6 +495,7 @@ export function resetClientState(): void {
   useChannelsStore.setState({ channelsByServer: {} })
   useMembersStore.setState({ membersByServer: {} })
   useMessagesStore.setState({ messagesByChannel: {} })
+  usePinsStore.setState({ pinsByChannel: {} })
   useVoiceStore.setState({ participantsByChannel: {}, activeChannelId: null, localTracks: [] })
   useFriendsStore.setState({ friends: [], blocked: [] })
   useDmStore.setState({ conversations: {} })

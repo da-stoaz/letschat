@@ -120,6 +120,18 @@ fn delete_channel_with_dependencies(ctx: &ReducerContext, channel_id: u64) {
         ctx.db.voice_participant().voice_key().delete(key);
     }
 
+    let pin_ids: Vec<u64> = ctx
+        .db
+        .pinned_message()
+        .channel_id()
+        .filter(channel_id)
+        .map(|pin| pin.pin_id)
+        .collect();
+
+    for pin_id in pin_ids {
+        ctx.db.pinned_message().pin_id().delete(pin_id);
+    }
+
     ctx.db.channel().id().delete(channel_id);
 }
 

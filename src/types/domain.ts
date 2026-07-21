@@ -108,6 +108,14 @@ export interface Message {
   deleted: boolean
 }
 
+export interface PinnedMessage {
+  pinId: u64
+  channelId: u64
+  messageId: u64
+  pinnedBy: Identity
+  pinnedAt: string
+}
+
 export interface VoiceParticipant {
   channelId: u64
   userIdentity: Identity

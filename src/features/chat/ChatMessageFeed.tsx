@@ -55,6 +55,9 @@ export function ChatMessageFeed({
   onEditMessage,
   onDeleteMessage,
   scrollToBottomToken = 0,
+  jumpToMessage = null,
+  pinnedMessageIds = null,
+  onTogglePin,
 }: {
   scopeKey: string
   messages: RenderableMessage[]
@@ -65,9 +68,14 @@ export function ChatMessageFeed({
   onEditMessage?: (message: RenderableMessage, newContent: string) => Promise<void> | void
   onDeleteMessage: (message: RenderableMessage) => Promise<void> | void
   scrollToBottomToken?: number
+  jumpToMessage?: { messageId: number; nonce: number } | null
+  pinnedMessageIds?: Set<number> | null
+  onTogglePin?: (message: RenderableMessage, pinned: boolean) => void
 }) {
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE_SIZE)
   const [isAtBottom, setIsAtBottom] = useState(true)
+  const [highlightedId, setHighlightedId] = useState<number | null>(null)
+  const pendingJumpRef = useRef<number | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const sortedMessages = useMemo(
@@ -151,6 +159,36 @@ export function ChatMessageFeed({
     requestAnimationFrame(() => scrollToBottom())
   }, [scrollToBottomToken])
 
+  // Phase 1: when a jump is requested, make sure the target message is loaded
+  // into the visible window and mark it for highlighting/scrolling.
+  useEffect(() => {
+    if (!jumpToMessage) return
+    const index = sortedMessages.findIndex((message) => message.id === jumpToMessage.messageId)
+    if (index < 0) return
+    const neededLimit = sortedMessages.length - index
+    setHistoryLimit((previous) => Math.max(previous, neededLimit))
+    setIsAtBottom(false)
+    setHighlightedId(jumpToMessage.messageId)
+    pendingJumpRef.current = jumpToMessage.messageId
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpToMessage?.nonce])
+
+  // Phase 2: once the target group is present in feedItems, scroll to it.
+  useEffect(() => {
+    const target = pendingJumpRef.current
+    if (target == null) return
+    const itemIndex = feedItems.findIndex(
+      (item) => item.type === 'group' && item.group.messages.some((message) => message.id === target),
+    )
+    if (itemIndex < 0) return
+    pendingJumpRef.current = null
+    requestAnimationFrame(() => rowVirtualizer.scrollToIndex(itemIndex, { align: 'center' }))
+    const timer = setTimeout(() => {
+      setHighlightedId((current) => (current === target ? null : current))
+    }, 2600)
+    return () => clearTimeout(timer)
+  }, [feedItems, rowVirtualizer])
+
   return (
     <div className="relative min-h-0 flex-1">
       <div
@@ -204,6 +242,9 @@ export function ChatMessageFeed({
                     canModerate={canDeleteAny}
                     allowEditOwn={allowEditOwn}
                     selfIdentity={selfIdentity}
+                    highlightMessageId={highlightedId}
+                    pinnedMessageIds={pinnedMessageIds}
+                    onTogglePin={onTogglePin}
                     onEditMessage={(message, newContent) => {
                       if (!onEditMessage) return
                       void onEditMessage(message, newContent)

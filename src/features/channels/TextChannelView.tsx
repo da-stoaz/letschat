@@ -1,37 +1,50 @@
-import { useEffect, useMemo, useState } from 'react'
-import { HashIcon, PinIcon, SearchIcon, SidebarIcon } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { HashIcon, SidebarIcon } from 'lucide-react'
 import { reducers } from '../../lib/spacetimedb'
 import { useChannelsStore } from '../../stores/channelsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useMembersStore } from '../../stores/membersStore'
 import { useMessagesStore } from '../../stores/messagesStore'
+import { usePinsStore } from '../../stores/pinsStore'
 import { useUiStore } from '../../stores/uiStore'
 import { useServerRole } from '../../hooks/useServerRole'
 import { warnOnce } from '../../lib/devWarnings'
 import { ChatMessageFeed } from '../chat/ChatMessageFeed'
 import { ChatComposer } from '../chat/ChatComposer'
+import { ChannelMessageSearch } from './ChannelMessageSearch'
+import { ChannelPinsPopover } from './ChannelPinsPopover'
 import { composeMessageWithAttachments } from '../chat/attachmentPayload'
-import type { Message, u64 } from '../../types/domain'
+import type { Message, PinnedMessage, u64 } from '../../types/domain'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 
 const EMPTY_MESSAGES: Message[] = []
+const EMPTY_PINS: PinnedMessage[] = []
 
 export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [scrollToBottomToken, setScrollToBottomToken] = useState(0)
+  const jumpNonceRef = useRef(0)
+  const [jumpToMessage, setJumpToMessage] = useState<{ messageId: number; nonce: number } | null>(null)
+  const jumpToMessageId = (messageId: number) => {
+    jumpNonceRef.current += 1
+    setJumpToMessage({ messageId, nonce: jumpNonceRef.current })
+  }
 
   const selfIdentity = useConnectionStore((s) => s.identity)
   const channelsByServer = useChannelsStore((s) => s.channelsByServer)
   const membersByServer = useMembersStore((s) => s.membersByServer)
   const messagesByChannel = useMessagesStore((s) => s.messagesByChannel)
+  const pinsByChannel = usePinsStore((s) => s.pinsByChannel)
   const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
   const clearUnread = useUiStore((s) => s.clearUnread)
   const unreadByChannel = useUiStore((s) => s.unreadByChannel)
   const toggleRightPanel = useUiStore((s) => s.toggleRightPanel)
   const messages = channelId === null ? EMPTY_MESSAGES : (messagesByChannel[channelId] ?? EMPTY_MESSAGES)
+  const pins = channelId === null ? EMPTY_PINS : (pinsByChannel[channelId] ?? EMPTY_PINS)
+  const pinnedMessageIds = useMemo(() => new Set(pins.map((pin) => pin.messageId)), [pins])
 
   useEffect(() => {
     if (channelId === null || messages !== EMPTY_MESSAGES) return
@@ -85,12 +98,19 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
           {channel?.moderatorOnly ? <Badge variant="secondary">Moderator only</Badge> : null}
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-xs" disabled>
-            <SearchIcon className="size-3.5" />
-          </Button>
-          <Button variant="ghost" size="icon-xs" disabled>
-            <PinIcon className="size-3.5" />
-          </Button>
+          <ChannelMessageSearch messages={messages} onJump={jumpToMessageId} />
+          <ChannelPinsPopover
+            pins={pins}
+            messages={messages}
+            canModerate={canModerate}
+            onJump={jumpToMessageId}
+            onUnpin={(messageId) => {
+              if (channelId === null) return
+              reducers.unpinMessage(channelId, messageId).catch((e) => {
+                setError(e instanceof Error ? e.message : 'Could not unpin message.')
+              })
+            }}
+          />
           <Button variant="outline" size="sm" className="h-8" onClick={toggleRightPanel}>
             <SidebarIcon className="size-4" />
             Members
@@ -124,6 +144,21 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
           }
         }}
         scrollToBottomToken={scrollToBottomToken}
+        jumpToMessage={jumpToMessage}
+        pinnedMessageIds={pinnedMessageIds}
+        onTogglePin={
+          canModerate
+            ? (message, pinned) => {
+                setError(null)
+                const action = pinned
+                  ? reducers.pinMessage(channelId, message.id)
+                  : reducers.unpinMessage(channelId, message.id)
+                action.catch((e) => {
+                  setError(e instanceof Error ? e.message : 'Could not update pin.')
+                })
+              }
+            : undefined
+        }
       />
 
       <Separator />

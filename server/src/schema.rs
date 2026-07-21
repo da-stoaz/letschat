@@ -245,6 +245,23 @@ pub struct Message {
     pub deleted: bool,
 }
 
+// Private: pinned messages for channels in spaces the caller belongs to, via the
+// `my_pinned_messages` view. Additive table — no destructive migration.
+#[spacetimedb::table(accessor = pinned_message)]
+pub struct PinnedMessage {
+    #[primary_key]
+    #[auto_inc]
+    pub pin_id: u64,
+    #[index(btree)]
+    pub channel_id: u64,
+    /// A message can be pinned at most once (unique gives the lookup accessor
+    /// used by `pin_message` / `unpin_message`).
+    #[unique]
+    pub message_id: u64,
+    pub pinned_by: Identity,
+    pub pinned_at: Timestamp,
+}
+
 // Private: the `my_voice_participants` view returns voice presence for channels
 // in spaces the caller belongs to.
 #[spacetimedb::table(

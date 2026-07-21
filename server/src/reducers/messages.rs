@@ -93,5 +93,10 @@ pub fn delete_message(ctx: &ReducerContext, message_id: u64) -> Result<(), Strin
     message_row.edited_at = Some(ctx.timestamp);
     ctx.db.message().id().update(message_row);
 
+    // Drop any pin for this message so the pins list never shows tombstones.
+    if ctx.db.pinned_message().message_id().find(message_id).is_some() {
+        ctx.db.pinned_message().message_id().delete(message_id);
+    }
+
     Ok(())
 }
