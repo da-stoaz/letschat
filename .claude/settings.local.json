@@ -5,8 +5,11 @@
       "Bash(docker compose *)"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "shadcn"
   ],
-  "enableAllProjectMcpServers": true
+  "enabledPlugins": {
+    "ponytail@ponytail": true
+  }
 }
