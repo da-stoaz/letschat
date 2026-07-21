@@ -33,7 +33,7 @@ jobs:
           # Files that never go into a built artifact — keep in sync with the
           # paths-ignore list in release.yml. A PR touching ONLY these needs no
           # app version bump.
-          non_app='(^site/)|(^livekit/)|(^deploy/)|(^\.claude/)|(^graphify-out/)|(^docker-compose)|(^\.env.*\.example$)|(^\.github/workflows/(react-doctor|version-check)\.yml$)|(^\.gitignore$)|(^LICENSE$)|(\.md$)'
+          non_app='(^site/)|(^livekit/)|(^deploy/)|(^\.claude/)|(^\.agents/)|(^graphify-out/)|(^docker-compose)|(^\.env.*\.example$)|(^\.github/)|(^\.gitignore$)|(^LICENSE$)|(^skills-lock\.json$)|(\.md$)'
 
           app_changed=$(echo "$changed" | grep -vE "$non_app" || true)
           if [ -z "$app_changed" ]; then
