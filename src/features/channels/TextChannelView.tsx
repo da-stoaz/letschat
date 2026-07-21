@@ -9,7 +9,7 @@ import { usePinsStore } from '../../stores/pinsStore'
 import { useUiStore } from '../../stores/uiStore'
 import { useServerRole } from '../../hooks/useServerRole'
 import { warnOnce } from '../../lib/devWarnings'
-import { ChatMessageFeed } from '../chat/ChatMessageFeed'
+import { ChatMessageFeed, type ChatMessageFeedHandle } from '../chat/ChatMessageFeed'
 import { ChatComposer } from '../chat/ChatComposer'
 import { ChannelMessageSearch } from './ChannelMessageSearch'
 import { ChannelPinsPopover } from './ChannelPinsPopover'
@@ -26,11 +26,9 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [scrollToBottomToken, setScrollToBottomToken] = useState(0)
-  const jumpNonceRef = useRef(0)
-  const [jumpToMessage, setJumpToMessage] = useState<{ messageId: number; nonce: number } | null>(null)
+  const feedRef = useRef<ChatMessageFeedHandle>(null)
   const jumpToMessageId = (messageId: number) => {
-    jumpNonceRef.current += 1
-    setJumpToMessage({ messageId, nonce: jumpNonceRef.current })
+    feedRef.current?.jumpToMessage(messageId)
   }
 
   const selfIdentity = useConnectionStore((s) => s.identity)
@@ -119,6 +117,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
       </header>
 
       <ChatMessageFeed
+        ref={feedRef}
         scopeKey={`channel:${channelId}`}
         messages={messages}
         selfIdentity={selfIdentity}
@@ -144,7 +143,6 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
           }
         }}
         scrollToBottomToken={scrollToBottomToken}
-        jumpToMessage={jumpToMessage}
         pinnedMessageIds={pinnedMessageIds}
         onTogglePin={
           canModerate
