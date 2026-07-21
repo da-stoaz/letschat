@@ -44,6 +44,31 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # ── Archive replication worker (storage-tiering, plan 2) ─────────────────────
+  # Mirrors the SpacetimeDB archive_* views into the `archive` database. core-api
+  # owns that database + schema (EF migrations on its startup); the worker waits
+  # for the schema, then writes the mirror. Opt-in for dev: enable with the
+  # `archive` profile (`docker compose --profile archive up -d`) — most local work
+  # doesn't need it. One-time bootstrap: an instance admin must register the
+  # worker's identity via `set_archive_service_identity` (see the worker logs).
+  archive-worker:
+    build:
+      context: .
+      dockerfile: archive-worker/Dockerfile
+    container_name: letschat-dev-archive-worker
+    profiles: ["archive"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPACETIMEDB_URI: ws://spacetimedb:3000
+      SPACETIMEDB_MODULE_NAME: letschat
+      ARCHIVE_DATABASE_URL: Host=postgres;Port=5432;Database=archive;Username=letschat;Password=letschat
+      ARCHIVE_WORKER_TOKEN_FILE: /data/archive-worker.token
+    volumes:
+      - archive_worker_dev_data:/data
+    restart: unless-stopped
+
   # ── Mailpit (core-api: dev SMTP catcher for email verification) ──────────────
   mailpit:
     image: axllent/mailpit:latest
@@ -88,4 +113,5 @@ volumes:
   spacetimedb_dev_home:
   minio_dev_data:
   postgres_dev_data:
+  archive_worker_dev_data:
 

@@ -13,6 +13,7 @@ public sealed class TokenServiceTests
     private static ServiceOptions Options(string secret) => new()
     {
         ConnectionString = "Host=localhost;Database=test;Username=t;Password=t",
+        ArchiveConnectionString = "Host=localhost;Database=archive;Username=t;Password=t",
         Bind = "127.0.0.1:8787",
         AdminBind = "127.0.0.1:8788",
         JwtSecret = secret,

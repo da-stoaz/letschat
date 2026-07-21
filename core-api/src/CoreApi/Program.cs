@@ -4,6 +4,7 @@ using System.Threading.RateLimiting;
 using CoreApi;
 using CoreApi.Configuration;
 using CoreApi.Data;
+using CoreApi.Data.Archive;
 using CoreApi.Endpoints;
 using CoreApi.Identity;
 using CoreApi.Services;
@@ -23,6 +24,18 @@ var adminPort = int.Parse(options.AdminBind.Split(':')[^1]);
 
 // ── Persistence + Identity ───────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(db => db.UseNpgsql(options.ConnectionString));
+
+// The cold-archive schema (storage-tiering, plan 2) is owned here: migrations
+// apply on startup like the auth context. The archive-worker connects to the
+// already-migrated schema; phase-3 read endpoints use this context.
+//
+// Registered ONLY when ARCHIVE_DATABASE_URL is configured. The archive is an
+// optional background replica; an environment that hasn't provisioned it (e.g.
+// the current prod compose) simply runs without it rather than failing to start.
+if (!string.IsNullOrWhiteSpace(options.ArchiveConnectionString))
+{
+    builder.Services.AddDbContext<ArchiveDbContext>(db => db.UseNpgsql(options.ArchiveConnectionString));
+}
 
 builder.Services
     .AddIdentity<ApplicationUser, IdentityRole>(identity =>
