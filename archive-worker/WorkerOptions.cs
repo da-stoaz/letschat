@@ -33,6 +33,14 @@ public sealed class WorkerOptions
     /// <summary>Backoff between reconnect attempts after a disconnect.</summary>
     public int ReconnectDelayMs { get; init; }
 
+    /// <summary>
+    /// One-shot rebuild mode (storage-tiering A2). When true, instead of the
+    /// steady-state replication loop the worker reloads the durable tables from
+    /// the PostgreSQL cold archive into SpacetimeDB via the <c>archive_restore_*</c>
+    /// reducers, then exits. Used after a destructive <c>--delete-data</c> migration.
+    /// </summary>
+    public bool Rebuild { get; init; }
+
     public static WorkerOptions FromConfiguration(IConfiguration config)
     {
         string Get(string key, string fallback) =>
@@ -55,6 +63,7 @@ public sealed class WorkerOptions
                 "Host=localhost;Port=5433;Database=archive;Username=letschat;Password=letschat"),
             TickIntervalMs = GetInt("ARCHIVE_TICK_INTERVAL_MS", 50),
             ReconnectDelayMs = GetInt("ARCHIVE_RECONNECT_DELAY_MS", 3000),
+            Rebuild = (GetOptional("ARCHIVE_REBUILD") ?? "").Trim() is "1" or "true" or "TRUE",
         };
     }
 }

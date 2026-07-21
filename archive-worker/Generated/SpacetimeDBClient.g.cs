@@ -712,6 +712,8 @@ namespace SpacetimeDB.Types
                 Reducer.AcceptFriendRequest args => Reducers.InvokeAcceptFriendRequest(eventContext, args),
                 Reducer.AdminUnlistServer args => Reducers.InvokeAdminUnlistServer(eventContext, args),
                 Reducer.ApproveJoinRequest args => Reducers.InvokeApproveJoinRequest(eventContext, args),
+                Reducer.ArchiveRestoreDirectMessage args => Reducers.InvokeArchiveRestoreDirectMessage(eventContext, args),
+                Reducer.ArchiveRestoreMessage args => Reducers.InvokeArchiveRestoreMessage(eventContext, args),
                 Reducer.BanMember args => Reducers.InvokeBanMember(eventContext, args),
                 Reducer.BlockUser args => Reducers.InvokeBlockUser(eventContext, args),
                 Reducer.CancelJoinRequest args => Reducers.InvokeCancelJoinRequest(eventContext, args),

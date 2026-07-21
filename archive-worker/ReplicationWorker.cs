@@ -15,10 +15,26 @@ public sealed class ReplicationWorker(
     WorkerOptions options,
     ArchiveDatabase db,
     Replication replication,
+    Rebuild rebuild,
+    IHostApplicationLifetime lifetime,
     ILogger<ReplicationWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
+        if (options.Rebuild)
+        {
+            try
+            {
+                await RunRebuildAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Rebuild failed.");
+            }
+            lifetime.StopApplication();
+            return;
+        }
+
         await db.InitializeAsync(ct);
         var consumer = Task.Run(() => db.RunConsumerAsync(ct), ct);
 
@@ -43,6 +59,49 @@ public sealed class ReplicationWorker(
         }
 
         await consumer;
+    }
+
+    /// <summary>
+    /// One-shot rebuild (A2): connect as the archive service identity, reload the
+    /// durable tables from PostgreSQL via the <c>archive_restore_*</c> reducers,
+    /// then exit. Assumes the worker's identity has been re-registered in the
+    /// freshly-published module (see the migration runbook) so the gated restore
+    /// reducers accept it.
+    /// </summary>
+    private async Task RunRebuildAsync(CancellationToken ct)
+    {
+        var token = LoadToken();
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var builder = DbConnection.Builder()
+            .WithUri(options.SpacetimeUri)
+            .WithDatabaseName(options.SpacetimeModule)
+            .OnConnect((_, identity, freshToken) =>
+            {
+                PersistToken(freshToken);
+                logger.LogInformation("Rebuild: connected as {Identity}", identity);
+                connected.TrySetResult();
+            })
+            .OnConnectError(ex =>
+            {
+                logger.LogError(ex, "Rebuild connect error.");
+                connected.TrySetException(ex);
+            });
+
+        if (!string.IsNullOrWhiteSpace(token))
+            builder = builder.WithToken(token);
+
+        var connection = builder.Build();
+
+        while (!connected.Task.IsCompleted && !ct.IsCancellationRequested)
+        {
+            connection.FrameTick();
+            await Task.Delay(options.TickIntervalMs, ct);
+        }
+        await connected.Task; // surfaces a connect error
+
+        await rebuild.RunAsync(connection, ct);
+        try { connection.Disconnect(); } catch { /* already closing */ }
     }
 
     private async Task RunConnectionAsync(CancellationToken ct)

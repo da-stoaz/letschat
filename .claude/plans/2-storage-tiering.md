@@ -42,15 +42,26 @@ The mechanism is a **live CDC replication worker**, not a snapshot poller:
 - **Unregistered-worker behaviour:** before its identity is registered, the gated views are empty and the worker's reconcile will **empty** the archive to match. Correct-but-surprising; document the bootstrap ordering (register before relying on the archive).
 - **Prod compose:** the worker + archive DB are wired into `docker-compose.dev.yml` only (opt-in `archive` profile). Add to the prod compose when Part A ships to prod.
 
-## A2 — Migration rebuild tooling — ⏭️ NEXT (ship now, per 2026-07-21 decision)
+## A2 — Migration rebuild tooling — ✅ MECHANISM DONE & VERIFIED (2026-07-21)
 
-The durability payoff: make a destructive SpacetimeDB schema change non-lossy.
+The durability payoff: make a destructive SpacetimeDB migration non-lossy — a `--delete-data` wipe becomes *rebuild from the Postgres archive*.
 
-- New reducer `archive_restore(rows)` (worker-only, in `reducers/archive.rs`): verbatim insert during rebuild — explicit primary keys (auto-inc honoured only for sentinel `0`), explicit timestamps, bypasses validation/permission logic.
-- Worker **rebuild mode**: read every archive row from Postgres, apply a per-migration **transform** (old-schema → new-schema), insert via `archive_restore`. With eviction deferred, rebuild loads **all** rows (no hot-set selection) — strictly simpler.
-- **Runbook:** maintenance mode → final replication drain → `spacetime publish --delete-data` → rebuild from Postgres → exit. The per-migration transform is the only bespoke part.
+- **Reducers** `archive_restore_message` / `archive_restore_direct_message` (worker-only, gated to the archive service identity, in `server/src/reducers/archive.rs`): batch verbatim upsert — explicit primary keys preserved (an `#[auto_inc]` id only generates when `0`, so restored non-zero ids are kept), explicit timestamps kept, **no** validation/permission/business logic. Idempotent per PK (safe to re-run a partial rebuild).
+- **Worker rebuild mode** (`archive-worker/Rebuild.cs`, `ARCHIVE_REBUILD=1`): connect as the service identity, read `archive_message`/`archive_direct_message` from Postgres (reverse of `Replication`'s column map — identities from hex, timestamps from µs BIGINT), call the restore reducers in 500-row batches, then exit.
 
-**Why now:** E2EE ([3-e2ee.md](3-e2ee.md)) Phase 7 drops the `deleted`/`deleted_by_*` columns — a destructive migration. A2 turns that from "wipe history" into "rebuild from archive."
+**Verified end-to-end** on a throwaway `rebuildtest` DB: seed 5 messages → worker snapshots to Postgres → `spacetime publish --delete-data` (full wipe) → re-register worker identity → run rebuild → **exact parity restored** (ids 1–5 preserved, content exact, timestamps to the microsecond).
+
+**⚠️ Scope — not yet a whole-DB migration:** only `message` + `direct_message` restore today (the unbounded tables storage-tiering protects, and the E2EE Phase-7 targets). Because `--delete-data` wipes *every* table, a real whole-database migration also needs restore reducers + worker maps for the **bounded** tables (user, server, channel, server_member, ban, block, friend, invite, join_request, dm_server_invite, read_state) — identical mechanical pattern, add before scheduling one. Until then, prefer **additive** migrations (`Option<T>`/`#[default]`); the message/dm rebuild is the escape hatch for their history specifically.
+
+### Operator runbook (destructive migration)
+1. **Maintenance mode** — pause client writes (brief downtime).
+2. **Drain** — confirm the replication worker is caught up (archive == live counts), then stop it.
+3. **Wipe + republish** — `spacetime publish --delete-data` with the new schema. This also wipes the `archive_service` registration.
+4. **Re-register the worker identity** — as the module owner: `spacetime sql <db> "INSERT INTO archive_service (id, service_identity) VALUES (1, 0x<worker-identity>)"` (no admin user exists post-wipe, so use owner SQL, not the admin reducer).
+5. **Rebuild** — run the worker once with `ARCHIVE_REBUILD=1`; it reloads from Postgres and exits. (A per-migration transform on the old→new row shape is the only bespoke part if columns changed; message/dm currently restore 1:1.)
+6. **Restart** the worker in steady-state; **exit maintenance mode.**
+
+**Why this matters now:** E2EE ([3-e2ee.md](3-e2ee.md)) Phase 7 drops the `deleted`/`deleted_by_*` columns on message/direct_message — exactly the tables A2 covers. A2 turns that from "wipe history" into "rebuild from archive."
 
 ## Verification checklist (Part A)
 1. **Mirror fidelity** — Postgres matches SpacetimeDB after inserts/edits/deletes. ✅ (backfill parity 74/20/10/38)
