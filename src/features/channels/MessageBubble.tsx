@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { PhoneCallIcon, PhoneMissedIcon, PhoneOffIcon, PencilIcon, Trash2Icon } from 'lucide-react'
+import { PhoneCallIcon, PhoneMissedIcon, PhoneOffIcon, PencilIcon, PinIcon, PinOffIcon, Trash2Icon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -34,6 +34,9 @@ interface MessageBubbleProps {
   canModerate: boolean
   allowEditOwn?: boolean
   selfIdentity: string | null
+  highlightMessageId?: number | null
+  pinnedMessageIds?: Set<number> | null
+  onTogglePin?: (message: RenderableMessage, pinned: boolean) => void
   onEditMessage: (message: RenderableMessage, newContent: string) => void
   onDeleteMessage: (message: RenderableMessage) => void
 }
@@ -52,6 +55,9 @@ export function MessageBubble({
   canModerate,
   allowEditOwn = true,
   selfIdentity,
+  highlightMessageId = null,
+  pinnedMessageIds = null,
+  onTogglePin,
   onEditMessage,
   onDeleteMessage,
 }: MessageBubbleProps) {
@@ -117,6 +123,8 @@ export function MessageBubble({
               const isOwn = sameIdentity(message.senderIdentity, selfIdentity)
               const canEdit = allowEditOwn && isOwn && !message.deleted
               const canDelete = canDeleteGroupMessage[message.id]
+              const isPinned = pinnedMessageIds?.has(message.id) ?? false
+              const canPin = Boolean(onTogglePin) && canModerate && !message.deleted
               const parsed = parseMessageAttachments(message.content)
               const hasText = parsed.text.trim().length > 0
 
@@ -135,8 +143,15 @@ export function MessageBubble({
                 setEditDraft('')
               }
 
+              const isHighlighted = highlightMessageId != null && message.id === highlightMessageId
+
               return (
-                <div key={message.id} className={`group/message relative rounded-md ${isEditing ? '' : 'pr-16'}`}>
+                <div
+                  key={message.id}
+                  className={`group/message relative rounded-md transition-colors ${isEditing ? '' : 'pr-16'} ${
+                    isHighlighted ? 'bg-primary/15 ring-1 ring-primary/40' : ''
+                  }`}
+                >
                   {message.deleted ? (
                     <p className="text-sm italic text-muted-foreground">[message deleted]</p>
                   ) : isEditing ? (
@@ -174,9 +189,24 @@ export function MessageBubble({
                     </div>
                   )}
                   {!isEditing && message.editedAt ? <span className="ml-1 text-xs text-muted-foreground">[edited]</span> : null}
+                  {!isEditing && isPinned ? (
+                    <span className="ml-1 inline-flex items-center gap-0.5 text-xs text-muted-foreground">
+                      <PinIcon className="size-3" />
+                    </span>
+                  ) : null}
 
-                  {!isEditing && (canEdit || canDelete) ? (
+                  {!isEditing && (canEdit || canDelete || canPin) ? (
                     <div className="absolute right-0 top-0 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100">
+                      {canPin ? (
+                        <Button
+                          size="icon-xs"
+                          variant="ghost"
+                          aria-label={isPinned ? 'Unpin message' : 'Pin message'}
+                          onClick={() => onTogglePin?.(message, !isPinned)}
+                        >
+                          {isPinned ? <PinOffIcon className="size-3.5" /> : <PinIcon className="size-3.5" />}
+                        </Button>
+                      ) : null}
                       {canEdit ? (
                         <Button size="icon-xs" variant="ghost" onClick={() => {
                           setEditingId(message.id)

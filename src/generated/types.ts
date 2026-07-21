@@ -153,6 +153,15 @@ export const Message = __t.object("Message", {
 });
 export type Message = __Infer<typeof Message>;
 
+export const PinnedMessage = __t.object("PinnedMessage", {
+  pinId: __t.u64(),
+  channelId: __t.u64(),
+  messageId: __t.u64(),
+  pinnedBy: __t.identity(),
+  pinnedAt: __t.timestamp(),
+});
+export type PinnedMessage = __Infer<typeof PinnedMessage>;
+
 export const PresenceState = __t.object("PresenceState", {
   identity: __t.identity(),
   online: __t.bool(),

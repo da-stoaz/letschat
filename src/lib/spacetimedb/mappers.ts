@@ -18,6 +18,7 @@ import type {
   Invite,
   JoinRequest,
   Message,
+  PinnedMessage,
   PresenceState,
   ReadState,
   Role,
@@ -199,6 +200,16 @@ export function mapMessage(row: DbRow): Message {
     sentAt: toIsoString(row.sentAt),
     editedAt: row.editedAt ? toIsoString(row.editedAt) : null,
     deleted: Boolean(row.deleted),
+  }
+}
+
+export function mapPinnedMessage(row: DbRow): PinnedMessage {
+  return {
+    pinId: toU64Number(row.pinId),
+    channelId: toU64Number(row.channelId),
+    messageId: toU64Number(row.messageId),
+    pinnedBy: toIdentityString(row.pinnedBy),
+    pinnedAt: toIsoString(row.pinnedAt),
   }
 }
 

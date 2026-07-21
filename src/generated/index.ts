@@ -66,6 +66,7 @@ import MarkDmReadReducer from "./mark_dm_read_reducer";
 import MoveChannelReducer from "./move_channel_reducer";
 import MoveChannelRelativeReducer from "./move_channel_relative_reducer";
 import MoveChannelToReducer from "./move_channel_to_reducer";
+import PinMessageReducer from "./pin_message_reducer";
 import RegisterUserReducer from "./register_user_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
 import RemoveTimeoutReducer from "./remove_timeout_reducer";
@@ -92,6 +93,7 @@ import TouchPresenceReducer from "./touch_presence_reducer";
 import TransferOwnershipReducer from "./transfer_ownership_reducer";
 import UnbanMemberReducer from "./unban_member_reducer";
 import UnblockUserReducer from "./unblock_user_reducer";
+import UnpinMessageReducer from "./unpin_message_reducer";
 import UpdateChannelReducer from "./update_channel_reducer";
 import UpdateDmVoiceStateReducer from "./update_dm_voice_state_reducer";
 import UpdateProfileReducer from "./update_profile_reducer";
@@ -111,6 +113,7 @@ import MyDmVoiceParticipantsRow from "./my_dm_voice_participants_table";
 import MyFriendsRow from "./my_friends_table";
 import MyInvitesRow from "./my_invites_table";
 import MyJoinRequestsRow from "./my_join_requests_table";
+import MyPinnedMessagesRow from "./my_pinned_messages_table";
 import MyPresenceStatesRow from "./my_presence_states_table";
 import MyReadStatesRow from "./my_read_states_table";
 import MyServerMembersRow from "./my_server_members_table";
@@ -205,6 +208,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyJoinRequestsRow),
+  my_pinned_messages: __table({
+    name: 'my_pinned_messages',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyPinnedMessagesRow),
   my_presence_states: __table({
     name: 'my_presence_states',
     indexes: [
@@ -290,6 +300,7 @@ const reducersSchema = __reducers(
   __reducerSchema("move_channel", MoveChannelReducer),
   __reducerSchema("move_channel_relative", MoveChannelRelativeReducer),
   __reducerSchema("move_channel_to", MoveChannelToReducer),
+  __reducerSchema("pin_message", PinMessageReducer),
   __reducerSchema("register_user", RegisterUserReducer),
   __reducerSchema("remove_friend", RemoveFriendReducer),
   __reducerSchema("remove_timeout", RemoveTimeoutReducer),
@@ -316,6 +327,7 @@ const reducersSchema = __reducers(
   __reducerSchema("transfer_ownership", TransferOwnershipReducer),
   __reducerSchema("unban_member", UnbanMemberReducer),
   __reducerSchema("unblock_user", UnblockUserReducer),
+  __reducerSchema("unpin_message", UnpinMessageReducer),
   __reducerSchema("update_channel", UpdateChannelReducer),
   __reducerSchema("update_dm_voice_state", UpdateDmVoiceStateReducer),
   __reducerSchema("update_profile", UpdateProfileReducer),

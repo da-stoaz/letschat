@@ -221,6 +221,16 @@ export const reducers = {
     spacetimedbClient.call('editMessage', { messageId: toU64(messageId, 'messageId'), newContent }),
   deleteMessage: (messageId: number) =>
     spacetimedbClient.call('deleteMessage', { messageId: toU64(messageId, 'messageId') }),
+  pinMessage: (channelId: number, messageId: number) =>
+    spacetimedbClient.call('pinMessage', {
+      channelId: toU64(channelId, 'channelId'),
+      messageId: toU64(messageId, 'messageId'),
+    }),
+  unpinMessage: (channelId: number, messageId: number) =>
+    spacetimedbClient.call('unpinMessage', {
+      channelId: toU64(channelId, 'channelId'),
+      messageId: toU64(messageId, 'messageId'),
+    }),
   touchPresence: () => spacetimedbClient.call('touchPresence'),
   setPresenceOffline: () => spacetimedbClient.call('setPresenceOffline'),
   setTypingState: (scopeKey: string, isTyping: boolean) =>

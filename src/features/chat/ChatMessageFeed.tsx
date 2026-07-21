@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowDownIcon } from 'lucide-react'
 import { MessageBubble, type MessageGroup, type RenderableMessage } from '../channels/MessageBubble'
@@ -7,6 +7,11 @@ import { Separator } from '@/components/ui/separator'
 
 const HISTORY_PAGE_SIZE = 50
 const GROUP_WINDOW_MS = 7 * 60 * 1000
+
+export interface ChatMessageFeedHandle {
+  /** Load (if needed), scroll to, and briefly highlight a message by id. */
+  jumpToMessage: (messageId: number) => void
+}
 
 type FeedItem =
   | { key: string; type: 'date'; dateLabel: string }
@@ -45,17 +50,7 @@ function estimateGroupHeight(group: MessageGroup): number {
   return 48 + group.messages.length * 28
 }
 
-export function ChatMessageFeed({
-  scopeKey,
-  messages,
-  selfIdentity,
-  unreadCount = 0,
-  canDeleteAny = false,
-  allowEditOwn = true,
-  onEditMessage,
-  onDeleteMessage,
-  scrollToBottomToken = 0,
-}: {
+export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   scopeKey: string
   messages: RenderableMessage[]
   selfIdentity: string | null
@@ -65,9 +60,25 @@ export function ChatMessageFeed({
   onEditMessage?: (message: RenderableMessage, newContent: string) => Promise<void> | void
   onDeleteMessage: (message: RenderableMessage) => Promise<void> | void
   scrollToBottomToken?: number
-}) {
+  pinnedMessageIds?: Set<number> | null
+  onTogglePin?: (message: RenderableMessage, pinned: boolean) => void
+}>(function ChatMessageFeed({
+  scopeKey,
+  messages,
+  selfIdentity,
+  unreadCount = 0,
+  canDeleteAny = false,
+  allowEditOwn = true,
+  onEditMessage,
+  onDeleteMessage,
+  scrollToBottomToken = 0,
+  pinnedMessageIds = null,
+  onTogglePin,
+}, ref) {
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE_SIZE)
   const [isAtBottom, setIsAtBottom] = useState(true)
+  const [highlightedId, setHighlightedId] = useState<number | null>(null)
+  const pendingJumpRef = useRef<number | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const sortedMessages = useMemo(
@@ -151,6 +162,41 @@ export function ChatMessageFeed({
     requestAnimationFrame(() => scrollToBottom())
   }, [scrollToBottomToken])
 
+  // Phase 1: the parent triggers a jump imperatively (from a search-result or
+  // pin click). Load the target into the visible window and mark it for the
+  // scroll/highlight the Phase-2 effect performs once it's laid out.
+  useImperativeHandle(
+    ref,
+    () => ({
+      jumpToMessage: (messageId: number) => {
+        const index = sortedMessages.findIndex((message) => message.id === messageId)
+        if (index < 0) return
+        const neededLimit = sortedMessages.length - index
+        setHistoryLimit((previous) => Math.max(previous, neededLimit))
+        setIsAtBottom(false)
+        setHighlightedId(messageId)
+        pendingJumpRef.current = messageId
+      },
+    }),
+    [sortedMessages],
+  )
+
+  // Phase 2: once the target group is present in feedItems, scroll to it.
+  useEffect(() => {
+    const target = pendingJumpRef.current
+    if (target == null) return
+    const itemIndex = feedItems.findIndex(
+      (item) => item.type === 'group' && item.group.messages.some((message) => message.id === target),
+    )
+    if (itemIndex < 0) return
+    pendingJumpRef.current = null
+    requestAnimationFrame(() => rowVirtualizer.scrollToIndex(itemIndex, { align: 'center' }))
+    const timer = setTimeout(() => {
+      setHighlightedId((current) => (current === target ? null : current))
+    }, 2600)
+    return () => clearTimeout(timer)
+  }, [feedItems, rowVirtualizer])
+
   return (
     <div className="relative min-h-0 flex-1">
       <div
@@ -204,6 +250,9 @@ export function ChatMessageFeed({
                     canModerate={canDeleteAny}
                     allowEditOwn={allowEditOwn}
                     selfIdentity={selfIdentity}
+                    highlightMessageId={highlightedId}
+                    pinnedMessageIds={pinnedMessageIds}
+                    onTogglePin={onTogglePin}
                     onEditMessage={(message, newContent) => {
                       if (!onEditMessage) return
                       void onEditMessage(message, newContent)
@@ -232,4 +281,4 @@ export function ChatMessageFeed({
       ) : null}
     </div>
   )
-}
+})

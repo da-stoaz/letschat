@@ -19,6 +19,7 @@ import {
   syncServerScopedState,
   syncChannels,
   syncMessages,
+  syncPins,
   syncVoiceParticipants,
   syncUsers,
   recomputeUnreadStateFromReadCursors,
@@ -307,4 +308,7 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
     syncMessages(conn)
     recomputeUnreadStateFromReadCursors()
   })
+  conn.db.my_pinned_messages.onInsert(() => syncPins(conn))
+  conn.db.my_pinned_messages.onUpdate(() => syncPins(conn))
+  conn.db.my_pinned_messages.onDelete(() => syncPins(conn))
 }
