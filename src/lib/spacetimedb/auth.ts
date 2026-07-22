@@ -122,7 +122,7 @@ export async function loginWithPassword(username: string, password: string): Pro
     )
   }
 
-  // Update the auth service with the fresh token SpacetimeDB issued during this connection,
+  // Update core-api with the fresh token SpacetimeDB issued during this connection,
   // so the next login won't hit a stale token.
   const freshToken = getCurrentSessionToken()
   if (freshToken) {
