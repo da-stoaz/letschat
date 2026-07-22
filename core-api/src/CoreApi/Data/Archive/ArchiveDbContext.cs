@@ -24,6 +24,7 @@ public sealed class ArchiveDbContext(DbContextOptions<ArchiveDbContext> options)
     public DbSet<ArchiveFriend> Friends => Set<ArchiveFriend>();
     public DbSet<ArchiveBlock> Blocks => Set<ArchiveBlock>();
     public DbSet<ArchiveReadState> ReadStates => Set<ArchiveReadState>();
+    public DbSet<ArchivePinnedMessage> PinnedMessages => Set<ArchivePinnedMessage>();
     public DbSet<ReplicationState> ReplicationState => Set<ReplicationState>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -38,6 +39,7 @@ public sealed class ArchiveDbContext(DbContextOptions<ArchiveDbContext> options)
         builder.Entity<ArchiveChannel>().Property(e => e.Id).ValueGeneratedNever();
         builder.Entity<ArchiveMessage>().Property(e => e.Id).ValueGeneratedNever();
         builder.Entity<ArchiveDirectMessage>().Property(e => e.Id).ValueGeneratedNever();
+        builder.Entity<ArchivePinnedMessage>().Property(e => e.PinId).ValueGeneratedNever();
 
         // Read-pattern indexes (archive read API, phase 3).
         builder.Entity<ArchiveServerMember>().HasIndex(e => e.ServerId);

@@ -550,3 +550,11 @@ pub fn archive_read_states(ctx: &ViewContext) -> Vec<ReadState> {
     }
     ctx.db.read_state().updated_at().filter(all::<Timestamp>()).collect()
 }
+
+#[spacetimedb::view(accessor = archive_pinned_messages, public)]
+pub fn archive_pinned_messages(ctx: &ViewContext) -> Vec<PinnedMessage> {
+    if !is_archive_service(ctx) {
+        return Vec::new();
+    }
+    ctx.db.pinned_message().channel_id().filter(all::<u64>()).collect()
+}

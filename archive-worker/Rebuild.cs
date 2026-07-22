@@ -39,14 +39,15 @@ public sealed class Rebuild(WorkerOptions options, ILogger<Rebuild> logger)
         var friends = await ReadFriendsAsync(db, ct);
         var blocks = await ReadBlocksAsync(db, ct);
         var readStates = await ReadReadStatesAsync(db, ct);
+        var pins = await ReadPinnedMessagesAsync(db, ct);
         var messages = await ReadMessagesAsync(db, ct);
         var dms = await ReadDirectMessagesAsync(db, ct);
 
         logger.LogInformation(
             "Rebuild: {U} user, {S} server, {C} channel, {M} member, {B} ban, {J} join_request, " +
-            "{I} invite, {D} dm_invite, {F} friend, {Bl} block, {R} read_state, {Msg} message, {Dm} direct_message.",
+            "{I} invite, {D} dm_invite, {F} friend, {Bl} block, {R} read_state, {P} pinned, {Msg} message, {Dm} direct_message.",
             users.Count, servers.Count, channels.Count, members.Count, bans.Count, joinRequests.Count,
-            invites.Count, dmInvites.Count, friends.Count, blocks.Count, readStates.Count, messages.Count, dms.Count);
+            invites.Count, dmInvites.Count, friends.Count, blocks.Count, readStates.Count, pins.Count, messages.Count, dms.Count);
 
         SubmitAll(conn, users, conn.Reducers.ArchiveRestoreUser);
         SubmitAll(conn, servers, conn.Reducers.ArchiveRestoreServer);
@@ -59,6 +60,7 @@ public sealed class Rebuild(WorkerOptions options, ILogger<Rebuild> logger)
         SubmitAll(conn, friends, conn.Reducers.ArchiveRestoreFriend);
         SubmitAll(conn, blocks, conn.Reducers.ArchiveRestoreBlock);
         SubmitAll(conn, readStates, conn.Reducers.ArchiveRestoreReadState);
+        SubmitAll(conn, pins, conn.Reducers.ArchiveRestorePinnedMessage);
         SubmitAll(conn, messages, conn.Reducers.ArchiveRestoreMessage);
         SubmitAll(conn, dms, conn.Reducers.ArchiveRestoreDirectMessage);
 
@@ -173,6 +175,14 @@ public sealed class Rebuild(WorkerOptions options, ILogger<Rebuild> logger)
         {
             ReadKey = x.Str(0), ScopeKey = x.Str(1), UserIdentity = Id(x, 2),
             LastReadAt = Ts(x, 3), UpdatedAt = Ts(x, 4),
+        }).ToList();
+
+    private static async Task<List<PinnedMessage>> ReadPinnedMessagesAsync(NpgsqlConnection db, CancellationToken ct) =>
+        (await QueryAsync(db, "SELECT pin_id, channel_id, message_id, pinned_by, pinned_at FROM archive_pinned_message", ct))
+        .Select(x => new PinnedMessage
+        {
+            PinId = U64(x, 0), ChannelId = U64(x, 1), MessageId = U64(x, 2),
+            PinnedBy = Id(x, 3), PinnedAt = Ts(x, 4),
         }).ToList();
 
     private static async Task<List<Message>> ReadMessagesAsync(NpgsqlConnection db, CancellationToken ct) =>

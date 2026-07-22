@@ -36,6 +36,7 @@ namespace SpacetimeDB.Types
             AddTable(ArchiveInvites = new(conn));
             AddTable(ArchiveJoinRequests = new(conn));
             AddTable(ArchiveMessages = new(conn));
+            AddTable(ArchivePinnedMessages = new(conn));
             AddTable(ArchiveReadStates = new(conn));
             AddTable(ArchiveServerMembers = new(conn));
             AddTable(ArchiveServers = new(conn));
@@ -565,6 +566,7 @@ namespace SpacetimeDB.Types
             new QueryBuilder().From.ArchiveInvites().ToSql(),
             new QueryBuilder().From.ArchiveJoinRequests().ToSql(),
             new QueryBuilder().From.ArchiveMessages().ToSql(),
+            new QueryBuilder().From.ArchivePinnedMessages().ToSql(),
             new QueryBuilder().From.ArchiveReadStates().ToSql(),
             new QueryBuilder().From.ArchiveServerMembers().ToSql(),
             new QueryBuilder().From.ArchiveServers().ToSql(),
@@ -604,6 +606,7 @@ namespace SpacetimeDB.Types
         public global::SpacetimeDB.Table<Invite, ArchiveInvitesCols, ArchiveInvitesIxCols> ArchiveInvites() => new("archive_invites", new ArchiveInvitesCols("archive_invites"), new ArchiveInvitesIxCols("archive_invites"));
         public global::SpacetimeDB.Table<JoinRequest, ArchiveJoinRequestsCols, ArchiveJoinRequestsIxCols> ArchiveJoinRequests() => new("archive_join_requests", new ArchiveJoinRequestsCols("archive_join_requests"), new ArchiveJoinRequestsIxCols("archive_join_requests"));
         public global::SpacetimeDB.Table<Message, ArchiveMessagesCols, ArchiveMessagesIxCols> ArchiveMessages() => new("archive_messages", new ArchiveMessagesCols("archive_messages"), new ArchiveMessagesIxCols("archive_messages"));
+        public global::SpacetimeDB.Table<PinnedMessage, ArchivePinnedMessagesCols, ArchivePinnedMessagesIxCols> ArchivePinnedMessages() => new("archive_pinned_messages", new ArchivePinnedMessagesCols("archive_pinned_messages"), new ArchivePinnedMessagesIxCols("archive_pinned_messages"));
         public global::SpacetimeDB.Table<ReadState, ArchiveReadStatesCols, ArchiveReadStatesIxCols> ArchiveReadStates() => new("archive_read_states", new ArchiveReadStatesCols("archive_read_states"), new ArchiveReadStatesIxCols("archive_read_states"));
         public global::SpacetimeDB.Table<ServerMember, ArchiveServerMembersCols, ArchiveServerMembersIxCols> ArchiveServerMembers() => new("archive_server_members", new ArchiveServerMembersCols("archive_server_members"), new ArchiveServerMembersIxCols("archive_server_members"));
         public global::SpacetimeDB.Table<Server, ArchiveServersCols, ArchiveServersIxCols> ArchiveServers() => new("archive_servers", new ArchiveServersCols("archive_servers"), new ArchiveServersIxCols("archive_servers"));
@@ -721,6 +724,7 @@ namespace SpacetimeDB.Types
                 Reducer.ArchiveRestoreInvite args => Reducers.InvokeArchiveRestoreInvite(eventContext, args),
                 Reducer.ArchiveRestoreJoinRequest args => Reducers.InvokeArchiveRestoreJoinRequest(eventContext, args),
                 Reducer.ArchiveRestoreMessage args => Reducers.InvokeArchiveRestoreMessage(eventContext, args),
+                Reducer.ArchiveRestorePinnedMessage args => Reducers.InvokeArchiveRestorePinnedMessage(eventContext, args),
                 Reducer.ArchiveRestoreReadState args => Reducers.InvokeArchiveRestoreReadState(eventContext, args),
                 Reducer.ArchiveRestoreServer args => Reducers.InvokeArchiveRestoreServer(eventContext, args),
                 Reducer.ArchiveRestoreServerMember args => Reducers.InvokeArchiveRestoreServerMember(eventContext, args),

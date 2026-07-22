@@ -51,7 +51,7 @@ The durability payoff: make a destructive SpacetimeDB migration non-lossy — a 
 
 **Verified end-to-end** on a throwaway `rebuildtest` DB with a rich fixture spanning **all 13 tables** (30 rows: `Everyone`/`ModeratorsOnly` policies, `{games,chat}` tags, invites with `max_uses`/`allowed_usernames`, `Owner`/`Member` roles, friends, DM, block, ban, join-request, read-state): seed → worker snapshots → `spacetime publish --delete-data` (full wipe) → re-register worker identity → rebuild → **exact parity on every table** — counts match and the tricky fields (enums, `text[]` arrays, `Option`s, µs timestamps, explicit ids) all restored verbatim. Test seeder: `tests/load/rebuild-fixture.ts`.
 
-**Not archived yet (small A1 gap, not A2):** `pinned_message` (added to main after the archive branch was cut) has no `archive_pinned_messages` view / EF entity, so it isn't replicated and can't be restored. Add the view + entity to close full coverage. Everything else in the durable set round-trips.
+**Full durable coverage (2026-07-22):** `pinned_message` — the last gap — is now archived and restored end-to-end: `archive_pinned_messages` gated view (`views.rs`), `ArchivePinnedMessage` EF entity + migration (`20260722152924_ArchivePinnedMessage`), worker replicator + `archive_restore_pinned_message` reducer. Verified in the fixture cycle (pin replicates live, then rebuilds verbatim after `--delete-data`). **All 14 durable tables now replicate and rebuild losslessly** — nothing in the durable set is left out.
 
 ### Operator runbook (destructive migration)
 1. **Maintenance mode** — pause client writes (brief downtime).

@@ -163,3 +163,4 @@ archive_restore!(archive_restore_invite, Invite, invite, token, byref);
 archive_restore!(archive_restore_friend, Friend, friend, pair_key, byref);
 archive_restore!(archive_restore_block, Block, block, block_key, byref);
 archive_restore!(archive_restore_read_state, ReadState, read_state, read_key, byref);
+archive_restore!(archive_restore_pinned_message, PinnedMessage, pinned_message, pin_id, byval);

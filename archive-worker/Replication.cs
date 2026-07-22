@@ -154,6 +154,13 @@ public sealed class Replication(ArchiveDatabase db, ILogger<Replication> logger)
         r => [r.ReadKey, r.ScopeKey, r.UserIdentity.ToString(), r.LastReadAt.Micros(), r.UpdatedAt.Micros()],
         r => [r.ReadKey]);
 
+    private readonly TableReplicator<PinnedMessage> _pinnedMessages = new(
+        "archive_pinned_message",
+        ["pin_id", "channel_id", "message_id", "pinned_by", "pinned_at"],
+        ["pin_id"],
+        p => [(long)p.PinId, (long)p.ChannelId, (long)p.MessageId, p.PinnedBy.ToString(), p.PinnedAt.Micros()],
+        p => [(long)p.PinId]);
+
     /// <summary>The SQL queries the worker subscribes to — one per archive view.</summary>
     public static string[] SubscriptionQueries =>
     [
@@ -170,6 +177,7 @@ public sealed class Replication(ArchiveDatabase db, ILogger<Replication> logger)
         "SELECT * FROM archive_friends",
         "SELECT * FROM archive_blocks",
         "SELECT * FROM archive_read_states",
+        "SELECT * FROM archive_pinned_messages",
         // Needed so the worker can observe its own service-identity registration
         // (and re-evaluate the gated views) without a reconnect.
         "SELECT * FROM archive_service",
@@ -191,6 +199,7 @@ public sealed class Replication(ArchiveDatabase db, ILogger<Replication> logger)
         Wire(conn.Db.ArchiveFriends, _friends);
         Wire(conn.Db.ArchiveBlocks, _blocks);
         Wire(conn.Db.ArchiveReadStates, _readStates);
+        Wire(conn.Db.ArchivePinnedMessages, _pinnedMessages);
     }
 
     /// <summary>
@@ -217,6 +226,7 @@ public sealed class Replication(ArchiveDatabase db, ILogger<Replication> logger)
         Reconcile(conn.Db.ArchiveFriends, _friends);
         Reconcile(conn.Db.ArchiveBlocks, _blocks);
         Reconcile(conn.Db.ArchiveReadStates, _readStates);
+        Reconcile(conn.Db.ArchivePinnedMessages, _pinnedMessages);
     }
 
     private void Wire<TRow>(RemoteTableHandle<EventContext, TRow> handle, TableReplicator<TRow> rep)

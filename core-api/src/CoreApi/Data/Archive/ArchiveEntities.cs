@@ -174,6 +174,16 @@ public sealed class ArchiveReadState
     [Column("updated_at")] public long UpdatedAt { get; set; }
 }
 
+[Table("archive_pinned_message")]
+public sealed class ArchivePinnedMessage
+{
+    [Key, Column("pin_id")] public long PinId { get; set; }
+    [Column("channel_id")] public long ChannelId { get; set; }
+    [Column("message_id")] public long MessageId { get; set; }
+    [Column("pinned_by")] public string PinnedBy { get; set; } = "";
+    [Column("pinned_at")] public long PinnedAt { get; set; }
+}
+
 /// <summary>
 /// Per-table sync watermarks written by the worker. SpacetimeDB exposes no
 /// resumable change-log position, so this is observability state, not a cursor.

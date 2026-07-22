@@ -22,6 +22,12 @@ await tryStep('set tags (text[])', () => a.call('set_server_tags', [server, ['ga
 const channel = await createChannel(a, server)
 for (let i = 0; i < 4; i++) await a.call('send_message', [channel, `fixture-msg-${i}`])
 
+// pin a message → pinned_message table
+await tryStep('pin a message', async () => {
+  const { rows } = await a.sql(`SELECT id FROM my_channel_messages WHERE channel_id = ${channel} LIMIT 1`)
+  await a.call('pin_message', [channel, Number(rows[0].id)])
+})
+
 // invites — two rows to cover both map shapes: max_uses(Some)/empty whitelist,
 // and max_uses(None)/non-empty whitelist (the two can't be combined).
 await tryStep('invite: max_uses', () => a.call('create_invite', [server, some(3600), some(5), []]))
