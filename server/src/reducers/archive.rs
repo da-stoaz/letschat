@@ -112,3 +112,54 @@ pub fn archive_restore_direct_message(
     }
     Ok(())
 }
+
+// The bounded durable tables. Same verbatim-upsert restore as message/dm; a
+// whole-database rebuild (after `--delete-data` wipes everything) needs these
+// alongside the two above. `byval` = Copy primary key (u64 / Identity), `byref`
+// = String primary key (find takes a reference).
+macro_rules! archive_restore {
+    ($fn:ident, $row:ty, $tbl:ident, $pk:ident, byval) => {
+        #[spacetimedb::reducer]
+        pub fn $fn(ctx: &ReducerContext, rows: Vec<$row>) -> Result<(), String> {
+            if !is_archive_service(ctx, ctx.sender()) {
+                return Err("archive service identity only".into());
+            }
+            for row in rows {
+                if ctx.db.$tbl().$pk().find(row.$pk).is_some() {
+                    ctx.db.$tbl().$pk().update(row);
+                } else {
+                    ctx.db.$tbl().insert(row);
+                }
+            }
+            Ok(())
+        }
+    };
+    ($fn:ident, $row:ty, $tbl:ident, $pk:ident, byref) => {
+        #[spacetimedb::reducer]
+        pub fn $fn(ctx: &ReducerContext, rows: Vec<$row>) -> Result<(), String> {
+            if !is_archive_service(ctx, ctx.sender()) {
+                return Err("archive service identity only".into());
+            }
+            for row in rows {
+                if ctx.db.$tbl().$pk().find(&row.$pk).is_some() {
+                    ctx.db.$tbl().$pk().update(row);
+                } else {
+                    ctx.db.$tbl().insert(row);
+                }
+            }
+            Ok(())
+        }
+    };
+}
+
+archive_restore!(archive_restore_user, User, user, identity, byval);
+archive_restore!(archive_restore_server, Server, server, id, byval);
+archive_restore!(archive_restore_channel, Channel, channel, id, byval);
+archive_restore!(archive_restore_dm_server_invite, DmServerInvite, dm_server_invite, id, byval);
+archive_restore!(archive_restore_server_member, ServerMember, server_member, member_key, byref);
+archive_restore!(archive_restore_ban, Ban, ban, ban_key, byref);
+archive_restore!(archive_restore_join_request, JoinRequest, join_request, request_key, byref);
+archive_restore!(archive_restore_invite, Invite, invite, token, byref);
+archive_restore!(archive_restore_friend, Friend, friend, pair_key, byref);
+archive_restore!(archive_restore_block, Block, block, block_key, byref);
+archive_restore!(archive_restore_read_state, ReadState, read_state, read_key, byref);
