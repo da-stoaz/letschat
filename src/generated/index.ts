@@ -37,6 +37,20 @@ import {
 import AcceptFriendRequestReducer from "./accept_friend_request_reducer";
 import AdminUnlistServerReducer from "./admin_unlist_server_reducer";
 import ApproveJoinRequestReducer from "./approve_join_request_reducer";
+import ArchiveRestoreBanReducer from "./archive_restore_ban_reducer";
+import ArchiveRestoreBlockReducer from "./archive_restore_block_reducer";
+import ArchiveRestoreChannelReducer from "./archive_restore_channel_reducer";
+import ArchiveRestoreDirectMessageReducer from "./archive_restore_direct_message_reducer";
+import ArchiveRestoreDmServerInviteReducer from "./archive_restore_dm_server_invite_reducer";
+import ArchiveRestoreFriendReducer from "./archive_restore_friend_reducer";
+import ArchiveRestoreInviteReducer from "./archive_restore_invite_reducer";
+import ArchiveRestoreJoinRequestReducer from "./archive_restore_join_request_reducer";
+import ArchiveRestoreMessageReducer from "./archive_restore_message_reducer";
+import ArchiveRestorePinnedMessageReducer from "./archive_restore_pinned_message_reducer";
+import ArchiveRestoreReadStateReducer from "./archive_restore_read_state_reducer";
+import ArchiveRestoreServerReducer from "./archive_restore_server_reducer";
+import ArchiveRestoreServerMemberReducer from "./archive_restore_server_member_reducer";
+import ArchiveRestoreUserReducer from "./archive_restore_user_reducer";
 import BanMemberReducer from "./ban_member_reducer";
 import BlockUserReducer from "./block_user_reducer";
 import CancelJoinRequestReducer from "./cancel_join_request_reducer";
@@ -113,6 +127,7 @@ import ArchiveFriendsRow from "./archive_friends_table";
 import ArchiveInvitesRow from "./archive_invites_table";
 import ArchiveJoinRequestsRow from "./archive_join_requests_table";
 import ArchiveMessagesRow from "./archive_messages_table";
+import ArchivePinnedMessagesRow from "./archive_pinned_messages_table";
 import ArchiveReadStatesRow from "./archive_read_states_table";
 import ArchiveServerMembersRow from "./archive_server_members_table";
 import ArchiveServersRow from "./archive_servers_table";
@@ -227,6 +242,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, ArchiveMessagesRow),
+  archive_pinned_messages: __table({
+    name: 'archive_pinned_messages',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchivePinnedMessagesRow),
   archive_read_states: __table({
     name: 'archive_read_states',
     indexes: [
@@ -388,6 +410,20 @@ const reducersSchema = __reducers(
   __reducerSchema("accept_friend_request", AcceptFriendRequestReducer),
   __reducerSchema("admin_unlist_server", AdminUnlistServerReducer),
   __reducerSchema("approve_join_request", ApproveJoinRequestReducer),
+  __reducerSchema("archive_restore_ban", ArchiveRestoreBanReducer),
+  __reducerSchema("archive_restore_block", ArchiveRestoreBlockReducer),
+  __reducerSchema("archive_restore_channel", ArchiveRestoreChannelReducer),
+  __reducerSchema("archive_restore_direct_message", ArchiveRestoreDirectMessageReducer),
+  __reducerSchema("archive_restore_dm_server_invite", ArchiveRestoreDmServerInviteReducer),
+  __reducerSchema("archive_restore_friend", ArchiveRestoreFriendReducer),
+  __reducerSchema("archive_restore_invite", ArchiveRestoreInviteReducer),
+  __reducerSchema("archive_restore_join_request", ArchiveRestoreJoinRequestReducer),
+  __reducerSchema("archive_restore_message", ArchiveRestoreMessageReducer),
+  __reducerSchema("archive_restore_pinned_message", ArchiveRestorePinnedMessageReducer),
+  __reducerSchema("archive_restore_read_state", ArchiveRestoreReadStateReducer),
+  __reducerSchema("archive_restore_server", ArchiveRestoreServerReducer),
+  __reducerSchema("archive_restore_server_member", ArchiveRestoreServerMemberReducer),
+  __reducerSchema("archive_restore_user", ArchiveRestoreUserReducer),
   __reducerSchema("ban_member", BanMemberReducer),
   __reducerSchema("block_user", BlockUserReducer),
   __reducerSchema("cancel_join_request", CancelJoinRequestReducer),
