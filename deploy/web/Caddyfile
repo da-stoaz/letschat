@@ -6,6 +6,27 @@
 	root * /srv
 	encode zstd gzip
 
+	# ── Security headers ────────────────────────────────────────────────────────
+	# The CSP is DERIVED FROM THIS INSTANCE'S SERVICE DOMAINS — the same env vars
+	# the edge reverse-proxy uses (AUTH_DOMAIN, CHAT_DOMAIN, LIVEKIT_DOMAIN,
+	# FILES_DOMAIN), injected into this container via docker-compose. Caddy fills
+	# `{$VAR}` from the container environment at startup.
+	#
+	# Shipped in REPORT-ONLY first: the browser reports what it *would* block (dev
+	# console + any report collector) WITHOUT breaking anything. Once the reports
+	# are clean for your deployment, rename the header to `Content-Security-Policy`
+	# to enforce. `script-src 'self'` (no 'unsafe-inline') is the key anti-XSS
+	# lever; `connect-src` limited to your own services is the anti-exfil lever.
+	header {
+		Content-Security-Policy-Report-Only "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://{$FILES_DOMAIN}; font-src 'self' data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' https://{$AUTH_DOMAIN} wss://{$CHAT_DOMAIN} https://{$LIVEKIT_DOMAIN} wss://{$LIVEKIT_DOMAIN} https://{$FILES_DOMAIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		# HSTS is set at the TLS edge (reverse proxy / tunnel), not here — this
+		# container listens plain HTTP behind that edge.
+		-Server
+	}
+
 	# Content-hashed bundle assets are immutable — cache them aggressively.
 	@assets path /assets/*
 	header @assets Cache-Control "public, max-age=31536000, immutable"

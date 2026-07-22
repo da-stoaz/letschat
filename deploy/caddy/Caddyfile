@@ -38,5 +38,10 @@
 # Hosted web client (browser SPA). Static files served by the `web` container;
 # it self-discovers this instance via auth.<domain>/.well-known/letschat.json.
 {$APP_DOMAIN} {
+  # HSTS belongs at the TLS edge (Caddy terminates TLS here). The app's CSP and
+  # other security headers travel with the response from the `web` container
+  # (deploy/web/Caddyfile). Under the Cloudflare-tunnel topology, enable HSTS at
+  # the tunnel/Cloudflare edge instead.
+  header Strict-Transport-Security "max-age=31536000; includeSubDomains"
   reverse_proxy web:80
 }
