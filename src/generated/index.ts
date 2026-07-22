@@ -37,6 +37,20 @@ import {
 import AcceptFriendRequestReducer from "./accept_friend_request_reducer";
 import AdminUnlistServerReducer from "./admin_unlist_server_reducer";
 import ApproveJoinRequestReducer from "./approve_join_request_reducer";
+import ArchiveRestoreBanReducer from "./archive_restore_ban_reducer";
+import ArchiveRestoreBlockReducer from "./archive_restore_block_reducer";
+import ArchiveRestoreChannelReducer from "./archive_restore_channel_reducer";
+import ArchiveRestoreDirectMessageReducer from "./archive_restore_direct_message_reducer";
+import ArchiveRestoreDmServerInviteReducer from "./archive_restore_dm_server_invite_reducer";
+import ArchiveRestoreFriendReducer from "./archive_restore_friend_reducer";
+import ArchiveRestoreInviteReducer from "./archive_restore_invite_reducer";
+import ArchiveRestoreJoinRequestReducer from "./archive_restore_join_request_reducer";
+import ArchiveRestoreMessageReducer from "./archive_restore_message_reducer";
+import ArchiveRestorePinnedMessageReducer from "./archive_restore_pinned_message_reducer";
+import ArchiveRestoreReadStateReducer from "./archive_restore_read_state_reducer";
+import ArchiveRestoreServerReducer from "./archive_restore_server_reducer";
+import ArchiveRestoreServerMemberReducer from "./archive_restore_server_member_reducer";
+import ArchiveRestoreUserReducer from "./archive_restore_user_reducer";
 import BanMemberReducer from "./ban_member_reducer";
 import BlockUserReducer from "./block_user_reducer";
 import CancelJoinRequestReducer from "./cancel_join_request_reducer";
@@ -78,6 +92,7 @@ import SendDmServerInviteReducer from "./send_dm_server_invite_reducer";
 import SendFriendRequestReducer from "./send_friend_request_reducer";
 import SendFriendRequestByUsernameReducer from "./send_friend_request_by_username_reducer";
 import SendMessageReducer from "./send_message_reducer";
+import SetArchiveServiceIdentityReducer from "./set_archive_service_identity_reducer";
 import SetChannelSectionReducer from "./set_channel_section_reducer";
 import SetMemberRoleReducer from "./set_member_role_reducer";
 import SetPresenceOfflineReducer from "./set_presence_offline_reducer";
@@ -103,6 +118,21 @@ import UseInviteReducer from "./use_invite_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import ArchiveBansRow from "./archive_bans_table";
+import ArchiveBlocksRow from "./archive_blocks_table";
+import ArchiveChannelsRow from "./archive_channels_table";
+import ArchiveDirectMessagesRow from "./archive_direct_messages_table";
+import ArchiveDmServerInvitesRow from "./archive_dm_server_invites_table";
+import ArchiveFriendsRow from "./archive_friends_table";
+import ArchiveInvitesRow from "./archive_invites_table";
+import ArchiveJoinRequestsRow from "./archive_join_requests_table";
+import ArchiveMessagesRow from "./archive_messages_table";
+import ArchivePinnedMessagesRow from "./archive_pinned_messages_table";
+import ArchiveReadStatesRow from "./archive_read_states_table";
+import ArchiveServerMembersRow from "./archive_server_members_table";
+import ArchiveServersRow from "./archive_servers_table";
+import ArchiveServiceRow from "./archive_service_table";
+import ArchiveUsersRow from "./archive_users_table";
 import MyBansRow from "./my_bans_table";
 import MyBlocksRow from "./my_blocks_table";
 import MyChannelMessagesRow from "./my_channel_messages_table";
@@ -127,6 +157,17 @@ import SystemSettingsRow from "./system_settings_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  archive_service: __table({
+    name: 'archive_service',
+    indexes: [
+      { accessor: 'id', name: 'archive_service_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'archive_service_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ArchiveServiceRow),
   system_settings: __table({
     name: 'system_settings',
     indexes: [
@@ -138,6 +179,104 @@ const tablesSchema = __schema({
       { name: 'system_settings_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, SystemSettingsRow),
+  archive_bans: __table({
+    name: 'archive_bans',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveBansRow),
+  archive_blocks: __table({
+    name: 'archive_blocks',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveBlocksRow),
+  archive_channels: __table({
+    name: 'archive_channels',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveChannelsRow),
+  archive_direct_messages: __table({
+    name: 'archive_direct_messages',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveDirectMessagesRow),
+  archive_dm_server_invites: __table({
+    name: 'archive_dm_server_invites',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveDmServerInvitesRow),
+  archive_friends: __table({
+    name: 'archive_friends',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveFriendsRow),
+  archive_invites: __table({
+    name: 'archive_invites',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveInvitesRow),
+  archive_join_requests: __table({
+    name: 'archive_join_requests',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveJoinRequestsRow),
+  archive_messages: __table({
+    name: 'archive_messages',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveMessagesRow),
+  archive_pinned_messages: __table({
+    name: 'archive_pinned_messages',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchivePinnedMessagesRow),
+  archive_read_states: __table({
+    name: 'archive_read_states',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveReadStatesRow),
+  archive_server_members: __table({
+    name: 'archive_server_members',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveServerMembersRow),
+  archive_servers: __table({
+    name: 'archive_servers',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveServersRow),
+  archive_users: __table({
+    name: 'archive_users',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveUsersRow),
   my_bans: __table({
     name: 'my_bans',
     indexes: [
@@ -271,6 +410,20 @@ const reducersSchema = __reducers(
   __reducerSchema("accept_friend_request", AcceptFriendRequestReducer),
   __reducerSchema("admin_unlist_server", AdminUnlistServerReducer),
   __reducerSchema("approve_join_request", ApproveJoinRequestReducer),
+  __reducerSchema("archive_restore_ban", ArchiveRestoreBanReducer),
+  __reducerSchema("archive_restore_block", ArchiveRestoreBlockReducer),
+  __reducerSchema("archive_restore_channel", ArchiveRestoreChannelReducer),
+  __reducerSchema("archive_restore_direct_message", ArchiveRestoreDirectMessageReducer),
+  __reducerSchema("archive_restore_dm_server_invite", ArchiveRestoreDmServerInviteReducer),
+  __reducerSchema("archive_restore_friend", ArchiveRestoreFriendReducer),
+  __reducerSchema("archive_restore_invite", ArchiveRestoreInviteReducer),
+  __reducerSchema("archive_restore_join_request", ArchiveRestoreJoinRequestReducer),
+  __reducerSchema("archive_restore_message", ArchiveRestoreMessageReducer),
+  __reducerSchema("archive_restore_pinned_message", ArchiveRestorePinnedMessageReducer),
+  __reducerSchema("archive_restore_read_state", ArchiveRestoreReadStateReducer),
+  __reducerSchema("archive_restore_server", ArchiveRestoreServerReducer),
+  __reducerSchema("archive_restore_server_member", ArchiveRestoreServerMemberReducer),
+  __reducerSchema("archive_restore_user", ArchiveRestoreUserReducer),
   __reducerSchema("ban_member", BanMemberReducer),
   __reducerSchema("block_user", BlockUserReducer),
   __reducerSchema("cancel_join_request", CancelJoinRequestReducer),
@@ -312,6 +465,7 @@ const reducersSchema = __reducers(
   __reducerSchema("send_friend_request", SendFriendRequestReducer),
   __reducerSchema("send_friend_request_by_username", SendFriendRequestByUsernameReducer),
   __reducerSchema("send_message", SendMessageReducer),
+  __reducerSchema("set_archive_service_identity", SetArchiveServiceIdentityReducer),
   __reducerSchema("set_channel_section", SetChannelSectionReducer),
   __reducerSchema("set_member_role", SetMemberRoleReducer),
   __reducerSchema("set_presence_offline", SetPresenceOfflineReducer),

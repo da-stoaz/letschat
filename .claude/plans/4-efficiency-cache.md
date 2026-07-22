@@ -2,7 +2,9 @@
 
 ## Context
 
-`2-storage-tiering.md` introduced a server-side hot/cold split: SpacetimeDB holds a bounded hot set (last N messages per conversation), a PostgreSQL archive holds full history, and clients load older history on scroll from the archive API. That solved server RAM, migration rigidity, and unbounded subscriptions.
+> **Dependency correction (2026-07-21):** the hot/cold split this plan builds on is delivered by **Part B (eviction)** of `2-storage-tiering.md`, which is now **deferred until RAM pressure is real** — *not* by Part A (durability), which ships first. So this plan depends on Part B, not merely on storage-tiering existing. Until eviction lands, all history still lives in SpacetimeDB and there is no cold/archive range to cache, stitch, or reconcile against. Do not start this plan before Part B.
+
+`2-storage-tiering.md` Part B introduces a server-side hot/cold split: SpacetimeDB holds a bounded hot set (last N messages per conversation), a PostgreSQL archive holds full history, and clients load older history on scroll from the archive API. That solved server RAM, migration rigidity, and unbounded subscriptions.
 
 What it did **not** address is the *client* experience:
 - On every reconnect the client re-downloads the entire hot set from SpacetimeDB.
@@ -11,7 +13,7 @@ What it did **not** address is the *client* experience:
 
 This plan adds a **client-side local cache** (SQLite on the device) and **search** over it. It is a pure client-side performance/UX layer.
 
-**Priority — the lowest-priority plan (4 of 4).** Storage-tiering already made the hot set small and bounded, so re-downloading it on reconnect is no longer expensive. The local cache is now an *optimization* (offline access, faster cold start, less bandwidth), not a necessity. Implement it after storage-tiering and E2EE — or skip it if those benefits aren't worth the cost.
+**Priority — the lowest-priority plan (4 of 4).** Once eviction (Part B) has made the hot set small and bounded, re-downloading it on reconnect is cheap, so this local cache is an *optimization* (offline access, faster cold start, less bandwidth), not a necessity. Implement it after Part B and E2EE — or skip it if those benefits aren't worth the cost.
 
 **Relationship to E2EE:** E2EE-agnostic. The cache stores whatever the row's `content` is — plaintext today, ciphertext after the E2EE plan. Because E2EE uses long-lived per-conversation keys (not a ratchet), cached ciphertext decrypts on read any number of times.
 

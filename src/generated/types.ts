@@ -10,6 +10,12 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const ArchiveService = __t.object("ArchiveService", {
+  id: __t.u8(),
+  serviceIdentity: __t.identity(),
+});
+export type ArchiveService = __Infer<typeof ArchiveService>;
+
 export const Ban = __t.object("Ban", {
   banKey: __t.string(),
   serverId: __t.u64(),

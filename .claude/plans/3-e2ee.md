@@ -7,7 +7,7 @@ This plan does **not** use the Signal Protocol. Signal's Double Ratchet makes ev
 
 The trade-off: no per-message forward secrecy. It is softened with **key epochs** — keys rotate on membership change and periodically — but a device that holds an epoch key can read all history encrypted under it. This is the standard model for E2EE team-chat tools and is the correct fit for this product.
 
-This is **plan 3 of 4** — implemented after `1-control-panel.md` and `2-storage-tiering.md`. The companion `4-efficiency-cache.md` (client-side local cache and search) depends on this plan and is only sound because decryption here is repeatable.
+This is **plan 3 of 4** — implemented after `1-control-panel.md` and **Part A (durability)** of `2-storage-tiering.md`. Part A is a real prerequisite: this plan's Phase 7 **drops** the `deleted`/`deleted_by_*` columns, a destructive migration — Part A's cold archive + rebuild path turns that from "wipe history" into "rebuild from Postgres" (see the migration note below). Part B (eviction) of storage-tiering is **not** a prerequisite and may still be deferred. The companion `4-efficiency-cache.md` (client-side local cache and search) depends on this plan and is only sound because decryption here is repeatable.
 
 ---
 
@@ -198,7 +198,7 @@ pub epoch: u32,
 
 Legacy rows keep `encrypted = false`, `epoch = 0`, and render as plaintext — no decryption attempted.
 
-> **Migration note — needs a decision at implementation time.** Adding fields with `#[default(...)]` is non-destructive. **Dropping** `deleted` / `deleted_by_sender` / `deleted_by_recipient` is a destructive migration; `spacetime publish` will halt on the "requires deleting data" prompt. Two options: (a) since the app is pre-release (v0.3.1), accept a one-time `bun run spacetime:reset`; (b) leave the old columns in place, unused, and drop them in a later deliberate migration. Confirm which before running Phase 1's publish. If `#[default(HistoryMode::JoinOnward)]` is rejected by the toolchain, fall back to `Option<HistoryMode>` with `None` treated as `JoinOnward`.
+> **Migration note — needs a decision at implementation time.** Adding fields with `#[default(...)]` is non-destructive. **Dropping** `deleted` / `deleted_by_sender` / `deleted_by_recipient` is a destructive migration; `spacetime publish` will halt on the "requires deleting data" prompt. Options, best first: (a) **rebuild from the cold archive** — with `2-storage-tiering.md` Part A shipped, drain the archive, `--delete-data`, then rebuild via `archive_restore` with a transform that drops the three columns: non-lossy, and the reason Part A precedes this plan; (b) leave the old columns in place, unused, and drop them in a later deliberate migration; (c) a one-time `bun run spacetime:reset` — **only** acceptable if there is no real message history yet (the app is past pre-release at v0.7.x, so real data likely exists — prefer (a)). Confirm which before running Phase 1's publish. If `#[default(HistoryMode::JoinOnward)]` is rejected by the toolchain, fall back to `Option<HistoryMode>` with `None` treated as `JoinOnward`.
 
 ### New reducers
 - `register_device(device_id, signing_pub, kex_pub, display_name)` — insert `UserDevice`; status `Trusted` if it is the owner's first device, else `Pending`
