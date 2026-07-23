@@ -17,8 +17,15 @@
 	# are clean for your deployment, rename the header to `Content-Security-Policy`
 	# to enforce. `script-src 'self'` (no 'unsafe-inline') is the key anti-XSS
 	# lever; `connect-src` limited to your own services is the anti-exfil lever.
+	#
+	# 'unsafe-eval' is REQUIRED, not optional: the SpacetimeDB SDK generates its
+	# BSATN row deserializers at runtime with `Function("reader", ...)` (see
+	# node_modules/spacetimedb .../index.browser.mjs). Remove it and the realtime
+	# client cannot decode any row — the app can't connect. It also covers the
+	# Krisp WASM (supersedes 'wasm-unsafe-eval'). We still withhold 'unsafe-inline',
+	# so injected inline <script> / event-handler XSS stays blocked.
 	header {
-		Content-Security-Policy-Report-Only "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://{$FILES_DOMAIN}; font-src 'self' data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' https://{$AUTH_DOMAIN} wss://{$CHAT_DOMAIN} https://{$LIVEKIT_DOMAIN} wss://{$LIVEKIT_DOMAIN} https://{$FILES_DOMAIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		Content-Security-Policy-Report-Only "default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://{$FILES_DOMAIN}; font-src 'self' data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' https://{$AUTH_DOMAIN} wss://{$CHAT_DOMAIN} https://{$LIVEKIT_DOMAIN} wss://{$LIVEKIT_DOMAIN} https://{$FILES_DOMAIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		X-Frame-Options "DENY"
