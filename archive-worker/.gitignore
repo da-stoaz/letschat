@@ -1,0 +1,4 @@
+bin/
+obj/
+# Auto-issued SpacetimeDB token cache (dev runs); the worker re-fetches if absent.
+*.token

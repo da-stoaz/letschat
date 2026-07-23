@@ -16,6 +16,23 @@ public sealed class ServiceOptions
     internal const string DevMinioSecretKey = "minioadmin";
 
     public required string ConnectionString { get; init; }
+
+    /// <summary>
+    /// Npgsql connection string for the <c>archive</c> database (storage-tiering,
+    /// plan 2). core-api owns this schema via <c>ArchiveDbContext</c> + EF
+    /// migrations — applied on startup, like the <c>auth</c> context — and the
+    /// archive-worker connects to the already-migrated schema.
+    /// <para>
+    /// <b>Optional, and deliberately has no default.</b> When
+    /// <c>ARCHIVE_DATABASE_URL</c> is unset this is <c>null</c> and the archive is
+    /// disabled: the <c>ArchiveDbContext</c> is not registered and no migration
+    /// runs. The archive is a background replica; it must never be able to take
+    /// down the (essential) auth service, so an unconfigured or unreachable
+    /// archive degrades gracefully instead of crashing startup.
+    /// </para>
+    /// </summary>
+    public string? ArchiveConnectionString { get; init; }
+
     public required string Bind { get; init; }
 
     /// <summary>
@@ -128,6 +145,8 @@ public sealed class ServiceOptions
             ConnectionString = Get(
                 "AUTH_DATABASE_URL",
                 "Host=localhost;Port=5432;Database=auth;Username=letschat;Password=letschat"),
+            // No default: unset == archive disabled (see ArchiveConnectionString).
+            ArchiveConnectionString = GetOptional("ARCHIVE_DATABASE_URL"),
             Bind = Get("AUTH_BIND", "127.0.0.1:8787"),
             AdminBind = Get("ADMIN_BIND", "127.0.0.1:8788"),
             JwtSecret = Get("AUTH_JWT_SECRET", DevJwtSecret),
