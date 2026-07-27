@@ -1,5 +1,4 @@
 import { authServiceRenewSession, type AuthFrameworkToken, getStoredAuthSessionToken } from './authService'
-import { useConnectionStore } from '../stores/connectionStore'
 
 const TOKEN_EXPIRY_BUFFER_MS = 30_000
 const SPACETIMEDB_TOKEN_KEY = 'spacetimedb.auth_token'
@@ -27,15 +26,13 @@ export async function renewAuthSession(): Promise<AuthFrameworkToken> {
   if (renewSessionPromise) return renewSessionPromise
 
   renewSessionPromise = (async () => {
+    // core-api re-verifies this token's own signature; its `sub` identifies the
+    // account, so no separate identity is sent.
     const spacetimeToken = getStoredSpacetimeToken()
-    const spacetimeIdentity = useConnectionStore.getState().identity
-    if (!spacetimeToken || !spacetimeIdentity) {
+    if (!spacetimeToken) {
       throw new Error('Your auth session expired. Please sign in again.')
     }
-    return authServiceRenewSession({
-      spacetimeToken,
-      spacetimeIdentity,
-    })
+    return authServiceRenewSession({ spacetimeToken })
   })()
 
   try {

@@ -97,6 +97,103 @@ public static class DbInitializer
         }
 
         await SeedBootstrapAdminAsync(services, logger);
+        await MigrateLegacyIdentitiesAsync(
+            services.GetRequiredService<AppDbContext>(),
+            services.GetRequiredService<Services.SpacetimeTokenService>(),
+            services.GetRequiredService<Services.SpacetimeClient>(),
+            logger);
+    }
+
+    /// <summary>A 32-byte SpacetimeDB identity as lower/upper-case hex (64 chars).</summary>
+    private static bool IsHexIdentity(string value) =>
+        value.Length == 64 && value.All(Uri.IsHexDigit);
+
+    /// <summary>
+    /// One-time identity migration for the OIDC cutover. Accounts created before
+    /// core-api became the issuer hold a legacy (client-supplied) SpacetimeDB
+    /// identity; the identity is now derived deterministically from the account
+    /// id. This rewrites every account's stored identity to the derived value so
+    /// the identity core-api returns matches the one its minted tokens resolve to.
+    ///
+    /// <para>
+    /// Automatic and idempotent: a fresh install has no legacy accounts (new ones
+    /// are already derived at creation), so it's a no-op; on an upgrade it runs
+    /// once and then finds nothing to change. The matching SpacetimeDB row-data
+    /// re-key is handled out-of-band by the archive rebuild (see the migration
+    /// runbook) — this covers the core-api-owned side.
+    /// </para>
+    /// </summary>
+    private static async Task MigrateLegacyIdentitiesAsync(
+        AppDbContext db,
+        Services.SpacetimeTokenService spacetime,
+        Services.SpacetimeClient client,
+        ILogger logger)
+    {
+        // Compute the target (derived) identity for every account and gather what
+        // needs to change. `pairs` are the accounts that also have live
+        // SpacetimeDB data to re-key (a valid 64-hex legacy identity); accounts
+        // with a junk/empty legacy value still get their stored identity fixed,
+        // but have no rows to move.
+        var pending = new List<(ApplicationUser User, string Derived)>();
+        var pairs = new List<(string OldHex, string NewHex)>();
+        foreach (var user in await db.Users.ToListAsync())
+        {
+            var derived = spacetime.ComputeIdentityHex(user.Id);
+            if (string.Equals(user.SpacetimeIdentityNorm, derived, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            pending.Add((user, derived));
+            if (IsHexIdentity(user.SpacetimeIdentityNorm))
+            {
+                pairs.Add((user.SpacetimeIdentityNorm, derived));
+            }
+        }
+
+        if (pending.Count == 0)
+        {
+            return; // fresh install, or already migrated — nothing to do.
+        }
+
+        // Re-key SpacetimeDB's data FIRST, so core-api's stored identities and the
+        // chat-domain rows never diverge. If it can't run now (service token
+        // absent, SpacetimeDB unreachable), defer the whole migration — leaving
+        // stored identities untouched — and retry on the next start. One batched,
+        // transactional reducer call, driven while the service token's identity is
+        // still admin.
+        if (pairs.Count > 0)
+        {
+            if (!client.IsConfigured)
+            {
+                logger.LogWarning(
+                    "Identity migration deferred: SPACETIMEDB_SERVICE_TOKEN not configured "
+                    + "({Count} account(s) awaiting re-key).", pairs.Count);
+                return;
+            }
+            try
+            {
+                await client.RekeyIdentitiesAsync(pairs);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "Identity migration deferred: SpacetimeDB re-key failed; will retry on next start.");
+                return;
+            }
+        }
+
+        // Data moved (or there was none) — now advance core-api's own copy.
+        foreach (var (user, derived) in pending)
+        {
+            user.SpacetimeIdentity = derived;
+            user.SpacetimeIdentityNorm = derived;
+            user.SpacetimeToken = string.Empty;
+            user.UpdatedAtUtc = DateTime.UtcNow;
+        }
+        await db.SaveChangesAsync();
+        logger.LogInformation(
+            "Identity migration: {Accounts} account(s) updated, {Pairs} re-keyed in SpacetimeDB.",
+            pending.Count, pairs.Count);
     }
 
     private static async Task SeedBootstrapAdminAsync(IServiceProvider services, ILogger logger)
@@ -116,19 +213,18 @@ public static class DbInitializer
             return;
         }
 
-        // Bootstrap admin uses a placeholder SpacetimeDB identity — it's
-        // valid as an admin-panel principal but can't sign in to the desktop
-        // client until rebound. Email is required (RequireUniqueEmail=true).
+        // Deterministic identity from the account id — so the bootstrap admin can
+        // sign in to the desktop client too. Email is required (RequireUniqueEmail=true).
         var admin = new ApplicationUser
         {
             UserName = username,
             Email = options.BootstrapAdminEmail,
             DisplayName = "Administrator",
-            SpacetimeIdentity = "pending:bootstrap-admin",
-            SpacetimeIdentityNorm = "pending:bootstrap-admin",
             Status = AccountStatus.Active,
             EmailConfirmed = true,
         };
+        Endpoints.AuthEndpoints.AssignDerivedIdentity(
+            admin, services.GetRequiredService<Services.SpacetimeTokenService>());
 
         var created = await users.CreateAsync(admin, options.BootstrapAdminPassword);
         if (!created.Succeeded)

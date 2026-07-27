@@ -1,4 +1,5 @@
 using CoreApi.Data;
+using CoreApi.Endpoints;
 using CoreApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -14,20 +15,17 @@ namespace CoreApi.Pages.Admin;
 /// the admin is the approval, per the plan.
 ///
 /// <para>
-/// The chat-domain SpacetimeDB identity does not exist yet when an admin
-/// creates an account, so the record is seeded with a <c>pending:{guid}</c>
-/// placeholder. The login endpoint detects this prefix on first sign-in and
-/// swaps in the real identity supplied by the client, so the admin only has
-/// to hand the user their username + password out of band.
+/// The SpacetimeDB identity is derived deterministically from the account id, so
+/// it's assigned at creation just like a self-registered account — no placeholder,
+/// no first-login binding. The admin hands the user their username + password.
 /// </para>
 /// </summary>
 [Authorize(Roles = DbInitializer.AdminRole)]
 public sealed class CreateUserModel(
     UserManager<ApplicationUser> users,
+    SpacetimeTokenService spacetime,
     AuditService audit) : PageModel
 {
-    public const string PendingIdentityPrefix = "pending:";
-
     [BindProperty] public string Username { get; set; } = string.Empty;
     [BindProperty] public string DisplayName { get; set; } = string.Empty;
     [BindProperty] public string Email { get; set; } = string.Empty;
@@ -78,21 +76,15 @@ public sealed class CreateUserModel(
             return Page();
         }
 
-        // Placeholder identity — the login endpoint replaces this with the
-        // client's real SpacetimeDB identity on first sign-in.
-        var placeholder = PendingIdentityPrefix + Guid.NewGuid().ToString("N");
-
         var user = new ApplicationUser
         {
             UserName = username,
             Email = email,
             DisplayName = displayName,
-            SpacetimeIdentity = placeholder,
-            SpacetimeIdentityNorm = placeholder,
-            SpacetimeToken = string.Empty,
             Status = AccountStatus.Active,
             EmailConfirmed = true,
         };
+        AuthEndpoints.AssignDerivedIdentity(user, spacetime);
 
         var created = await users.CreateAsync(user, password);
         if (!created.Succeeded)

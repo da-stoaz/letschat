@@ -28,6 +28,7 @@ public sealed class TokenServiceTests
         DiscoveryAuthUrl = "http://x",
         DiscoveryLiveKitUrl = "ws://x",
         DiscoveryDatabase = "letschat",
+        SpacetimeOidcIssuer = "https://issuer.test",
         RequireEmailConfirmation = true,
         RequireAdminApproval = false,
         EmailSenderKind = "log",

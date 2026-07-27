@@ -21,10 +21,14 @@ public sealed class ServiceOptionsTests
 
         var insecure = options.FindInsecureDefaults();
 
-        Assert.Equal(3, insecure.Count);
+        Assert.Equal(5, insecure.Count);
         Assert.Contains("AUTH_JWT_SECRET", insecure);
         Assert.Contains("LIVEKIT_API_SECRET", insecure);
         Assert.Contains("MINIO_SECRET_KEY", insecure);
+        // The OIDC issuer left at its dev default, and an unset signing key, are
+        // both identity-defining and must be flagged for prod.
+        Assert.Contains("SPACETIME_OIDC_ISSUER", insecure);
+        Assert.Contains("SPACETIME_OIDC_PRIVATE_KEY", insecure);
     }
 
     [Fact]
@@ -35,6 +39,8 @@ public sealed class ServiceOptionsTests
             ["AUTH_JWT_SECRET"] = "a-strong-unique-jwt-secret-value-1234567890",
             ["LIVEKIT_API_SECRET"] = "a-strong-unique-livekit-secret-1234567890",
             ["MINIO_SECRET_KEY"] = "a-strong-unique-minio-secret-value",
+            ["SPACETIME_OIDC_ISSUER"] = "https://auth.example.com",
+            ["SPACETIME_OIDC_PRIVATE_KEY"] = "-----BEGIN PRIVATE KEY-----\nMII...\n-----END PRIVATE KEY-----",
         }));
 
         Assert.Empty(options.FindInsecureDefaults());

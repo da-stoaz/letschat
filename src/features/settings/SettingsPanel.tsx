@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BellIcon, CameraIcon, Loader2Icon, LogOutIcon, ShieldCheckIcon, Trash2Icon, UserRoundIcon } from 'lucide-react'
-import { getCurrentSessionToken, reducers, signOut } from '../../lib/spacetimedb'
-import { authServiceLink } from '../../lib/authService'
+import { reducers, signOut } from '../../lib/spacetimedb'
+import { authServiceLink, getStoredAuthSessionToken } from '../../lib/authService'
 import { uploadSingleFile } from '../../lib/uploads'
 import {
   ensureNotificationPermission,
@@ -452,9 +452,9 @@ export function SettingsPanel() {
                           setAccountMessage('No active identity found.')
                           return
                         }
-                        const sessionToken = getCurrentSessionToken()
+                        const sessionToken = getStoredAuthSessionToken()
                         if (!sessionToken) {
-                          setAccountMessage('No active Spacetime session token found.')
+                          setAccountMessage('No active sign-in session found.')
                           return
                         }
                         if (password.length < 8) {
@@ -472,8 +472,7 @@ export function SettingsPanel() {
                             username: user.username,
                             displayName: user.displayName,
                             password,
-                            spacetimeToken: sessionToken,
-                            spacetimeIdentity: identity,
+                            sessionToken,
                           })
                           setPassword('')
                           setConfirmPassword('')

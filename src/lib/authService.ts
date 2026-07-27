@@ -57,37 +57,34 @@ type RegisterPayload = {
   displayName: string
   password: string
   email: string
-  spacetimeToken: string
-  spacetimeIdentity: Identity
 }
 
 /**
  * Result of `/auth/register`. When email confirmation is required the account
  * is created but not yet usable — `status` is `pending_email_verification` and
  * no session is issued; otherwise `status` is `active` and `auth` is populated.
+ * `identity` is the account's deterministic SpacetimeDB identity, returned even
+ * in the pending case so the confirm-email poll can locate the account.
  */
 export interface RegisterResult {
   status: 'active' | 'pending_email_verification'
   auth: AuthServiceResponse | null
   email: string | null
+  identity: string | null
 }
 
 type LinkPayload = {
   username: string
   displayName: string
   password: string
-  spacetimeToken: string
-  spacetimeIdentity: Identity
+  // The existing-account (change-password) path is gated on the caller's active
+  // app session, not a SpacetimeDB-identity match.
+  sessionToken: AuthFrameworkToken
 }
 
 type LoginPayload = {
   username: string
   password: string
-  // Optional — when the account is admin-created and the server still holds a
-  // `pending:{…}` placeholder identity, the login endpoint swaps in these
-  // values on first sign-in. Ignored for normal accounts.
-  spacetimeIdentity?: Identity
-  spacetimeToken?: string
 }
 
 type LivekitTokenPayload = {
@@ -120,7 +117,6 @@ type DownloadUrlsPayload = {
 
 type RenewSessionPayload = {
   spacetimeToken: string
-  spacetimeIdentity: Identity
 }
 
 export interface UploadRequestResponse {
@@ -256,13 +252,6 @@ export async function authServiceLogin(payload: LoginPayload): Promise<AuthServi
   const result = await postJson<AuthServiceResponse, LoginPayload>('/auth/login', payload)
   setStoredAuthSessionToken(result.sessionToken)
   return result
-}
-
-export async function authServiceRefreshSpacetimeToken(payload: {
-  sessionToken: AuthFrameworkToken
-  spacetimeToken: string
-}): Promise<void> {
-  await postJson<Record<string, never>, typeof payload>('/auth/refresh-spacetime-token', payload)
 }
 
 export async function authServiceGenerateLivekitToken(payload: LivekitTokenPayload): Promise<string> {
