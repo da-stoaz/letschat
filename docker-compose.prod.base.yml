@@ -95,6 +95,21 @@ services:
       AUTH_JWT_SECRET: "${AUTH_JWT_SECRET}"
       AUTH_ADMIN_API_KEY: "${AUTH_ADMIN_API_KEY:-}"
 
+      # ── OIDC issuer for SpacetimeDB ──────────────────────────────────────
+      # core-api signs the SpacetimeDB access token; SpacetimeDB verifies it by
+      # fetching {SPACETIME_OIDC_ISSUER}/.well-known/openid-configuration and the
+      # JWKS behind it. That fetch is made BY THE SPACETIMEDB CONTAINER, so the
+      # URL must be reachable on this Docker network — hence the internal service
+      # name rather than the public https:// address (which would have to leave
+      # the host and come back, and isn't reachable at all on the tunnel setup).
+      #
+      # ⚠️ PERMANENT. The issuer string is hashed into every account's SpacetimeDB
+      # identity (blake3(iss + "|" + account id)). Changing it re-derives every
+      # identity and orphans every account from its data. Do not edit after the
+      # first user registers. Not operator-configurable for that reason.
+      SPACETIME_OIDC_ISSUER: "http://core-api:8787"
+      SPACETIME_OIDC_PRIVATE_KEY: "${SPACETIME_OIDC_PRIVATE_KEY}"
+
       LIVEKIT_API_KEY: "${LIVEKIT_API_KEY}"
       LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET}"
 

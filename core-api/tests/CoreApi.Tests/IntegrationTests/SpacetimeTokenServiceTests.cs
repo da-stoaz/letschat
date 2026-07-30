@@ -63,6 +63,48 @@ public sealed class SpacetimeTokenServiceTests
     }
 
     [Fact]
+    public async Task Configured_Base64_Pem_Key_Is_Actually_Used()
+    {
+        // Production supplies the signing key base64-encoded, because a PEM is
+        // multi-line and .env values are not. Two independent services given the
+        // SAME key must accept each other's tokens — which they only can if the
+        // configured key was loaded rather than a fresh random one generated.
+        using var rsa = System.Security.Cryptography.RSA.Create(2048);
+        var base64Pem = Convert.ToBase64String(
+            System.Text.Encoding.UTF8.GetBytes(rsa.ExportPkcs8PrivateKeyPem()));
+
+        var minted = KeyedService(base64Pem).Mint("shared-account");
+        Assert.Equal("shared-account", await KeyedService(base64Pem).ValidateAndGetSubjectAsync(minted));
+
+        // Sanity check on the assertion itself: a service with a *different* key
+        // must reject that same token.
+        using var other = System.Security.Cryptography.RSA.Create(2048);
+        var otherKey = Convert.ToBase64String(
+            System.Text.Encoding.UTF8.GetBytes(other.ExportPkcs8PrivateKeyPem()));
+        Assert.Null(await KeyedService(otherKey).ValidateAndGetSubjectAsync(minted));
+    }
+
+    [Fact]
+    public void Unusable_Key_Fails_Loudly_Rather_Than_Falling_Back()
+    {
+        // Silently generating a random key here would "work" until a restart
+        // logged every user out, so a bad value must stop startup instead.
+        var ex = Assert.Throws<InvalidOperationException>(() => KeyedService("not-a-key"));
+        Assert.Contains("SPACETIME_OIDC_PRIVATE_KEY", ex.Message);
+    }
+
+    private static SpacetimeTokenService KeyedService(string key)
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["SPACETIME_OIDC_ISSUER"] = "https://issuer.example",
+            ["SPACETIMEDB_MODULE_NAME"] = "letschat",
+            ["SPACETIME_OIDC_PRIVATE_KEY"] = key,
+        }).Build();
+        return new SpacetimeTokenService(ServiceOptions.FromConfiguration(config));
+    }
+
+    [Fact]
     public async Task Mint_Then_Validate_RoundTrips_The_Subject()
     {
         var svc = Service();

@@ -51,11 +51,7 @@ public sealed class SpacetimeTokenService
         _rsa = RSA.Create(2048);
         if (!string.IsNullOrWhiteSpace(options.SpacetimeOidcPrivateKey))
         {
-            // Accept either an inline PEM or a path to one.
-            var pem = options.SpacetimeOidcPrivateKey.Contains("BEGIN", StringComparison.Ordinal)
-                ? options.SpacetimeOidcPrivateKey
-                : File.ReadAllText(options.SpacetimeOidcPrivateKey);
-            _rsa.ImportFromPem(pem);
+            _rsa.ImportFromPem(ReadPrivateKeyPem(options.SpacetimeOidcPrivateKey));
         }
         // else: dev — a freshly generated in-memory key. Identities are unaffected
         // (they hash iss+sub only, never the key), and JWKS is fetched live so
@@ -70,6 +66,51 @@ public sealed class SpacetimeTokenService
         _key = new RsaSecurityKey(_rsa);
         _key.KeyId = Base64UrlEncoder.Encode(_key.ComputeJwkThumbprint());
         _credentials = new SigningCredentials(_key, SecurityAlgorithms.RsaSha256);
+    }
+
+    /// <summary>
+    /// Resolves the configured signing key to PEM text, accepting the three forms
+    /// an operator might reasonably supply:
+    /// <list type="bullet">
+    ///   <item>an inline PEM (recognised by its <c>BEGIN</c> header),</item>
+    ///   <item><b>base64 of a PEM</b> — the documented production form, because a
+    ///     PEM is multi-line and <c>.env</c> values are not,</item>
+    ///   <item>a path to a PEM file, for secret managers that mount files.</item>
+    /// </list>
+    /// </summary>
+    private static string ReadPrivateKeyPem(string configured)
+    {
+        var value = configured.Trim();
+
+        if (value.Contains("BEGIN", StringComparison.Ordinal))
+        {
+            return value;
+        }
+
+        // A path wins over base64 — a filename can't decode to a valid PEM, and
+        // this way a mis-typed path fails loudly instead of as "bad base64".
+        if (File.Exists(value))
+        {
+            return File.ReadAllText(value);
+        }
+
+        try
+        {
+            var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(value));
+            if (decoded.Contains("BEGIN", StringComparison.Ordinal))
+            {
+                return decoded;
+            }
+        }
+        catch (FormatException)
+        {
+            // Not base64 — fall through to the shared error below.
+        }
+
+        throw new InvalidOperationException(
+            "SPACETIME_OIDC_PRIVATE_KEY is set but is neither a PEM, a base64-encoded PEM, "
+            + "nor a path to an existing PEM file. Generate one with: "
+            + "openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | base64");
     }
 
     /// <summary>Mints the RS256 JWT the client hands to SpacetimeDB.</summary>
