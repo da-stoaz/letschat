@@ -213,20 +213,50 @@ public sealed class Replication(ArchiveDatabase db, ILogger<Replication> logger)
     /// </summary>
     public void ReconcileAll(DbConnection conn)
     {
-        Reconcile(conn.Db.ArchiveUsers, _users);
-        Reconcile(conn.Db.ArchiveServers, _servers);
-        Reconcile(conn.Db.ArchiveServerMembers, _members);
-        Reconcile(conn.Db.ArchiveBans, _bans);
-        Reconcile(conn.Db.ArchiveJoinRequests, _joinRequests);
-        Reconcile(conn.Db.ArchiveInvites, _invites);
-        Reconcile(conn.Db.ArchiveDmServerInvites, _dmServerInvites);
-        Reconcile(conn.Db.ArchiveChannels, _channels);
-        Reconcile(conn.Db.ArchiveMessages, _messages);
-        Reconcile(conn.Db.ArchiveDirectMessages, _directMessages);
-        Reconcile(conn.Db.ArchiveFriends, _friends);
-        Reconcile(conn.Db.ArchiveBlocks, _blocks);
-        Reconcile(conn.Db.ArchiveReadStates, _readStates);
-        Reconcile(conn.Db.ArchivePinnedMessages, _pinnedMessages);
+        var requests = new List<ReconcileRequest>
+        {
+            Build(conn.Db.ArchiveUsers, _users),
+            Build(conn.Db.ArchiveServers, _servers),
+            Build(conn.Db.ArchiveServerMembers, _members),
+            Build(conn.Db.ArchiveBans, _bans),
+            Build(conn.Db.ArchiveJoinRequests, _joinRequests),
+            Build(conn.Db.ArchiveInvites, _invites),
+            Build(conn.Db.ArchiveDmServerInvites, _dmServerInvites),
+            Build(conn.Db.ArchiveChannels, _channels),
+            Build(conn.Db.ArchiveMessages, _messages),
+            Build(conn.Db.ArchiveDirectMessages, _directMessages),
+            Build(conn.Db.ArchiveFriends, _friends),
+            Build(conn.Db.ArchiveBlocks, _blocks),
+            Build(conn.Db.ArchiveReadStates, _readStates),
+            Build(conn.Db.ArchivePinnedMessages, _pinnedMessages),
+        };
+
+        // GUARD: the archive_* views are gated on this worker's identity being
+        // registered via set_archive_service_identity. An UNREGISTERED worker
+        // sees every view as empty, which at the row level is indistinguishable
+        // from "the module really is empty" — and a full reconcile would then
+        // delete every row in the archive. That is the backup destroying itself
+        // at exactly the moment it's misconfigured (observed: a fresh worker
+        // container wiped a populated archive on first connect).
+        //
+        // A genuinely empty module has an empty archive too, so refusing here
+        // costs nothing in the legitimate case. Fail loud, change nothing.
+        if (requests.All(r => r.LiveKeys.Count == 0))
+        {
+            logger.LogError(
+                "Refusing to reconcile: every archive_* view returned 0 rows. This almost always "
+                + "means this worker's identity is NOT registered — run set_archive_service_identity "
+                + "with the identity logged above. Reconciling now would DELETE the entire archive. "
+                + "(If the module is genuinely empty, there is nothing to reconcile either.)");
+            return;
+        }
+
+        foreach (var request in requests)
+        {
+            db.EnqueueReconcile(request);
+            logger.LogDebug(
+                "Reconcile queued for {Table} ({N} live rows).", request.PgTable, request.LiveKeys.Count);
+        }
     }
 
     private void Wire<TRow>(RemoteTableHandle<EventContext, TRow> handle, TableReplicator<TRow> rep)
@@ -254,13 +284,18 @@ public sealed class Replication(ArchiveDatabase db, ILogger<Replication> logger)
         };
     }
 
-    private void Reconcile<TRow>(RemoteTableHandle<EventContext, TRow> handle, TableReplicator<TRow> rep)
+    /// <summary>
+    /// Snapshots one table's live PK set into a reconcile request. Pure — the
+    /// caller decides whether to enqueue it (see the empty-view guard in
+    /// <see cref="ReconcileAll"/>).
+    /// </summary>
+    private static ReconcileRequest Build<TRow>(
+        RemoteTableHandle<EventContext, TRow> handle, TableReplicator<TRow> rep)
         where TRow : class, IStructuralReadWrite, new()
     {
         var live = new HashSet<string>();
         foreach (var row in handle.Iter())
             live.Add(rep.LiveKey(row));
-        db.EnqueueReconcile(new ReconcileRequest(rep.PgTable, rep.PkColumns, rep.DeleteSql, live));
-        logger.LogDebug("Reconcile queued for {Table} ({N} live rows).", rep.PgTable, live.Count);
+        return new ReconcileRequest(rep.PgTable, rep.PkColumns, rep.DeleteSql, live);
     }
 }

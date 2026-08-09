@@ -95,6 +95,18 @@ services:
       AUTH_JWT_SECRET: "${AUTH_JWT_SECRET}"
       AUTH_ADMIN_API_KEY: "${AUTH_ADMIN_API_KEY:-}"
 
+      # ── Cold archive (storage-tiering, plan 2 Part A) ────────────────────
+      # core-api OWNS this schema: EF migrations run on startup and create the
+      # `archive` database if it doesn't exist. The archive-worker below then
+      # connects to an already-migrated schema and mirrors SpacetimeDB into it.
+      # Same Postgres instance as auth, separate database.
+      #
+      # The archive is an optional background replica and is deliberately
+      # fail-safe: if it's unreachable, core-api logs and carries on serving
+      # auth. Unset ARCHIVE_DATABASE_URL to disable it entirely (and then also
+      # remove the archive-worker service).
+      ARCHIVE_DATABASE_URL: "Host=postgres;Port=5432;Database=${ARCHIVE_DB:-archive};Username=${POSTGRES_USER:-letschat};Password=${POSTGRES_PASSWORD}"
+
       # ── OIDC issuer for SpacetimeDB ──────────────────────────────────────
       # core-api signs the SpacetimeDB access token; SpacetimeDB verifies it by
       # fetching {SPACETIME_OIDC_ISSUER}/.well-known/openid-configuration and the
@@ -193,6 +205,43 @@ services:
         condition: service_healthy
     restart: on-failure
 
+  # ── Archive replication worker (storage-tiering, plan 2 Part A) ─────────────
+  # THE DURABILITY GUARANTEE. Subscribes to the gated `archive_*` views in
+  # SpacetimeDB and mirrors every durable row into the `archive` Postgres
+  # database in real time. That second copy is what makes a destructive
+  # SpacetimeDB migration survivable: drain → publish --delete-data → rebuild
+  # from Postgres (ARCHIVE_REBUILD=1), instead of losing all message history.
+  #
+  # ⚠️ ONE-TIME BOOTSTRAP REQUIRED — it does nothing until you do this.
+  # The archive_* views are gated to a registered service identity. On first
+  # start the worker logs the identity SpacetimeDB issued it; an instance admin
+  # must register that identity via the `set_archive_service_identity` reducer
+  # before any rows replicate. See DEPLOYMENT.md → "Cold archive".
+  #
+  # The identity is persisted to the archive_worker_data volume so it stays
+  # stable across restarts — do NOT delete that volume, or you'll have to
+  # re-register a fresh identity.
+  archive-worker:
+    image: ghcr.io/da-stoaz/letschat-archive-worker:latest
+    container_name: letschat-archive-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      spacetimedb:
+        condition: service_healthy
+    environment:
+      SPACETIMEDB_URI: "ws://spacetimedb:3000"
+      # Hardcoded to match the name module-init publishes under, NOT
+      # DISCOVERY_DATABASE — that one is operator-editable and advertised to
+      # clients, so keying off it would let the worker drift to a module that
+      # doesn't exist.
+      SPACETIMEDB_MODULE_NAME: "letschat"
+      ARCHIVE_DATABASE_URL: "Host=postgres;Port=5432;Database=${ARCHIVE_DB:-archive};Username=${POSTGRES_USER:-letschat};Password=${POSTGRES_PASSWORD}"
+      ARCHIVE_WORKER_TOKEN_FILE: /data/archive-worker.token
+    volumes:
+      - archive_worker_data:/data
+    restart: unless-stopped
+
   # ── LiveKit ──────────────────────────────────────────────────────────────────
   # Signalling (44380, HTTP/WS) is LOOPBACK-only — fronted by the tunnel/Caddy
   # (Docker service name) or a host proxy (127.0.0.1:44380), never public.
@@ -280,6 +329,10 @@ services:
 volumes:
   spacetimedb_home:
   postgres_data:
+  # The archive-worker's SpacetimeDB identity token. Deleting this volume makes
+  # the worker get a NEW identity on next start, which an admin must re-register
+  # via set_archive_service_identity before replication resumes.
+  archive_worker_data:
   # Retained ONLY for the one-time migration from the legacy Rust auth-service.
   # Safe to remove (`docker volume rm letschat_auth_data`) once the migrator
   # has been run and core-api is verified.
