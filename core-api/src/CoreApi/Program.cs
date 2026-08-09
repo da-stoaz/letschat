@@ -72,6 +72,8 @@ builder.Services.ConfigureApplicationCookie(cookie =>
 
 // ── Domain services ──────────────────────────────────────────────────────────
 builder.Services.AddSingleton<TokenService>();
+// OIDC issuer for SpacetimeDB — mints the SpacetimeDB JWT and derives identities.
+builder.Services.AddSingleton<SpacetimeTokenService>();
 builder.Services.AddSingleton<LiveKitTokenService>();
 builder.Services.AddSingleton<StorageService>();
 

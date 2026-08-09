@@ -61,8 +61,8 @@ function pickCompression(): 'gzip' | 'none' {
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
-function setStatus(status: ConnectionStatus): void {
-  useConnectionStore.getState().setStatus(status)
+function setStatus(status: ConnectionStatus, errorMessage?: string | null): void {
+  useConnectionStore.getState().setStatus(status, errorMessage)
 }
 
 // Tear down the active connection's subscription and handle, then drop it.
@@ -408,14 +408,32 @@ export async function connect(): Promise<void> {
     // path an exotic browser/proxy can't handle never strands us. Only on web,
     // only while still using gzip, only once. Because that retry can still
     // recover, the first (gzip) pass suppresses the user-facing error toast.
-    const canDowngrade = !isDesktopTauriRuntime() && !webCompressionDowngraded && pickCompression() === 'gzip'
+    const connectWithCompressionFallback = async (): Promise<void> => {
+      const canDowngrade = !isDesktopTauriRuntime() && !webCompressionDowngraded && pickCompression() === 'gzip'
+      try {
+        await tryAllCandidates(!canDowngrade)
+      } catch (error) {
+        if (canDowngrade) {
+          webCompressionDowngraded = true
+          console.warn('[spacetimedb] compressed connect failed; retrying without WebSocket compression')
+          await tryAllCandidates(true)
+        } else {
+          throw error
+        }
+      }
+    }
+
     try {
-      await tryAllCandidates(!canDowngrade)
+      await connectWithCompressionFallback()
     } catch (error) {
-      if (canDowngrade) {
-        webCompressionDowngraded = true
-        console.warn('[spacetimedb] compressed connect failed; retrying without WebSocket compression')
-        await tryAllCandidates(true)
+      // A cached token the server can't verify — e.g. after the SpacetimeDB
+      // database/keys were reset — would otherwise brick the client forever:
+      // every reconnect re-presents the same dead token. Drop it and retry once,
+      // connecting anonymously so the fresh server issues a new identity/token.
+      if (getStoredToken() && /verify token/i.test(getConnectionErrorDetails(error))) {
+        console.warn('[spacetimedb] stored token rejected by server; clearing it and retrying anonymously')
+        clearStoredToken()
+        await connectWithCompressionFallback()
       } else {
         throw error
       }
@@ -426,6 +444,13 @@ export async function connect(): Promise<void> {
     await connectPromise
     reconnectAttempts = 0
     startHeartbeat()
+  } catch (error) {
+    // Surface the failure as a terminal state so the UI can show an error +
+    // retry instead of an eternal "connecting" spinner. Every connect attempt
+    // is bounded by SPACETIMEDB_CONNECT_TIMEOUT_MS, so this always fires within
+    // a few seconds of a bad server/schema/network rather than hanging.
+    setStatus('error', getConnectionErrorDetails(error))
+    throw error
   } finally {
     connectPromise = null
   }

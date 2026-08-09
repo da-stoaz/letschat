@@ -7,7 +7,6 @@ export { reducers } from './reducers'
 export {
   initializeSpacetime,
   signOut,
-  rotateIdentityForRegistration,
   loginWithPassword,
 } from './auth'
 export {

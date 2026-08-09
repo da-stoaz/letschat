@@ -3,6 +3,7 @@ using System.Text;
 using CoreApi.Configuration;
 using CoreApi.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CoreApi.Tests;
 
@@ -17,7 +18,11 @@ public sealed class SpacetimeClientPolicyTests
     private static SpacetimeClient Client(string body, HttpStatusCode status = HttpStatusCode.OK)
     {
         var options = ServiceOptions.FromConfiguration(new ConfigurationBuilder().Build());
-        return new SpacetimeClient(new StubFactory(new StubHandler(status, body)), options);
+        return new SpacetimeClient(
+            new StubFactory(new StubHandler(status, body)),
+            options,
+            new SpacetimeTokenService(options),
+            TestScopes.Empty);
     }
 
     [Fact]
