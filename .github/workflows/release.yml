@@ -83,6 +83,22 @@ jobs:
           cache-from: type=gha,scope=core-api-migrator
           cache-to: type=gha,scope=core-api-migrator,mode=max
 
+      # Cold-archive replication worker (storage-tiering plan 2, Part A). Build
+      # context is the repo root, not ./archive-worker — the Dockerfile COPYs
+      # `archive-worker/...` paths so it needs the parent directory.
+      - name: Build and push archive-worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./archive-worker/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/letschat-archive-worker:latest
+            ghcr.io/${{ github.repository_owner }}/letschat-archive-worker:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/letschat-archive-worker:sha-${{ steps.sha.outputs.short }}
+          cache-from: type=gha,scope=archive-worker
+          cache-to: type=gha,scope=archive-worker,mode=max
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown

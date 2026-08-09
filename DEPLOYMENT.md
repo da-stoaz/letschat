@@ -176,6 +176,89 @@ If you skip this, the rest of core-api works fine — only the Spaces card on
 `/admin/config` renders read-only with a hint pointing back at these
 instructions.
 
+## Cold archive (durability)
+
+SpacetimeDB keeps its data in memory and has no second copy. A destructive
+schema change halts `spacetime publish` on a "requires deleting data" prompt,
+and the only way through is `--delete-data` — which wipes message history.
+
+The **archive-worker** closes that hole. It subscribes to the gated `archive_*`
+views and mirrors every durable row into an `archive` PostgreSQL database in
+real time. With that copy in place a destructive migration becomes survivable:
+drain → `--delete-data` → rebuild from Postgres.
+
+It runs by default in the production compose. `core-api` owns the schema and
+creates the `archive` database on startup; the worker only writes to it.
+
+### One-time bootstrap — replication does not start until you do this
+
+The `archive_*` views are gated to a registered service identity, so a fresh
+worker sees nothing until an instance admin registers it.
+
+```bash
+# 1. Start the stack, then read the identity the worker was issued.
+docker compose -f docker-compose.prod.base.yml logs archive-worker | grep "identity"
+
+# It logs the exact command to run, e.g.:
+#   Archive worker identity: c200a1f...
+#   If the archive views are empty, register this identity once (as an instance
+#   admin): spacetime call letschat set_archive_service_identity '["0xc200a1f..."]'
+
+# 2. Register it. The reducer is admin-gated, and note the REQUIRED 0x prefix
+#    (without it: "invalid digit found in string").
+spacetime call letschat set_archive_service_identity '["0x<identity-from-logs>"]'
+
+# 3. Verify rows are flowing.
+docker compose -f docker-compose.prod.base.yml logs archive-worker | tail -20
+#   expect: "Subscription applied; reconciling archive."
+docker compose -f docker-compose.prod.base.yml exec postgres \
+  psql -U letschat -d archive -c 'SELECT count(*) FROM message;'
+```
+
+If step 2 fails with **HTTP 530**, your `spacetime` CLI identity is not an
+instance admin. Since core-api became the OIDC issuer, admin status lives on
+identities *derived from core-api accounts* — the raw CLI/publisher identity
+generally is **not** one of them. Write the row directly as the module owner
+instead:
+
+```bash
+spacetime sql letschat \
+  "UPDATE archive_service SET service_identity = 0x<identity-from-logs> WHERE id = 1"
+```
+
+The identity is persisted to the `archive_worker_data` volume so it survives
+restarts. **Deleting that volume issues a new identity**, and replication stops
+until you re-register it — the reducer is idempotent, so re-running step 2 with
+the new identity is all that's needed.
+
+An unregistered worker is safe: it refuses to reconcile rather than mistaking
+empty gated views for an emptied database (which would delete the archive). It
+logs `Refusing to reconcile: every archive_* view returned 0 rows` until you
+register it.
+
+### Rebuilding SpacetimeDB from the archive
+
+After a destructive migration, restore the durable tables from Postgres by
+running the worker once in rebuild mode:
+
+```bash
+docker compose -f docker-compose.prod.base.yml run --rm \
+  -e ARCHIVE_REBUILD=1 archive-worker
+```
+
+It reloads every durable table verbatim (explicit primary keys and timestamps)
+and exits. Take a Postgres backup first — this is the copy you are restoring
+from, and it is the only one.
+
+> **Known gap:** after a rebuild, SpacetimeDB's auto-increment sequences are not
+> advanced past the restored ids, so the next insert can fail with a duplicate
+> unique column error. Verify a test message send after any rebuild.
+
+### Disabling it
+
+Unset `ARCHIVE_DATABASE_URL` on `core-api` and remove the `archive-worker`
+service. You then have no second copy of message history.
+
 ## SpacetimeDB identity — the issuer is permanent
 
 core-api is the OIDC issuer for SpacetimeDB: it signs each user's SpacetimeDB
@@ -232,6 +315,7 @@ unset those env vars on the next deploy.
 | Auth backend | `AUTH_JWT_SECRET`, `AUTH_ADMIN_API_KEY` | JWT secret required; admin API key optional (enables `/admin/accounts/rebind`) |
 | SpacetimeDB identity | `SPACETIME_OIDC_PRIVATE_KEY` | **Required.** Signs the SpacetimeDB access token (RS256); supply a base64-encoded PEM. Generate once — replacing it forces every user to sign in again. `SPACETIME_OIDC_ISSUER` is fixed in compose and must never change (see below) |
 | PostgreSQL | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Only the password is mandatory; defaults are `letschat` / `auth` |
+| Cold archive | `ARCHIVE_DB` | Database name for the durable mirror, default `archive` (same Postgres instance as auth). Wired in compose for both `core-api` and `archive-worker`; needs a one-time identity registration — see "Cold archive" above |
 | Bootstrap admin | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD`, `ADMIN_BOOTSTRAP_EMAIL` | First-run seeding; remove from env after first sign-in |
 | Registration policy | `REQUIRE_EMAIL_CONFIRMATION`, `REQUIRE_ADMIN_APPROVAL` | Booleans (`true`/`false`) — also runtime-editable via the admin panel |
 | Email | `EMAIL_SENDER`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_STARTTLS`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME` | `EMAIL_SENDER=smtp` for real delivery; `log` only in dev |
