@@ -22,9 +22,11 @@ import { DesktopAppBanner } from './features/web/DesktopAppBanner'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
 import { useVoiceStateReconciler } from './hooks/useVoiceStateReconciler'
 import { ensureNotificationPermission } from './lib/notifications'
+import { initializeSpacetime } from './lib/spacetimedb'
 import { SplashScreen } from './components/SplashScreen'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { LoaderCircleIcon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { LoaderCircleIcon, TriangleAlertIcon } from 'lucide-react'
 
 function App() {
   useDeepLink()
@@ -33,6 +35,8 @@ function App() {
   useVoiceStateReconciler()
   const user = useSelfStore((s) => s.user)
   const connectionStatus = useConnectionStore((s) => s.status)
+  const connectionError = useConnectionStore((s) => s.errorMessage)
+  const clearServerConfig = useServerConfigStore((s) => s.clearConfig)
   const notificationsEnabled = useUiStore((s) => s.notificationSettings.enabled)
   const isConfigured = useServerConfigStore((s) => s.config !== null)
   const hasHydrated = useServerConfigStore((s) => s.hasHydrated)
@@ -74,6 +78,38 @@ function App() {
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">Establishing realtime connection...</CardContent>
+        </Card>
+      </main>
+    )
+  }
+
+  if (connectionStatus === 'error' && !user && !onAuthRoute && !onSetupRoute) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,--theme(--color-blue-500/20),transparent),radial-gradient(900px_700px_at_100%_0%,--theme(--color-cyan-500/15),transparent)] p-4">
+        <Card className="w-full max-w-md border-border/70 bg-card/90 backdrop-blur">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TriangleAlertIcon className="size-5 text-destructive" />
+              Couldn’t connect
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-muted-foreground">
+            <p>
+              We couldn’t reach the realtime server. It may be offline or unreachable, or
+              this app version may be out of date for it.
+            </p>
+            {connectionError ?
+              <p className="max-h-32 overflow-auto rounded-md bg-muted/50 p-2 font-mono text-xs wrap-break-word">
+                {connectionError}
+              </p>
+            : null}
+            <div className="flex gap-2">
+              <Button onClick={() => void initializeSpacetime().catch(() => {})}>Try again</Button>
+              <Button variant="outline" onClick={() => clearServerConfig()}>
+                Change server
+              </Button>
+            </div>
+          </CardContent>
         </Card>
       </main>
     )

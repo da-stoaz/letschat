@@ -14,7 +14,9 @@ const queryClient = new QueryClient()
 
 function initializePersistedSpacetime(): void {
   if (useServerConfigStore.getState().config !== null) {
-    void initializeSpacetime()
+    // Failure is surfaced via the connection store's 'error' status (App shows a
+    // retry screen); swallow the rejection here so it isn't an unhandled reject.
+    void initializeSpacetime().catch(() => {})
   }
 }
 
