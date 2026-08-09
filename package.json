@@ -1,7 +1,7 @@
 {
   "name": "letschat",
   "private": true,
-  "version": "0.8.1",
+  "version": "0.9.0",
   "type": "module",
   "scripts": {
     "version:bump": "bun scripts/bump-version.ts",
@@ -17,7 +17,7 @@
     "test:watch": "vitest",
     "test:unit": "vitest run --project unit",
     "test:security": "vitest run --project security",
-    "core-api:dev": "ASPNETCORE_ENVIRONMENT=Development dotnet run --project core-api/src/CoreApi/CoreApi.csproj",
+    "core-api:dev": "ASPNETCORE_ENVIRONMENT=Development AUTH_BIND=0.0.0.0:8787 dotnet run --project core-api/src/CoreApi/CoreApi.csproj",
     "core-api:dev:lan": "bun run scripts/core-api-lan.ts",
     "core-api:test": "dotnet test core-api/CoreApi.slnx",
     "core-api:migrate": "dotnet run --project core-api/tools/CoreApi.Migrator -- --sqlite ./legacy-auth.db",

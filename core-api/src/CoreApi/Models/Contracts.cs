@@ -6,20 +6,22 @@ namespace CoreApi.Models;
 // camelCase wire format the desktop client already sends and expects. These
 // shapes mirror the legacy Rust handlers exactly.
 
+// The SpacetimeDB identity/token are no longer client-supplied — core-api
+// derives the identity from the account id and mints the token itself.
 public sealed record RegisterRequest(
     string Username,
     string DisplayName,
     string Password,
-    string SpacetimeToken,
-    string SpacetimeIdentity,
     string? Email = null);
 
 /// <summary>
 /// Register result. <c>Status</c> is <c>"active"</c> (account usable now,
 /// <c>Auth</c> populated) or <c>"pending_email_verification"</c> (a
-/// confirmation email was sent to <c>Email</c>, <c>Auth</c> is null).
+/// confirmation email was sent to <c>Email</c>, <c>Auth</c> is null). In the
+/// pending case <c>Identity</c> still carries the account's (already computed,
+/// deterministic) SpacetimeDB identity so the confirm-email poll can locate it.
 /// </summary>
-public sealed record RegisterResponse(string Status, AuthResponse? Auth, string? Email);
+public sealed record RegisterResponse(string Status, AuthResponse? Auth, string? Email, string? Identity = null);
 
 /// <summary>
 /// Re-send the confirmation email. Identify the account by <c>Email</c> (the
@@ -43,32 +45,28 @@ public sealed record RegistrationStatusRequest(string Username, string Spacetime
 
 public sealed record RegistrationStatusResponse(string Status);
 
+/// <summary>
+/// Set/change the password on an existing account, or create a fresh account.
+/// The existing-account path is gated on a valid <see cref="SessionToken"/>
+/// (the caller is already signed in) rather than a SpacetimeDB-identity match.
+/// </summary>
 public sealed record LinkRequest(
     string Username,
     string DisplayName,
     string Password,
-    string SpacetimeToken,
-    string SpacetimeIdentity,
+    SessionToken? SessionToken = null,
     string? Email = null);
 
-/// <summary>
-/// Login payload. <c>SpacetimeIdentity</c> and <c>SpacetimeToken</c> are optional
-/// — when the stored account still carries an <c>admin-created</c> placeholder
-/// identity (see <c>CreateUser</c> in the admin panel), the login endpoint
-/// swaps in the real values from the client transparently on first sign-in.
-/// For normal accounts these are ignored.
-/// </summary>
-public sealed record LoginRequest(
-    string Username,
-    string Password,
-    string? SpacetimeIdentity = null,
-    string? SpacetimeToken = null);
+public sealed record LoginRequest(string Username, string Password);
 
 public sealed record VerifyRequest(SessionToken SessionToken);
 
-public sealed record RenewSessionRequest(string SpacetimeToken, string SpacetimeIdentity);
-
-public sealed record RefreshSpacetimeTokenRequest(SessionToken SessionToken, string SpacetimeToken);
+/// <summary>
+/// Renews the app session. The presented SpacetimeDB token is verified
+/// cryptographically (signature + lifetime) and its <c>sub</c> — the account id
+/// — identifies the account; no separate identity field is needed.
+/// </summary>
+public sealed record RenewSessionRequest(string SpacetimeToken);
 
 public sealed record AuthResponse(
     string Username,

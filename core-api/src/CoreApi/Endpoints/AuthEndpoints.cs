@@ -39,7 +39,6 @@ public static class AuthEndpoints
         routes.MapPost("/auth/link", Link);
         routes.MapPost("/auth/verify", Verify);
         routes.MapPost("/auth/renew-session", RenewSession);
-        routes.MapPost("/auth/refresh-spacetime-token", RefreshSpacetimeToken);
 
         // Hit from the email link in a browser — returns an HTML page.
         routes.MapGet("/auth/confirm-email", ConfirmEmail);
@@ -49,6 +48,7 @@ public static class AuthEndpoints
         RegisterRequest request,
         UserManager<ApplicationUser> users,
         TokenService tokens,
+        SpacetimeTokenService spacetime,
         SystemConfigService config,
         AccountEmailService accountEmail)
     {
@@ -61,9 +61,6 @@ public static class AuthEndpoints
         Validation.ValidateUsername(username);
         Validation.ValidatePassword(request.Password);
         var displayName = Validation.Required(request.DisplayName, "Display name is required.");
-        var spacetimeToken = Validation.Required(request.SpacetimeToken, "Spacetime token is required.");
-        var spacetimeIdentity = Validation.Required(request.SpacetimeIdentity, "Spacetime identity is required.");
-        var identityNorm = Validation.NormalizeIdentity(spacetimeIdentity);
 
         // Email is mandatory on every account — it's the recovery + uniqueness key.
         var requiresConfirmation = config.Current.RequireEmailConfirmation;
@@ -72,12 +69,6 @@ public static class AuthEndpoints
         if (await users.FindByNameAsync(username) is not null)
         {
             throw ApiException.Conflict("Username already exists.");
-        }
-
-        if (await users.Users.AnyAsync(u => u.SpacetimeIdentityNorm == identityNorm))
-        {
-            throw ApiException.Conflict(
-                "Spacetime identity is already linked to another account.");
         }
 
         if (await users.FindByEmailAsync(email) is not null)
@@ -90,12 +81,13 @@ public static class AuthEndpoints
             UserName = username,
             Email = email,
             DisplayName = displayName,
-            SpacetimeIdentity = spacetimeIdentity,
-            SpacetimeIdentityNorm = identityNorm,
-            SpacetimeToken = spacetimeToken,
             Status = requiresConfirmation ? AccountStatus.Registered : AccountStatus.Active,
             EmailConfirmed = !requiresConfirmation,
         };
+        // Identity is derived from the (already-assigned) account id and frozen
+        // here — deterministic and wipe-proof. Collisions between distinct
+        // accounts are structurally impossible; the unique index just guards it.
+        AssignDerivedIdentity(user, spacetime);
 
         var result = await users.CreateAsync(user, request.Password);
         if (!result.Succeeded)
@@ -113,46 +105,63 @@ public static class AuthEndpoints
             {
                 // The confirmation email is mandatory for a self-registered
                 // account — without it the user can never advance past Registered.
-                // Roll the just-created account back so its username / email /
-                // Spacetime identity free up for a clean retry, then surface a
-                // clear 503 instead of leaving an orphaned, unconfirmable user.
+                // Roll the just-created account back so its username / email free
+                // up for a clean retry, then surface a clear 503 instead of
+                // leaving an orphaned, unconfirmable user.
                 await users.DeleteAsync(user);
                 throw ApiException.ServiceUnavailable(
                     "Your account couldn't be created because the confirmation email " +
                     "couldn't be sent. Please try again later or contact the administrator.");
             }
 
-            return new RegisterResponse("pending_email_verification", Auth: null, Email: email);
+            // Carry the computed identity so the confirm-email poll can locate the
+            // account without leaking whether a username exists.
+            return new RegisterResponse(
+                "pending_email_verification", Auth: null, Email: email, Identity: user.SpacetimeIdentity);
         }
 
-        var auth = await BuildAuthResponse(user, users, tokens);
+        var auth = BuildAuthResponse(user, await users.GetRolesAsync(user), tokens, spacetime);
         return new RegisterResponse("active", auth, Email: null);
+    }
+
+    /// <summary>
+    /// Derives and freezes an account's SpacetimeDB identity from its id. The id
+    /// is assigned by Identity at construction, so this is safe to call before
+    /// <c>CreateAsync</c>. <c>SpacetimeToken</c> is left empty — the token is
+    /// minted on demand, never stored.
+    /// </summary>
+    public static void AssignDerivedIdentity(ApplicationUser user, SpacetimeTokenService spacetime)
+    {
+        var identity = spacetime.ComputeIdentityHex(user.Id);
+        user.SpacetimeIdentity = identity;
+        user.SpacetimeIdentityNorm = Validation.NormalizeIdentity(identity);
+        user.SpacetimeToken = string.Empty;
     }
 
     private static async Task<AuthResponse> Link(
         LinkRequest request,
         UserManager<ApplicationUser> users,
-        TokenService tokens)
+        TokenService tokens,
+        SpacetimeTokenService spacetime)
     {
         var username = Validation.NormalizeUsername(request.Username);
         Validation.ValidateUsername(username);
         Validation.ValidatePassword(request.Password);
         var displayName = Validation.Required(request.DisplayName, "Display name is required.");
-        var spacetimeToken = Validation.Required(request.SpacetimeToken, "Spacetime token is required.");
-        var spacetimeIdentity = Validation.Required(request.SpacetimeIdentity, "Spacetime identity is required.");
-        var identityNorm = Validation.NormalizeIdentity(spacetimeIdentity);
 
         var existing = await users.FindByNameAsync(username);
         if (existing is not null)
         {
-            if (!string.Equals(existing.SpacetimeIdentityNorm, identityNorm, StringComparison.Ordinal))
+            // Set/change password on an existing account. The identity is derived
+            // and permanent, so it can no longer stand in for "is signed in" —
+            // require a valid session token for this same account instead.
+            var caller = request.SessionToken is null ? null : await tokens.ValidateAsync(request.SessionToken);
+            if (caller is null || !string.Equals(caller, username, StringComparison.Ordinal))
             {
-                throw ApiException.Conflict(
-                    "Username is linked to a different Spacetime identity.");
+                throw ApiException.Unauthorized("Sign in before changing this account's password.");
             }
 
             existing.DisplayName = displayName;
-            existing.SpacetimeToken = spacetimeToken;
             existing.UpdatedAtUtc = DateTime.UtcNow;
 
             var passwordReset = await users.RemovePasswordAsync(existing);
@@ -173,13 +182,7 @@ public static class AuthEndpoints
             }
 
             EnsureSignInAllowed(existing);
-            return await BuildAuthResponse(existing, users, tokens);
-        }
-
-        if (await users.Users.AnyAsync(u => u.SpacetimeIdentityNorm == identityNorm))
-        {
-            throw ApiException.Conflict(
-                "Spacetime identity is already linked to another account.");
+            return BuildAuthResponse(existing, await users.GetRolesAsync(existing), tokens, spacetime);
         }
 
         var email = Validation.NormalizeEmail(request.Email);
@@ -188,19 +191,16 @@ public static class AuthEndpoints
             throw ApiException.Conflict("Email address is already registered.");
         }
 
-        // `link` is the credential-(re)binding path for an identity the caller
-        // already controls; a new account created here is Active directly.
+        // New account created here is Active directly.
         var user = new ApplicationUser
         {
             UserName = username,
             Email = email,
             DisplayName = displayName,
-            SpacetimeIdentity = spacetimeIdentity,
-            SpacetimeIdentityNorm = identityNorm,
-            SpacetimeToken = spacetimeToken,
             Status = AccountStatus.Active,
             EmailConfirmed = true,
         };
+        AssignDerivedIdentity(user, spacetime);
 
         var created = await users.CreateAsync(user, request.Password);
         if (!created.Succeeded)
@@ -208,17 +208,15 @@ public static class AuthEndpoints
             throw TranslateIdentityFailure(created);
         }
 
-        return await BuildAuthResponse(user, users, tokens);
+        return BuildAuthResponse(user, await users.GetRolesAsync(user), tokens, spacetime);
     }
-
-    /// <summary>Marker prefix the admin Create-User flow seeds for accounts that haven't bound a real SpacetimeDB identity yet.</summary>
-    public const string PendingIdentityPrefix = "pending:";
 
     private static async Task<AuthResponse> Login(
         LoginRequest request,
         UserManager<ApplicationUser> users,
         TokenService tokens,
-        SpacetimeClient spacetime,
+        SpacetimeTokenService spacetime,
+        SpacetimeClient spacetimeClient,
         ILoggerFactory loggerFactory)
     {
         var username = Validation.NormalizeUsername(request.Username);
@@ -235,46 +233,11 @@ public static class AuthEndpoints
 
         EnsureSignInAllowed(user);
 
-        // First sign-in for an admin-created account: the stored identity is a
-        // `pending:{guid}` placeholder. If the client sent real values, swap
-        // them in so the chat-domain binding completes on the first login.
-        if (user.SpacetimeIdentity.StartsWith(PendingIdentityPrefix, StringComparison.Ordinal)
-            && !string.IsNullOrWhiteSpace(request.SpacetimeIdentity)
-            && !string.IsNullOrWhiteSpace(request.SpacetimeToken))
-        {
-            var realIdentity = request.SpacetimeIdentity.Trim();
-            var realToken = request.SpacetimeToken.Trim();
-            var identityNorm = Validation.NormalizeIdentity(realIdentity);
+        // Every account has its real, deterministic identity from creation, so
+        // an admin's instance-admin flag can be pushed straight through. Best-effort.
+        await SyncAdminFlagBestEffort(user, users, spacetimeClient, loggerFactory);
 
-            // Reject the swap if another account already owns this identity —
-            // SpacetimeIdentityNorm carries the unique index either way.
-            var conflict = await users.Users.AnyAsync(u =>
-                u.SpacetimeIdentityNorm == identityNorm && u.Id != user.Id);
-            if (conflict)
-            {
-                throw ApiException.Conflict(
-                    "This client identity is already linked to another account.");
-            }
-
-            user.SpacetimeIdentity = realIdentity;
-            user.SpacetimeIdentityNorm = identityNorm;
-            user.SpacetimeToken = realToken;
-            user.UpdatedAtUtc = DateTime.UtcNow;
-
-            var update = await users.UpdateAsync(user);
-            if (!update.Succeeded)
-            {
-                throw TranslateIdentityFailure(update);
-            }
-        }
-
-        // Admin accounts created before they had a SpacetimeDB identity (the
-        // admin Create-User flow, the bootstrap admin) only get a real identity
-        // here on first sign-in — push their instance-admin flag through now so
-        // the chat-domain gate matches the ASP.NET Admin role. Best-effort.
-        await SyncAdminFlagBestEffort(user, users, spacetime, loggerFactory);
-
-        return await BuildAuthResponse(user, users, tokens);
+        return BuildAuthResponse(user, await users.GetRolesAsync(user), tokens, spacetime);
     }
 
     /// <summary>
@@ -312,43 +275,20 @@ public static class AuthEndpoints
     private static async Task<RenewSessionResponse> RenewSession(
         RenewSessionRequest request,
         UserManager<ApplicationUser> users,
-        TokenService tokens)
+        TokenService tokens,
+        SpacetimeTokenService spacetime)
     {
-        var spacetimeToken = Validation.Required(request.SpacetimeToken, "Spacetime token is required.");
-        var identityNorm = Validation.NormalizeIdentity(
-            Validation.Required(request.SpacetimeIdentity, "Spacetime identity is required."));
+        // Verify the SpacetimeDB token cryptographically (signature + lifetime);
+        // its `sub` is the account id. No DB token-equality lookup.
+        var subject = await spacetime.ValidateAndGetSubjectAsync(request.SpacetimeToken)
+            ?? throw ApiException.Unauthorized("Could not renew session for this account.");
 
-        var user = await users.Users.FirstOrDefaultAsync(u =>
-            u.SpacetimeToken == spacetimeToken && u.SpacetimeIdentityNorm == identityNorm)
+        var user = await users.FindByIdAsync(subject)
             ?? throw ApiException.Unauthorized("Could not renew session for this account.");
 
         EnsureSignInAllowed(user);
         var roles = await users.GetRolesAsync(user);
         return new RenewSessionResponse(tokens.IssueSession(user.UserName!, roles));
-    }
-
-    private static async Task<IResult> RefreshSpacetimeToken(
-        RefreshSpacetimeTokenRequest request,
-        UserManager<ApplicationUser> users,
-        TokenService tokens)
-    {
-        var username = await tokens.ValidateAsync(request.SessionToken)
-            ?? throw ApiException.Unauthorized("Invalid or expired session token.");
-
-        var spacetimeToken = Validation.Required(request.SpacetimeToken, "spacetimeToken is required.");
-
-        var user = await users.FindByNameAsync(username)
-            ?? throw ApiException.Unauthorized("Account not found for session token.");
-
-        user.SpacetimeToken = spacetimeToken;
-        user.UpdatedAtUtc = DateTime.UtcNow;
-        var update = await users.UpdateAsync(user);
-        if (!update.Succeeded)
-        {
-            throw TranslateIdentityFailure(update);
-        }
-
-        return Results.Json(new { });
     }
 
     /// <summary>
@@ -572,15 +512,17 @@ public static class AuthEndpoints
             ok: true);
     }
 
-    private static async Task<AuthResponse> BuildAuthResponse(
-        ApplicationUser user, UserManager<ApplicationUser> users, TokenService tokens)
+    private static AuthResponse BuildAuthResponse(
+        ApplicationUser user, IEnumerable<string> roles, TokenService tokens, SpacetimeTokenService spacetime)
     {
-        var roles = await users.GetRolesAsync(user);
         var session = tokens.IssueSession(user.UserName!, roles);
+        // The SpacetimeDB token is minted fresh (never stored); the client
+        // presents it to SpacetimeDB, which derives the same identity we hold.
+        var spacetimeToken = spacetime.Mint(user.Id);
         return new AuthResponse(
             user.UserName!,
             user.DisplayName,
-            user.SpacetimeToken,
+            spacetimeToken,
             user.SpacetimeIdentity,
             session);
     }

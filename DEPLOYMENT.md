@@ -176,6 +176,37 @@ If you skip this, the rest of core-api works fine — only the Spaces card on
 `/admin/config` renders read-only with a hint pointing back at these
 instructions.
 
+## SpacetimeDB identity — the issuer is permanent
+
+core-api is the OIDC issuer for SpacetimeDB: it signs each user's SpacetimeDB
+access token, and SpacetimeDB verifies that signature by fetching
+`{SPACETIME_OIDC_ISSUER}/.well-known/openid-configuration` and the JWKS behind
+it. Two consequences worth understanding before you operate this:
+
+1. **That fetch is made by the SpacetimeDB container**, not by any client. The
+   issuer is therefore pinned in compose to the internal service address
+   `http://core-api:8787`, which is reachable on the Docker network in both
+   topologies. A public `https://auth.<domain>` URL is deliberately *not* used:
+   the container would have to leave the host and come back (unreliable behind
+   NAT, and not routable at all on the tunnel setup).
+
+2. **The issuer string is hashed into every account's identity**
+   (`blake3(issuer + "|" + account id)`). This is what makes identities
+   deterministic and survive a SpacetimeDB data wipe — but it also means
+   changing the issuer re-derives every identity and orphans every account from
+   its spaces and messages. **Never edit `SPACETIME_OIDC_ISSUER` after the first
+   user registers.** It is set in compose rather than `.env` for that reason.
+
+`SPACETIME_OIDC_PRIVATE_KEY` is the separate signing key (base64-encoded PEM,
+see the `.env.production.*.example` files). Rotating it invalidates access
+tokens already issued — everyone signs in again — but leaves accounts,
+identities and data untouched.
+
+Upgrading an instance that predates this: core-api migrates identities
+automatically on first start, re-keying SpacetimeDB's rows and its own records
+in one pass. No manual steps, no wipe. If SpacetimeDB is unreachable at that
+moment the migration is deferred and retried on the next start.
+
 ## Admin Control Panel
 
 `core-api` serves the admin Razor area on container port `8788`. The
@@ -199,6 +230,7 @@ unset those env vars on the next deploy.
 | Area | Key env / file | Notes |
 |---|---|---|
 | Auth backend | `AUTH_JWT_SECRET`, `AUTH_ADMIN_API_KEY` | JWT secret required; admin API key optional (enables `/admin/accounts/rebind`) |
+| SpacetimeDB identity | `SPACETIME_OIDC_PRIVATE_KEY` | **Required.** Signs the SpacetimeDB access token (RS256); supply a base64-encoded PEM. Generate once — replacing it forces every user to sign in again. `SPACETIME_OIDC_ISSUER` is fixed in compose and must never change (see below) |
 | PostgreSQL | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Only the password is mandatory; defaults are `letschat` / `auth` |
 | Bootstrap admin | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD`, `ADMIN_BOOTSTRAP_EMAIL` | First-run seeding; remove from env after first sign-in |
 | Registration policy | `REQUIRE_EMAIL_CONFIRMATION`, `REQUIRE_ADMIN_APPROVAL` | Booleans (`true`/`false`) — also runtime-editable via the admin panel |

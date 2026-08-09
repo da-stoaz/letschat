@@ -15,6 +15,11 @@ public sealed class ServiceOptions
     internal const string DevLiveKitApiSecret = "devsecret0123456789devsecret0123456789";
     internal const string DevMinioSecretKey = "minioadmin";
 
+    // The dev OIDC issuer. SpacetimeDB (in Docker) reaches core-api (on the host)
+    // via host.docker.internal; this URL is baked into every derived identity, so
+    // it is guarded like a secret — prod MUST override it (see FindInsecureDefaults).
+    internal const string DevSpacetimeOidcIssuer = "http://host.docker.internal:8787";
+
     public required string ConnectionString { get; init; }
 
     /// <summary>
@@ -120,6 +125,27 @@ public sealed class ServiceOptions
     /// </summary>
     public string? SpacetimeServiceToken { get; init; }
 
+    // ── OIDC issuer for SpacetimeDB (identity-authority-inversion) ───────────
+
+    /// <summary>
+    /// The canonical issuer URL. Baked into every derived SpacetimeDB identity
+    /// via <c>blake3(iss + "|" + sub)</c>, so it is a <b>permanent deployment
+    /// constant</b> — changing it silently re-hashes every account into a
+    /// different identity. Must be byte-identical to the URL the SpacetimeDB
+    /// server fetches OIDC metadata from, and reachable server-to-server from it.
+    /// Prod must override the dev default (guarded in <see cref="FindInsecureDefaults"/>).
+    /// </summary>
+    public required string SpacetimeOidcIssuer { get; init; }
+
+    /// <summary>
+    /// RSA private key (PEM inline, or a path to a PEM file) that signs the
+    /// SpacetimeDB JWT. Optional in dev — when unset a fresh in-memory key is
+    /// generated per process (fine, because the identity derivation is
+    /// key-independent). Prod must set a stable key so multiple instances /
+    /// restarts publish a consistent JWKS.
+    /// </summary>
+    public string? SpacetimeOidcPrivateKey { get; init; }
+
     public static ServiceOptions FromConfiguration(IConfiguration config)
     {
         string Get(string key, string fallback) =>
@@ -187,6 +213,9 @@ public sealed class ServiceOptions
             SpacetimeHttpUrl = Get("SPACETIMEDB_HTTP_URL", "http://localhost:4300"),
             SpacetimeModuleName = Get("SPACETIMEDB_MODULE_NAME", "letschat"),
             SpacetimeServiceToken = GetOptional("SPACETIMEDB_SERVICE_TOKEN"),
+
+            SpacetimeOidcIssuer = Get("SPACETIME_OIDC_ISSUER", DevSpacetimeOidcIssuer),
+            SpacetimeOidcPrivateKey = GetOptional("SPACETIME_OIDC_PRIVATE_KEY"),
         };
     }
 
@@ -212,6 +241,17 @@ public sealed class ServiceOptions
         Check("AUTH_JWT_SECRET", JwtSecret, DevJwtSecret);
         Check("LIVEKIT_API_SECRET", LiveKitApiSecret, DevLiveKitApiSecret);
         Check("MINIO_SECRET_KEY", MinioSecretKey, DevMinioSecretKey);
+
+        // The issuer is permanent and identity-defining — a prod deployment left
+        // on the dev default would derive host.docker.internal identities and, if
+        // ever corrected, silently orphan every account. Force an explicit value.
+        Check("SPACETIME_OIDC_ISSUER", SpacetimeOidcIssuer, DevSpacetimeOidcIssuer);
+        // Without a stable signing key, JWKS differs per instance/restart and
+        // tokens fail to verify. Require one in prod.
+        if (string.IsNullOrWhiteSpace(SpacetimeOidcPrivateKey))
+        {
+            issues.Add("SPACETIME_OIDC_PRIVATE_KEY");
+        }
 
         return issues;
     }

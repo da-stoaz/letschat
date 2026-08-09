@@ -3,8 +3,20 @@ using System.Text;
 using CoreApi.Configuration;
 using CoreApi.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CoreApi.Tests;
+
+/// <summary>
+/// An <see cref="IServiceScopeFactory"/> with nothing registered — the admin
+/// credential resolver finds no Identity store and falls back to the configured
+/// token, which is all these transport-level tests need.
+/// </summary>
+internal static class TestScopes
+{
+    public static IServiceScopeFactory Empty { get; } =
+        new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+}
 
 /// <summary>
 /// <see cref="SpacetimeClient.HasVoicePresenceAsync"/> — the room-authorization
@@ -16,8 +28,12 @@ public sealed class SpacetimeClientVoiceTests
     private static ServiceOptions Options() =>
         ServiceOptions.FromConfiguration(new ConfigurationBuilder().Build());
 
-    private static SpacetimeClient Client(StubHandler handler) =>
-        new(new StubFactory(handler), Options());
+    private static SpacetimeClient Client(StubHandler handler)
+    {
+        var options = Options();
+        return new SpacetimeClient(
+            new StubFactory(handler), options, new SpacetimeTokenService(options), TestScopes.Empty);
+    }
 
     private static StubHandler Json(string body) => new(_ =>
         new HttpResponseMessage(HttpStatusCode.OK)

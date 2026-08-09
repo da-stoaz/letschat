@@ -9,6 +9,7 @@ mod messages;
 mod pins;
 mod presence;
 mod read_state;
+mod rekey;
 mod servers;
 mod social;
 mod system;

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CoreApi.Configuration;
+using Microsoft.AspNetCore.Identity;
 
 namespace CoreApi.Services;
 
@@ -20,9 +21,135 @@ namespace CoreApi.Services;
 /// comment on <see cref="ServiceOptions"/>.
 /// </para>
 /// </summary>
-public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptions options)
+public sealed class SpacetimeClient(
+    IHttpClientFactory httpFactory,
+    ServiceOptions options,
+    SpacetimeTokenService tokens,
+    IServiceScopeFactory scopes)
 {
     private const string ClientName = "spacetimedb";
+
+    /// <summary>
+    /// Builds the ordered list of credentials an admin reducer call may be signed
+    /// with. Which one actually holds admin changes across the OIDC identity
+    /// migration, so both are offered and the caller tries them in turn.
+    ///
+    /// <para>
+    /// <b>1. The configured <see cref="ServiceOptions.SpacetimeServiceToken"/></b>
+    /// — the explicitly provisioned bootstrap credential. It is the one that holds
+    /// admin <em>before</em> the migration runs, and indefinitely if it belongs to
+    /// a dedicated service identity rather than a user account.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>2. Freshly minted tokens for ASP.NET <c>Admin</c>-role accounts</b> —
+    /// core-api is the OIDC issuer, so it can mint for any account; the resulting
+    /// identity is <c>derive(account.Id)</c>, exactly what that account's module
+    /// <c>User</c> row carries <em>after</em> the re-key. This is what survives the
+    /// migration stranding a static token that was minted against a user's
+    /// pre-OIDC identity (that identity loses its <c>User</c> row, so it is no
+    /// longer admin). Every admin is offered because only those that have actually
+    /// signed into the client have a module <c>User</c> row at all.
+    /// </para>
+    ///
+    /// <para>Empty when neither exists — callers no-op rather than firing an
+    /// unauthenticated call.</para>
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ResolveAdminTokensAsync()
+    {
+        var candidates = new List<string>();
+
+        // 1. The explicitly provisioned bootstrap credential. Correct before the
+        //    identity migration (and forever, if it's a dedicated service identity
+        //    rather than a user account's token).
+        if (!string.IsNullOrWhiteSpace(options.SpacetimeServiceToken))
+        {
+            candidates.Add(options.SpacetimeServiceToken);
+        }
+
+        // 2. Freshly minted tokens for accounts holding the ASP.NET Admin role.
+        //    Their identity is derive(account.Id) — the identity that account's
+        //    module User row carries after the migration — so this is the path
+        //    that keeps working once a re-key strands a user-account-derived
+        //    static token. Several admins may exist and only some have a module
+        //    User row (an admin-panel-only account never registered one), so all
+        //    are offered.
+        try
+        {
+            using var scope = scopes.CreateScope();
+            var users = scope.ServiceProvider
+                .GetRequiredService<UserManager<Data.ApplicationUser>>();
+            foreach (var admin in await users.GetUsersInRoleAsync(DbInitializer.AdminRole))
+            {
+                candidates.Add(tokens.Mint(admin.Id));
+            }
+        }
+        catch
+        {
+            // Identity store unavailable (e.g. very early startup) — the
+            // configured token above still stands on its own.
+        }
+
+        return candidates;
+    }
+
+    /// <summary>
+    /// Calls an admin-gated reducer, trying each available admin credential until
+    /// one is accepted. A credential the module rejects as non-admin (401/403) is
+    /// skipped rather than surfaced — this is what makes admin operations
+    /// self-healing across the identity migration, where which credential holds
+    /// admin changes. Any other failure, or exhausting all credentials, throws.
+    /// </summary>
+    private async Task PostAdminReducerAsync(string reducer, object args, CancellationToken ct)
+    {
+        var candidates = await ResolveAdminTokensAsync();
+        if (candidates.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"No SpacetimeDB admin credential available for {reducer} (no Admin account to "
+                + "mint for, and SPACETIMEDB_SERVICE_TOKEN is unset). See ServiceOptions.");
+        }
+
+        var http = httpFactory.CreateClient(ClientName);
+        var url = $"{options.SpacetimeHttpUrl.TrimEnd('/')}/v1/database/{options.SpacetimeModuleName}/call/{reducer}";
+        string lastBody = string.Empty;
+        var lastStatus = 0;
+
+        foreach (var token in candidates)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = ReducerArgs(args),
+            };
+            request.Headers.Authorization = new("Bearer", token);
+
+            var response = await http.SendAsync(request, ct);
+            if (response.IsSuccessStatusCode)
+            {
+                return;
+            }
+
+            lastStatus = (int)response.StatusCode;
+            lastBody = await response.Content.ReadAsStringAsync(ct);
+
+            // Only retry the next credential when THIS one was rejected for lack
+            // of permission. Matching is deliberately narrow — the module answers
+            // a failed `require_system_admin` with "instance admin permission
+            // required" (as a 530 reducer error, not a 401). A broader match (e.g.
+            // any body containing "admin") would treat a genuine failure of
+            // `set_user_admin` as an auth problem and burn every credential on it.
+            var isAuthFailure = lastStatus is 401 or 403
+                || lastBody.Contains("permission required", StringComparison.OrdinalIgnoreCase);
+            if (!isAuthFailure)
+            {
+                break;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"SpacetimeDB rejected {reducer} ({lastStatus}) with all {candidates.Count} "
+            + $"admin credential(s): {lastBody}");
+    }
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web)
     {
@@ -246,18 +373,11 @@ public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptio
     }
 
     /// <summary>
-    /// Calls the <c>set_space_create_policy</c> reducer. Throws if the service
-    /// token is unset or if SpacetimeDB rejects the call (e.g. the token's
-    /// identity isn't admin).
+    /// Calls the <c>set_space_create_policy</c> reducer. Throws if no admin
+    /// credential is available or SpacetimeDB rejects the call with all of them.
     /// </summary>
     public async Task SetSpaceCreatePolicyAsync(SpaceCreatePolicy policy, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(options.SpacetimeServiceToken))
-        {
-            throw new InvalidOperationException(
-                "SPACETIMEDB_SERVICE_TOKEN is not configured. See ServiceOptions for the bootstrap.");
-        }
-
         // SpacetimeDB's reducer-call body is a JSON array of args, one per
         // parameter. The enum variant is `{ "anyone": [] }` or `{ "adminsOnly": [] }`.
         var variantName = policy == SpaceCreatePolicy.AdminsOnly ? "adminsOnly" : "anyone";
@@ -266,25 +386,8 @@ public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptio
             [variantName] = Array.Empty<object>(),
         }};
 
-        var http = httpFactory.CreateClient(ClientName);
-        var url = $"{options.SpacetimeHttpUrl.TrimEnd('/')}/v1/database/{options.SpacetimeModuleName}/call/set_space_create_policy";
-        using var request = new HttpRequestMessage(HttpMethod.Post, url)
-        {
-            Content = ReducerArgs(args),
-        };
-        request.Headers.Authorization = new("Bearer", options.SpacetimeServiceToken);
-
-        var response = await http.SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(ct);
-            throw new InvalidOperationException(
-                $"SpacetimeDB rejected set_space_create_policy ({(int)response.StatusCode}): {body}");
-        }
+        await PostAdminReducerAsync("set_space_create_policy", args, ct);
     }
-
-    /// <summary>Placeholder prefix on accounts that haven't bound a real SpacetimeDB identity yet.</summary>
-    private const string PendingIdentityPrefix = "pending:";
 
     /// <summary>
     /// Pushes a user's instance-admin flag onto their SpacetimeDB <c>User</c> row
@@ -292,20 +395,21 @@ public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptio
     /// in sync with the ASP.NET Identity <c>Admin</c> role.
     ///
     /// <para>
-    /// No-ops (returns <c>false</c>) when the service token isn't configured or
-    /// the account has no real SpacetimeDB identity yet — admin-created accounts
-    /// carry a <c>pending:</c> placeholder until first sign-in, when the login
-    /// path retries this. Returns <c>true</c> when the reducer was called;
-    /// throws if SpacetimeDB rejects it (e.g. the service identity isn't admin,
-    /// or the target hasn't registered a <c>User</c> row yet).
+    /// No-ops (returns <c>false</c>) when no admin credential is available.
+    /// Returns <c>true</c> when the reducer was called; throws if SpacetimeDB
+    /// rejects it with every credential (e.g. none is admin, or the target
+    /// hasn't registered a <c>User</c> row yet).
     /// </para>
     /// </summary>
     public async Task<bool> SyncUserAdminAsync(
         string? spacetimeIdentity, bool isAdmin, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(options.SpacetimeServiceToken)
-            || string.IsNullOrWhiteSpace(spacetimeIdentity)
-            || spacetimeIdentity.StartsWith(PendingIdentityPrefix, StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(spacetimeIdentity))
+        {
+            return false;
+        }
+
+        if ((await ResolveAdminTokensAsync()).Count == 0)
         {
             return false;
         }
@@ -317,8 +421,49 @@ public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptio
             : "0x" + spacetimeIdentity;
         var args = new List<object> { new[] { hex }, isAdmin };
 
+        await PostAdminReducerAsync("set_user_admin", args, ct);
+        return true;
+    }
+
+    /// <summary>
+    /// Drives the OIDC identity-inversion migration in SpacetimeDB: re-keys every
+    /// durable row from each <c>old</c> identity to its <c>new</c> derived one via
+    /// the admin-gated <c>rekey_identities</c> reducer, in a single transaction.
+    /// Throws if the service token is unset or SpacetimeDB rejects the call, so the
+    /// caller can defer (and retry) rather than half-migrate.
+    /// </summary>
+    public async Task RekeyIdentitiesAsync(
+        IReadOnlyCollection<(string OldHex, string NewHex)> pairs, CancellationToken ct = default)
+    {
+        // Deliberately the STATIC token, not ResolveAdminTokenAsync(): before the
+        // migration runs, the module's admin User row still sits on the account's
+        // pre-OIDC identity, so a freshly minted (derived-identity) token isn't
+        // admin yet. The configured bootstrap token is the credential that still
+        // holds admin at this moment. Afterwards, admin ops switch to minted
+        // tokens automatically and this token is no longer needed.
+        if (string.IsNullOrWhiteSpace(options.SpacetimeServiceToken))
+        {
+            throw new InvalidOperationException(
+                "SPACETIMEDB_SERVICE_TOKEN is not configured; cannot run the identity migration.");
+        }
+        if (pairs.Count == 0)
+        {
+            return;
+        }
+
+        static string Hex(string h) =>
+            h.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? h : "0x" + h;
+
+        // rekey_identities(Vec<IdentityRemap{old,new}>). SATS-JSON: an Identity is
+        // a 1-field product -> ["0x<hex>"]; IdentityRemap is a 2-field product ->
+        // [old, new]; the single Vec arg wraps the list.
+        var remaps = pairs
+            .Select(p => new object[] { new[] { Hex(p.OldHex) }, new[] { Hex(p.NewHex) } })
+            .ToList();
+        var args = new List<object> { remaps };
+
         var http = httpFactory.CreateClient(ClientName);
-        var url = $"{options.SpacetimeHttpUrl.TrimEnd('/')}/v1/database/{options.SpacetimeModuleName}/call/set_user_admin";
+        var url = $"{options.SpacetimeHttpUrl.TrimEnd('/')}/v1/database/{options.SpacetimeModuleName}/call/rekey_identities";
         using var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = ReducerArgs(args),
@@ -330,10 +475,8 @@ public sealed class SpacetimeClient(IHttpClientFactory httpFactory, ServiceOptio
         {
             var body = await response.Content.ReadAsStringAsync(ct);
             throw new InvalidOperationException(
-                $"SpacetimeDB rejected set_user_admin ({(int)response.StatusCode}): {body}");
+                $"SpacetimeDB rejected rekey_identities ({(int)response.StatusCode}): {body}");
         }
-
-        return true;
     }
 }
 

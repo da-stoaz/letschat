@@ -1,13 +1,8 @@
 import { useState } from 'react'
 import { LogInIcon, UserRoundPlusIcon } from 'lucide-react'
-import {
-  getCurrentSessionToken,
-  loginWithPassword,
-  rotateIdentityForRegistration,
-} from '../../lib/spacetimedb'
+import { loginWithPassword } from '../../lib/spacetimedb'
 import { authServiceRegister, type RegisterResult } from '../../lib/authService'
 import { useSelfStore } from '../../stores/selfStore'
-import { useConnectionStore } from '../../stores/connectionStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -86,32 +81,24 @@ export function CredentialsForm({
                 throw new Error('Passwords do not match.')
               }
 
-              // Establish a fresh SpacetimeDB identity to bind the account to.
-              // The SpacetimeDB `User` row is created on first sign-in, not here.
-              await rotateIdentityForRegistration()
-              const spacetimeToken = getCurrentSessionToken()
-              const spacetimeIdentity = useConnectionStore.getState().identity
-              if (!spacetimeToken || !spacetimeIdentity) {
-                throw new Error('Could not obtain an active Spacetime session for registration.')
-              }
-
+              // core-api derives the SpacetimeDB identity from the account id
+              // and mints the token itself — no anonymous pre-connect needed.
               const result: RegisterResult = await authServiceRegister({
                 username: normalizedUsername,
                 displayName: displayName.trim(),
                 password,
                 email: email.trim(),
-                spacetimeToken,
-                spacetimeIdentity,
               })
 
               // Account created but not yet usable — hand the confirm-email
               // screen (and the password, for auto sign-in) up to the parent.
+              // The identity comes straight from the response.
               if (result.status === 'pending_email_verification') {
                 onPendingRegistration(
                   {
                     email: result.email ?? email.trim(),
                     username: normalizedUsername,
-                    spacetimeIdentity,
+                    spacetimeIdentity: result.identity ?? '',
                   },
                   password,
                 )
