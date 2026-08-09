@@ -148,7 +148,7 @@ export function MessageBubble({
               return (
                 <div
                   key={message.id}
-                  className={`group/message relative rounded-md transition-colors ${isEditing ? '' : 'pr-16'} ${
+                  className={`group/message relative rounded-md transition-colors ${
                     isHighlighted ? 'bg-primary/15 ring-1 ring-primary/40' : ''
                   }`}
                 >
@@ -196,7 +196,7 @@ export function MessageBubble({
                   ) : null}
 
                   {!isEditing && (canEdit || canDelete || canPin) ? (
-                    <div className="absolute right-0 top-0 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100">
+                    <div className="absolute -top-3 right-1 flex items-center gap-0.5 rounded-md border border-border/70 bg-popover/95 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover/message:opacity-100">
                       {canPin ? (
                         <Button
                           size="icon-xs"

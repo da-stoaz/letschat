@@ -36,13 +36,92 @@ import { toast } from '@/components/ui/sonner'
 import type { Channel } from '../types/domain'
 
 const EMPTY_CHANNELS: Channel[] = []
+/** Pixels a resize handle moves per arrow-key press. */
+const RESIZE_KEYBOARD_STEP = 16
+
+/**
+ * Draggable pane divider. A focusable `separator` is an ARIA window splitter,
+ * so it carries `aria-value*` and must be operable by keyboard as well as
+ * pointer — arrows nudge, Home/End jump to the limits.
+ *
+ * `direction` is +1 when dragging the handle right widens the pane (it sits on
+ * the pane's right edge) and -1 when it narrows it (handle on the left edge),
+ * matching the pointer maths in each caller.
+ */
+function ResizeHandle({
+  label,
+  width,
+  min,
+  max,
+  direction,
+  className,
+  onPointerDown,
+  onResize,
+}: {
+  label: string
+  width: number
+  min: number
+  max: number
+  direction: 1 | -1
+  className: string
+  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
+  onResize: (width: number) => void
+}) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      aria-valuenow={width}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      tabIndex={0}
+      className={cn(
+        'group focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+        className,
+      )}
+      onPointerDown={onPointerDown}
+      onDoubleClick={() => onResize(min)}
+      onKeyDown={(event) => {
+        const step =
+          event.key === 'ArrowLeft' ? -RESIZE_KEYBOARD_STEP
+          : event.key === 'ArrowRight' ? RESIZE_KEYBOARD_STEP
+          : 0
+        if (step !== 0) {
+          event.preventDefault()
+          onResize(width + step * direction)
+          return
+        }
+        if (event.key === 'Home') {
+          event.preventDefault()
+          onResize(min)
+        } else if (event.key === 'End') {
+          event.preventDefault()
+          onResize(max)
+        }
+      }}
+    >
+      <div className="h-full w-full rounded-full bg-border/60 shadow-[0_0_0_1px_hsl(var(--background)/0.95)] transition-colors group-hover:bg-primary/55" />
+    </div>
+  )
+}
+
 const CHANNEL_BAR_MIN_WIDTH = 220
 const CHANNEL_BAR_MAX_WIDTH = Math.round(CHANNEL_BAR_MIN_WIDTH * 1.7)
 const CHANNEL_BAR_WIDTH_STORAGE_KEY = 'letschat.channel-bar-width'
 
+const MEMBER_PANEL_MIN_WIDTH = 240
+const MEMBER_PANEL_MAX_WIDTH = Math.round(MEMBER_PANEL_MIN_WIDTH * 1.7)
+const MEMBER_PANEL_WIDTH_STORAGE_KEY = 'letschat.member-panel-width'
+
 function clampChannelBarWidth(value: number): number {
   if (!Number.isFinite(value)) return CHANNEL_BAR_MIN_WIDTH
   return Math.min(CHANNEL_BAR_MAX_WIDTH, Math.max(CHANNEL_BAR_MIN_WIDTH, Math.round(value)))
+}
+
+function clampMemberPanelWidth(value: number): number {
+  if (!Number.isFinite(value)) return MEMBER_PANEL_MIN_WIDTH
+  return Math.min(MEMBER_PANEL_MAX_WIDTH, Math.max(MEMBER_PANEL_MIN_WIDTH, Math.round(value)))
 }
 
 export function AppLayout() {
@@ -59,6 +138,12 @@ export function AppLayout() {
     const stored = window.localStorage.getItem(CHANNEL_BAR_WIDTH_STORAGE_KEY)
     const parsed = stored ? Number(stored) : CHANNEL_BAR_MIN_WIDTH
     return clampChannelBarWidth(parsed)
+  })
+  const [memberPanelWidth, setMemberPanelWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return MEMBER_PANEL_MIN_WIDTH
+    const stored = window.localStorage.getItem(MEMBER_PANEL_WIDTH_STORAGE_KEY)
+    const parsed = stored ? Number(stored) : MEMBER_PANEL_MIN_WIDTH
+    return clampMemberPanelWidth(parsed)
   })
 
   const servers = useServersStore((s) => s.servers)
@@ -436,6 +521,35 @@ export function AppLayout() {
     window.localStorage.setItem(CHANNEL_BAR_WIDTH_STORAGE_KEY, String(channelBarWidth))
   }, [channelBarWidth])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(MEMBER_PANEL_WIDTH_STORAGE_KEY, String(memberPanelWidth))
+  }, [memberPanelWidth])
+
+  const onMemberPanelResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (isMobile) return
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = memberPanelWidth
+
+    // Handle sits on the panel's left edge: dragging left widens it.
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX
+      setMemberPanelWidth(clampMemberPanelWidth(startWidth - delta))
+    }
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      document.body.style.removeProperty('cursor')
+      document.body.style.removeProperty('user-select')
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp, { once: true })
+  }, [memberPanelWidth, isMobile])
+
   const onChannelBarResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (isMobile) return
     event.preventDefault()
@@ -460,7 +574,10 @@ export function AppLayout() {
   }, [channelBarWidth, isMobile])
 
   const mainPane = (
-    <div className={cn('grid min-h-0 min-w-0 gap-2 overflow-hidden', rightPanelOpen && activeServerId && !isServerManagePage ? 'grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-1')}>
+    <div
+      className={cn('grid min-h-0 min-w-0 gap-2 overflow-hidden', rightPanelOpen && activeServerId && !isServerManagePage ? 'grid-cols-[minmax(0,1fr)_var(--member-panel-width)]' : 'grid-cols-1')}
+      style={{ ['--member-panel-width' as string]: `${memberPanelWidth}px` }}
+    >
       <Card className="relative h-full min-h-0 gap-0 border-border/60 bg-card/80 py-0 backdrop-blur">
         <CardContent
           className={cn(
@@ -473,20 +590,32 @@ export function AppLayout() {
       </Card>
 
       {rightPanelOpen && activeServerId && !isServerManagePage ? (
-        <MemberPanel
-          members={activeServerMembers}
-          selfIdentity={selfIdentity}
-          selfRole={role}
-          serverId={activeServerId}
-          onKick={(member) => setMemberAction({ kind: 'kick', member })}
-          onBan={(member) => setMemberAction({ kind: 'ban', member })}
-          onTimeout={(member) => setMemberAction({ kind: 'timeout', member })}
-          onRemoveTimeout={async (member) => {
-            await reducers.removeTimeout(activeServerId, member.userIdentity)
-          }}
-          onSetRole={(member, newRole) => setMemberAction({ kind: 'setRole', member, newRole })}
-          onTransferOwnership={(member) => setMemberAction({ kind: 'transferOwnership', member })}
-        />
+        <div className="relative min-h-0 min-w-0">
+          <ResizeHandle
+            label="Resize member panel"
+            width={memberPanelWidth}
+            min={MEMBER_PANEL_MIN_WIDTH}
+            max={MEMBER_PANEL_MAX_WIDTH}
+            direction={-1}
+            className="absolute left-0 top-3 z-20 h-[calc(100%-1.5rem)] w-0.75 cursor-col-resize max-md:hidden"
+            onPointerDown={onMemberPanelResizeStart}
+            onResize={(next) => setMemberPanelWidth(clampMemberPanelWidth(next))}
+          />
+          <MemberPanel
+            members={activeServerMembers}
+            selfIdentity={selfIdentity}
+            selfRole={role}
+            serverId={activeServerId}
+            onKick={(member) => setMemberAction({ kind: 'kick', member })}
+            onBan={(member) => setMemberAction({ kind: 'ban', member })}
+            onTimeout={(member) => setMemberAction({ kind: 'timeout', member })}
+            onRemoveTimeout={async (member) => {
+              await reducers.removeTimeout(activeServerId, member.userIdentity)
+            }}
+            onSetRole={(member, newRole) => setMemberAction({ kind: 'setRole', member, newRole })}
+            onTransferOwnership={(member) => setMemberAction({ kind: 'transferOwnership', member })}
+          />
+        </div>
       ) : null}
     </div>
   )
@@ -564,16 +693,16 @@ export function AppLayout() {
                   dmCallActiveByIdentity={dmCallActiveByIdentity}
                   onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
                 />
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="Resize channel bar"
-                  className="group absolute right-0 top-3 z-20 h-[calc(100%-1.5rem)] w-0.75 cursor-col-resize max-md:hidden"
+                <ResizeHandle
+                  label="Resize channel bar"
+                  width={channelBarWidth}
+                  min={CHANNEL_BAR_MIN_WIDTH}
+                  max={CHANNEL_BAR_MAX_WIDTH}
+                  direction={1}
+                  className="absolute right-0 top-3 z-20 h-[calc(100%-1.5rem)] w-0.75 cursor-col-resize max-md:hidden"
                   onPointerDown={onChannelBarResizeStart}
-                  onDoubleClick={() => setChannelBarWidth(CHANNEL_BAR_MIN_WIDTH)}
-                >
-                  <div className="h-full w-full rounded-full bg-border/60 shadow-[0_0_0_1px_hsl(var(--background)/0.95)] transition-colors group-hover:bg-primary/55" />
-                </div>
+                  onResize={(next) => setChannelBarWidth(clampChannelBarWidth(next))}
+                />
               </div>
 
               {activeCallDockVisible ? (
