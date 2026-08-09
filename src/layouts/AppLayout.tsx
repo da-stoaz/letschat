@@ -36,6 +36,76 @@ import { toast } from '@/components/ui/sonner'
 import type { Channel } from '../types/domain'
 
 const EMPTY_CHANNELS: Channel[] = []
+/** Pixels a resize handle moves per arrow-key press. */
+const RESIZE_KEYBOARD_STEP = 16
+
+/**
+ * Draggable pane divider. A focusable `separator` is an ARIA window splitter,
+ * so it carries `aria-value*` and must be operable by keyboard as well as
+ * pointer — arrows nudge, Home/End jump to the limits.
+ *
+ * `direction` is +1 when dragging the handle right widens the pane (it sits on
+ * the pane's right edge) and -1 when it narrows it (handle on the left edge),
+ * matching the pointer maths in each caller.
+ */
+function ResizeHandle({
+  label,
+  width,
+  min,
+  max,
+  direction,
+  className,
+  onPointerDown,
+  onResize,
+}: {
+  label: string
+  width: number
+  min: number
+  max: number
+  direction: 1 | -1
+  className: string
+  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
+  onResize: (width: number) => void
+}) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      aria-valuenow={width}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      tabIndex={0}
+      className={cn(
+        'group focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+        className,
+      )}
+      onPointerDown={onPointerDown}
+      onDoubleClick={() => onResize(min)}
+      onKeyDown={(event) => {
+        const step =
+          event.key === 'ArrowLeft' ? -RESIZE_KEYBOARD_STEP
+          : event.key === 'ArrowRight' ? RESIZE_KEYBOARD_STEP
+          : 0
+        if (step !== 0) {
+          event.preventDefault()
+          onResize(width + step * direction)
+          return
+        }
+        if (event.key === 'Home') {
+          event.preventDefault()
+          onResize(min)
+        } else if (event.key === 'End') {
+          event.preventDefault()
+          onResize(max)
+        }
+      }}
+    >
+      <div className="h-full w-full rounded-full bg-border/60 shadow-[0_0_0_1px_hsl(var(--background)/0.95)] transition-colors group-hover:bg-primary/55" />
+    </div>
+  )
+}
+
 const CHANNEL_BAR_MIN_WIDTH = 220
 const CHANNEL_BAR_MAX_WIDTH = Math.round(CHANNEL_BAR_MIN_WIDTH * 1.7)
 const CHANNEL_BAR_WIDTH_STORAGE_KEY = 'letschat.channel-bar-width'
@@ -521,16 +591,16 @@ export function AppLayout() {
 
       {rightPanelOpen && activeServerId && !isServerManagePage ? (
         <div className="relative min-h-0 min-w-0">
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize member panel"
-            className="group absolute left-0 top-3 z-20 h-[calc(100%-1.5rem)] w-0.75 cursor-col-resize max-md:hidden"
+          <ResizeHandle
+            label="Resize member panel"
+            width={memberPanelWidth}
+            min={MEMBER_PANEL_MIN_WIDTH}
+            max={MEMBER_PANEL_MAX_WIDTH}
+            direction={-1}
+            className="absolute left-0 top-3 z-20 h-[calc(100%-1.5rem)] w-0.75 cursor-col-resize max-md:hidden"
             onPointerDown={onMemberPanelResizeStart}
-            onDoubleClick={() => setMemberPanelWidth(MEMBER_PANEL_MIN_WIDTH)}
-          >
-            <div className="h-full w-full rounded-full bg-border/60 shadow-[0_0_0_1px_hsl(var(--background)/0.95)] transition-colors group-hover:bg-primary/55" />
-          </div>
+            onResize={(next) => setMemberPanelWidth(clampMemberPanelWidth(next))}
+          />
           <MemberPanel
             members={activeServerMembers}
             selfIdentity={selfIdentity}
@@ -623,16 +693,16 @@ export function AppLayout() {
                   dmCallActiveByIdentity={dmCallActiveByIdentity}
                   onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
                 />
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="Resize channel bar"
-                  className="group absolute right-0 top-3 z-20 h-[calc(100%-1.5rem)] w-0.75 cursor-col-resize max-md:hidden"
+                <ResizeHandle
+                  label="Resize channel bar"
+                  width={channelBarWidth}
+                  min={CHANNEL_BAR_MIN_WIDTH}
+                  max={CHANNEL_BAR_MAX_WIDTH}
+                  direction={1}
+                  className="absolute right-0 top-3 z-20 h-[calc(100%-1.5rem)] w-0.75 cursor-col-resize max-md:hidden"
                   onPointerDown={onChannelBarResizeStart}
-                  onDoubleClick={() => setChannelBarWidth(CHANNEL_BAR_MIN_WIDTH)}
-                >
-                  <div className="h-full w-full rounded-full bg-border/60 shadow-[0_0_0_1px_hsl(var(--background)/0.95)] transition-colors group-hover:bg-primary/55" />
-                </div>
+                  onResize={(next) => setChannelBarWidth(clampChannelBarWidth(next))}
+                />
               </div>
 
               {activeCallDockVisible ? (
