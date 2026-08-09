@@ -251,6 +251,13 @@ services:
         VITE_WEB_CONNECT_URL: "${VITE_WEB_CONNECT_URL}"
         VITE_WEB_WS_COMPRESSION: "${VITE_WEB_WS_COMPRESSION:-gzip}"
     container_name: letschat-web
+    # Service domains for the Content-Security-Policy in deploy/web/Caddyfile.
+    # Same values the edge proxy uses; Caddy reads them as `{$VAR}` at startup.
+    environment:
+      AUTH_DOMAIN: "${AUTH_DOMAIN}"
+      CHAT_DOMAIN: "${CHAT_DOMAIN}"
+      FILES_DOMAIN: "${FILES_DOMAIN}"
+      LIVEKIT_DOMAIN: "${LIVEKIT_DOMAIN}"
     ports:
       - "127.0.0.1:44310:80"
     restart: unless-stopped
