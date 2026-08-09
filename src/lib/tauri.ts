@@ -64,7 +64,7 @@ function resolveLivekitUrl(): string {
 }
 
 /**
- * Mints a LiveKit access token via the space's auth service, which signs it
+ * Mints a LiveKit access token via the space's core-api, which signs it
  * with that server's real LiveKit secret. Used by both desktop and web.
  */
 async function generateLivekitToken(room: string, identity: Identity): Promise<string> {
