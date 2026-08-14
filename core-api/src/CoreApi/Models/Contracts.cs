@@ -57,6 +57,17 @@ public sealed record LinkRequest(
     SessionToken? SessionToken = null,
     string? Email = null);
 
+/// <summary>
+/// Changes the signed-in account's password, verifying <c>CurrentPassword</c>
+/// first. Distinct from <see cref="LinkRequest"/>, which resets the password on
+/// the strength of the session alone — that path stays for account creation and
+/// backwards compatibility, but the Settings UI uses this one.
+/// </summary>
+public sealed record ChangePasswordRequest(
+    SessionToken SessionToken,
+    string CurrentPassword,
+    string NewPassword);
+
 public sealed record LoginRequest(string Username, string Password);
 
 public sealed record VerifyRequest(SessionToken SessionToken);

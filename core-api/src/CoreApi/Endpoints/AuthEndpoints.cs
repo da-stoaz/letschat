@@ -40,6 +40,10 @@ public static class AuthEndpoints
         routes.MapPost("/auth/link", Link);
         routes.MapPost("/auth/verify", Verify);
         routes.MapPost("/auth/account", Account);
+
+        // Verifies the current password, so it is guessable — rate-limit it.
+        routes.MapPost("/auth/change-password", ChangePassword)
+            .RequireRateLimiting(RateLimitPolicy);
         routes.MapPost("/auth/renew-session", RenewSession);
 
         // Hit from the email link in a browser — returns an HTML page.
@@ -302,6 +306,41 @@ public static class AuthEndpoints
             // without the trailing Z and the client would then read as local.
             DateTime.SpecifyKind(user.CreatedAtUtc, DateTimeKind.Utc)
                 .ToString("o", CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Changes the signed-in account's password after verifying the current one.
+    ///
+    /// <para>
+    /// <c>/auth/link</c> can also set a password, but on the strength of the
+    /// session alone — anyone at an unlocked, signed-in client could lock the
+    /// owner out. That path stays for account creation and older clients; this
+    /// is what the Settings UI calls.
+    /// </para>
+    /// </summary>
+    private static async Task<IResult> ChangePassword(
+        ChangePasswordRequest request,
+        UserManager<ApplicationUser> users,
+        TokenService tokens)
+    {
+        var username = await tokens.ValidateAsync(request.SessionToken)
+            ?? throw ApiException.Unauthorized("Sign in before changing your password.");
+
+        var user = await users.FindByNameAsync(username)
+            ?? throw ApiException.Unauthorized("Sign in before changing your password.");
+
+        Validation.ValidatePassword(request.NewPassword ?? string.Empty);
+
+        var result = await users.ChangePasswordAsync(
+            user, request.CurrentPassword ?? string.Empty, request.NewPassword!);
+        if (!result.Succeeded)
+        {
+            throw TranslateIdentityFailure(result);
+        }
+
+        user.UpdatedAtUtc = DateTime.UtcNow;
+        await users.UpdateAsync(user);
+        return Results.NoContent();
     }
 
     /// <summary>Wire name for an account's lifecycle status.</summary>

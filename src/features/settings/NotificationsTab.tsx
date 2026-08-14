@@ -123,7 +123,6 @@ export function NotificationsTab() {
       <Switch
         checked={notificationSettings.eventToggles[row.key]}
         onCheckedChange={(checked) => setNotificationEventEnabled(row.key, Boolean(checked))}
-        disabled={!notificationSettings.enabled}
       />
     </div>
   )
@@ -154,88 +153,93 @@ export function NotificationsTab() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/70 bg-muted/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Priority Alerts</CardTitle>
-          <CardDescription>Keep these on if you never want to miss direct attention.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-1 rounded-lg border border-border/70 bg-card/70 p-3">
-          {priorityNotificationRows.map((row) => renderNotificationToggleRow(row))}
-        </CardContent>
-      </Card>
+      {/* Everything below depends on the master switch — collapsed rather than
+          left greyed-out, per CLAUDE-UI.md. */}
+      {notificationSettings.enabled ? (
+        <>
+        <Card className="border-border/70 bg-muted/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Priority Alerts</CardTitle>
+            <CardDescription>Keep these on if you never want to miss direct attention.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-1 rounded-lg border border-border/70 bg-card/70 p-3">
+            {priorityNotificationRows.map((row) => renderNotificationToggleRow(row))}
+          </CardContent>
+        </Card>
 
-      <Card className="border-border/70 bg-muted/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Everything Else</CardTitle>
-          <CardDescription>Lower-priority updates you can tune based on preference.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-1 rounded-lg border border-border/70 bg-card/70 p-3">
-          {secondaryNotificationRows.map((row) => renderNotificationToggleRow(row))}
-        </CardContent>
-      </Card>
+        <Card className="border-border/70 bg-muted/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Everything Else</CardTitle>
+            <CardDescription>Lower-priority updates you can tune based on preference.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-1 rounded-lg border border-border/70 bg-card/70 p-3">
+            {secondaryNotificationRows.map((row) => renderNotificationToggleRow(row))}
+          </CardContent>
+        </Card>
 
-      <Card className="border-border/70 bg-muted/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Privacy & Schedule</CardTitle>
-          <CardDescription>Control what is shown and when alerts are suppressed.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/70 p-3">
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Show message previews</p>
-              <p className="text-xs text-muted-foreground">Hide content in notification bodies when disabled.</p>
-            </div>
-            <Switch
-              checked={notificationSettings.showPreviews}
-              onCheckedChange={(checked) => setNotificationPreviewsEnabled(Boolean(checked))}
-              disabled={!notificationSettings.enabled}
-            />
-          </div>
-
-          <div className="space-y-3 rounded-lg border border-border/70 bg-card/70 p-3">
-            <div className="flex items-center justify-between">
+        <Card className="border-border/70 bg-muted/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Privacy & Schedule</CardTitle>
+            <CardDescription>Control what is shown and when alerts are suppressed.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/70 p-3">
               <div className="space-y-1">
-                <p className="text-sm font-medium">Quiet hours</p>
-                <p className="text-xs text-muted-foreground">Suppress all notifications during this time range.</p>
+                <p className="text-sm font-medium">Show message previews</p>
+                <p className="text-xs text-muted-foreground">Hide content in notification bodies when disabled.</p>
               </div>
               <Switch
-                checked={notificationSettings.quietHoursEnabled}
-                onCheckedChange={(checked) => setNotificationQuietHoursEnabled(Boolean(checked))}
-                disabled={!notificationSettings.enabled}
+                checked={notificationSettings.showPreviews}
+                onCheckedChange={(checked) => setNotificationPreviewsEnabled(Boolean(checked))}
               />
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label htmlFor="quiet-hours-start">Start</Label>
-                <Input
-                  id="quiet-hours-start"
-                  type="time"
-                  value={quietHoursStart}
-                  disabled={!notificationSettings.enabled || !notificationSettings.quietHoursEnabled}
-                  onChange={(event) => setQuietHoursStart(event.target.value)}
-                  onBlur={() =>
-                    setNotificationQuietHoursRange(normalizeTimeInput(quietHoursStart), normalizeTimeInput(quietHoursEnd))
-                  }
+            <div className="space-y-3 rounded-lg border border-border/70 bg-card/70 p-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Quiet hours</p>
+                  <p className="text-xs text-muted-foreground">Suppress all notifications during this time range.</p>
+                </div>
+                <Switch
+                  checked={notificationSettings.quietHoursEnabled}
+                  onCheckedChange={(checked) => setNotificationQuietHoursEnabled(Boolean(checked))}
                 />
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="quiet-hours-end">End</Label>
-                <Input
-                  id="quiet-hours-end"
-                  type="time"
-                  value={quietHoursEnd}
-                  disabled={!notificationSettings.enabled || !notificationSettings.quietHoursEnabled}
-                  onChange={(event) => setQuietHoursEnd(event.target.value)}
-                  onBlur={() =>
-                    setNotificationQuietHoursRange(normalizeTimeInput(quietHoursStart), normalizeTimeInput(quietHoursEnd))
-                  }
-                />
-              </div>
+
+              {notificationSettings.quietHoursEnabled ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="quiet-hours-start">Start</Label>
+                    <Input
+                      id="quiet-hours-start"
+                      type="time"
+                      value={quietHoursStart}
+                      onChange={(event) => setQuietHoursStart(event.target.value)}
+                      onBlur={() =>
+                        setNotificationQuietHoursRange(normalizeTimeInput(quietHoursStart), normalizeTimeInput(quietHoursEnd))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="quiet-hours-end">End</Label>
+                    <Input
+                      id="quiet-hours-end"
+                      type="time"
+                      value={quietHoursEnd}
+                      onChange={(event) => setQuietHoursEnd(event.target.value)}
+                      onBlur={() =>
+                        setNotificationQuietHoursRange(normalizeTimeInput(quietHoursStart), normalizeTimeInput(quietHoursEnd))
+                      }
+                    />
+                  </div>
+                </div>
+              ) : null}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+        </>
+      ) : null}
+
 
       <Card className="border-border/70 bg-muted/20">
         <CardHeader className="pb-3">

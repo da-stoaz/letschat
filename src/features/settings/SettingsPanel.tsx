@@ -3,12 +3,9 @@ import { AccountTab } from './AccountTab'
 import { SecurityTab } from './SecurityTab'
 import { ConnectionTab } from './ConnectionTab'
 import { NotificationsTab } from './NotificationsTab'
-import { useConnectionStore } from '../../stores/connectionStore'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export function SettingsPanel() {
-  const identity = useConnectionStore((s) => s.identity)
-
   return (
     <section className="space-y-4">
       <header className="space-y-1">
@@ -47,17 +44,7 @@ export function SettingsPanel() {
         </TabsContent>
 
         <TabsContent value="connection">
-          <div className="space-y-3">
-            {/* ConnectionTab is shared with the setup/auth screen, where no
-                identity exists yet — so the identity row lives here, not in it. */}
-            <ConnectionTab />
-            {identity ? (
-              <div className="space-y-1 rounded-lg border border-border/70 bg-muted/20 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Your identity</p>
-                <p className="break-all font-mono text-xs text-muted-foreground">{identity}</p>
-              </div>
-            ) : null}
-          </div>
+          <ConnectionTab />
         </TabsContent>
 
         <TabsContent value="notifications">

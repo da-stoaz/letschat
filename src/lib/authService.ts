@@ -187,6 +187,9 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
     throw new Error(errorBody?.error ?? fallback)
   }
 
+  // 204 has no body — parsing it as JSON would turn a success into an error.
+  if (response.status === 204) return undefined as TResponse
+
   return (await response.json()) as TResponse
 }
 
@@ -288,6 +291,23 @@ export async function authServiceVerify(): Promise<boolean> {
     sessionToken: token,
   })
   return Boolean(result.valid)
+}
+
+/**
+ * Changes the password, verifying the current one. Prefer this over
+ * {@link authServiceLink}, which resets without checking.
+ */
+export async function authServiceChangePassword(payload: {
+  currentPassword: string
+  newPassword: string
+}): Promise<void> {
+  const sessionToken = getStoredAuthSessionToken()
+  if (!sessionToken) throw new Error('No active sign-in session found.')
+
+  await postJson<void, { sessionToken: AuthFrameworkToken; currentPassword: string; newPassword: string }>(
+    '/auth/change-password',
+    { sessionToken, ...payload },
+  )
 }
 
 export interface AccountDetails {
