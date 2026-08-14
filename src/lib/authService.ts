@@ -1,7 +1,6 @@
 import type { Identity } from '../types/domain'
-import { useServerConfigStore } from '../stores/serverConfigStore'
+import { AUTH_SESSION_KEY, useServerConfigStore } from '../stores/serverConfigStore'
 
-const AUTH_SESSION_KEY = 'letschat.auth_session_token'
 const AUTH_REQUEST_TIMEOUT_MS = 12000
 
 
