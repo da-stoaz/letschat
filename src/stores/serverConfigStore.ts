@@ -26,6 +26,11 @@ function hostKey(config: ServerConfig): string {
   return config.authServiceUrl
 }
 
+/** Puts a host at the front of the list, without duplicating it. */
+function rememberHost(hosts: ServerConfig[], config: ServerConfig): ServerConfig[] {
+  return [config, ...hosts.filter((host) => hostKey(host) !== hostKey(config))]
+}
+
 /** Human label for a host — the discovery hostname, or the raw URL if unparseable. */
 export function hostLabel(config: ServerConfig): string {
   try {
@@ -81,16 +86,20 @@ export const useServerConfigStore = create<ServerConfigState>()(
             localStorage.removeItem(AUTH_SESSION_KEY)
           }
 
-          return {
-            config,
-            knownHosts: [config, ...state.knownHosts.filter((host) => hostKey(host) !== hostKey(config))],
-          }
+          return { config, knownHosts: rememberHost(state.knownHosts, config) }
         }),
       forgetHost: (authServiceUrl) =>
         set((state) => ({
           knownHosts: state.knownHosts.filter((host) => host.authServiceUrl !== authServiceUrl),
         })),
-      clearConfig: () => set({ config: null }),
+      // Remember where we were on the way out. "Change server" is exactly the
+      // moment the user wants this host kept — dropping the config without
+      // recording it is how a host goes missing from its own recent list.
+      clearConfig: () =>
+        set((state) => ({
+          config: null,
+          knownHosts: state.config ? rememberHost(state.knownHosts, state.config) : state.knownHosts,
+        })),
       setHasHydrated: (value) => set({ hasHydrated: value }),
     }),
     {

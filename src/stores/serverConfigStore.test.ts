@@ -55,6 +55,32 @@ describe('serverConfigStore known hosts', () => {
     expect(localStorage.getItem(AUTH_SESSION_KEY)).toBe('token-for-a')
   })
 
+  it('remembers the host it just left when the config is cleared', () => {
+    // "Change server" clears the config; the host must survive that, or it
+    // vanishes from the very list that exists to bring the user back to it.
+    useServerConfigStore.getState().setConfig(hostA)
+    useServerConfigStore.setState({ knownHosts: [] })
+
+    useServerConfigStore.getState().clearConfig()
+
+    const state = useServerConfigStore.getState()
+    expect(state.config).toBeNull()
+    expect(state.knownHosts.map((h) => h.authServiceUrl)).toEqual([hostA.authServiceUrl])
+  })
+
+  it('does not duplicate the host when clearing a config already in the list', () => {
+    const { setConfig } = useServerConfigStore.getState()
+    setConfig(hostA)
+    setConfig(hostB)
+
+    useServerConfigStore.getState().clearConfig()
+
+    expect(useServerConfigStore.getState().knownHosts.map((h) => h.authServiceUrl)).toEqual([
+      hostB.authServiceUrl,
+      hostA.authServiceUrl,
+    ])
+  })
+
   it('forgets a host on request', () => {
     const { setConfig } = useServerConfigStore.getState()
     setConfig(hostA)
