@@ -69,6 +69,11 @@ export function useDeepLink(): void {
       const previous = useServerConfigStore.getState().config
       if (sameConfig(previous, cfg)) return
 
+      // A deep link is a config handed over by someone else, so both an
+      // unfamiliar host and a moved one stop for confirmation. The dialog
+      // finishes the connect when the user accepts.
+      if (!useServerConfigStore.getState().requestConnect(cfg, { confirmUnknown: true })) return
+
       const switching = previous !== null
       setConfig(cfg)
       void initializeSpacetime()

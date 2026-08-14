@@ -18,7 +18,7 @@ const localStorageStub = {
 vi.stubGlobal('localStorage', localStorageStub)
 vi.stubGlobal('window', { localStorage: localStorageStub })
 
-const { AUTH_SESSION_KEY, hostLabel, mergePersisted, useServerConfigStore } = await import('./serverConfigStore')
+const { AUTH_SESSION_KEY, diffKnownHost, hostLabel, mergePersisted, useServerConfigStore } = await import('./serverConfigStore')
 
 const hostA = {
   spacetimedbUri: 'ws://a.example:4300',
@@ -31,7 +31,7 @@ const hostB = { ...hostA, authServiceUrl: 'https://auth.b.example', spacetimedbU
 describe('serverConfigStore known hosts', () => {
   beforeEach(() => {
     store.clear()
-    useServerConfigStore.setState({ config: null, knownHosts: [] })
+    useServerConfigStore.setState({ config: null, knownHosts: [], pendingHost: null })
   })
 
   it('records every configured host, most recent first, without duplicates', () => {
@@ -161,6 +161,69 @@ describe('serverConfigStore known hosts', () => {
     expect(written.state.knownHosts.map((h: { authServiceUrl: string }) => h.authServiceUrl)).toEqual([
       hostA.authServiceUrl,
     ])
+  })
+
+  it('reports no diff for a host it has never seen', () => {
+    expect(diffKnownHost([], hostA)).toBeNull()
+  })
+
+  it('reports no changes when a known host serves what it served before', () => {
+    expect(diffKnownHost([hostA], { ...hostA })).toEqual([])
+  })
+
+  it('reports each service URL a known host has moved', () => {
+    const moved = { ...hostA, spacetimedbUri: 'wss://evil.example', livekitUrl: 'wss://evil.example:7880' }
+
+    expect(diffKnownHost([hostA], moved)).toEqual([
+      { field: 'spacetimedbUri', stored: hostA.spacetimedbUri, incoming: moved.spacetimedbUri },
+      { field: 'livekitUrl', stored: hostA.livekitUrl, incoming: moved.livekitUrl },
+    ])
+  })
+
+  it('lets an unchanged known host connect without a prompt', () => {
+    useServerConfigStore.getState().setConfig(hostA)
+
+    expect(useServerConfigStore.getState().requestConnect(hostA)).toBe(true)
+    expect(useServerConfigStore.getState().pendingHost).toBeNull()
+  })
+
+  it('blocks a known host that moved, and does not apply it until accepted', () => {
+    useServerConfigStore.getState().setConfig(hostA)
+    const moved = { ...hostA, spacetimedbUri: 'wss://evil.example' }
+
+    expect(useServerConfigStore.getState().requestConnect(moved)).toBe(false)
+    expect(useServerConfigStore.getState().pendingHost?.reason).toBe('changed')
+    // Still on the original until the user says otherwise.
+    expect(useServerConfigStore.getState().config?.spacetimedbUri).toBe(hostA.spacetimedbUri)
+
+    useServerConfigStore.getState().resolvePendingHost(false)
+    expect(useServerConfigStore.getState().config?.spacetimedbUri).toBe(hostA.spacetimedbUri)
+    expect(useServerConfigStore.getState().pendingHost).toBeNull()
+  })
+
+  it('applies the moved host only once accepted', () => {
+    useServerConfigStore.getState().setConfig(hostA)
+    const moved = { ...hostA, spacetimedbUri: 'wss://moved.example' }
+    useServerConfigStore.getState().requestConnect(moved)
+
+    expect(useServerConfigStore.getState().resolvePendingHost(true)).toEqual(moved)
+    expect(useServerConfigStore.getState().config?.spacetimedbUri).toBe('wss://moved.example')
+  })
+
+  it('waves through an unknown host the user typed, but stops one that arrived in a link', () => {
+    expect(useServerConfigStore.getState().requestConnect(hostA)).toBe(true)
+
+    useServerConfigStore.setState({ config: null, knownHosts: [], pendingHost: null })
+    expect(useServerConfigStore.getState().requestConnect(hostA, { confirmUnknown: true })).toBe(false)
+    expect(useServerConfigStore.getState().pendingHost?.reason).toBe('unknown')
+  })
+
+  it('keeps a pending prompt out of persisted storage', () => {
+    useServerConfigStore.getState().setConfig(hostA)
+    useServerConfigStore.getState().requestConnect({ ...hostA, livekitUrl: 'wss://other.example' })
+
+    const written = JSON.parse(store.get('letschat.server_config') ?? '{}')
+    expect(written.state.pendingHost).toBeUndefined()
   })
 
   it('labels a host by its discovery hostname', () => {

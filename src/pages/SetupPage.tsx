@@ -9,10 +9,14 @@ import { GlobeIcon, QrCodeIcon, ServerIcon, XIcon } from 'lucide-react'
 
 export function SetupPage() {
   const setConfig = useServerConfigStore((s) => s.setConfig)
+  const requestConnect = useServerConfigStore((s) => s.requestConnect)
   const knownHosts = useServerConfigStore((s) => s.knownHosts)
   const forgetHost = useServerConfigStore((s) => s.forgetHost)
 
   const handleConnect = async (cfg: ServerConfig) => {
+    // A host the user typed here is deliberate, so an unknown one needs no
+    // prompt — but one that has moved since last time still does.
+    if (!requestConnect(cfg)) return
     setConfig(cfg)
     await initializeSpacetime()
   }

@@ -29,6 +29,9 @@ export function WebJoinPage() {
         return
       }
       try {
+        // Same reasoning as the desktop deep link: this config arrived in a
+        // link, not from the user. The dialog completes the connect on accept.
+        if (!useServerConfigStore.getState().requestConnect(cfg, { confirmUnknown: true })) return
         setConfig(cfg)
         await initializeSpacetime()
         navigate('/', { replace: true })

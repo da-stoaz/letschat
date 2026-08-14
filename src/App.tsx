@@ -24,6 +24,7 @@ import { useVoiceStateReconciler } from './hooks/useVoiceStateReconciler'
 import { ensureNotificationPermission } from './lib/notifications'
 import { initializeSpacetime } from './lib/spacetimedb'
 import { SplashScreen } from './components/SplashScreen'
+import { HostConfirmDialog } from './features/setup/HostConfirmDialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { LoaderCircleIcon, TriangleAlertIcon } from 'lucide-react'
@@ -79,6 +80,7 @@ function App() {
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">Establishing realtime connection...</CardContent>
         </Card>
+        <HostConfirmDialog />
       </main>
     )
   }
@@ -111,6 +113,7 @@ function App() {
             </div>
           </CardContent>
         </Card>
+        <HostConfirmDialog />
       </main>
     )
   }
@@ -137,6 +140,7 @@ function App() {
       </Route>
         </Routes>
       </div>
+      <HostConfirmDialog />
     </div>
   )
 }
