@@ -1,13 +1,16 @@
-import { useServerConfigStore, type ServerConfig } from '../stores/serverConfigStore'
+import { hostLabel, useServerConfigStore, type ServerConfig } from '../stores/serverConfigStore'
 import { initializeSpacetime } from '../lib/spacetimedb'
 import { DiscoverTab } from './setup/DiscoverTab'
 import { JoinLinkTab } from './setup/JoinLinkTab'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { GlobeIcon, QrCodeIcon } from 'lucide-react'
+import { GlobeIcon, QrCodeIcon, ServerIcon, XIcon } from 'lucide-react'
 
 export function SetupPage() {
   const setConfig = useServerConfigStore((s) => s.setConfig)
+  const knownHosts = useServerConfigStore((s) => s.knownHosts)
+  const forgetHost = useServerConfigStore((s) => s.forgetHost)
 
   const handleConnect = async (cfg: ServerConfig) => {
     setConfig(cfg)
@@ -21,6 +24,40 @@ export function SetupPage() {
           <h1 className="text-2xl font-bold tracking-tight">LetsChat</h1>
           <p className="text-sm text-muted-foreground">Connect to your server to get started.</p>
         </div>
+
+        {knownHosts.length > 0 ? (
+          <Card className="border-border/70 bg-card/90 backdrop-blur">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Recent servers</CardTitle>
+              <CardDescription className="text-xs">Servers you have connected to before.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-1.5">
+              {knownHosts.map((host) => (
+                <div key={host.authServiceUrl} className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-w-0 flex-1 justify-start"
+                    onClick={() => void handleConnect(host)}
+                  >
+                    <ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{hostLabel(host)}</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0"
+                    aria-label={`Forget ${hostLabel(host)}`}
+                    onClick={() => forgetHost(host.authServiceUrl)}
+                  >
+                    <XIcon className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card className="border-border/70 bg-card/90 backdrop-blur">
           <CardHeader className="pb-2">

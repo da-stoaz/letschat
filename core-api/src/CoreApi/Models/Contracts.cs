@@ -57,9 +57,36 @@ public sealed record LinkRequest(
     SessionToken? SessionToken = null,
     string? Email = null);
 
+/// <summary>
+/// Changes the signed-in account's password, verifying <c>CurrentPassword</c>
+/// first. Distinct from <see cref="LinkRequest"/>, which resets the password on
+/// the strength of the session alone — that path stays for account creation and
+/// backwards compatibility, but the Settings UI uses this one.
+/// </summary>
+public sealed record ChangePasswordRequest(
+    SessionToken SessionToken,
+    string CurrentPassword,
+    string NewPassword);
+
 public sealed record LoginRequest(string Username, string Password);
 
 public sealed record VerifyRequest(SessionToken SessionToken);
+
+/// <summary>
+/// Reads back the signed-in account's own details for the Settings surface.
+/// Email/username live only here (not in the SpacetimeDB <c>User</c> row nor the
+/// session token), so the client cannot show them without asking. Gated on the
+/// session token alone — there is no path to read another account.
+/// </summary>
+public sealed record AccountRequest(SessionToken SessionToken);
+
+public sealed record AccountResponse(
+    string Username,
+    string DisplayName,
+    string Email,
+    string Status,
+    bool EmailConfirmed,
+    string CreatedAt);
 
 /// <summary>
 /// Renews the app session. The presented SpacetimeDB token is verified

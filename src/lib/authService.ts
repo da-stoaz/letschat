@@ -1,7 +1,6 @@
 import type { Identity } from '../types/domain'
-import { useServerConfigStore } from '../stores/serverConfigStore'
+import { AUTH_SESSION_KEY, useServerConfigStore } from '../stores/serverConfigStore'
 
-const AUTH_SESSION_KEY = 'letschat.auth_session_token'
 const AUTH_REQUEST_TIMEOUT_MS = 12000
 
 
@@ -188,6 +187,9 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
     throw new Error(errorBody?.error ?? fallback)
   }
 
+  // 204 has no body — parsing it as JSON would turn a success into an error.
+  if (response.status === 204) return undefined as TResponse
+
   return (await response.json()) as TResponse
 }
 
@@ -289,6 +291,42 @@ export async function authServiceVerify(): Promise<boolean> {
     sessionToken: token,
   })
   return Boolean(result.valid)
+}
+
+/**
+ * Changes the password, verifying the current one. Prefer this over
+ * {@link authServiceLink}, which resets without checking.
+ */
+export async function authServiceChangePassword(payload: {
+  currentPassword: string
+  newPassword: string
+}): Promise<void> {
+  const sessionToken = getStoredAuthSessionToken()
+  if (!sessionToken) throw new Error('No active sign-in session found.')
+
+  await postJson<void, { sessionToken: AuthFrameworkToken; currentPassword: string; newPassword: string }>(
+    '/auth/change-password',
+    { sessionToken, ...payload },
+  )
+}
+
+export interface AccountDetails {
+  username: string
+  displayName: string
+  email: string
+  status: string
+  emailConfirmed: boolean
+  createdAt: string
+}
+
+/** The signed-in account's own details. `null` when there is no stored session. */
+export async function authServiceAccount(): Promise<AccountDetails | null> {
+  const token = getStoredAuthSessionToken()
+  if (!token) return null
+
+  return postJson<AccountDetails, { sessionToken: AuthFrameworkToken }>('/auth/account', {
+    sessionToken: token,
+  })
 }
 
 export function getStoredAuthSessionToken(): AuthFrameworkToken | null {
