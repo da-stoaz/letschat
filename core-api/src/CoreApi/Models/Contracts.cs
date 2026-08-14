@@ -62,6 +62,22 @@ public sealed record LoginRequest(string Username, string Password);
 public sealed record VerifyRequest(SessionToken SessionToken);
 
 /// <summary>
+/// Reads back the signed-in account's own details for the Settings surface.
+/// Email/username live only here (not in the SpacetimeDB <c>User</c> row nor the
+/// session token), so the client cannot show them without asking. Gated on the
+/// session token alone — there is no path to read another account.
+/// </summary>
+public sealed record AccountRequest(SessionToken SessionToken);
+
+public sealed record AccountResponse(
+    string Username,
+    string DisplayName,
+    string Email,
+    string Status,
+    bool EmailConfirmed,
+    string CreatedAt);
+
+/// <summary>
 /// Renews the app session. The presented SpacetimeDB token is verified
 /// cryptographically (signature + lifetime) and its <c>sub</c> — the account id
 /// — identifies the account; no separate identity field is needed.

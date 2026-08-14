@@ -1,3 +1,4 @@
+using System.Globalization;
 using CoreApi.Configuration;
 using CoreApi.Data;
 using CoreApi.Models;
@@ -38,6 +39,7 @@ public static class AuthEndpoints
 
         routes.MapPost("/auth/link", Link);
         routes.MapPost("/auth/verify", Verify);
+        routes.MapPost("/auth/account", Account);
         routes.MapPost("/auth/renew-session", RenewSession);
 
         // Hit from the email link in a browser — returns an HTML page.
@@ -272,6 +274,47 @@ public static class AuthEndpoints
         return new VerifyResponse(username is not null);
     }
 
+    /// <summary>
+    /// The signed-in account's own details, for the Settings surface. Email and
+    /// username are only ever stored here, so this is the client's only way to
+    /// show them. The session token identifies the account — a caller cannot ask
+    /// about anyone else.
+    /// </summary>
+    private static async Task<AccountResponse> Account(
+        AccountRequest request,
+        UserManager<ApplicationUser> users,
+        TokenService tokens)
+    {
+        var username = await tokens.ValidateAsync(request.SessionToken)
+            ?? throw ApiException.Unauthorized("Not signed in.");
+
+        var user = await users.FindByNameAsync(username)
+            ?? throw ApiException.Unauthorized("Not signed in.");
+
+        return new AccountResponse(
+            user.UserName!,
+            user.DisplayName,
+            user.Email ?? string.Empty,
+            StatusToString(user.Status),
+            user.EmailConfirmed,
+            // Force the UTC marker on — the column is UTC by construction, but a
+            // round-trip can hand back Kind.Unspecified, which "o" renders
+            // without the trailing Z and the client would then read as local.
+            DateTime.SpecifyKind(user.CreatedAtUtc, DateTimeKind.Utc)
+                .ToString("o", CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>Wire name for an account's lifecycle status.</summary>
+    private static string StatusToString(AccountStatus status) => status switch
+    {
+        AccountStatus.Registered => "registered",
+        AccountStatus.EmailVerified => "email_verified",
+        AccountStatus.Active => "active",
+        AccountStatus.Disabled => "disabled",
+        AccountStatus.Rejected => "rejected",
+        _ => "unknown",
+    };
+
     private static async Task<RenewSessionResponse> RenewSession(
         RenewSessionRequest request,
         UserManager<ApplicationUser> users,
@@ -373,15 +416,7 @@ public static class AuthEndpoints
             return new RegistrationStatusResponse("unknown");
         }
 
-        return new RegistrationStatusResponse(user.Status switch
-        {
-            AccountStatus.Registered => "registered",
-            AccountStatus.EmailVerified => "email_verified",
-            AccountStatus.Active => "active",
-            AccountStatus.Disabled => "disabled",
-            AccountStatus.Rejected => "rejected",
-            _ => "unknown",
-        });
+        return new RegistrationStatusResponse(StatusToString(user.Status));
     }
 
     /// <summary>Re-sends the confirmation email. Always responds generically.</summary>

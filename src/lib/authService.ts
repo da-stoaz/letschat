@@ -291,6 +291,25 @@ export async function authServiceVerify(): Promise<boolean> {
   return Boolean(result.valid)
 }
 
+export interface AccountDetails {
+  username: string
+  displayName: string
+  email: string
+  status: string
+  emailConfirmed: boolean
+  createdAt: string
+}
+
+/** The signed-in account's own details. `null` when there is no stored session. */
+export async function authServiceAccount(): Promise<AccountDetails | null> {
+  const token = getStoredAuthSessionToken()
+  if (!token) return null
+
+  return postJson<AccountDetails, { sessionToken: AuthFrameworkToken }>('/auth/account', {
+    sessionToken: token,
+  })
+}
+
 export function getStoredAuthSessionToken(): AuthFrameworkToken | null {
   const raw = localStorage.getItem(AUTH_SESSION_KEY)
   if (!raw) return null
