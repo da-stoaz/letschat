@@ -10,7 +10,7 @@ vi.stubGlobal('localStorage', {
   clear: () => store.clear(),
 })
 
-const { AUTH_SESSION_KEY, hostLabel, useServerConfigStore } = await import('./serverConfigStore')
+const { AUTH_SESSION_KEY, hostLabel, mergePersisted, useServerConfigStore } = await import('./serverConfigStore')
 
 const hostA = {
   spacetimedbUri: 'ws://a.example:4300',
@@ -62,6 +62,30 @@ describe('serverConfigStore known hosts', () => {
 
     useServerConfigStore.getState().forgetHost(hostA.authServiceUrl)
     expect(useServerConfigStore.getState().knownHosts.map((h) => h.authServiceUrl)).toEqual([hostB.authServiceUrl])
+  })
+
+  it('seeds the list from an existing config saved before knownHosts existed', () => {
+    const current = useServerConfigStore.getState()
+
+    // What an older install has persisted: a config, and no knownHosts key.
+    const merged = mergePersisted({ config: hostA, hasHydrated: false }, current)
+
+    expect(merged.knownHosts.map((h) => h.authServiceUrl)).toEqual([hostA.authServiceUrl])
+  })
+
+  it('leaves an already-populated list alone on load', () => {
+    const current = useServerConfigStore.getState()
+
+    const merged = mergePersisted({ config: hostB, knownHosts: [hostA, hostB] }, current)
+
+    expect(merged.knownHosts.map((h) => h.authServiceUrl)).toEqual([
+      hostA.authServiceUrl,
+      hostB.authServiceUrl,
+    ])
+  })
+
+  it('seeds nothing when there is no saved config', () => {
+    expect(mergePersisted({ config: null }, useServerConfigStore.getState()).knownHosts).toEqual([])
   })
 
   it('labels a host by its discovery hostname', () => {

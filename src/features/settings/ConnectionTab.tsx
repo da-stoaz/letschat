@@ -48,6 +48,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 export function ConnectionTab() {
   const config = useServerConfigStore((s) => s.config)
+  const knownHosts = useServerConfigStore((s) => s.knownHosts)
+  const setConfig = useServerConfigStore((s) => s.setConfig)
   const clearConfig = useServerConfigStore((s) => s.clearConfig)
   const status = useConnectionStore((s) => s.status)
   const identity = useConnectionStore((s) => s.identity)
@@ -57,6 +59,7 @@ export function ConnectionTab() {
   if (!config) return null
 
   const joinLink = buildJoinLink(config)
+  const otherHosts = knownHosts.filter((host) => host.authServiceUrl !== config.authServiceUrl)
 
   return (
     <div className="space-y-3">
@@ -101,14 +104,39 @@ export function ConnectionTab() {
       {/* Hosted web is locked to its own instance — changing server would clear
           the config and strand the locked-instance bootstrap, so it is hidden. */}
       {!isHostedWebBuild() && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/20 p-3">
+        <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3">
           <div className="space-y-1">
             <p className="text-sm font-medium">Connect to a different server</p>
             <p className="text-xs text-muted-foreground">Signs you out of this one. Your account here is untouched.</p>
           </div>
+
+          {otherHosts.length > 0 ? (
+            <div className="space-y-1.5">
+              {otherHosts.map((host) => (
+                <Button
+                  key={host.authServiceUrl}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setConfig(host)
+                    // Full reload so bootstrap re-runs against the new host —
+                    // simpler and more reliable than tearing the live
+                    // connection down and rebuilding it in place.
+                    window.location.assign('/auth')
+                  }}
+                >
+                  <ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{hostLabel(host)}</span>
+                </Button>
+              ))}
+            </div>
+          ) : null}
+
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => {
               clearConfig()
@@ -116,7 +144,7 @@ export function ConnectionTab() {
             }}
           >
             <PlugZapIcon className="size-3.5" />
-            Change server
+            {otherHosts.length > 0 ? 'Add another server' : 'Change server'}
           </Button>
         </div>
       )}

@@ -35,6 +35,24 @@ export function hostLabel(config: ServerConfig): string {
   }
 }
 
+/**
+ * Folds persisted state over the store's defaults on load.
+ *
+ * <p>Installs that predate {@link ServerConfigState.knownHosts} have a saved
+ * config but no list, so the server the user is already on would be missing
+ * from its own "recent servers" — seed it from the active config.</p>
+ *
+ * Exported for tests; zustand calls it via the persist `merge` option.
+ */
+export function mergePersisted(persisted: unknown, current: ServerConfigState): ServerConfigState {
+  const merged = { ...current, ...(persisted as Partial<ServerConfigState> | undefined) }
+  const knownHosts = merged.knownHosts ?? []
+  return {
+    ...merged,
+    knownHosts: knownHosts.length === 0 && merged.config ? [merged.config] : knownHosts,
+  }
+}
+
 interface ServerConfigState {
   config: ServerConfig | null
   /** Every host successfully configured before, most recent first. */
@@ -77,6 +95,7 @@ export const useServerConfigStore = create<ServerConfigState>()(
     }),
     {
       name: 'letschat.server_config',
+      merge: (persisted, current) => mergePersisted(persisted, current),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true)
       },
