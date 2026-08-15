@@ -7,7 +7,7 @@ import {
 } from '../../lib/notifications'
 import { isDesktopTauriRuntime } from '../../lib/tauri'
 import { useUiStore } from '../../stores/uiStore'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'

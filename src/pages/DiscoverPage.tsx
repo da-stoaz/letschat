@@ -13,7 +13,7 @@ import type { DiscoverServer, JoinRequestStatus } from '../types/domain'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 
 function formatMemberCount(count: number): string {
   return `${count} ${count === 1 ? 'member' : 'members'}`

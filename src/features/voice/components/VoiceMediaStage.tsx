@@ -54,16 +54,9 @@ export function VoiceMediaStage({
     return map
   }, [sortedMediaTiles])
 
-  useEffect(() => {
-    setManualSpotlightKeys((previous) => {
-      const next = previous.filter((key) => tileByKey.has(key)).slice(0, 2)
-      if (next.length === previous.length && next.every((value, index) => value === previous[index])) {
-        return previous
-      }
-      return next
-    })
-  }, [tileByKey])
-
+  // Stale pins for tiles that left are filtered at read time (see
+  // effectiveSpotlightKeys), so no state pruning pass is needed; a pin
+  // deliberately survives a tile briefly disappearing and reappearing.
   const autoSpotlightKeys = useMemo(() => {
     if (sortedMediaTiles.length === 0) return []
     const visualTiles = sortedMediaTiles.filter((tile) => tile.hasVisual).slice(0, 2)

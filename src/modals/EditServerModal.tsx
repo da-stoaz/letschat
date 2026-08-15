@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { CameraIcon, Loader2Icon, Trash2Icon } from 'lucide-react'
 import { serverInitials } from '../layouts/app-layout/helpers'
 
