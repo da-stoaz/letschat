@@ -222,10 +222,18 @@ public sealed class SpacetimeClient(
                 // A genuine, final refusal — not the retry loop still finding nothing
                 // on an early pass. Logged (rather than only surfaced as a 403) so a
                 // real incident is diagnosable from normal logs instead of needing
-                // ad-hoc Console output added under pressure. No full identities here.
+                // ad-hoc Console output added under pressure.
+                //
+                // Deliberately the SpacetimeDB identity here, never accountId (the
+                // ASP.NET Identity primary key): the identity is public — every client
+                // in a room already sees it, and it's what SpacetimeDB's own connection
+                // logs use, so this line actually cross-references. accountId is an
+                // internal key with no reason to ever reach a log.
+                var normalizedIdentity = NormalizeIdentityHex(userIdentity);
                 logger.LogInformation(
-                    "Voice presence refused: account={AccountIdPrefix}… room={Room} attempts={Attempts}",
-                    accountId[..Math.Min(8, accountId.Length)], RoomDescription(room), PresenceReadAttempts);
+                    "Voice presence refused: identity={IdentityPrefix}… room={Room} attempts={Attempts}",
+                    normalizedIdentity[..Math.Min(8, normalizedIdentity.Length)],
+                    RoomDescription(room), PresenceReadAttempts);
                 return false;
             }
             await Task.Delay(PresenceReadRetryDelay, ct);
