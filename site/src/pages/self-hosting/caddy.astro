@@ -118,14 +118,18 @@ wget -O deploy/caddy/Caddyfile \\
         <h2 class="text-2xl font-semibold tracking-tight">Step 3: Configure secrets and domains</h2>
         <p class="guide-prose">Open <code>.env</code> and replace every placeholder. Generate secrets with:</p>
         <CodeBlock label="terminal" code={`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
-openssl rand -base64 32   # for LIVEKIT_API_SECRET`} />
-        <p class="guide-prose"><strong>Every field below must be set</strong> — the stack will not start without <code>POSTGRES_PASSWORD</code>, and you cannot sign in without the bootstrap admin. Grouped by purpose:</p>
+openssl rand -base64 32   # for LIVEKIT_API_SECRET
+
+# Signing key for SpacetimeDB access tokens — generate ONCE and keep it
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | base64 | tr -d '\\n'`} />
+        <p class="guide-prose"><strong>Every field below must be set</strong> — the stack will not start without <code>POSTGRES_PASSWORD</code> or <code>SPACETIME_OIDC_PRIVATE_KEY</code>, and you cannot sign in without the bootstrap admin. Grouped by purpose:</p>
         <CodeBlock label=".env" code={`# Secrets — generate each one
 AUTH_JWT_SECRET=            # openssl rand -hex 32
 POSTGRES_PASSWORD=         # openssl rand -hex 32
 LIVEKIT_API_SECRET=        # openssl rand -base64 32
 MINIO_ACCESS_KEY=          # any username you choose
 MINIO_SECRET_KEY=          # openssl rand -hex 32
+SPACETIME_OIDC_PRIVATE_KEY= # openssl genpkey ... | base64 (see above) — generate ONCE
 
 # First admin account — created on first start, change the password after
 ADMIN_BOOTSTRAP_USERNAME=admin
@@ -152,6 +156,20 @@ SMTP_PORT=587
 SMTP_USER=
 SMTP_PASSWORD=
 EMAIL_FROM_ADDRESS=no-reply@example.com`} />
+
+        <Callout type="warning" title="Generate SPACETIME_OIDC_PRIVATE_KEY once, then never change it">
+          <p>
+            This key signs the access tokens clients present to the real-time database. core-api
+            publishes the matching public key, and the database fetches it to verify every token.
+          </p>
+          <p>
+            If the key is unset, core-api refuses to start. If you replace it later, every token
+            already issued stops verifying — signed-in users are logged out and, until they sign in
+            again, their client may reconnect anonymously. Accounts and messages are unaffected
+            (identities do not depend on this key), but there is no reason to rotate it. Back it up
+            with your other secrets.
+          </p>
+        </Callout>
 
         <h3 class="text-lg font-medium pt-1">Hosting the browser client (optional)</h3>
         <p class="guide-prose">

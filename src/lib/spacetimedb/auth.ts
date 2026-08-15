@@ -98,5 +98,22 @@ export async function loginWithPassword(username: string, password: string): Pro
     throw new Error('Login failed: authenticated session has no active identity.')
   }
 
+  // The identity we connected as must be the one core-api just authenticated.
+  // They diverge when SpacetimeDB rejects the minted token and hands back an
+  // anonymous identity instead — which onConnect then persists, so every later
+  // connect reuses the wrong identity. Left unchecked this surfaces much later
+  // and far more confusingly, as "username already exists" from register_user.
+  // Drop the bad token and say what actually went wrong.
+  if (!sameIdentity(connectedIdentity, auth.spacetimeIdentity)) {
+    disconnect()
+    clearStoredToken()
+    throw new Error(
+      'Login failed: SpacetimeDB did not accept this account\'s token and connected ' +
+        'anonymously instead. The stored token has been cleared — try again. If it keeps ' +
+        'happening, the server\'s SPACETIME_OIDC_PRIVATE_KEY is probably unset or changed, ' +
+        'so tokens it signs no longer verify.',
+    )
+  }
+
   await ensureAuthenticatedUserRow(normalized, auth.displayName)
 }

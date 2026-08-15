@@ -174,10 +174,14 @@ wget -O .env \\
         <div class="step-head"><span class="step-num">3</span><h2 class="text-2xl font-semibold tracking-tight">Fill in your <code class="text-xl">.env</code></h2></div>
         <p class="guide-prose">Generate the secrets first:</p>
         <CodeBlock label="terminal" code={`openssl rand -hex 32      # AUTH_JWT_SECRET, POSTGRES_PASSWORD, MINIO_SECRET_KEY
-openssl rand -base64 32   # LIVEKIT_API_SECRET`} />
+openssl rand -base64 32   # LIVEKIT_API_SECRET
+
+# Signing key for SpacetimeDB access tokens — generate ONCE and keep it
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | base64 | tr -d '\\n'`} />
         <p class="guide-prose">
           Open <code>.env</code> and set <strong>every field in this block</strong> — the stack won't start
-          without <code>POSTGRES_PASSWORD</code>, and you can't sign in without the admin account.
+          without <code>POSTGRES_PASSWORD</code> or <code>SPACETIME_OIDC_PRIVATE_KEY</code>, and you can't
+          sign in without the admin account.
           Replace <code>example.com</code> with your domain throughout:
         </p>
         <CodeBlock label=".env" code={`# Secrets
@@ -186,6 +190,7 @@ POSTGRES_PASSWORD=         # openssl rand -hex 32
 LIVEKIT_API_SECRET=        # openssl rand -base64 32
 MINIO_ACCESS_KEY=          # any username you choose, e.g. letschat-minio
 MINIO_SECRET_KEY=          # openssl rand -hex 32
+SPACETIME_OIDC_PRIVATE_KEY= # openssl genpkey ... | base64 (see above) — generate ONCE
 CLOUDFLARE_TUNNEL_TOKEN=   # the token you copied in Step 1
 
 # First admin account (created on first start — change the password after)
@@ -198,6 +203,20 @@ MINIO_PUBLIC_ENDPOINT=https://files.example.com
 DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
 DISCOVERY_AUTH_URL=https://auth.example.com
 DISCOVERY_LIVEKIT_URL=wss://lk.example.com`} />
+
+        <Callout type="warning" title="Generate SPACETIME_OIDC_PRIVATE_KEY once, then never change it">
+          <p>
+            This key signs the access tokens clients present to the real-time database. core-api
+            publishes the matching public key, and the database fetches it to verify every token.
+          </p>
+          <p>
+            If the key is unset, core-api refuses to start. If you replace it later, every token
+            already issued stops verifying — signed-in users are logged out and, until they sign in
+            again, their client may reconnect anonymously. Accounts and messages are unaffected
+            (identities do not depend on this key), but there is no reason to rotate it. Back it up
+            with your other secrets.
+          </p>
+        </Callout>
 
         <h3 class="text-lg font-medium pt-3">Hosting the browser client (optional)</h3>
         <p class="guide-prose">
