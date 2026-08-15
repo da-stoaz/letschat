@@ -30,7 +30,13 @@ services:
   #   LIVEKIT_NODE_IP=$(hostname -I | awk '{print $1}') bun run services:up  # Linux
   # The published ports already forward host -> container, so nothing else changes.
   livekit:
-    image: livekit/livekit-server:latest
+    # Pinned, NOT :latest. A cached :latest left this stack on v1.10.0, which has a
+    # browser-only ICE bug: with IPv6 unavailable (i.e. in Docker) it emits an ICE
+    # server entry with an empty hostname, browsers reject it with "ICE server
+    # parsing failed: Invalid hostname format", and the participant drops right
+    # after signalling. Native clients are unaffected, so the desktop app worked
+    # while the web client could never connect. See livekit/livekit#4397.
+    image: livekit/livekit-server:v1.13.5
     container_name: letschat-dev-livekit
     command: --config /etc/livekit.yaml --node-ip ${LIVEKIT_NODE_IP:-127.0.0.1}
     ports:

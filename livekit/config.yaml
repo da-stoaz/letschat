@@ -1,15 +1,8 @@
 port: 7880
 rtc:
   use_external_ip: false
-  # Dev runs LiveKit inside Docker, so a full ICE agent tries to run connectivity
-  # checks outward from the container: it advertises its container IP (unreachable
-  # from the host) and public srflx candidates, and cannot resolve the browser's
-  # mDNS .local candidates across the bridge. Media then never establishes and the
-  # client times out with a dtls timeout. ICE-lite makes LiveKit accept connections
-  # on its advertised candidates instead of probing outward, which is the right
-  # model for a server at a fixed, reachable address.
-  use_ice_lite: true
-  use_mdns: false
+  use_ice_lite: false
+  use_mdns: true
   enable_loopback_candidate: true
   allow_tcp_fallback: true
   udp_port: 7882
