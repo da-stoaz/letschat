@@ -1,4 +1,4 @@
-use spacetimedb::{Identity, ReducerContext};
+use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::schema::*;
 
@@ -143,6 +143,84 @@ pub(crate) fn require_system_admin(
 ) -> Result<(), String> {
     assert_or_err(is_system_admin(ctx, identity), "instance admin permission required")
 }
+
+// ─── Module-managed id allocation (see `IdCounter` in schema.rs) ───────────────
+
+/// Allocate the next id for an `#[auto_inc]` table.
+///
+/// Returns `0` when no counter row exists — `0` is auto-inc's "generate one"
+/// sentinel, so a never-rebuilt instance keeps the stock behaviour and this
+/// costs one point lookup. Once a counter exists (seeded by an archive restore
+/// or `archive_reseed_id_counters`), ids come from the counter instead, which
+/// is the only way to hand out ids above the stale sequence without colliding.
+///
+/// `taken` reports whether an id is already present in the table: the counter
+/// skips over occupied ids rather than letting the insert panic. In practice
+/// it never loops — it is the guard for a counter that has fallen behind
+/// (a partially replayed rebuild, or a new insert site that forgot to call
+/// this helper). Reducers are serialised, so no locking is involved.
+pub(crate) fn alloc_id(
+    ctx: &ReducerContext,
+    table_name: &str,
+    taken: impl Fn(u64) -> bool,
+) -> u64 {
+    let Some(mut counter) = ctx.db.id_counter().table_name().find(table_name.to_string()) else {
+        return 0;
+    };
+    while taken(counter.next_id) {
+        counter.next_id += 1;
+    }
+    let id = counter.next_id;
+    counter.next_id += 1;
+    ctx.db.id_counter().table_name().update(counter);
+    id
+}
+
+/// Raise a table's counter so the next allocation lands above `max_id`.
+///
+/// Monotonic: an existing counter is never lowered, so replaying a rebuild or
+/// restoring an out-of-order batch cannot hand out an id that is already in
+/// use. Called by the archive restore reducers and by
+/// `archive_reseed_id_counters`.
+///
+/// `max_id == 0` means there is nothing to protect (an empty table, or an empty
+/// restore batch — auto-inc ids start at 1). No counter is created in that
+/// case, which deliberately leaves the table on auto-inc: a sequence never
+/// reuses an id, whereas a counter seeded from an empty table would restart at
+/// 1 and could hand out ids that older rows once used.
+pub(crate) fn raise_id_counter(ctx: &ReducerContext, table_name: &str, max_id: u64) {
+    if max_id == 0 {
+        return;
+    }
+    let next_id = max_id.saturating_add(1);
+    match ctx.db.id_counter().table_name().find(table_name.to_string()) {
+        Some(existing) if existing.next_id >= next_id => {}
+        Some(existing) => {
+            ctx.db.id_counter().table_name().update(IdCounter {
+                next_id,
+                ..existing
+            });
+        }
+        None => {
+            ctx.db.id_counter().insert(IdCounter {
+                table_name: table_name.to_string(),
+                next_id,
+            });
+        }
+    }
+}
+
+/// `next_id!(ctx, message, id)` — the id to insert into `message`, using the
+/// table's own name as the counter key so allocation and seeding can never
+/// drift apart.
+macro_rules! next_id {
+    ($ctx:expr, $tbl:ident, $pk:ident) => {
+        crate::helpers::alloc_id($ctx, stringify!($tbl), |id| {
+            $ctx.db.$tbl().$pk().find(id).is_some()
+        })
+    };
+}
+pub(crate) use next_id;
 
 pub(crate) fn find_channel(ctx: &ReducerContext, channel_id: u64) -> Result<Channel, String> {
     ctx.db

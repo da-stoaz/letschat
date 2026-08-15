@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, find_friend_row, has_block_either_direction};
+use crate::helpers::{assert_or_err, find_friend_row, has_block_either_direction, next_id};
 use crate::schema::*;
 
 #[spacetimedb::reducer]
@@ -26,7 +26,7 @@ pub fn send_direct_message(
     )?;
 
     ctx.db.direct_message().insert(DirectMessage {
-        id: 0,
+        id: next_id!(ctx, direct_message, id),
         sender_identity: ctx.sender(),
         recipient_identity,
         content,

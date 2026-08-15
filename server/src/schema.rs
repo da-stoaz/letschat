@@ -65,6 +65,31 @@ pub struct ArchiveService {
     pub service_identity: Identity,
 }
 
+/// Module-managed id allocation for the `#[auto_inc]` tables, keyed by table
+/// name (`"message"`, `"server"`, …).
+///
+/// Why this exists: an archive rebuild restores rows verbatim with their
+/// original ids, but SpacetimeDB's auto-inc sequences are NOT advanced by an
+/// explicit insert (the SDK warns about exactly this: insert above the
+/// sequence and "the sequence will eventually catch up, allocate a value
+/// that's already present"). After a `--delete-data` republish the sequences
+/// restart near 1, so the first organic insert collides with a restored row
+/// and panics the reducer — the whole instance returns HTTP 530.
+///
+/// There is no API anywhere (module SDK, ABI, or SQL) to set a sequence, so
+/// the module owns allocation instead: a counter row here overrides auto-inc
+/// for that table. No counter row == auto-inc as before, so an instance that
+/// has never been rebuilt is completely unaffected.
+///
+/// Private: purely internal bookkeeping, never read by clients.
+#[spacetimedb::table(accessor = id_counter)]
+pub struct IdCounter {
+    #[primary_key]
+    pub table_name: String,
+    /// The id handed out by the next `next_id!` call for this table.
+    pub next_id: u64,
+}
+
 // Private: clients read the directory of people they can actually see (members
 // of shared spaces, friends, join-requesters they moderate, DM-invite
 // counterparties) through the `my_visible_users` view, instead of enumerating

@@ -121,6 +121,18 @@ export const FriendStatus = __t.enum("FriendStatus", {
 });
 export type FriendStatus = __Infer<typeof FriendStatus>;
 
+export const IdCounter = __t.object("IdCounter", {
+  tableName: __t.string(),
+  nextId: __t.u64(),
+});
+export type IdCounter = __Infer<typeof IdCounter>;
+
+export const IdentityRemap = __t.object("IdentityRemap", {
+  old: __t.identity(),
+  new: __t.identity(),
+});
+export type IdentityRemap = __Infer<typeof IdentityRemap>;
+
 export const Invite = __t.object("Invite", {
   token: __t.string(),
   serverId: __t.u64(),

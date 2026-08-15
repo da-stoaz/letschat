@@ -37,6 +37,7 @@ import {
 import AcceptFriendRequestReducer from "./accept_friend_request_reducer";
 import AdminUnlistServerReducer from "./admin_unlist_server_reducer";
 import ApproveJoinRequestReducer from "./approve_join_request_reducer";
+import ArchiveReseedIdCountersReducer from "./archive_reseed_id_counters_reducer";
 import ArchiveRestoreBanReducer from "./archive_restore_ban_reducer";
 import ArchiveRestoreBlockReducer from "./archive_restore_block_reducer";
 import ArchiveRestoreChannelReducer from "./archive_restore_channel_reducer";
@@ -82,6 +83,7 @@ import MoveChannelRelativeReducer from "./move_channel_relative_reducer";
 import MoveChannelToReducer from "./move_channel_to_reducer";
 import PinMessageReducer from "./pin_message_reducer";
 import RegisterUserReducer from "./register_user_reducer";
+import RekeyIdentitiesReducer from "./rekey_identities_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
 import RemoveTimeoutReducer from "./remove_timeout_reducer";
 import RenameServerReducer from "./rename_server_reducer";
@@ -410,6 +412,7 @@ const reducersSchema = __reducers(
   __reducerSchema("accept_friend_request", AcceptFriendRequestReducer),
   __reducerSchema("admin_unlist_server", AdminUnlistServerReducer),
   __reducerSchema("approve_join_request", ApproveJoinRequestReducer),
+  __reducerSchema("archive_reseed_id_counters", ArchiveReseedIdCountersReducer),
   __reducerSchema("archive_restore_ban", ArchiveRestoreBanReducer),
   __reducerSchema("archive_restore_block", ArchiveRestoreBlockReducer),
   __reducerSchema("archive_restore_channel", ArchiveRestoreChannelReducer),
@@ -455,6 +458,7 @@ const reducersSchema = __reducers(
   __reducerSchema("move_channel_to", MoveChannelToReducer),
   __reducerSchema("pin_message", PinMessageReducer),
   __reducerSchema("register_user", RegisterUserReducer),
+  __reducerSchema("rekey_identities", RekeyIdentitiesReducer),
   __reducerSchema("remove_friend", RemoveFriendReducer),
   __reducerSchema("remove_timeout", RemoveTimeoutReducer),
   __reducerSchema("rename_server", RenameServerReducer),

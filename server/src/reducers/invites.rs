@@ -2,7 +2,7 @@ use spacetimedb::rand::{Rng, distributions::Alphanumeric};
 use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
 
 use crate::helpers::{
-    assert_or_err, has_member_role, is_banned, member_key, require_invite_permission,
+    assert_or_err, has_member_role, is_banned, member_key, next_id, require_invite_permission,
     require_member_role,
 };
 use crate::schema::*;
@@ -284,7 +284,7 @@ pub fn send_dm_server_invite(
     });
 
     ctx.db.dm_server_invite().insert(DmServerInvite {
-        id: 0,
+        id: next_id!(ctx, dm_server_invite, id),
         server_id,
         invite_token: token,
         sender_identity: ctx.sender(),
