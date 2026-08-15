@@ -312,7 +312,7 @@ unset those env vars on the next deploy.
 
 | Area | Key env / file | Notes |
 |---|---|---|
-| Auth backend | `AUTH_JWT_SECRET`, `AUTH_ADMIN_API_KEY` | JWT secret required; admin API key optional (enables `/admin/accounts/rebind`) |
+| Auth backend | `AUTH_JWT_SECRET` | Required. Signs the client session tokens (HS256) |
 | SpacetimeDB identity | `SPACETIME_OIDC_PRIVATE_KEY` | **Required.** Signs the SpacetimeDB access token (RS256); supply a base64-encoded PEM. Generate once — replacing it forces every user to sign in again. `SPACETIME_OIDC_ISSUER` is fixed in compose and must never change (see below) |
 | PostgreSQL | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Only the password is mandatory; defaults are `letschat` / `auth` |
 | Cold archive | `ARCHIVE_DB` | Database name for the durable mirror, default `archive` (same Postgres instance as auth). Wired in compose for both `core-api` and `archive-worker`; needs a one-time identity registration — see "Cold archive" above |

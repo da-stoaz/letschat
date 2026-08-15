@@ -47,7 +47,6 @@ public sealed class ServiceOptions
     /// </summary>
     public required string AdminBind { get; init; }
     public required string JwtSecret { get; init; }
-    public string? AdminApiKey { get; init; }
 
     public required string MinioAccessKey { get; init; }
     public required string MinioSecretKey { get; init; }
@@ -176,7 +175,6 @@ public sealed class ServiceOptions
             Bind = Get("AUTH_BIND", "127.0.0.1:8787"),
             AdminBind = Get("ADMIN_BIND", "127.0.0.1:8788"),
             JwtSecret = Get("AUTH_JWT_SECRET", DevJwtSecret),
-            AdminApiKey = GetOptional("AUTH_ADMIN_API_KEY"),
 
             MinioAccessKey = Get("MINIO_ACCESS_KEY", "minioadmin"),
             MinioSecretKey = Get("MINIO_SECRET_KEY", DevMinioSecretKey),

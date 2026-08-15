@@ -133,15 +133,13 @@ public static class AuthEndpoints
     /// <summary>
     /// Derives and freezes an account's SpacetimeDB identity from its id. The id
     /// is assigned by Identity at construction, so this is safe to call before
-    /// <c>CreateAsync</c>. <c>SpacetimeToken</c> is left empty — the token is
-    /// minted on demand, never stored.
+    /// <c>CreateAsync</c>. Access tokens are minted on demand and never stored.
     /// </summary>
     public static void AssignDerivedIdentity(ApplicationUser user, SpacetimeTokenService spacetime)
     {
         var identity = spacetime.ComputeIdentityHex(user.Id);
         user.SpacetimeIdentity = identity;
         user.SpacetimeIdentityNorm = Validation.NormalizeIdentity(identity);
-        user.SpacetimeToken = string.Empty;
     }
 
     private static async Task<AuthResponse> Link(

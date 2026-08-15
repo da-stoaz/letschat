@@ -151,10 +151,8 @@ VITE_LIVEKIT_URL          default: ws://localhost:7880
 ### Auth Service
 ```
 AUTH_BIND           default: 127.0.0.1:8787
-AUTH_DATABASE_URL   auth-service: sqlite://auth-service/auth.db
-                    core-api:     PostgreSQL connection string (dev port 5433)
+AUTH_DATABASE_URL   PostgreSQL connection string (dev port 5433)
 AUTH_JWT_SECRET     required in production
-AUTH_ADMIN_API_KEY  optional; enables POST /admin/accounts/rebind
 ```
 See `core-api/README.md` for the full core-api configuration set.
 
