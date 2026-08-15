@@ -565,9 +565,14 @@ async function connectRoomWithFallback(livekitUrls: string[], token: string): Pr
 }
 
 function mapLiveKitConnectionError(error: unknown, livekitUrls: string[]): Error {
+  // The messages below are for humans and deliberately drop detail. Keep the
+  // original on the console and as `cause` — without it a connection failure is
+  // undiagnosable, because the friendly text is all anyone ever sees.
+  console.error('[livekit] connect failed', { url: livekitUrls[0], error })
   if (error instanceof Error && error.message.includes('Bad Configuration Parameters')) {
     return new Error(
       `LiveKit returned invalid ICE parameters for ${livekitUrls[0]}. Verify LiveKit config and restart the server.`,
+      { cause: error },
     )
   }
   if (error instanceof Error && /(notallowederror|permission denied|permission dismissed)/i.test(error.message)) {
@@ -577,11 +582,12 @@ function mapLiveKitConnectionError(error: unknown, livekitUrls: string[]): Error
     return new Error('This account is already in the same call from another client/session. Leave there first.')
   }
   if (error instanceof Error && error.message.toLowerCase().includes('connect timeout')) {
-    return new Error(`LiveKit connect timed out at ${livekitUrls[0]}.`)
+    return new Error(`LiveKit connect timed out at ${livekitUrls[0]}.`, { cause: error })
   }
   if (error instanceof Error && error.message.toLowerCase().includes('pc connection')) {
     return new Error(
       `Could not establish peer connection. Signal URL ${livekitUrls[0]} responded, but ICE failed. Verify LiveKit TCP 7881 and UDP 7882 mappings (plus UDP 7881 if enabled).`,
+      { cause: error },
     )
   }
   return error instanceof Error ? error : new Error('Failed to connect to LiveKit.')
@@ -597,6 +603,13 @@ type ConnectLiveKitWithPresenceParams = {
   onSyncMutedState: (muted: boolean) => Promise<void>
 }
 
+// Bumped on every join attempt. A failed attempt must only clean up its OWN
+// presence: without this, a slow failure's cleanup lands after the user has
+// retried and deletes the successful attempt's row, leaving them connected to
+// LiveKit with no presence at all — "Joined" next to "0 participants", which is
+// unrecoverable until they leave and rejoin.
+let joinAttemptSeq = 0
+
 async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresenceParams): Promise<Room> {
   const rawLivekitUrl = await tauriCommands.getLivekitUrl()
   const livekitUrls = buildLiveKitUrls(rawLivekitUrl)
@@ -605,13 +618,17 @@ async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresencePara
     throw new Error(params.identityErrorMessage)
   }
 
+  const attempt = ++joinAttemptSeq
   let room: Room | null = null
   await params.onJoinPresence()
   try {
     const token = await tauriCommands.generateLivekitToken(params.roomName, identity)
     room = await connectRoomWithFallback(livekitUrls, token)
   } catch (error) {
-    await params.onLeavePresence().catch(() => undefined)
+    // Superseded by a newer attempt — that attempt owns the presence row now.
+    if (attempt === joinAttemptSeq) {
+      await params.onLeavePresence().catch(() => undefined)
+    }
     room?.disconnect()
     throw mapLiveKitConnectionError(error, livekitUrls)
   }

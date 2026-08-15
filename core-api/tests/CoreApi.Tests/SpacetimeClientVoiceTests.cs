@@ -116,6 +116,32 @@ public sealed class SpacetimeClientVoiceTests
     }
 
     /// <summary>
+    /// The client awaits the join reducer's commit, but this view can still be a
+    /// beat behind, so the first read legitimately misses the row. Refusing there
+    /// cost the user their token AND their presence row, because the client's
+    /// failure path deletes it. Re-read before concluding the row isn't there.
+    /// </summary>
+    [Fact]
+    public async Task ARowThatOnlyBecomesVisibleOnASecondRead_IsStillAuthorized()
+    {
+        var reads = 0;
+        var handler = new StubHandler(_ =>
+        {
+            reads++;
+            // Empty on the first read (replication lag), present afterwards.
+            var body = reads == 1 ? "[{\"rows\":[]}]" : "[{\"rows\":[[[\"0xabc\"]]]}]";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            };
+        });
+        VoiceRoom.TryParse("42", out var room);
+
+        Assert.True(await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
+        Assert.True(reads > 1, "expected the lagging first read to be retried");
+    }
+
+    /// <summary>
     /// Regression guard. This query used to be signed with a token persisted on
     /// the account row — a field that is always empty since core-api became the
     /// OIDC issuer, so every room check failed closed and nobody could join

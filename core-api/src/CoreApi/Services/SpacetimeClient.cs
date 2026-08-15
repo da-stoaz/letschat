@@ -201,6 +201,41 @@ public sealed class SpacetimeClient(
         VoiceRoom room,
         CancellationToken ct = default)
     {
+        // The client awaits the join reducer's commit before asking for a token, but
+        // committed is not the same as readable: this /sql view can still be a beat
+        // behind, so the very first join legitimately finds no row and gets refused.
+        // That refusal is worse than it looks — the client's failure path deletes its
+        // presence row, and if the user immediately retries, that late cleanup lands
+        // on the retry's row and leaves them connected to LiveKit with no presence at
+        // all. Re-read a few times before concluding the row isn't there. This does
+        // not weaken the gate: a user who was never admitted still finds nothing, no
+        // matter how often we look.
+        for (var attempt = 0; ; attempt++)
+        {
+            if (await QueryVoicePresenceAsync(accountId, userIdentity, room, ct))
+            {
+                return true;
+            }
+            if (attempt >= PresenceReadAttempts - 1)
+            {
+                return false;
+            }
+            await Task.Delay(PresenceReadRetryDelay, ct);
+        }
+    }
+
+    /// <summary>Total reads before refusing; see <see cref="HasVoicePresenceAsync"/>.</summary>
+    private const int PresenceReadAttempts = 3;
+
+    /// <summary>Gap between reads — comfortably over the observed replication lag.</summary>
+    private static readonly TimeSpan PresenceReadRetryDelay = TimeSpan.FromMilliseconds(120);
+
+    private async Task<bool> QueryVoicePresenceAsync(
+        string accountId,
+        string userIdentity,
+        VoiceRoom room,
+        CancellationToken ct)
+    {
         // room.ChannelId is numeric and room.RoomKey is validated by VoiceRoom,
         // so neither can carry SQL injection.
         var sql = room.IsDm
