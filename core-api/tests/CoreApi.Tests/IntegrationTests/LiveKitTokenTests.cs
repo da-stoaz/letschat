@@ -80,6 +80,37 @@ public sealed class LiveKitTokenTests
         Assert.Equal(identity, spacetimeTokens.ComputeIdentityHex(subject));
     }
 
+    /// <summary>
+    /// DM rooms go through a different key than channel rooms, and that difference
+    /// is where the second voice bug lived: the LiveKit room name is
+    /// <c>dm:&lt;a&gt;:&lt;b&gt;</c>, but the module's stored <c>room_key</c> is just
+    /// <c>&lt;a&gt;:&lt;b&gt;</c>. Querying with the prefix matched nothing, so DM
+    /// voice was refused for everyone while channel voice worked.
+    /// </summary>
+    [Fact]
+    public async Task Dm_Room_Queries_The_Module_Key_Without_The_Livekit_Prefix()
+    {
+        using var spacetime = new SqlStub();
+        using var factory = new LetsChatWebApplicationFactory { SpacetimeTransport = spacetime };
+        var client = factory.CreateClient();
+
+        var (sessionToken, identity) = await RegisterAsync(client, "caller");
+        // The partner half of the pair; ordering in the room name is the client's job.
+        const string partner = "c200ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        var room = string.CompareOrdinal(identity, partner) <= 0
+            ? $"dm:{identity}:{partner}"
+            : $"dm:{partner}:{identity}";
+
+        spacetime.Rows = $"[[[\"{identity}\"]]]";
+
+        var response = await RequestTokenAsync(client, room, identity, sessionToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("my_dm_voice_participants", spacetime.LastBody);
+        Assert.Contains($"room_key = '{room["dm:".Length..]}'", spacetime.LastBody);
+        Assert.DoesNotContain("room_key = 'dm:", spacetime.LastBody);
+    }
+
     [Fact]
     public async Task Refuses_A_Room_The_Module_Never_Admitted_The_Caller_To()
     {

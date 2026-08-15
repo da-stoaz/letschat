@@ -20,7 +20,15 @@ public readonly struct VoiceRoom
     /// <summary>Channel id when <see cref="IsDm"/> is false.</summary>
     public ulong ChannelId { get; private init; }
 
-    /// <summary>The validated room name (the DM room key when <see cref="IsDm"/> is true).</summary>
+    /// <summary>
+    /// For a DM, the module's <c>room_key</c> — the two identities joined by a
+    /// colon, <b>without</b> the <c>dm:</c> prefix the LiveKit room name carries,
+    /// lower-cased and with any <c>0x</c> stripped. That is exactly what
+    /// <c>dm_room_key()</c> stores (see <c>server/src/helpers.rs</c>), so it can be
+    /// compared directly against the <c>my_dm_voice_participants</c> view.
+    /// For a channel, the validated room name; the query uses
+    /// <see cref="ChannelId"/> instead.
+    /// </summary>
     public string RoomKey { get; private init; }
 
     public static bool TryParse(string? room, out VoiceRoom parsed)
@@ -42,7 +50,13 @@ public readonly struct VoiceRoom
                 return false;
             }
 
-            parsed = new VoiceRoom { IsDm = true, RoomKey = value };
+            // Drop the "dm:" prefix: it belongs to the LiveKit room name, not to
+            // the module's room_key, which is just "<identity>:<identity>".
+            parsed = new VoiceRoom
+            {
+                IsDm = true,
+                RoomKey = $"{NormalizeIdentity(parts[1])}:{NormalizeIdentity(parts[2])}",
+            };
             return true;
         }
 
@@ -55,9 +69,14 @@ public readonly struct VoiceRoom
         return false;
     }
 
-    private static bool IsHexIdentity(string segment)
-    {
-        var hex = segment.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? segment[2..] : segment;
-        return hex.Length is > 0 and <= 128 && hex.All(Uri.IsHexDigit);
-    }
+    private static bool IsHexIdentity(string segment) =>
+        NormalizeIdentity(segment) is { Length: > 0 and <= 128 } hex && hex.All(Uri.IsHexDigit);
+
+    /// <summary>
+    /// Strips an optional <c>0x</c> and lower-cases — the form the module stores,
+    /// since identities there are written as bare lower-case hex.
+    /// </summary>
+    private static string NormalizeIdentity(string segment) =>
+        (segment.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? segment[2..] : segment)
+            .ToLowerInvariant();
 }

@@ -69,7 +69,11 @@ public sealed class SpacetimeClientVoiceTests
 
         Assert.True(ok);
         Assert.Contains("my_dm_voice_participants", handler.LastBody);
-        Assert.Contains("room_key = 'dm:0xa:0xb'", handler.LastBody);
+        // The module's room_key is "<identity>:<identity>" — the "dm:" prefix and
+        // any "0x" belong to the LiveKit room name, not to the stored key. Asserting
+        // the prefixed form here is what let the mismatch ship: the query never
+        // matched a row, so DM voice was refused for everyone.
+        Assert.Contains("room_key = 'a:b'", handler.LastBody);
     }
 
     [Fact]
