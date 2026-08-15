@@ -24,11 +24,15 @@ services:
   # (Firefox: media.peerconnection.ice.loopback, default false), leaving them with
   # no usable candidate at all — signalling succeeds, then media never establishes.
   #
-  # To exercise the browser client, point LIVEKIT_NODE_IP at this machine's LAN
-  # address so the advertised candidate is routable and non-loopback:
-  #   LIVEKIT_NODE_IP=$(ipconfig getifaddr en0) bun run services:up   # macOS
-  #   LIVEKIT_NODE_IP=$(hostname -I | awk '{print $1}') bun run services:up  # Linux
-  # The published ports already forward host -> container, so nothing else changes.
+  # `bun run services:up` detects this machine's LAN address and passes it through
+  # LIVEKIT_NODE_ARG, so the advertised candidate is routable and non-loopback and
+  # the browser client works with no manual step. The published ports already
+  # forward host -> container, so nothing else changes.
+  #
+  # Left unset (i.e. running `docker compose` by hand) LiveKit keeps its own
+  # auto-detection — the stock behaviour. Do NOT default this to 127.0.0.1: that
+  # narrows the offer to loopback only and breaks browsers that would otherwise
+  # have had a usable candidate.
   livekit:
     # Pinned, NOT :latest. A cached :latest left this stack on v1.10.0, which has a
     # browser-only ICE bug: with IPv6 unavailable (i.e. in Docker) it emits an ICE
@@ -38,7 +42,7 @@ services:
     # while the web client could never connect. See livekit/livekit#4397.
     image: livekit/livekit-server:v1.13.5
     container_name: letschat-dev-livekit
-    command: --config /etc/livekit.yaml --node-ip ${LIVEKIT_NODE_IP:-127.0.0.1}
+    command: --config /etc/livekit.yaml ${LIVEKIT_NODE_ARG:-}
     ports:
       - "7880:7880"
       - "7881:7881"
