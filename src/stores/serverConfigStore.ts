@@ -31,6 +31,35 @@ function rememberHost(hosts: ServerConfig[], config: ServerConfig): ServerConfig
   return [config, ...hosts.filter((host) => hostKey(host) !== hostKey(config))]
 }
 
+/** A service URL that a known host is now advertising differently than before. */
+export interface HostChange {
+  field: 'spacetimedbUri' | 'livekitUrl' | 'spacetimedbDatabase'
+  stored: string
+  incoming: string
+}
+
+/** The fields pinned per host. `authServiceUrl` is excluded — it is the key. */
+const PINNED_FIELDS: HostChange['field'][] = ['spacetimedbUri', 'livekitUrl', 'spacetimedbDatabase']
+
+/**
+ * Compares what a host is advertising now against what it served last time.
+ *
+ * <p>Returns `null` when the host has never been connected to (nothing to
+ * compare), an empty array when it matches, and the differing fields
+ * otherwise. A host that suddenly points its SpacetimeDB or LiveKit URL
+ * somewhere else — hijacked DNS, an expired domain, a compromised box — is
+ * exactly the case worth stopping on, because discovery is otherwise followed
+ * without question.</p>
+ */
+export function diffKnownHost(hosts: ServerConfig[], incoming: ServerConfig): HostChange[] | null {
+  const stored = hosts.find((host) => hostKey(host) === hostKey(incoming))
+  if (!stored) return null
+
+  return PINNED_FIELDS.flatMap((field) =>
+    stored[field] === incoming[field] ? [] : [{ field, stored: stored[field], incoming: incoming[field] }],
+  )
+}
+
 /** Human label for a host — the discovery hostname, or the raw URL if unparseable. */
 export function hostLabel(config: ServerConfig): string {
   try {
@@ -58,12 +87,32 @@ export function mergePersisted(persisted: unknown, current: ServerConfigState): 
   }
 }
 
+/** A connection held back until the user confirms it. */
+export interface PendingHost {
+  config: ServerConfig
+  /** Empty when the host is simply unrecognised rather than changed. */
+  changes: HostChange[]
+  reason: 'changed' | 'unknown'
+}
+
 interface ServerConfigState {
   config: ServerConfig | null
   /** Every host successfully configured before, most recent first. */
   knownHosts: ServerConfig[]
   hasHydrated: boolean
+  /** Set when {@link requestConnect} refuses to connect without confirmation. */
+  pendingHost: PendingHost | null
   setConfig: (config: ServerConfig) => void
+  /**
+   * Gate in front of {@link setConfig} for user-facing connects. Returns true
+   * when it is safe to proceed; false when confirmation is needed, having
+   * parked the config in {@link pendingHost} for the dialog to pick up.
+   *
+   * `confirmUnknown` should be set on links the user did not type — deep links
+   * and web join links — where an unfamiliar host is worth naming out loud.
+   */
+  requestConnect: (config: ServerConfig, options?: { confirmUnknown?: boolean }) => boolean
+  resolvePendingHost: (accept: boolean) => ServerConfig | null
   forgetHost: (authServiceUrl: string) => void
   clearConfig: () => void
   setHasHydrated: (value: boolean) => void
@@ -71,10 +120,11 @@ interface ServerConfigState {
 
 export const useServerConfigStore = create<ServerConfigState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       config: null,
       knownHosts: [],
       hasHydrated: false,
+      pendingHost: null,
       setConfig: (config) =>
         set((state) => {
           // A session token is only meaningful to the host that issued it.
@@ -88,6 +138,29 @@ export const useServerConfigStore = create<ServerConfigState>()(
 
           return { config, knownHosts: rememberHost(state.knownHosts, config) }
         }),
+      requestConnect: (config, options) => {
+        const state = get()
+        const changes = diffKnownHost(state.knownHosts, config)
+
+        if (changes === null) {
+          if (!options?.confirmUnknown) return true
+          set({ pendingHost: { config, changes: [], reason: 'unknown' } })
+          return false
+        }
+
+        if (changes.length === 0) return true
+
+        set({ pendingHost: { config, changes, reason: 'changed' } })
+        return false
+      },
+      resolvePendingHost: (accept) => {
+        const pending = get().pendingHost
+        set({ pendingHost: null })
+        if (!pending || !accept) return null
+
+        get().setConfig(pending.config)
+        return pending.config
+      },
       forgetHost: (authServiceUrl) =>
         set((state) => ({
           knownHosts: state.knownHosts.filter((host) => host.authServiceUrl !== authServiceUrl),
@@ -104,6 +177,10 @@ export const useServerConfigStore = create<ServerConfigState>()(
     }),
     {
       name: 'letschat.server_config',
+      // Only the durable facts. A pending confirmation is a live UI decision —
+      // persisting it would resurrect a security prompt on the next launch with
+      // no context for why it is there.
+      partialize: (state) => ({ config: state.config, knownHosts: state.knownHosts }),
       merge: (persisted, current) => mergePersisted(persisted, current),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true)
