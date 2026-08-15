@@ -18,21 +18,6 @@ services:
     restart: unless-stopped
 
   # ── LiveKit ──────────────────────────────────────────────────────────────────
-  # In Docker, LiveKit only has two addresses to advertise as ICE candidates: its
-  # container IP (unreachable from the host) and 127.0.0.1. The Tauri webview will
-  # happily use the loopback one, but browsers reject loopback ICE candidates
-  # (Firefox: media.peerconnection.ice.loopback, default false), leaving them with
-  # no usable candidate at all — signalling succeeds, then media never establishes.
-  #
-  # `bun run services:up` detects this machine's LAN address and passes it through
-  # LIVEKIT_NODE_ARG, so the advertised candidate is routable and non-loopback and
-  # the browser client works with no manual step. The published ports already
-  # forward host -> container, so nothing else changes.
-  #
-  # Left unset (i.e. running `docker compose` by hand) LiveKit keeps its own
-  # auto-detection — the stock behaviour. Do NOT default this to 127.0.0.1: that
-  # narrows the offer to loopback only and breaks browsers that would otherwise
-  # have had a usable candidate.
   livekit:
     # Pinned, NOT :latest. A cached :latest left this stack on v1.10.0, which has a
     # browser-only ICE bug: with IPv6 unavailable (i.e. in Docker) it emits an ICE
@@ -42,7 +27,7 @@ services:
     # while the web client could never connect. See livekit/livekit#4397.
     image: livekit/livekit-server:v1.13.5
     container_name: letschat-dev-livekit
-    command: --config /etc/livekit.yaml ${LIVEKIT_NODE_ARG:-}
+    command: --config /etc/livekit.yaml
     ports:
       - "7880:7880"
       - "7881:7881"
