@@ -66,18 +66,15 @@ export function AccountTab() {
     }
   }, [])
 
+  // The effect below revokes the previous blob URL on every change and on
+  // unmount, so the updaters stay pure (StrictMode runs updaters twice — a
+  // createObjectURL inside one leaks a blob per double-invoke).
   const clearAvatarPreview = useCallback(() => {
-    setAvatarPreviewUrl((current) => {
-      if (current?.startsWith('blob:')) URL.revokeObjectURL(current)
-      return null
-    })
+    setAvatarPreviewUrl(null)
   }, [])
 
   const setAvatarPreviewFromFile = useCallback((file: File) => {
-    setAvatarPreviewUrl((current) => {
-      if (current?.startsWith('blob:')) URL.revokeObjectURL(current)
-      return URL.createObjectURL(file)
-    })
+    setAvatarPreviewUrl(URL.createObjectURL(file))
   }, [])
 
   const handleAvatarFilePicked = useCallback(
