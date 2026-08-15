@@ -98,7 +98,6 @@ foreach (var account in legacyAccounts)
         DisplayName = account.DisplayName,
         SpacetimeIdentity = account.SpacetimeIdentity,
         SpacetimeIdentityNorm = identityNorm,
-        SpacetimeToken = account.SpacetimeToken,
         // Existing users are grandfathered: fully usable, no email/approval gate.
         Status = AccountStatus.Active,
         CreatedAtUtc = DateTime.UtcNow,
@@ -157,9 +156,11 @@ static List<LegacyAccount> ReadLegacyAccounts(string sqlitePath)
     connection.Open();
 
     using var command = connection.CreateCommand();
+    // The legacy `spacetime_token` column is deliberately not read: core-api is
+    // the OIDC issuer now and mints access tokens on demand, so there is nowhere
+    // to put a stored one.
     command.CommandText =
-        "SELECT username, display_name, password_hash, spacetime_token, spacetime_identity " +
-        "FROM accounts";
+        "SELECT username, display_name, password_hash, spacetime_identity FROM accounts";
 
     using var reader = command.ExecuteReader();
     while (reader.Read())
@@ -168,8 +169,7 @@ static List<LegacyAccount> ReadLegacyAccounts(string sqlitePath)
             reader.GetString(0),
             reader.GetString(1),
             reader.GetString(2),
-            reader.GetString(3),
-            reader.GetString(4)));
+            reader.GetString(3)));
     }
 
     return accounts;
@@ -179,5 +179,4 @@ internal sealed record LegacyAccount(
     string Username,
     string DisplayName,
     string PasswordHash,
-    string SpacetimeToken,
     string SpacetimeIdentity);

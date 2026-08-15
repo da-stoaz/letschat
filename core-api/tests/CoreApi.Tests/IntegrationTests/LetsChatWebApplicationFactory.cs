@@ -56,6 +56,13 @@ public sealed class LetsChatWebApplicationFactory : WebApplicationFactory<Progra
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    /// <summary>
+    /// Optional stub transport for the <c>spacetimedb</c> named HTTP client.
+    /// Set it to drive endpoints that consult the chat module (currently
+    /// <c>/livekit/token</c>'s room-authorization query) without a live module.
+    /// </summary>
+    public HttpMessageHandler? SpacetimeTransport { get; init; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         // Stay out of the Development env so appsettings.Development.json
@@ -157,6 +164,14 @@ public sealed class LetsChatWebApplicationFactory : WebApplicationFactory<Progra
                 opts.UseInMemoryDatabase($"{_databaseName}-archive");
                 opts.UseInternalServiceProvider(internalSp);
             });
+
+            if (SpacetimeTransport is not null)
+            {
+                // Named-client configuration chains rather than replaces, so this
+                // keeps Program.cs's timeout/header setup and only swaps transport.
+                services.AddHttpClient("spacetimedb")
+                    .ConfigurePrimaryHttpMessageHandler(() => SpacetimeTransport);
+            }
         });
     }
 

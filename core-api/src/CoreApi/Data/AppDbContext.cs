@@ -26,7 +26,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             user.Property(u => u.DisplayName).HasMaxLength(256);
             user.Property(u => u.SpacetimeIdentity).HasMaxLength(256);
             user.Property(u => u.SpacetimeIdentityNorm).HasMaxLength(256);
-            user.Property(u => u.SpacetimeToken).HasMaxLength(4096);
 
             // The plan's highest-risk invariant: one account ↔ one SpacetimeDB
             // identity. A filtered unique index enforces it at the DB level.

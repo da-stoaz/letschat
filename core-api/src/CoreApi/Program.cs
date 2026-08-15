@@ -245,7 +245,6 @@ app.MapLiveKitEndpoints();
 app.MapUploadEndpoints();
 app.MapMiscEndpoints();
 app.MapDownloadEndpoints();
-app.MapAdminEndpoints();
 app.MapRazorPages();
 
 await DbInitializer.InitializeAsync(app);

@@ -17,13 +17,13 @@ contract unchanged so the existing Tauri desktop client works without changes:
 | Auth | `POST /auth/register`, `/auth/link`, `/auth/login`, `/auth/verify`, `/auth/renew-session`, `/auth/refresh-spacetime-token` |
 | Voice | `POST /livekit/token` |
 | Files | `POST /uploads/request`, `/uploads/confirm`, `/uploads/download-url`, `/uploads/download-urls` |
-| Admin | `POST /admin/accounts/rebind` |
 | Misc | `GET /health`, `GET /.well-known/letschat.json` |
 
 - **Identity** — accounts live in ASP.NET Core Identity (`AspNetUsers`, …),
   extended with the chat binding: `DisplayName`, `SpacetimeIdentity`,
   `SpacetimeIdentityNorm` (unique-indexed — one account ↔ one SpacetimeDB
-  identity), `SpacetimeToken`, and an `AccountStatus`.
+  identity), and an `AccountStatus`. Access tokens are minted on demand from
+  the account id and never stored.
 - **Passwords** — hashed with **Argon2id** in PHC format (`Argon2Phc`). This
   matches the format the legacy Rust service produced, so migrated hashes
   verify unchanged. See `Identity/Argon2Phc.cs`.
@@ -91,7 +91,6 @@ or, in Development, from `appsettings.Development.json`.
 | `AUTH_DATABASE_URL` | PostgreSQL connection string | `…Port=5432;Database=auth…` |
 | `AUTH_BIND` | listen address | `127.0.0.1:8787` |
 | `AUTH_JWT_SECRET` | HS256 signing secret for sessions | dev placeholder |
-| `AUTH_ADMIN_API_KEY` | enables `POST /admin/accounts/rebind` | unset (disabled) |
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` / `MINIO_BUCKET` | object storage | `minioadmin` / `minioadmin` / `letschat-files` |
 | `MINIO_INTERNAL_ENDPOINT` / `MINIO_PUBLIC_ENDPOINT` | S3 endpoints (HEAD vs. presign) | `http://127.0.0.1:4390` |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | LiveKit token signing | `devkey` / dev secret |

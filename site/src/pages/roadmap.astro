@@ -41,6 +41,28 @@ const shipped = [
       "MinIO browser CORS, web join links, and a dismissable \"also on desktop\" prompt.",
     ],
   },
+  {
+    id: "Identity Authority Inversion",
+    focus: "core-api as the OIDC issuer",
+    blurb: "One account, one permanent identity — derived rather than stored, and immune to database wipes.",
+    items: [
+      "core-api issues the realtime-database access token as an OIDC provider; the database verifies it against a published JWKS.",
+      "Identities derive deterministically from issuer + account, so they survive a wipe and never need relinking.",
+      "Retired the stale-token and relink bug class outright — tokens are minted on demand and never stored.",
+      "Breaking deploy: SPACETIME_OIDC_PRIVATE_KEY must be set before upgrading, or core-api refuses to start.",
+    ],
+  },
+  {
+    id: "Plan 2, Part A",
+    focus: "Durability & Cold Archive",
+    blurb: "Nothing is lost: every message mirrored to PostgreSQL, and destructive migrations made survivable.",
+    items: [
+      "A .NET replication worker mirrors the chat domain into a PostgreSQL cold archive.",
+      "Destructive schema migrations become a safe wipe-and-rebuild from the archive.",
+      "Scheduled backups of all data, wired into the production compose stack.",
+      "Part B (evicting cold history from the hot set to cap server RAM) remains ahead.",
+    ],
+  },
 ];
 
 // Sequenced ahead — roughly in priority order. Direction: Spaces with
@@ -59,15 +81,15 @@ const upcoming = [
     ],
   },
   {
-    id: "Plan 2",
-    focus: "Storage Tiering & Data Safety",
+    id: "Plan 2, Part B",
+    focus: "Storage Tiering — Eviction",
     priority: "P0",
     status: "Next",
-    effort: "~5 weeks",
+    effort: "~2 weeks",
     goals: [
       "Keep only a bounded hot working set in SpacetimeDB to cap server RAM.",
-      "Mirror everything to a PostgreSQL cold archive via a .NET replication worker; serve old history from it.",
-      "Turn destructive schema migrations into safe wipe-and-rebuild, and add scheduled backups of all data.",
+      "Serve older history from the cold archive on demand, transparently to the client.",
+      "Part A (durability: the archive mirror, safe rebuilds, scheduled backups) has shipped.",
     ],
   },
   {
@@ -173,7 +195,7 @@ const upcoming = [
 
       <div class="roadmap-kpis">
         <article>
-          <p class="kpi-value">3</p>
+          <p class="kpi-value">5</p>
           <p class="kpi-label">Plans shipped</p>
         </article>
         <article>
