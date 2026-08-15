@@ -181,23 +181,26 @@ public sealed class SpacetimeClient(
     /// row → the user was never admitted, so no token is minted.
     ///
     /// <para>
-    /// Queries SpacetimeDB's <c>/sql</c> endpoint with the user's own access
-    /// token so row-level visibility is exactly what the client sees. Fails
-    /// closed (returns <c>false</c>) on any missing token, transport error or
+    /// Queries SpacetimeDB's <c>/sql</c> endpoint as the account itself, so
+    /// row-level visibility is exactly what the client sees. The access token is
+    /// minted here from <paramref name="accountId"/> rather than taken from the
+    /// caller: core-api is the OIDC issuer, tokens are never stored, and minting
+    /// in one place means no caller can authorize a room against the wrong
+    /// credential. Fails closed (returns <c>false</c>) on any transport error or
     /// non-success response — we never issue a token we couldn't authorize.
     /// </para>
     /// </summary>
+    /// <param name="accountId">
+    /// The ASP.NET Identity account id. <c>derive(accountId)</c> is the
+    /// SpacetimeDB identity the minted token resolves to, so it must be the same
+    /// account <paramref name="userIdentity"/> belongs to.
+    /// </param>
     public async Task<bool> HasVoicePresenceAsync(
-        string? userSpacetimeToken,
+        string accountId,
         string userIdentity,
         VoiceRoom room,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(userSpacetimeToken))
-        {
-            return false;
-        }
-
         // room.ChannelId is numeric and room.RoomKey is validated by VoiceRoom,
         // so neither can carry SQL injection.
         var sql = room.IsDm
@@ -210,7 +213,7 @@ public sealed class SpacetimeClient(
         {
             Content = new StringContent(sql),
         };
-        request.Headers.Authorization = new("Bearer", userSpacetimeToken);
+        request.Headers.Authorization = new("Bearer", tokens.Mint(accountId));
 
         HttpResponseMessage response;
         try
