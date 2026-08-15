@@ -27,7 +27,16 @@ services:
     # while the web client could never connect. See livekit/livekit#4397.
     image: livekit/livekit-server:v1.13.5
     container_name: letschat-dev-livekit
-    command: --config /etc/livekit.yaml
+    # LiveKit sits in Docker, so the only addresses it can advertise as ICE
+    # candidates are its container IP (unreachable from the host) and 127.0.0.1.
+    # Chrome and the Tauri webview accept the loopback one; Firefox refuses
+    # loopback candidates by default, so it is left with nothing usable and fails
+    # ICE. node_ip REPLACES the advertised set rather than adding to it (see
+    # livekit#4487), so serving browsers means pointing it at a routable address:
+    #   LIVEKIT_NODE_ARG="--node-ip $(ipconfig getifaddr en0)" \
+    #     docker compose -f docker-compose.dev.yml up -d --force-recreate livekit
+    # Unset keeps LiveKit's own detection, which is the stock behaviour.
+    command: --config /etc/livekit.yaml ${LIVEKIT_NODE_ARG:-}
     ports:
       - "7880:7880"
       - "7881:7881"
