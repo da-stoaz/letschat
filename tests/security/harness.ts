@@ -7,7 +7,7 @@
 // and private base tables are simply invisible — which is exactly what we
 // assert in the tests.
 
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 
 export const BASE = process.env.STDB_URL ?? 'http://127.0.0.1:4300'
 export const DB = process.env.STDB_TEST_DB ?? 'letschattest'
@@ -152,9 +152,14 @@ export async function makeAdmin(prefix = 'adm'): Promise<TestUser> {
   return user
 }
 
-/** Run a statement as the database owner (the CLI identity that published). */
+/**
+ * Run a statement as the database owner (the CLI identity that published).
+ *
+ * `execFileSync`, not `execSync`: the query goes to the process as one argv
+ * entry, so there is no shell to inject into.
+ */
 export function ownerSql(query: string): string {
-  return execSync(`spacetime sql -s ${BASE} ${DB} ${JSON.stringify(query)}`, {
+  return execFileSync('spacetime', ['sql', '-s', BASE, DB, query], {
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'ignore'],
   })
