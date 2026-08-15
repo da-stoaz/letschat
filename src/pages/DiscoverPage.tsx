@@ -55,42 +55,40 @@ function DiscoverCard({
   const directJoin = server.invitePolicy === 'Everyone'
   const description = server.description?.trim()
 
-  const run = async (action: () => Promise<void>, failMessage: string) => {
-    if (busy) return
+  // run() only wraps the reducer call; success toasts and follow-up state
+  // live in the event handlers so the wrapped callback stays pure.
+  const run = async (action: () => Promise<void>, failMessage: string): Promise<boolean> => {
+    if (busy) return false
     setBusy(true)
     try {
       await action()
+      return true
     } catch (error) {
       const message = error instanceof Error ? error.message : failMessage
       toast.error(failMessage, { description: message })
+      return false
     } finally {
       setBusy(false)
     }
   }
 
-  const join = () =>
-    run(async () => {
-      await reducers.joinDiscoverableServer(server.id)
-      toast.success(`Joined ${server.name}`)
-      onJoined(server.id)
-    }, 'Could not join this space.')
+  const join = async () => {
+    if (!(await run(() => reducers.joinDiscoverableServer(server.id), 'Could not join this space.'))) return
+    toast.success(`Joined ${server.name}`)
+    onJoined(server.id)
+  }
 
-  const request = () =>
-    run(async () => {
-      await reducers.requestToJoin(server.id)
-      toast.success('Request sent', { description: 'A moderator will review your request to join.' })
-    }, 'Could not send your request.')
+  const request = async () => {
+    if (!(await run(() => reducers.requestToJoin(server.id), 'Could not send your request.'))) return
+    toast.success('Request sent', { description: 'A moderator will review your request to join.' })
+  }
 
-  const cancel = () =>
-    run(async () => {
-      await reducers.cancelJoinRequest(server.id)
-    }, 'Could not cancel your request.')
+  const cancel = () => void run(() => reducers.cancelJoinRequest(server.id), 'Could not cancel your request.')
 
-  const adminUnlist = () =>
-    run(async () => {
-      await reducers.adminUnlistServer(server.id)
-      toast.success(`Removed ${server.name} from Discover`)
-    }, 'Could not remove this space from Discover.')
+  const adminUnlist = async () => {
+    if (!(await run(() => reducers.adminUnlistServer(server.id), 'Could not remove this space from Discover.'))) return
+    toast.success(`Removed ${server.name} from Discover`)
+  }
 
   return (
     <Card className="flex flex-col border-border/70 bg-background/40 transition-colors hover:border-border">
