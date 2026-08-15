@@ -216,7 +216,18 @@ type ConnectProfile = {
   connectOptions?: RoomConnectOptions
 }
 
-const CONNECT_TIMEOUT_MS = 5_000
+// Budget for the whole LiveKit connect: WebSocket, then ICE, then DTLS. 5s was far
+// too tight — ICE alone routinely needs longer than that on a first connection,
+// notably through Docker Desktop's userspace UDP proxy in local dev, so the client
+// hung up mid-negotiation every time and reported a generic timeout. This matches
+// the SDK's own 15s default for peerConnectionTimeout / websocketTimeout.
+const CONNECT_TIMEOUT_MS = 15_000
+
+// The outer guard only exists to catch a connect() that never settles at all, so it
+// must sit ABOVE the SDK's own timeouts. Racing at the same value wins the race and
+// replaces the SDK's specific failure ("could not establish pc connection") with an
+// unhelpful "connect timed out", which is exactly what masked the cause here.
+const CONNECT_WATCHDOG_MS = CONNECT_TIMEOUT_MS + 5_000
 const CAMERA_TRACK_WAIT_MS = 1_500
 
 function isLoopbackLivekitUrl(livekitUrl: string): boolean {
@@ -533,8 +544,8 @@ async function connectRoomWithFallback(livekitUrls: string[], token: string): Pr
         room.connect(livekitUrl, token, profile.connectOptions),
         new Promise<never>((_resolve, reject) => {
           timeoutHandle = setTimeout(() => {
-            reject(new Error(`LiveKit connect timeout after ${CONNECT_TIMEOUT_MS}ms`))
-          }, CONNECT_TIMEOUT_MS)
+            reject(new Error(`LiveKit connect timeout after ${CONNECT_WATCHDOG_MS}ms`))
+          }, CONNECT_WATCHDOG_MS)
         }),
       ])
       if (timeoutHandle) {
@@ -554,9 +565,14 @@ async function connectRoomWithFallback(livekitUrls: string[], token: string): Pr
 }
 
 function mapLiveKitConnectionError(error: unknown, livekitUrls: string[]): Error {
+  // The messages below are for humans and deliberately drop detail. Keep the
+  // original on the console and as `cause` — without it a connection failure is
+  // undiagnosable, because the friendly text is all anyone ever sees.
+  console.error('[livekit] connect failed', { url: livekitUrls[0], error })
   if (error instanceof Error && error.message.includes('Bad Configuration Parameters')) {
     return new Error(
       `LiveKit returned invalid ICE parameters for ${livekitUrls[0]}. Verify LiveKit config and restart the server.`,
+      { cause: error },
     )
   }
   if (error instanceof Error && /(notallowederror|permission denied|permission dismissed)/i.test(error.message)) {
@@ -566,11 +582,12 @@ function mapLiveKitConnectionError(error: unknown, livekitUrls: string[]): Error
     return new Error('This account is already in the same call from another client/session. Leave there first.')
   }
   if (error instanceof Error && error.message.toLowerCase().includes('connect timeout')) {
-    return new Error(`LiveKit connect timed out at ${livekitUrls[0]}.`)
+    return new Error(`LiveKit connect timed out at ${livekitUrls[0]}.`, { cause: error })
   }
   if (error instanceof Error && error.message.toLowerCase().includes('pc connection')) {
     return new Error(
       `Could not establish peer connection. Signal URL ${livekitUrls[0]} responded, but ICE failed. Verify LiveKit TCP 7881 and UDP 7882 mappings (plus UDP 7881 if enabled).`,
+      { cause: error },
     )
   }
   return error instanceof Error ? error : new Error('Failed to connect to LiveKit.')
@@ -586,6 +603,13 @@ type ConnectLiveKitWithPresenceParams = {
   onSyncMutedState: (muted: boolean) => Promise<void>
 }
 
+// Bumped on every join attempt. A failed attempt must only clean up its OWN
+// presence: without this, a slow failure's cleanup lands after the user has
+// retried and deletes the successful attempt's row, leaving them connected to
+// LiveKit with no presence at all — "Joined" next to "0 participants", which is
+// unrecoverable until they leave and rejoin.
+let joinAttemptSeq = 0
+
 async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresenceParams): Promise<Room> {
   const rawLivekitUrl = await tauriCommands.getLivekitUrl()
   const livekitUrls = buildLiveKitUrls(rawLivekitUrl)
@@ -594,13 +618,17 @@ async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresencePara
     throw new Error(params.identityErrorMessage)
   }
 
+  const attempt = ++joinAttemptSeq
   let room: Room | null = null
   await params.onJoinPresence()
   try {
     const token = await tauriCommands.generateLivekitToken(params.roomName, identity)
     room = await connectRoomWithFallback(livekitUrls, token)
   } catch (error) {
-    await params.onLeavePresence().catch(() => undefined)
+    // Superseded by a newer attempt — that attempt owns the presence row now.
+    if (attempt === joinAttemptSeq) {
+      await params.onLeavePresence().catch(() => undefined)
+    }
     room?.disconnect()
     throw mapLiveKitConnectionError(error, livekitUrls)
   }

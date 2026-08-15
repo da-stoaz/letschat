@@ -93,7 +93,6 @@ services:
       ADMIN_BIND: "0.0.0.0:8788"
       AUTH_DATABASE_URL: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-auth};Username=${POSTGRES_USER:-letschat};Password=${POSTGRES_PASSWORD}"
       AUTH_JWT_SECRET: "${AUTH_JWT_SECRET}"
-      AUTH_ADMIN_API_KEY: "${AUTH_ADMIN_API_KEY:-}"
 
       # ── Cold archive (storage-tiering, plan 2 Part A) ────────────────────
       # core-api OWNS this schema: EF migrations run on startup and create the

@@ -187,7 +187,6 @@ public static class DbInitializer
         {
             user.SpacetimeIdentity = derived;
             user.SpacetimeIdentityNorm = derived;
-            user.SpacetimeToken = string.Empty;
             user.UpdatedAtUtc = DateTime.UtcNow;
         }
         await db.SaveChangesAsync();

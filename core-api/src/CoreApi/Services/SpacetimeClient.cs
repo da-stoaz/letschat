@@ -25,7 +25,8 @@ public sealed class SpacetimeClient(
     IHttpClientFactory httpFactory,
     ServiceOptions options,
     SpacetimeTokenService tokens,
-    IServiceScopeFactory scopes)
+    IServiceScopeFactory scopes,
+    ILogger<SpacetimeClient> logger)
 {
     private const string ClientName = "spacetimedb";
 
@@ -181,23 +182,80 @@ public sealed class SpacetimeClient(
     /// row → the user was never admitted, so no token is minted.
     ///
     /// <para>
-    /// Queries SpacetimeDB's <c>/sql</c> endpoint with the user's own access
-    /// token so row-level visibility is exactly what the client sees. Fails
-    /// closed (returns <c>false</c>) on any missing token, transport error or
+    /// Queries SpacetimeDB's <c>/sql</c> endpoint as the account itself, so
+    /// row-level visibility is exactly what the client sees. The access token is
+    /// minted here from <paramref name="accountId"/> rather than taken from the
+    /// caller: core-api is the OIDC issuer, tokens are never stored, and minting
+    /// in one place means no caller can authorize a room against the wrong
+    /// credential. Fails closed (returns <c>false</c>) on any transport error or
     /// non-success response — we never issue a token we couldn't authorize.
     /// </para>
     /// </summary>
+    /// <param name="accountId">
+    /// The ASP.NET Identity account id. <c>derive(accountId)</c> is the
+    /// SpacetimeDB identity the minted token resolves to, so it must be the same
+    /// account <paramref name="userIdentity"/> belongs to.
+    /// </param>
     public async Task<bool> HasVoicePresenceAsync(
-        string? userSpacetimeToken,
+        string accountId,
         string userIdentity,
         VoiceRoom room,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(userSpacetimeToken))
+        // The client awaits the join reducer's commit before asking for a token, but
+        // committed is not the same as readable: this /sql view can still be a beat
+        // behind, so the very first join legitimately finds no row and gets refused.
+        // That refusal is worse than it looks — the client's failure path deletes its
+        // presence row, and if the user immediately retries, that late cleanup lands
+        // on the retry's row and leaves them connected to LiveKit with no presence at
+        // all. Re-read a few times before concluding the row isn't there. This does
+        // not weaken the gate: a user who was never admitted still finds nothing, no
+        // matter how often we look.
+        for (var attempt = 0; ; attempt++)
         {
-            return false;
+            if (await QueryVoicePresenceAsync(accountId, userIdentity, room, ct))
+            {
+                return true;
+            }
+            if (attempt >= PresenceReadAttempts - 1)
+            {
+                // A genuine, final refusal — not the retry loop still finding nothing
+                // on an early pass. Logged (rather than only surfaced as a 403) so a
+                // real incident is diagnosable from normal logs instead of needing
+                // ad-hoc Console output added under pressure.
+                //
+                // Deliberately the SpacetimeDB identity here, never accountId (the
+                // ASP.NET Identity primary key): the identity is public — every client
+                // in a room already sees it, and it's what SpacetimeDB's own connection
+                // logs use, so this line actually cross-references. accountId is an
+                // internal key with no reason to ever reach a log.
+                var normalizedIdentity = NormalizeIdentityHex(userIdentity);
+                logger.LogInformation(
+                    "Voice presence refused: identity={IdentityPrefix}… room={Room} attempts={Attempts}",
+                    normalizedIdentity[..Math.Min(8, normalizedIdentity.Length)],
+                    RoomDescription(room), PresenceReadAttempts);
+                return false;
+            }
+            await Task.Delay(PresenceReadRetryDelay, ct);
         }
+    }
 
+    /// <summary>A log-safe room descriptor — no full identities in the log line.</summary>
+    private static string RoomDescription(VoiceRoom room) =>
+        room.IsDm ? $"dm:{room.RoomKey[..Math.Min(12, room.RoomKey.Length)]}…" : $"channel:{room.ChannelId}";
+
+    /// <summary>Total reads before refusing; see <see cref="HasVoicePresenceAsync"/>.</summary>
+    private const int PresenceReadAttempts = 3;
+
+    /// <summary>Gap between reads — comfortably over the observed replication lag.</summary>
+    private static readonly TimeSpan PresenceReadRetryDelay = TimeSpan.FromMilliseconds(120);
+
+    private async Task<bool> QueryVoicePresenceAsync(
+        string accountId,
+        string userIdentity,
+        VoiceRoom room,
+        CancellationToken ct)
+    {
         // room.ChannelId is numeric and room.RoomKey is validated by VoiceRoom,
         // so neither can carry SQL injection.
         var sql = room.IsDm
@@ -210,20 +268,25 @@ public sealed class SpacetimeClient(
         {
             Content = new StringContent(sql),
         };
-        request.Headers.Authorization = new("Bearer", userSpacetimeToken);
+        request.Headers.Authorization = new("Bearer", tokens.Mint(accountId));
 
         HttpResponseMessage response;
         try
         {
             response = await http.SendAsync(request, ct);
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(
+                ex, "Voice presence query transport error for room={Room}", RoomDescription(room));
             return false;
         }
 
         if (!response.IsSuccessStatusCode)
         {
+            logger.LogWarning(
+                "Voice presence query got {Status} from SpacetimeDB for room={Room}",
+                (int)response.StatusCode, RoomDescription(room));
             return false;
         }
 

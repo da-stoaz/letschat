@@ -4,6 +4,7 @@ using CoreApi.Configuration;
 using CoreApi.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CoreApi.Tests;
 
@@ -22,7 +23,8 @@ public sealed class SpacetimeClientPolicyTests
             new StubFactory(new StubHandler(status, body)),
             options,
             new SpacetimeTokenService(options),
-            TestScopes.Empty);
+            TestScopes.Empty,
+            NullLogger<SpacetimeClient>.Instance);
     }
 
     [Fact]

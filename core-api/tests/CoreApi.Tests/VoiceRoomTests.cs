@@ -20,14 +20,23 @@ public sealed class VoiceRoomTests
         Assert.Equal(expected, parsed.ChannelId);
     }
 
+    /// <summary>
+    /// The room key must equal what <c>dm_room_key()</c> stores in the module
+    /// (<c>server/src/helpers.rs</c>): the two identities joined by a colon, bare
+    /// lower-case hex — no <c>dm:</c> prefix and no <c>0x</c>. Those belong to the
+    /// LiveKit room name only. Carrying them into the key made the presence query
+    /// compare <c>'dm:a:b'</c> against a stored <c>'a:b'</c>, so it matched nothing
+    /// and DM voice was refused for everyone.
+    /// </summary>
     [Theory]
-    [InlineData("dm:0xabc:0xdef")]
-    [InlineData("dm:abc123:def456")]
-    public void TryParse_AcceptsDmRooms(string room)
+    [InlineData("dm:0xabc:0xdef", "abc:def")]
+    [InlineData("dm:abc123:def456", "abc123:def456")]
+    [InlineData(" dm:ABC:DEF ", "abc:def")]
+    public void TryParse_AcceptsDmRooms_AndYieldsTheModulesRoomKey(string room, string expectedKey)
     {
         Assert.True(VoiceRoom.TryParse(room, out var parsed));
         Assert.True(parsed.IsDm);
-        Assert.Equal(room.Trim(), parsed.RoomKey);
+        Assert.Equal(expectedKey, parsed.RoomKey);
     }
 
     [Theory]

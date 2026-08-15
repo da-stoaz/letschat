@@ -53,7 +53,7 @@ public static class LiveKitEndpoints
         // mint a publish/subscribe token for any room (any channel, any DM) just
         // by naming it.
         var admitted = await spacetime.HasVoicePresenceAsync(
-            user.SpacetimeToken, user.SpacetimeIdentity, voiceRoom, ct);
+            user.Id, user.SpacetimeIdentity, voiceRoom, ct);
         if (!admitted)
         {
             throw ApiException.Forbidden("You are not a participant in this voice room.");

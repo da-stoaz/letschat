@@ -285,6 +285,13 @@ see the `.env.production.*.example` files). Rotating it invalidates access
 tokens already issued — everyone signs in again — but leaves accounts,
 identities and data untouched.
 
+**If you rotate it, restart the `spacetimedb` container too.** SpacetimeDB
+caches the issuer's JWKS and does not re-fetch when it meets an unknown key id,
+so until it restarts every token signed by the new key is rejected with
+`401 Specified key ID not found in JWKs`. Client-visible symptom: voice fails
+with "You are not a participant in this voice room", because the room
+authorization query fails closed.
+
 Upgrading an instance that predates this: core-api migrates identities
 automatically on first start, re-keying SpacetimeDB's rows and its own records
 in one pass. No manual steps, no wipe. If SpacetimeDB is unreachable at that
@@ -312,7 +319,7 @@ unset those env vars on the next deploy.
 
 | Area | Key env / file | Notes |
 |---|---|---|
-| Auth backend | `AUTH_JWT_SECRET`, `AUTH_ADMIN_API_KEY` | JWT secret required; admin API key optional (enables `/admin/accounts/rebind`) |
+| Auth backend | `AUTH_JWT_SECRET` | Required. Signs the client session tokens (HS256) |
 | SpacetimeDB identity | `SPACETIME_OIDC_PRIVATE_KEY` | **Required.** Signs the SpacetimeDB access token (RS256); supply a base64-encoded PEM. Generate once — replacing it forces every user to sign in again. `SPACETIME_OIDC_ISSUER` is fixed in compose and must never change (see below) |
 | PostgreSQL | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Only the password is mandatory; defaults are `letschat` / `auth` |
 | Cold archive | `ARCHIVE_DB` | Database name for the durable mirror, default `archive` (same Postgres instance as auth). Wired in compose for both `core-api` and `archive-worker`; needs a one-time identity registration — see "Cold archive" above |

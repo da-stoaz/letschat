@@ -221,8 +221,10 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   const joined = roomForPartner !== null && connectionState === ConnectionState.Connected
   const connecting = dmJoining || (roomForPartner !== null && connectionState === ConnectionState.Connecting)
   const hasActiveCall = joined || connecting || voiceParticipants.length > 0
-  const statusBadge = connecting ? 'Joining...' : joined ? 'Joined' : voiceParticipants.length > 0 ? 'Syncing...' : 'Not joined'
-  const statusVariant = connecting ? 'outline' : joined ? 'default' : voiceParticipants.length > 0 ? 'outline' : 'secondary'
+  // The call button already says "Joining…" / "Leave Call", so a badge repeating it
+  // is noise sitting right next to its own label. Show the badge only for the one
+  // state the button cannot express: a call already in progress that you are not in.
+  const showStatusBadge = !connecting && !joined && voiceParticipants.length > 0
   const selfVoiceParticipant = useMemo(
     () =>
       voiceParticipants.find(
@@ -340,7 +342,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {hasActiveCall ? <Badge variant={statusVariant}>{statusBadge}</Badge> : null}
+          {showStatusBadge ? <Badge variant="outline">In call</Badge> : null}
           <Button
             size="sm"
             variant={joined ? 'destructive' : 'default'}

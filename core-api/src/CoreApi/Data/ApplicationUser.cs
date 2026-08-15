@@ -24,9 +24,6 @@ public sealed class ApplicationUser : IdentityUser
     /// <summary>Lower-cased/trimmed <see cref="SpacetimeIdentity"/>; unique-indexed.</summary>
     public string SpacetimeIdentityNorm { get; set; } = string.Empty;
 
-    /// <summary>The current SpacetimeDB access token issued for this account.</summary>
-    public string SpacetimeToken { get; set; } = string.Empty;
-
     public AccountStatus Status { get; set; } = AccountStatus.Registered;
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

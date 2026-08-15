@@ -4,6 +4,8 @@ using CoreApi.Configuration;
 using CoreApi.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace CoreApi.Tests;
 
@@ -25,6 +27,8 @@ internal static class TestScopes
 /// </summary>
 public sealed class SpacetimeClientVoiceTests
 {
+    private const string AccountId = "account-1";
+
     private static ServiceOptions Options() =>
         ServiceOptions.FromConfiguration(new ConfigurationBuilder().Build());
 
@@ -32,7 +36,8 @@ public sealed class SpacetimeClientVoiceTests
     {
         var options = Options();
         return new SpacetimeClient(
-            new StubFactory(handler), options, new SpacetimeTokenService(options), TestScopes.Empty);
+            new StubFactory(handler), options, new SpacetimeTokenService(options), TestScopes.Empty,
+            NullLogger<SpacetimeClient>.Instance);
     }
 
     private static StubHandler Json(string body) => new(_ =>
@@ -49,7 +54,7 @@ public sealed class SpacetimeClientVoiceTests
         var handler = Json("[{\"rows\":[[[\"0xabc\"]]]}]");
         VoiceRoom.TryParse("42", out var room);
 
-        var ok = await Client(handler).HasVoicePresenceAsync("user-token", "0xABC", room);
+        var ok = await Client(handler).HasVoicePresenceAsync(AccountId, "0xABC", room);
 
         Assert.True(ok);
         Assert.Contains("my_voice_participants", handler.LastBody);
@@ -62,11 +67,15 @@ public sealed class SpacetimeClientVoiceTests
         var handler = Json("[{\"rows\":[[[\"0xA\"]]]}]");
         VoiceRoom.TryParse("dm:0xa:0xb", out var room);
 
-        var ok = await Client(handler).HasVoicePresenceAsync("user-token", "0xa", room);
+        var ok = await Client(handler).HasVoicePresenceAsync(AccountId, "0xa", room);
 
         Assert.True(ok);
         Assert.Contains("my_dm_voice_participants", handler.LastBody);
-        Assert.Contains("room_key = 'dm:0xa:0xb'", handler.LastBody);
+        // The module's room_key is "<identity>:<identity>" — the "dm:" prefix and
+        // any "0x" belong to the LiveKit room name, not to the stored key. Asserting
+        // the prefixed form here is what let the mismatch ship: the query never
+        // matched a row, so DM voice was refused for everyone.
+        Assert.Contains("room_key = 'a:b'", handler.LastBody);
     }
 
     [Fact]
@@ -76,7 +85,7 @@ public sealed class SpacetimeClientVoiceTests
         var handler = Json("[{\"rows\":[[[\"0xother1\"]],[[\"0xother2\"]]]}]");
         VoiceRoom.TryParse("42", out var room);
 
-        var ok = await Client(handler).HasVoicePresenceAsync("user-token", "0xabc", room);
+        var ok = await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room);
 
         Assert.False(ok);
     }
@@ -87,7 +96,7 @@ public sealed class SpacetimeClientVoiceTests
         var handler = Json("[{\"rows\":[]}]");
         VoiceRoom.TryParse("42", out var room);
 
-        Assert.False(await Client(handler).HasVoicePresenceAsync("user-token", "0xabc", room));
+        Assert.False(await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
     }
 
     [Fact]
@@ -96,7 +105,7 @@ public sealed class SpacetimeClientVoiceTests
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
         VoiceRoom.TryParse("42", out var room);
 
-        Assert.False(await Client(handler).HasVoicePresenceAsync("user-token", "0xabc", room));
+        Assert.False(await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
     }
 
     [Fact]
@@ -105,31 +114,64 @@ public sealed class SpacetimeClientVoiceTests
         var handler = new StubHandler(_ => throw new HttpRequestException("connection refused"));
         VoiceRoom.TryParse("42", out var room);
 
-        Assert.False(await Client(handler).HasVoicePresenceAsync("user-token", "0xabc", room));
+        Assert.False(await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
     }
 
+    /// <summary>
+    /// The client awaits the join reducer's commit, but this view can still be a
+    /// beat behind, so the first read legitimately misses the row. Refusing there
+    /// cost the user their token AND their presence row, because the client's
+    /// failure path deletes it. Re-read before concluding the row isn't there.
+    /// </summary>
     [Fact]
-    public async Task FailsClosed_AndDoesNotCallSpacetime_WhenTheUserHasNoToken()
+    public async Task ARowThatOnlyBecomesVisibleOnASecondRead_IsStillAuthorized()
     {
-        var handler = Json("[[\"0xabc\"]]");
+        var reads = 0;
+        var handler = new StubHandler(_ =>
+        {
+            reads++;
+            // Empty on the first read (replication lag), present afterwards.
+            var body = reads == 1 ? "[{\"rows\":[]}]" : "[{\"rows\":[[[\"0xabc\"]]]}]";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            };
+        });
         VoiceRoom.TryParse("42", out var room);
 
-        var ok = await Client(handler).HasVoicePresenceAsync("  ", "0xabc", room);
+        Assert.True(await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
+        Assert.True(reads > 1, "expected the lagging first read to be retried");
+    }
 
-        Assert.False(ok);
-        Assert.False(handler.WasCalled);
+    /// <summary>
+    /// Regression guard. This query used to be signed with a token persisted on
+    /// the account row — a field that is always empty since core-api became the
+    /// OIDC issuer, so every room check failed closed and nobody could join
+    /// voice at all. The credential is minted here now; there is no stored field
+    /// left to go stale.
+    /// </summary>
+    [Fact]
+    public async Task QueriesAsTheAccount_WithAFreshlyMintedToken()
+    {
+        var handler = Json("[{\"rows\":[]}]");
+        VoiceRoom.TryParse("42", out var room);
+
+        await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room);
+
+        Assert.NotNull(handler.LastBearer);
+        Assert.Equal(AccountId, new JsonWebToken(handler.LastBearer!).Subject);
     }
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
         : HttpMessageHandler
     {
-        public bool WasCalled { get; private set; }
         public string? LastBody { get; private set; }
+        public string? LastBearer { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            WasCalled = true;
+            LastBearer = request.Headers.Authorization?.Parameter;
             if (request.Content is not null)
             {
                 LastBody = await request.Content.ReadAsStringAsync(cancellationToken);

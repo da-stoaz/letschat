@@ -52,8 +52,7 @@ bun run services:reset
 ## Auth Service Environment
 
 - `AUTH_BIND` (default: `127.0.0.1:8787`)
-- `AUTH_DATABASE_URL` — Rust auth-service: `sqlite://auth-service/auth.db`; core-api: a PostgreSQL connection string
+- `AUTH_DATABASE_URL` — a PostgreSQL connection string
 - `AUTH_JWT_SECRET` (set this in real deployments)
-- `AUTH_ADMIN_API_KEY` (optional; enables `/admin/accounts/rebind` for host-admin account rebinding)
 
 The desktop client discovers the backend URL from `/.well-known/letschat.json`; there is no build-time auth URL.
