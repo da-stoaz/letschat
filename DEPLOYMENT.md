@@ -285,6 +285,13 @@ see the `.env.production.*.example` files). Rotating it invalidates access
 tokens already issued — everyone signs in again — but leaves accounts,
 identities and data untouched.
 
+**If you rotate it, restart the `spacetimedb` container too.** SpacetimeDB
+caches the issuer's JWKS and does not re-fetch when it meets an unknown key id,
+so until it restarts every token signed by the new key is rejected with
+`401 Specified key ID not found in JWKs`. Client-visible symptom: voice fails
+with "You are not a participant in this voice room", because the room
+authorization query fails closed.
+
 Upgrading an instance that predates this: core-api migrates identities
 automatically on first start, re-keying SpacetimeDB's rows and its own records
 in one pass. No manual steps, no wipe. If SpacetimeDB is unreachable at that

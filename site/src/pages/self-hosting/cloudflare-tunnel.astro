@@ -216,6 +216,13 @@ DISCOVERY_LIVEKIT_URL=wss://lk.example.com`} />
             (identities do not depend on this key), but there is no reason to rotate it. Back it up
             with your other secrets.
           </p>
+          <p>
+            If you ever <em>do</em> change it, restart the <code>spacetimedb</code> container as well.
+            It caches the public key per issuer and will not re-fetch on its own, so until it is
+            restarted every request fails with
+            <code>401 Specified key ID not found in JWKs</code> — which surfaces in the app as
+            voice refusing to connect.
+          </p>
         </Callout>
 
         <h3 class="text-lg font-medium pt-3">Hosting the browser client (optional)</h3>
