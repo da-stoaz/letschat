@@ -25,7 +25,8 @@ public sealed class SpacetimeClient(
     IHttpClientFactory httpFactory,
     ServiceOptions options,
     SpacetimeTokenService tokens,
-    IServiceScopeFactory scopes)
+    IServiceScopeFactory scopes,
+    ILogger<SpacetimeClient> logger)
 {
     private const string ClientName = "spacetimedb";
 
@@ -218,11 +219,22 @@ public sealed class SpacetimeClient(
             }
             if (attempt >= PresenceReadAttempts - 1)
             {
+                // A genuine, final refusal — not the retry loop still finding nothing
+                // on an early pass. Logged (rather than only surfaced as a 403) so a
+                // real incident is diagnosable from normal logs instead of needing
+                // ad-hoc Console output added under pressure. No full identities here.
+                logger.LogInformation(
+                    "Voice presence refused: account={AccountIdPrefix}… room={Room} attempts={Attempts}",
+                    accountId[..Math.Min(8, accountId.Length)], RoomDescription(room), PresenceReadAttempts);
                 return false;
             }
             await Task.Delay(PresenceReadRetryDelay, ct);
         }
     }
+
+    /// <summary>A log-safe room descriptor — no full identities in the log line.</summary>
+    private static string RoomDescription(VoiceRoom room) =>
+        room.IsDm ? $"dm:{room.RoomKey[..Math.Min(12, room.RoomKey.Length)]}…" : $"channel:{room.ChannelId}";
 
     /// <summary>Total reads before refusing; see <see cref="HasVoicePresenceAsync"/>.</summary>
     private const int PresenceReadAttempts = 3;
@@ -255,13 +267,18 @@ public sealed class SpacetimeClient(
         {
             response = await http.SendAsync(request, ct);
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(
+                ex, "Voice presence query transport error for room={Room}", RoomDescription(room));
             return false;
         }
 
         if (!response.IsSuccessStatusCode)
         {
+            logger.LogWarning(
+                "Voice presence query got {Status} from SpacetimeDB for room={Room}",
+                (int)response.StatusCode, RoomDescription(room));
             return false;
         }
 

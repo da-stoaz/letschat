@@ -4,6 +4,7 @@ using CoreApi.Configuration;
 using CoreApi.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace CoreApi.Tests;
@@ -35,7 +36,8 @@ public sealed class SpacetimeClientVoiceTests
     {
         var options = Options();
         return new SpacetimeClient(
-            new StubFactory(handler), options, new SpacetimeTokenService(options), TestScopes.Empty);
+            new StubFactory(handler), options, new SpacetimeTokenService(options), TestScopes.Empty,
+            NullLogger<SpacetimeClient>.Instance);
     }
 
     private static StubHandler Json(string body) => new(_ =>
