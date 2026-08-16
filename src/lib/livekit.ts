@@ -621,14 +621,14 @@ async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresencePara
   const attempt = ++joinAttemptSeq
   let room: Room | null = null
 
-  // Mint the token BEFORE claiming presence. Minting can fail in the one way
-  // that also destroys the session used to clean up (an expired session forces
-  // a sign-out), which would strand a presence row nobody can delete — the
-  // stale row that later makes a rejoin look like "Joined · 0 participants".
-  const token = await tauriCommands.generateLivekitToken(params.roomName, identity)
-
+  // Presence MUST be claimed before minting the token: core-api authorises the
+  // token against the SpacetimeDB presence row (LiveKitEndpoints.IssueToken ->
+  // HasVoicePresenceAsync) so that nobody can mint a token for a room they
+  // never joined. Minting first returns 403 "You are not a participant in this
+  // voice room." — do not reorder these.
   await params.onJoinPresence()
   try {
+    const token = await tauriCommands.generateLivekitToken(params.roomName, identity)
     room = await connectRoomWithFallback(livekitUrls, token)
   } catch (error) {
     // Superseded by a newer attempt — that attempt owns the presence row now.
