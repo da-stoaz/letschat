@@ -20,8 +20,8 @@ import { WebJoinPage } from './pages/WebJoinPage'
 import { WebConnectErrorPage } from './pages/WebConnectErrorPage'
 import { DesktopAppBanner } from './features/web/DesktopAppBanner'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
-import { useVoiceStateReconciler } from './hooks/useVoiceStateReconciler'
 import { ensureNotificationPermission } from './lib/notifications'
+import { useVoiceLifecycle } from './hooks/useVoiceLifecycle'
 import { initializeSpacetime } from './lib/spacetimedb'
 import { SplashScreen } from './components/SplashScreen'
 import { HostConfirmDialog } from './features/setup/HostConfirmDialog'
@@ -33,7 +33,7 @@ function App() {
   useDeepLink()
   const webAutoConfig = useWebAutoConfig()
   usePresenceLifecycle()
-  useVoiceStateReconciler()
+  useVoiceLifecycle()
   const user = useSelfStore((s) => s.user)
   const connectionStatus = useConnectionStore((s) => s.status)
   const connectionError = useConnectionStore((s) => s.errorMessage)

@@ -1,4 +1,4 @@
-use spacetimedb::{Identity, SpacetimeType, Timestamp};
+use spacetimedb::{ConnectionId, Identity, SpacetimeType, Timestamp};
 
 #[derive(SpacetimeType, Clone, PartialEq, Eq)]
 pub enum Role {
@@ -323,6 +323,14 @@ pub struct VoiceParticipant {
     pub deafened: bool,
     pub sharing_screen: bool,
     pub sharing_camera: bool,
+    /// The SpacetimeDB connection that claimed this presence. Voice presence is
+    /// connection-scoped: `client_disconnected` sweeps the rows of the dying
+    /// connection, so a killed app / dropped socket can never leave a ghost
+    /// participant behind. `None` only on legacy rows from before this field
+    /// (or one-off non-socket calls); those are swept on any disconnect of the
+    /// same identity.
+    #[default(None::<ConnectionId>)]
+    pub connection_id: Option<ConnectionId>,
 }
 
 #[spacetimedb::table(accessor = friend)]
@@ -392,6 +400,9 @@ pub struct DmVoiceParticipant {
     pub deafened: bool,
     pub sharing_screen: bool,
     pub sharing_camera: bool,
+    /// See `VoiceParticipant::connection_id` — same connection-scoped cleanup.
+    #[default(None::<ConnectionId>)]
+    pub connection_id: Option<ConnectionId>,
 }
 
 #[spacetimedb::table(accessor = presence_state)]

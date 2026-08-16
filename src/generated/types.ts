@@ -99,6 +99,7 @@ export const DmVoiceParticipant = __t.object("DmVoiceParticipant", {
   deafened: __t.bool(),
   sharingScreen: __t.bool(),
   sharingCamera: __t.bool(),
+  connectionId: __t.option(__t.connectionId()),
 });
 export type DmVoiceParticipant = __Infer<typeof DmVoiceParticipant>;
 
@@ -274,6 +275,7 @@ export const VoiceParticipant = __t.object("VoiceParticipant", {
   deafened: __t.bool(),
   sharingScreen: __t.bool(),
   sharingCamera: __t.bool(),
+  connectionId: __t.option(__t.connectionId()),
 });
 export type VoiceParticipant = __Infer<typeof VoiceParticipant>;
 
