@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { authServiceGenerateLivekitToken, clearStoredAuthSessionToken, getStoredAuthSessionToken } from './authService'
 import { clearSignedDownloadUrlCache } from './uploads'
+import { withSessionTokenRetry } from './uploadSession'
 import { useServerConfigStore } from '../stores/serverConfigStore'
 import type { Identity } from '../types/domain'
 export type NotificationPermissionState = NotificationPermission | 'unsupported'
@@ -68,17 +69,19 @@ function resolveLivekitUrl(): string {
  * with that server's real LiveKit secret. Used by both desktop and web.
  */
 async function generateLivekitToken(room: string, identity: Identity): Promise<string> {
-  const sessionToken = getStoredAuthSessionToken()
-  if (!sessionToken) {
+  if (!getStoredAuthSessionToken()) {
     throw new Error('Voice requires a valid session. Please log in again.')
   }
   try {
-    return await authServiceGenerateLivekitToken({
-      room,
-      identity,
-      sessionToken,
-    })
+    // Renew-and-retry, exactly as uploads and downloads do. Without this a
+    // session that merely needed refreshing signed the user out the moment they
+    // clicked "Join" on a voice channel.
+    return await withSessionTokenRetry((sessionToken) =>
+      authServiceGenerateLivekitToken({ room, identity, sessionToken }),
+    )
   } catch (error) {
+    // Only give up once renewal itself has failed — then the session really is
+    // dead and signing out is the honest outcome.
     if (isInvalidAuthSessionError(error)) {
       forceSignOutForExpiredSession()
       throw new Error('Session expired. Please log in again.')
