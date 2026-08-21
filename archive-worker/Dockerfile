@@ -1,13 +1,15 @@
 # Archive replication worker (storage-tiering, plan 2).
 # Multi-stage: restore+publish on the SDK image, run on the runtime image.
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# Cross-compile rather than emulate — see the note in core-api/Dockerfile.
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG TARGETARCH=amd64
 WORKDIR /src
 
 COPY archive-worker/ArchiveWorker.csproj archive-worker/
-RUN dotnet restore archive-worker/ArchiveWorker.csproj
+RUN dotnet restore -a $TARGETARCH archive-worker/ArchiveWorker.csproj
 
 COPY archive-worker/ archive-worker/
-RUN dotnet publish archive-worker/ArchiveWorker.csproj -c Release -o /app
+RUN dotnet publish -a $TARGETARCH archive-worker/ArchiveWorker.csproj -c Release -o /app --no-restore
 
 FROM mcr.microsoft.com/dotnet/runtime:10.0 AS runtime
 WORKDIR /app

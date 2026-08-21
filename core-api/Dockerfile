@@ -1,17 +1,21 @@
 # core-api — .NET / ASP.NET Core Identity service.
 # Build context is the core-api/ directory.
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# Always build on the NATIVE arch and cross-compile to $TARGETARCH: emulating an
+# arm64 SDK under QEMU turns a ~1 min build into ~15. Both ARGs are supplied by
+# buildx; they default sanely for a plain `docker build`.
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG TARGETARCH=amd64
 WORKDIR /src
 
 # Restore first (cached unless the project file or pinned SDK changes).
 COPY global.json ./
 COPY src/CoreApi/CoreApi.csproj src/CoreApi/
-RUN dotnet restore src/CoreApi/CoreApi.csproj
+RUN dotnet restore -a $TARGETARCH src/CoreApi/CoreApi.csproj
 
 # Build + publish the service.
 COPY src/ src/
-RUN dotnet publish src/CoreApi/CoreApi.csproj -c Release -o /app --no-restore
+RUN dotnet publish -a $TARGETARCH src/CoreApi/CoreApi.csproj -c Release -o /app --no-restore
 
 # ─────────────────────────────────────────────────────────────────────────────
 
