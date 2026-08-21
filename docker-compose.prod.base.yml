@@ -199,6 +199,16 @@ services:
     image: ghcr.io/da-stoaz/letschat-module:${LETSCHAT_VERSION:-latest}
     container_name: letschat-module-init
     command: "publish --server http://spacetimedb:3000 letschat --bin-path /module/letschat_server.wasm --yes"
+    # PERSISTS THE PUBLISHER IDENTITY. `spacetime login` mints a NEW identity
+    # every time it runs, and only the identity that first created the database
+    # may update it. Without this volume the very next publish — i.e. every
+    # version upgrade — dies with:
+    #   403 Forbidden: <identity> is not authorized to perform action on
+    #   database <db>: update database
+    # and `restart: on-failure` turns that into a crash loop. Do NOT delete
+    # this volume: losing it means losing the ability to update the module.
+    volumes:
+      - module_init_home:/home/spacetime
     depends_on:
       spacetimedb:
         condition: service_healthy
@@ -327,6 +337,8 @@ services:
 
 volumes:
   spacetimedb_home:
+  # The module publisher's identity — see the module-init service.
+  module_init_home:
   postgres_data:
   # The archive-worker's SpacetimeDB identity token. Deleting this volume makes
   # the worker get a NEW identity on next start, which an admin must re-register

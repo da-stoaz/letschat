@@ -2,7 +2,10 @@
 # Multi-stage: restore+publish on the SDK image, run on the runtime image.
 # Cross-compile rather than emulate — see the note in core-api/Dockerfile.
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-ARG TARGETARCH=amd64
+# NO default value: a default SHADOWS the value buildkit injects, which
+# silently produces x64 assemblies in an arm64 image ("The assembly
+# architecture is not compatible with the current process architecture").
+ARG TARGETARCH
 WORKDIR /src
 
 COPY archive-worker/ArchiveWorker.csproj archive-worker/

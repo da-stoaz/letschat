@@ -2,10 +2,13 @@
 # Build context is the core-api/ directory.
 
 # Always build on the NATIVE arch and cross-compile to $TARGETARCH: emulating an
-# arm64 SDK under QEMU turns a ~1 min build into ~15. Both ARGs are supplied by
-# buildx; they default sanely for a plain `docker build`.
+# arm64 SDK under QEMU turns a ~1 min build into ~15. Both ARGs are injected by
+# buildkit (TARGETARCH follows --platform, or the host when it is omitted).
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-ARG TARGETARCH=amd64
+# NO default value: a default SHADOWS the value buildkit injects, which
+# silently produces x64 assemblies in an arm64 image ("The assembly
+# architecture is not compatible with the current process architecture").
+ARG TARGETARCH
 WORKDIR /src
 
 # Restore first (cached unless the project file or pinned SDK changes).
