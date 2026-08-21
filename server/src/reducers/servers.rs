@@ -1,8 +1,8 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err, has_member_role, is_banned, is_system_admin, member_key, require_member_role,
-    require_owner, require_system_admin, voice_key,
+    assert_or_err, has_member_role, is_banned, is_system_admin, member_key, next_id,
+    require_member_role, require_owner, require_system_admin, voice_key,
 };
 use crate::schema::*;
 
@@ -34,7 +34,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
     }
 
     let server_row = ctx.db.server().insert(Server {
-        id: 0,
+        id: next_id!(ctx, server, id),
         name,
         owner_identity: ctx.sender(),
         invite_policy: InvitePolicy::ModeratorsOnly,
@@ -57,7 +57,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
     });
 
     ctx.db.channel().insert(Channel {
-        id: 0,
+        id: next_id!(ctx, channel, id),
         server_id,
         name: "general".to_string(),
         kind: ChannelKind::Text,
@@ -67,7 +67,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
     });
 
     ctx.db.channel().insert(Channel {
-        id: 0,
+        id: next_id!(ctx, channel, id),
         server_id,
         name: "General".to_string(),
         kind: ChannelKind::Voice,

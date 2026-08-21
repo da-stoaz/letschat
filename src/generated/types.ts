@@ -99,6 +99,7 @@ export const DmVoiceParticipant = __t.object("DmVoiceParticipant", {
   deafened: __t.bool(),
   sharingScreen: __t.bool(),
   sharingCamera: __t.bool(),
+  connectionId: __t.option(__t.connectionId()),
 });
 export type DmVoiceParticipant = __Infer<typeof DmVoiceParticipant>;
 
@@ -120,6 +121,18 @@ export const FriendStatus = __t.enum("FriendStatus", {
   Accepted: __t.unit(),
 });
 export type FriendStatus = __Infer<typeof FriendStatus>;
+
+export const IdCounter = __t.object("IdCounter", {
+  tableName: __t.string(),
+  nextId: __t.u64(),
+});
+export type IdCounter = __Infer<typeof IdCounter>;
+
+export const IdentityRemap = __t.object("IdentityRemap", {
+  old: __t.identity(),
+  new: __t.identity(),
+});
+export type IdentityRemap = __Infer<typeof IdentityRemap>;
 
 export const Invite = __t.object("Invite", {
   token: __t.string(),
@@ -262,6 +275,7 @@ export const VoiceParticipant = __t.object("VoiceParticipant", {
   deafened: __t.bool(),
   sharingScreen: __t.bool(),
   sharingCamera: __t.bool(),
+  connectionId: __t.option(__t.connectionId()),
 });
 export type VoiceParticipant = __Infer<typeof VoiceParticipant>;
 

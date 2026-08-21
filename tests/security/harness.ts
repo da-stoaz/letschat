@@ -7,6 +7,8 @@
 // and private base tables are simply invisible — which is exactly what we
 // assert in the tests.
 
+import { execFileSync } from 'node:child_process'
+
 export const BASE = process.env.STDB_URL ?? 'http://127.0.0.1:4300'
 export const DB = process.env.STDB_TEST_DB ?? 'letschattest'
 
@@ -136,6 +138,35 @@ export async function makeUser(prefix = 'u'): Promise<TestUser> {
   await user.call('register_user', [username, username])
   return user
 }
+
+/**
+ * Mint a user and promote it to instance admin.
+ *
+ * Goes through owner `spacetime sql` because that is genuinely the only way to
+ * make the FIRST admin — `set_user_admin` is itself admin-gated, so on a real
+ * instance the bootstrap admin is set exactly like this.
+ */
+export async function makeAdmin(prefix = 'adm'): Promise<TestUser> {
+  const user = await makeUser(prefix)
+  ownerSql(`UPDATE user SET is_admin = true WHERE identity = 0x${user.identity}`)
+  return user
+}
+
+/**
+ * Run a statement as the database owner (the CLI identity that published).
+ *
+ * `execFileSync`, not `execSync`: the query goes to the process as one argv
+ * entry, so there is no shell to inject into.
+ */
+export function ownerSql(query: string): string {
+  return execFileSync('spacetime', ['sql', '-s', BASE, DB, query], {
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  })
+}
+
+/** `Timestamp` reducer arg — a product of one i64, so a one-element array. */
+export const timestamp = (micros: number): [number] => [micros]
 
 // ─── Scenario builders ─────────────────────────────────────────────────────────
 

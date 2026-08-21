@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { CameraIcon, Loader2Icon, Trash2Icon } from 'lucide-react'
 import { serverInitials } from '../layouts/app-layout/helpers'
 
@@ -61,10 +61,9 @@ export function EditServerModal({
     void uploadSingleFile(file)
       .then((uploaded) => {
         setIconUrl(uploaded.storageKey)
-        setIconPreviewUrl((current) => {
-          if (current?.startsWith('blob:')) URL.revokeObjectURL(current)
-          return URL.createObjectURL(file)
-        })
+        // Previous blob URL is revoked by the effect watching iconPreviewUrl;
+        // keeping the updater pure avoids a StrictMode double-create leak.
+        setIconPreviewUrl(URL.createObjectURL(file))
         toast.success('Space icon uploaded')
       })
       .catch((uploadError) => {

@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import {
   CopyIcon,
   CheckIcon,

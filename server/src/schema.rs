@@ -1,4 +1,4 @@
-use spacetimedb::{Identity, SpacetimeType, Timestamp};
+use spacetimedb::{ConnectionId, Identity, SpacetimeType, Timestamp};
 
 #[derive(SpacetimeType, Clone, PartialEq, Eq)]
 pub enum Role {
@@ -63,6 +63,31 @@ pub struct ArchiveService {
     #[primary_key]
     pub id: u8,
     pub service_identity: Identity,
+}
+
+/// Module-managed id allocation for the `#[auto_inc]` tables, keyed by table
+/// name (`"message"`, `"server"`, …).
+///
+/// Why this exists: an archive rebuild restores rows verbatim with their
+/// original ids, but SpacetimeDB's auto-inc sequences are NOT advanced by an
+/// explicit insert (the SDK warns about exactly this: insert above the
+/// sequence and "the sequence will eventually catch up, allocate a value
+/// that's already present"). After a `--delete-data` republish the sequences
+/// restart near 1, so the first organic insert collides with a restored row
+/// and panics the reducer — the whole instance returns HTTP 530.
+///
+/// There is no API anywhere (module SDK, ABI, or SQL) to set a sequence, so
+/// the module owns allocation instead: a counter row here overrides auto-inc
+/// for that table. No counter row == auto-inc as before, so an instance that
+/// has never been rebuilt is completely unaffected.
+///
+/// Private: purely internal bookkeeping, never read by clients.
+#[spacetimedb::table(accessor = id_counter)]
+pub struct IdCounter {
+    #[primary_key]
+    pub table_name: String,
+    /// The id handed out by the next `next_id!` call for this table.
+    pub next_id: u64,
 }
 
 // Private: clients read the directory of people they can actually see (members
@@ -298,6 +323,14 @@ pub struct VoiceParticipant {
     pub deafened: bool,
     pub sharing_screen: bool,
     pub sharing_camera: bool,
+    /// The SpacetimeDB connection that claimed this presence. Voice presence is
+    /// connection-scoped: `client_disconnected` sweeps the rows of the dying
+    /// connection, so a killed app / dropped socket can never leave a ghost
+    /// participant behind. `None` only on legacy rows from before this field
+    /// (or one-off non-socket calls); those are swept on any disconnect of the
+    /// same identity.
+    #[default(None::<ConnectionId>)]
+    pub connection_id: Option<ConnectionId>,
 }
 
 #[spacetimedb::table(accessor = friend)]
@@ -367,6 +400,9 @@ pub struct DmVoiceParticipant {
     pub deafened: bool,
     pub sharing_screen: bool,
     pub sharing_camera: bool,
+    /// See `VoiceParticipant::connection_id` — same connection-scoped cleanup.
+    #[default(None::<ConnectionId>)]
+    pub connection_id: Option<ConnectionId>,
 }
 
 #[spacetimedb::table(accessor = presence_state)]

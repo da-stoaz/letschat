@@ -1,6 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, find_channel, require_mod_or_owner};
+use crate::helpers::{assert_or_err, find_channel, next_id, require_mod_or_owner};
 use crate::schema::*;
 
 /// Bound the pinned-message table per channel so it can't grow without limit.
@@ -35,7 +35,7 @@ pub fn pin_message(ctx: &ReducerContext, channel_id: u64, message_id: u64) -> Re
     )?;
 
     ctx.db.pinned_message().insert(PinnedMessage {
-        pin_id: 0,
+        pin_id: next_id!(ctx, pinned_message, pin_id),
         channel_id,
         message_id,
         pinned_by: ctx.sender(),

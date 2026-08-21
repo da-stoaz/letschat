@@ -86,9 +86,13 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
     [messages],
   )
 
-  useEffect(() => {
+  // Adjust-state-during-render: entering a different channel/DM resets
+  // pagination before paint instead of one frame late in an effect.
+  const [lastScopeKey, setLastScopeKey] = useState(scopeKey)
+  if (scopeKey !== lastScopeKey) {
+    setLastScopeKey(scopeKey)
     setHistoryLimit(HISTORY_PAGE_SIZE)
-  }, [scopeKey])
+  }
 
   const visibleMessages = useMemo(() => {
     if (historyLimit >= sortedMessages.length) return sortedMessages

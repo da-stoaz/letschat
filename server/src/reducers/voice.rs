@@ -54,9 +54,46 @@ pub fn join_voice_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), S
         deafened: false,
         sharing_screen: false,
         sharing_camera: false,
+        connection_id: ctx.connection_id(),
     });
 
     Ok(())
+}
+
+/// Voice presence is connection-scoped (see `VoiceParticipant::connection_id`):
+/// when a client's socket dies — app killed, network drop, logout, module
+/// republish — its presence rows go with it. This is the single authority for
+/// stale-row cleanup; the client performs NO presence reconciliation. Rows from
+/// other live connections of the same identity are left alone.
+#[spacetimedb::reducer(client_disconnected)]
+pub fn on_client_disconnected(ctx: &ReducerContext) {
+    let sender = ctx.sender();
+    let conn = ctx.connection_id();
+    let owned_by_dying_connection =
+        |row_conn: &Option<spacetimedb::ConnectionId>| row_conn.is_none() || *row_conn == conn;
+
+    let voice_keys: Vec<String> = ctx
+        .db
+        .voice_participant()
+        .iter()
+        .filter(|vp| vp.user_identity == sender && owned_by_dying_connection(&vp.connection_id))
+        .map(|vp| vp.voice_key)
+        .collect();
+    for key in voice_keys {
+        ctx.db.voice_participant().voice_key().delete(key);
+    }
+
+    let dm_keys: Vec<String> = ctx
+        .db
+        .dm_voice_participant()
+        .user_identity()
+        .filter(sender)
+        .filter(|vp| owned_by_dying_connection(&vp.connection_id))
+        .map(|vp| vp.dm_voice_key)
+        .collect();
+    for key in dm_keys {
+        ctx.db.dm_voice_participant().dm_voice_key().delete(key);
+    }
 }
 
 #[spacetimedb::reducer]

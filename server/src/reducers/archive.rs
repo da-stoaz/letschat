@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
-use crate::helpers::require_system_admin;
+use crate::helpers::{raise_id_counter, require_system_admin};
 use crate::schema::*;
 
 /// Singleton primary key for the `ArchiveService` row.
@@ -84,13 +84,16 @@ pub fn archive_restore_message(ctx: &ReducerContext, rows: Vec<Message>) -> Resu
     if !is_archive_service(ctx, ctx.sender()) {
         return Err("archive service identity only".into());
     }
+    let mut max_id = 0;
     for row in rows {
+        max_id = max_id.max(row.id);
         if ctx.db.message().id().find(row.id).is_some() {
             ctx.db.message().id().update(row);
         } else {
             ctx.db.message().insert(row);
         }
     }
+    raise_id_counter(ctx, "message", max_id);
     Ok(())
 }
 
@@ -103,13 +106,16 @@ pub fn archive_restore_direct_message(
     if !is_archive_service(ctx, ctx.sender()) {
         return Err("archive service identity only".into());
     }
+    let mut max_id = 0;
     for row in rows {
+        max_id = max_id.max(row.id);
         if ctx.db.direct_message().id().find(row.id).is_some() {
             ctx.db.direct_message().id().update(row);
         } else {
             ctx.db.direct_message().insert(row);
         }
     }
+    raise_id_counter(ctx, "direct_message", max_id);
     Ok(())
 }
 
@@ -118,6 +124,28 @@ pub fn archive_restore_direct_message(
 // alongside the two above. `byval` = Copy primary key (u64 / Identity), `byref`
 // = String primary key (find takes a reference).
 macro_rules! archive_restore {
+    // `autoinc` = byval with an `#[auto_inc]` u64 primary key: same verbatim
+    // upsert, plus the id-counter raise that keeps post-rebuild inserts off the
+    // stale sequence (see `IdCounter`).
+    ($fn:ident, $row:ty, $tbl:ident, $pk:ident, autoinc) => {
+        #[spacetimedb::reducer]
+        pub fn $fn(ctx: &ReducerContext, rows: Vec<$row>) -> Result<(), String> {
+            if !is_archive_service(ctx, ctx.sender()) {
+                return Err("archive service identity only".into());
+            }
+            let mut max_id = 0;
+            for row in rows {
+                max_id = max_id.max(row.$pk);
+                if ctx.db.$tbl().$pk().find(row.$pk).is_some() {
+                    ctx.db.$tbl().$pk().update(row);
+                } else {
+                    ctx.db.$tbl().insert(row);
+                }
+            }
+            raise_id_counter(ctx, stringify!($tbl), max_id);
+            Ok(())
+        }
+    };
     ($fn:ident, $row:ty, $tbl:ident, $pk:ident, byval) => {
         #[spacetimedb::reducer]
         pub fn $fn(ctx: &ReducerContext, rows: Vec<$row>) -> Result<(), String> {
@@ -153,9 +181,9 @@ macro_rules! archive_restore {
 }
 
 archive_restore!(archive_restore_user, User, user, identity, byval);
-archive_restore!(archive_restore_server, Server, server, id, byval);
-archive_restore!(archive_restore_channel, Channel, channel, id, byval);
-archive_restore!(archive_restore_dm_server_invite, DmServerInvite, dm_server_invite, id, byval);
+archive_restore!(archive_restore_server, Server, server, id, autoinc);
+archive_restore!(archive_restore_channel, Channel, channel, id, autoinc);
+archive_restore!(archive_restore_dm_server_invite, DmServerInvite, dm_server_invite, id, autoinc);
 archive_restore!(archive_restore_server_member, ServerMember, server_member, member_key, byref);
 archive_restore!(archive_restore_ban, Ban, ban, ban_key, byref);
 archive_restore!(archive_restore_join_request, JoinRequest, join_request, request_key, byref);
@@ -163,4 +191,46 @@ archive_restore!(archive_restore_invite, Invite, invite, token, byref);
 archive_restore!(archive_restore_friend, Friend, friend, pair_key, byref);
 archive_restore!(archive_restore_block, Block, block, block_key, byref);
 archive_restore!(archive_restore_read_state, ReadState, read_state, read_key, byref);
-archive_restore!(archive_restore_pinned_message, PinnedMessage, pinned_message, pin_id, byval);
+archive_restore!(archive_restore_pinned_message, PinnedMessage, pinned_message, pin_id, autoinc);
+
+/// Repair the id counters for an instance that was rebuilt from the archive
+/// *before* the counters existed (or whose counters were lost some other way):
+/// walks each `#[auto_inc]` table and raises its counter past the largest id
+/// present. Idempotent and monotonic — safe to run more than once, and safe on
+/// an instance that never needed it (a table with no rows leaves no counter, so
+/// that table simply stays on auto-inc).
+///
+/// A rebuild seeds the counters as it restores, so this is a repair tool, not
+/// part of the normal flow. Instance admin or the archive worker may call it.
+///
+/// ponytail: full scan per table — fine as a one-shot repair on any realistic
+/// instance; if a huge `message` table ever pushes this past the reducer time
+/// budget, split it into one reducer call per table.
+#[spacetimedb::reducer]
+pub fn archive_reseed_id_counters(ctx: &ReducerContext) -> Result<(), String> {
+    if !is_archive_service(ctx, ctx.sender()) {
+        require_system_admin(ctx, ctx.sender())?;
+    }
+
+    let max_or_zero = |ids: &mut dyn Iterator<Item = u64>| ids.max().unwrap_or(0);
+
+    raise_id_counter(ctx, "server", max_or_zero(&mut ctx.db.server().iter().map(|r| r.id)));
+    raise_id_counter(ctx, "channel", max_or_zero(&mut ctx.db.channel().iter().map(|r| r.id)));
+    raise_id_counter(ctx, "message", max_or_zero(&mut ctx.db.message().iter().map(|r| r.id)));
+    raise_id_counter(
+        ctx,
+        "direct_message",
+        max_or_zero(&mut ctx.db.direct_message().iter().map(|r| r.id)),
+    );
+    raise_id_counter(
+        ctx,
+        "pinned_message",
+        max_or_zero(&mut ctx.db.pinned_message().iter().map(|r| r.pin_id)),
+    );
+    raise_id_counter(
+        ctx,
+        "dm_server_invite",
+        max_or_zero(&mut ctx.db.dm_server_invite().iter().map(|r| r.id)),
+    );
+    Ok(())
+}

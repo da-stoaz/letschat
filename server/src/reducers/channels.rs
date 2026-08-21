@@ -1,6 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, find_channel, require_mod_or_owner};
+use crate::helpers::{assert_or_err, find_channel, next_id, require_mod_or_owner};
 use crate::schema::*;
 
 const CHANNEL_SECTION_MAX_LEN: usize = 40;
@@ -154,7 +154,7 @@ pub fn create_channel(
     let next_position = section_channels_sorted(ctx, server_id, &normalized_section).len() as u32;
 
     ctx.db.channel().insert(Channel {
-        id: 0,
+        id: next_id!(ctx, channel, id),
         server_id,
         name,
         kind,

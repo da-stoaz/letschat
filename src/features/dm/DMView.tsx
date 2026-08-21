@@ -31,7 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { useUsersStore } from '../../stores/usersStore'
 
 const EMPTY_DM_MESSAGES: DirectMessage[] = []
@@ -143,6 +143,14 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   const [scrollToBottomToken, setScrollToBottomToken] = useState(0)
   const isMobile = useIsMobile()
   const [callPanelMinimized, setCallPanelMinimized] = useState(!isMobile)
+  // Adjust-state-during-render: reset the panel to its default whenever the
+  // conversation or form factor changes, without an extra effect pass.
+  const panelResetKey = `${isMobile}|${partnerIdentity}`
+  const [lastPanelResetKey, setLastPanelResetKey] = useState(panelResetKey)
+  if (panelResetKey !== lastPanelResetKey) {
+    setLastPanelResetKey(panelResetKey)
+    setCallPanelMinimized(!isMobile)
+  }
   const selfIdentity = useConnectionStore((s) => s.identity)
   const conversations = useDmStore((s) => s.conversations)
   const clearDmUnread = useUiStore((s) => s.clearDmUnread)
@@ -204,15 +212,14 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
     [messages, partner.displayName, selfIdentity, selfLabel],
   )
 
-  useEffect(() => {
-    setCallPanelMinimized(!isMobile)
-  }, [isMobile, partnerIdentity])
-
   const roomKey = useMemo(
     () => (selfIdentity ? dmVoiceRoomKey(selfIdentity, partnerIdentity) : null),
     [partnerIdentity, selfIdentity],
   )
-  const voiceParticipants = roomKey ? (participantsByRoom[roomKey] ?? []) : []
+  const voiceParticipants = useMemo(
+    () => (roomKey ? (participantsByRoom[roomKey] ?? []) : []),
+    [participantsByRoom, roomKey],
+  )
   const roomForPartner =
     dmRoom && joinedPartnerIdentity && normalizeIdentity(joinedPartnerIdentity) === normalizeIdentity(partnerIdentity)
       ? dmRoom

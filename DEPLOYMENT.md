@@ -145,6 +145,41 @@ spacetime publish --server http://127.0.0.1:44300 letschat --module-path server 
 schema updates, drop `--yes` so SpacetimeDB prompts before any destructive
 migration instead of wiping data.
 
+## Upgrading a running deployment
+
+Set the release you want in `.env`, then pull and restart:
+
+```bash
+LETSCHAT_VERSION=1.0.0   # in .env
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml up -d
+```
+
+Rolling back is the same two commands with the previous version. Every release
+publishes immutable `:<version>` and `:sha-<commit>` tags, so a pinned
+deployment can always go back to a known-good image.
+
+> **⚠️ Never delete the `module_init_home` volume.** `spacetime login` mints a
+> **new** identity every time it runs, and only the identity that created a
+> database may update it. That volume is what keeps `module-init`'s identity
+> stable across upgrades. Lose it and every subsequent publish fails with:
+>
+> ```
+> 403 Forbidden: <identity> is not authorized to perform action on
+> database <db>: update database
+> ```
+>
+> and `restart: on-failure` turns that into a crash loop. The identity cannot be
+> recovered — a non-owner cannot `publish`, `rename`, or even `delete` the
+> database. Recovery means publishing under a **new** database name, pointing
+> `DISCOVERY_DATABASE` / `SPACETIMEDB_MODULE_NAME` at it, and rebuilding the
+> data from the cold archive (see *Cold archive*), which is one more reason to
+> confirm the archive worker is actually replicating.
+>
+> Deployments created **before** v1.0.0 have no such volume, so their publisher
+> identity was already ephemeral. Treat the first 1.0.0 upgrade of such a
+> deployment as a fresh install (or plan the rename + archive-rebuild above).
+
 ## Promoting core-api as a SpacetimeDB admin (plan 1.5)
 
 Some admin-panel surfaces (currently: the **Spaces → create policy** card on
@@ -154,14 +189,22 @@ identity that has `is_admin = true` to call those reducers.
 
 Run this once, after the first `spacetime publish`:
 
+> **Where the first admin comes from.** The module's `init` reducer can only
+> promote the publisher if a `User` row already exists for it — and in a Compose
+> deployment the publisher is the automated `module-init` container, which never
+> signs in. So the first admin is instead granted on registration: **the first
+> account to register on an instance that has no admin becomes the instance
+> admin.** Sign in once with your own account before exposing a new instance
+> publicly, and you are that admin. (Everything admin-gated depends on this,
+> including `set_archive_service_identity` — see *Cold archive*.)
+
 ```bash
 # 1. Generate a long-lived token (and identity) for core-api.
 spacetime token gen > core-api.token
 CORE_API_IDENTITY=$(spacetime identity list | grep -A1 "$(cat core-api.token)" | tail -1 | awk '{print $1}')
 
-# 2. As the module publisher (your operator identity — the publisher is
-#    automatically the first admin via the module's `init` reducer), grant
-#    core-api's identity instance-admin status:
+# 2. As the instance admin (the first-registered account, see the note above),
+#    grant core-api's identity instance-admin status:
 spacetime call letschat set_user_admin "$CORE_API_IDENTITY" true
 
 # 3. Put the token in core-api's environment and restart:
