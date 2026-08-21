@@ -210,6 +210,11 @@ VITE_WEB_WS_COMPRESSION=gzip`} />
 
       <article class="step-card rounded-xl p-7 space-y-4">
         <h2 class="text-2xl font-semibold tracking-tight">Step 5: Pull images and start</h2>
+        <p class="guide-prose">
+          Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
+          (e.g. <code>LETSCHAT_VERSION=1.0.0</code>) to make upgrades explicit — and a rollback a one-line
+          edit: set the previous version and re-run the two commands below.
+        </p>
         <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`} />

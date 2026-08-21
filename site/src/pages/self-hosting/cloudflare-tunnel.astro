@@ -296,6 +296,11 @@ app.example.com    ->  http://web:80               # browser client (omit if not
       <!-- ── Step 6 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-7 space-y-4">
         <div class="step-head"><span class="step-num">6</span><h2 class="text-2xl font-semibold tracking-tight">Start the stack</h2></div>
+        <p class="guide-prose">
+          Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
+          (e.g. <code>LETSCHAT_VERSION=1.0.0</code>) to make upgrades explicit — and a rollback a one-line
+          edit: set the previous version, then <code>docker compose … pull && docker compose … up -d</code>.
+        </p>
         <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d`} />
         <p class="guide-prose">
           The <code>module-init</code> container publishes the SpacetimeDB schema automatically once the
