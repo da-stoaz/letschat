@@ -25,7 +25,7 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 
 | # | Titel | Grad | Bereich |
 |---|---|---|---|
-| [A1](#a1) | SpacetimeDB akzeptiert anonyme Identities — Account-Kontrollen der core-api greifen nicht | S1 | Auth |
+| [A1](#a1) | ~~SpacetimeDB akzeptiert anonyme Identities — Account-Kontrollen der core-api greifen nicht~~ · **✅ behoben (PR #71)** | ~~S1~~ | Auth |
 | [A2](#a2) | ~~Rate-Limiting partitioniert nach Proxy-IP statt Client-IP~~ · **✅ behoben (PR #70)** | ~~S1~~ | Auth |
 | [A3](#a3) | ~~`/auth/link` umgeht Registrierungssperre, E-Mail-Bestätigung und Rate-Limit~~ · **✅ behoben (PR #70)** | ~~S1~~ | Auth |
 | [A4](#a4) | Keine Token-Revokation: Passwort-Reset und Account-Sperre wirken nicht | S1 | Auth |
@@ -74,42 +74,43 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 # A — Authentifizierung, Autorisierung, Sicherheit
 
 <a id="a1"></a>
-## A1 — SpacetimeDB akzeptiert anonyme Identities; die Account-Kontrollen der core-api greifen dort nicht · **S1**
+## A1 — SpacetimeDB akzeptiert anonyme Identities · ✅ **behoben**
 
-**Stellen:** `spacetimedb/config.prod.toml`, `deploy/caddy/Caddyfile` (`{$CHAT_DOMAIN}`),
-sämtliche Reducer in `server/src/reducers/`
+**Behoben in PR #71** (`fix/spacetimedb-anonymous-identity-gate`).
 
-Das SpacetimeDB-Modul autorisiert ausschließlich über `ctx.sender()`. Es gibt an
-keiner Stelle eine Prüfung, ob die aufrufende Identity überhaupt zu einem von der
-core-api ausgestellten OIDC-Token gehört — also ob dahinter ein bestätigter Account
-steht. `server/src/reducers/users.rs:7` (`register_user`), `servers.rs:13`
-(`create_server`) und `invites.rs:114` (`use_invite`) prüfen alle nur den Sender.
+Zwei Gates im Modul schließen die Lücke:
 
-Die SpacetimeDB-Instanz ist über `chat.<domain>` öffentlich erreichbar (Caddyfile
-blockiert nur `/sql`, nicht `/subscribe`), und die Standalone-Konfiguration
-(`spacetimedb/config.prod.toml`) enthält keine Einschränkung auf authentifizierte
-Verbindungen. Der SDK verbindet ohne Token anonym — genau das tut der Client selbst
-im Fallback-Pfad, siehe [E1](#e1).
+- **`require_account`** in allen 60 client-aufrufbaren Reducern (`server/src/helpers.rs`):
+  Der Aufrufer braucht eine `User`-Zeile. Ein Primärschlüssel-Lookup pro Aufruf — und
+  weil eine `User`-Zeile nur über `register_user` entsteht, wirkt die Issuer-Prüfung
+  darüber transitiv überall.
+- **`require_trusted_issuer`** in `register_user` (`server/src/reducers/system.rs`),
+  dem einzigen Reducer, der überhaupt Standing erzeugt. SpacetimeDB 2.5 stellt das
+  bereits verifizierte JWT des Aufrufers über `ctx.sender_auth()` bereit, das Modul
+  verlangt also den `iss`-Claim des eigenen OIDC-Issuers. Die Signatur prüft
+  SpacetimeDB vorher gegen die JWKS dieses Issuers — `iss` ist damit nicht fälschbar.
 
-**Auswirkung:** Alle Registrierungskontrollen der core-api — `RegistrationOpen`,
-`RequireEmailConfirmation`, `RequireAdminApproval`, `AccountStatus.Disabled` — gelten
-nur für den HTTP-Weg. Eine anonyme WebSocket-Verbindung kann:
+Die `archive_*`-Reducer (registrierte Worker-Identity), die admin-gateten Reducer
+(`require_system_admin` setzt bereits eine `User`-Zeile voraus) und die
+Lifecycle-Reducer behalten bewusst ihre eigene, striktere Grenze.
 
-- `register_user` aufrufen und damit einen Chat-Account ohne E-Mail-Bestätigung anlegen,
-- `create_server` aufrufen (sofern die Policy `Anyone` ist — Default),
-- mit einem beliebigen Invite-Token (8 Zeichen, siehe [B7](#b7)) `use_invite` aufrufen
-  und danach über `my_channel_messages` die komplette Historie des Space lesen und
-  über `send_message` schreiben,
-- `send_friend_request_by_username` gegen beliebige Benutzernamen aufrufen.
+**Keine neue Konfiguration.** core-api pinnt seinen `SPACETIME_OIDC_ISSUER` über den
+neuen, admin-gateten Reducer `set_trusted_issuer` selbst ins Modul — beim Start und
+erneut bei jeder Admin-Anmeldung. Solange nichts gepinnt ist, ist die Prüfung **aus**:
+Ein Publish auf eine laufende Instanz kann niemanden aussperren, und eine frische
+Instanz (die bis zur ersten Registrierung gar keinen Admin hat) startet weiterhin
+sauber. Deshalb ist der Rat „vor der Öffentlichmachung einmal selbst anmelden" jetzt
+betrieblich relevant — dokumentiert in `DEPLOYMENT.md` und beiden Self-Hosting-Guides.
 
-**Auslöser:** SpacetimeDB-SDK ohne Token gegen `wss://chat.<domain>` verbinden und
-einen Reducer aufrufen.
+Verifiziert gegen eine echte SpacetimeDB-Instanz: 7 neue Fälle in
+`tests/security/anonymous-identity.test.ts`, von denen 6 gegen das ungepatchte Modul
+fehlschlagen. Drei core-api-Tests fixieren zusätzlich die SATS-`Option<String>`-Kodierung
+des Reducer-Aufrufs — die Stelle, an der ein stiller Fehler die Prüfung ausgeschaltet
+ließe.
 
-**Richtung für einen Fix:** Ein Gate am Anfang jedes zustandsändernden Reducers, das
-eine `User`-Zeile *oder* eine registrierte Service-Identity verlangt — und
-`register_user` selbst so absichern, dass es nur mit einer Identity aufrufbar ist,
-die aus dem OIDC-Issuer der core-api abgeleitet wurde (z. B. Präfix-/Herkunftsprüfung
-oder ein von der core-api gesetztes Freigabe-Flag).
+Offen bleibt [A8](#a8): Die erste Registrierung auf einer frischen Instanz wird weiterhin
+automatisch Instanz-Admin, und genau dieses eine Fenster ist auch beim Issuer-Pinning
+noch ungeschützt.
 
 ---
 
@@ -1451,7 +1452,7 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 ## Vorschlag zur Priorisierung
 
 **Erledigt:** [A2](#a2) (Forwarded Headers) und [A3](#a3) (`/auth/link` absichern)
-sind in PR #70 behoben.
+sind in PR #70 behoben, [A1](#a1) (Gate für anonyme Identities) in PR #71.
 
 **Zuerst — Sicherheit, kleiner Aufwand, große Wirkung:**
 [B1](#b1)/[B2](#b2) (Selbstbezug-Prüfungen, je eine Zeile), [B3](#b3) (Block-Prüfung
@@ -1463,5 +1464,5 @@ View begrenzen, inkrementell statt vollständig synchronisieren, `recompute` ent
 und einmal statt dreimal aufrufen.
 
 **Strukturell — braucht eine Entwurfsentscheidung:**
-[A1](#a1) (Gate für anonyme Identities), [A4](#a4) (Token-Revokation),
-[A6](#a6) (Autorisierung für Anhänge), [C4](#c4) (Discover-Mitgliederzahl aggregieren).
+[A4](#a4) (Token-Revokation), [A6](#a6) (Autorisierung für Anhänge),
+[C4](#c4) (Discover-Mitgliederzahl aggregieren).
