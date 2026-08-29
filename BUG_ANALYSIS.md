@@ -26,8 +26,8 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 | # | Titel | Grad | Bereich |
 |---|---|---|---|
 | [A1](#a1) | SpacetimeDB akzeptiert anonyme Identities — Account-Kontrollen der core-api greifen nicht | S1 | Auth |
-| [A2](#a2) | Rate-Limiting partitioniert nach Proxy-IP statt Client-IP | S1 | Auth |
-| [A3](#a3) | `/auth/link` umgeht Registrierungssperre, E-Mail-Bestätigung und Rate-Limit | S1 | Auth |
+| [A2](#a2) | ~~Rate-Limiting partitioniert nach Proxy-IP statt Client-IP~~ · **✅ behoben (PR #70)** | ~~S1~~ | Auth |
+| [A3](#a3) | ~~`/auth/link` umgeht Registrierungssperre, E-Mail-Bestätigung und Rate-Limit~~ · **✅ behoben (PR #70)** | ~~S1~~ | Auth |
 | [A4](#a4) | Keine Token-Revokation: Passwort-Reset und Account-Sperre wirken nicht | S1 | Auth |
 | [A5](#a5) | Upload-Größenlimit und Tagesquote sind clientseitig deklariert, nicht durchgesetzt | S2 | Storage |
 | [A6](#a6) | Presigned Download-URLs ohne Zugriffsprüfung auf den Storage-Key | S2 | Storage |
@@ -114,86 +114,40 @@ oder ein von der core-api gesetztes Freigabe-Flag).
 ---
 
 <a id="a2"></a>
-## A2 — Rate-Limiting partitioniert nach Proxy-IP statt Client-IP · **S1**
+## A2 — Rate-Limiting partitioniert nach Proxy-IP statt Client-IP · ✅ **behoben**
 
-**Stellen:** `core-api/src/CoreApi/Program.cs:124-147` (insb. Zeile 130),
-`deploy/caddy/Caddyfile`
+**Behoben in PR #70** (`fix/auth-link-bypass-and-forwarded-headers`).
 
-```csharp
-partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-```
+`UseForwardedHeaders` wird jetzt in `core-api/src/CoreApi/Program.cs` aufgerufen — und
+zwar vor jeder Middleware, die die Client-IP liest. `X-Forwarded-For` wird nur von
+Peers aus Loopback-, RFC1918- und IPv6-Unique-Local-Netzen akzeptiert, also aus dem
+Container-Netz des Reverse-Proxys; ein direkt verbundener Aufrufer aus dem öffentlichen
+Netz kann den Header nicht fälschen, um das Limit zu umgehen. `ForwardLimit = 1`
+vertraut nur der Aussage des unmittelbar vorgelagerten Proxys.
 
-Der Kommentar direkt darüber (Zeile 122-123) sagt es selbst: *"behind a reverse proxy,
-configure forwarded headers so the real client IP is used"*. `UseForwardedHeaders()`
-wird jedoch nirgends aufgerufen — eine Suche über `core-api/`, `deploy/` und alle
-Compose-Dateien findet keinen einzigen Treffer für `ForwardedHeaders`.
-
-In beiden dokumentierten Produktionstopologien (Caddy und Cloudflare Tunnel) läuft
-sämtlicher Verkehr über einen Reverse-Proxy. `RemoteIpAddress` ist damit für *jede*
-Anfrage die IP des Proxy-Containers.
-
-**Auswirkung — zwei Fehler in einem:**
-
-1. **Rate-Limiting wirkungslos gegen verteilte Angreifer:** alle Clients teilen sich
-   einen Bucket, die Herkunft spielt keine Rolle.
-2. **Globaler Denial-of-Service durch einen einzelnen Client:** Default ist
-   `RATE_LIMIT_PERMIT=10` pro `RATE_LIMIT_WINDOW_SECONDS=300`
-   (`ServiceOptions.cs:208-209`). Zehn Anfragen pro fünf Minuten für die *gesamte
-   Instanz*. Ein einziger Client, der `/auth/login` in einer Schleife aufruft, sperrt
-   Login, Registrierung, Passwort-Reset und Bestätigungs-Mails für alle anderen
-   Nutzer aus.
-
-Der zweite Punkt ist gravierender als der erste: die Instanz ist mit trivialem Aufwand
-für alle Nutzer unbenutzbar zu machen.
-
-**Auslöser:** Von einem beliebigen Host mehr als `RATE_LIMIT_PERMIT` Anfragen pro
-Fenster an `/auth/login` senden, dann von einem anderen Host einen Login versuchen.
+Damit partitioniert der Limiter wieder nach echter Client-IP; der beschriebene
+instanzweite Login-Lockout durch einen einzelnen Client ist nicht mehr möglich.
 
 ---
 
 <a id="a3"></a>
-## A3 — `/auth/link` umgeht Registrierungssperre, E-Mail-Bestätigung und Rate-Limit · **S1**
+## A3 — `/auth/link` umgeht Registrierungssperre, E-Mail-Bestätigung und Rate-Limit · ✅ **behoben**
 
-**Stellen:** `core-api/src/CoreApi/Endpoints/AuthEndpoints.cs:40` (Routen-Registrierung),
-`:145-211` (`Link`)
+**Behoben in PR #70** (`fix/auth-link-bypass-and-forwarded-headers`).
 
-```csharp
-routes.MapPost("/auth/link", Link);      // kein .RequireRateLimiting(...)
-```
+Der Pfad für einen *neuen* Account in `Link` spiegelt jetzt exakt die Kontrollen von
+`Register`: Prüfung von `RegistrationOpen`, `Status`/`EmailConfirmed` abgeleitet aus
+`RequireEmailConfirmation`, Bestätigungsmail inklusive Rollback bei Zustellfehler, und
+abschließend `EnsureSignInAllowed` — ein unbestätigter Account erhält damit ein 401
+statt einer nutzbaren Sitzung. Die Route trägt zusätzlich
+`.RequireRateLimiting(RateLimitPolicy)` wie jeder andere Auth-Endpunkt.
 
-Der Pfad für einen *neuen* Account in `Link` (ab Zeile 199):
+Der Pfad für *bestehende* Accounts war bereits korrekt abgesichert und ist unverändert.
+Der Endpunkt wurde bewusst nicht entfernt (obwohl er keine Client-Aufrufer hat), weil
+`CLAUDE.md` API-Endpunkte unter Backwards-Compatibility stellt.
 
-```csharp
-var user = new ApplicationUser
-{
-    UserName = username,
-    Email = email,
-    DisplayName = displayName,
-    Status = AccountStatus.Active,     // sofort aktiv
-    EmailConfirmed = true,             // ohne jede Bestätigung
-};
-```
-
-Verglichen mit `Register` (`:53-128`) fehlen drei Kontrollen vollständig:
-
-| Kontrolle | `/auth/register` | `/auth/link` |
-|---|---|---|
-| `config.Current.RegistrationOpen` | geprüft (Z. 61) | **nicht geprüft** |
-| `RequireEmailConfirmation` | beachtet (Z. 71, 100) | **umgangen** (`EmailConfirmed = true`, Z. 205) |
-| `RequireAdminApproval` | über `ConfirmEmail` erreichbar | **umgangen** (`Status = Active`, Z. 204) |
-| Rate-Limit | `RequireRateLimiting` (Z. 24) | **keins** |
-
-**Auswirkung:** Der Endpunkt ist unauthentifiziert erreichbar und legt sofort
-nutzbare, verifizierte Accounts an. Eine geschlossene Instanz
-(`RegistrationOpen = false`) ist damit weiterhin offen; die E-Mail-Verifikation ist
-wirkungslos; das Anlegen ist zusätzlich nicht rate-limitiert, also für
-Massenerstellung geeignet.
-
-Der Pfad für *bestehende* Accounts (Z. 150-198) ist dagegen korrekt abgesichert — er
-verlangt ein gültiges Session-Token desselben Accounts.
-
-**Auslöser:** `POST /auth/link` mit `{username, password, displayName, email}` für
-einen noch nicht existierenden Benutzernamen, bei geschlossener Registrierung.
+Abgesichert durch `core-api/tests/CoreApi.Tests/IntegrationTests/LinkTests.cs`;
+gegen den unkorrigierten Endpunkt fallen 2 der 3 Tests.
 
 ---
 
@@ -1496,8 +1450,10 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
+**Erledigt:** [A2](#a2) (Forwarded Headers) und [A3](#a3) (`/auth/link` absichern)
+sind in PR #70 behoben.
+
 **Zuerst — Sicherheit, kleiner Aufwand, große Wirkung:**
-[A2](#a2) (Forwarded Headers), [A3](#a3) (`/auth/link` absichern),
 [B1](#b1)/[B2](#b2) (Selbstbezug-Prüfungen, je eine Zeile), [B3](#b3) (Block-Prüfung
 in `edit_direct_message`), [A5](#a5) (echte Objektgröße verwenden).
 
