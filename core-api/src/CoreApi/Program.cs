@@ -8,6 +8,7 @@ using CoreApi.Data.Archive;
 using CoreApi.Endpoints;
 using CoreApi.Identity;
 using CoreApi.Services;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -116,11 +117,46 @@ builder.Services.AddHttpClient("github", client =>
     client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
 });
 
+// ── Forwarded headers ────────────────────────────────────────────────────────
+// Both documented production topologies (Caddy, Cloudflare Tunnel) put a reverse
+// proxy in front, so Connection.RemoteIpAddress is the PROXY's address. Without
+// this, the auth rate limiter below partitions every request in the instance
+// into a single bucket — which not only defeats per-client limiting but lets one
+// client exhaust the window and lock every other user out of login, register and
+// password reset.
+//
+// X-Forwarded-For is honoured only when the immediate peer is on a loopback or
+// private network — i.e. the container network the proxy runs on. A request that
+// reaches the listener directly from a public address cannot spoof the header to
+// dodge the limiter. ForwardLimit 1 trusts only the adjacent proxy's assertion.
+// Loopback, RFC1918 and IPv6 unique-local — the ranges a container network and
+// a locally-bound proxy actually use.
+var trustedProxyNetworks = new (string Prefix, int Bits)[]
+{
+    ("127.0.0.0", 8),
+    ("10.0.0.0", 8),
+    ("172.16.0.0", 12),
+    ("192.168.0.0", 16),
+    ("::1", 128),
+    ("fc00::", 7),
+};
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+    options.KnownProxies.Clear();
+    options.KnownIPNetworks.Clear();
+    foreach (var (prefix, bits) in trustedProxyNetworks)
+    {
+        options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse(prefix), bits));
+    }
+});
+
 // ── Rate limiting ────────────────────────────────────────────────────────────
 // Per-IP fixed window on abuse-prone auth endpoints (register / login / resend).
 // Limits come from the runtime SystemConfig; new windows pick up edits.
-// NOTE: behind a reverse proxy, configure forwarded headers so the real client
-// IP is used for partitioning rather than the proxy's.
+// Partitioning is only meaningful because UseForwardedHeaders runs first.
 builder.Services.AddRateLimiter(rateLimiter =>
 {
     rateLimiter.AddPolicy(AuthEndpoints.RateLimitPolicy, httpContext =>
@@ -157,6 +193,10 @@ var app = builder.Build();
 // dev default. A silently-accepted dev secret is the worst failure mode — auth
 // and voice keep working, but anyone can forge tokens with the well-known key.
 EnsureSecretsAreProductionSafe(app);
+
+// Must precede every middleware that reads the client IP (notably the rate
+// limiter) so RemoteIpAddress is the real caller and not the reverse proxy.
+app.UseForwardedHeaders();
 
 // ── Listener-scope guard ─────────────────────────────────────────────────────
 // Each listener is mutually exclusive about what it serves:

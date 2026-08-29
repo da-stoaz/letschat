@@ -37,7 +37,8 @@ public static class AuthEndpoints
         // Not rate-limited — the client polls this from the "confirm email" screen.
         routes.MapPost("/auth/registration-status", RegistrationStatus);
 
-        routes.MapPost("/auth/link", Link);
+        // Creates accounts and sets passwords — rate-limit it like /auth/register.
+        routes.MapPost("/auth/link", Link).RequireRateLimiting(RateLimitPolicy);
         routes.MapPost("/auth/verify", Verify);
         routes.MapPost("/auth/account", Account);
 
@@ -146,7 +147,9 @@ public static class AuthEndpoints
         LinkRequest request,
         UserManager<ApplicationUser> users,
         TokenService tokens,
-        SpacetimeTokenService spacetime)
+        SpacetimeTokenService spacetime,
+        SystemConfigService config,
+        AccountEmailService accountEmail)
     {
         var username = Validation.NormalizeUsername(request.Username);
         Validation.ValidateUsername(username);
@@ -189,20 +192,29 @@ public static class AuthEndpoints
             return BuildAuthResponse(existing, await users.GetRolesAsync(existing), tokens, spacetime);
         }
 
+        // Creating a NEW account here is reachable unauthenticated, so it has to
+        // obey exactly the same controls as /auth/register. Previously it did
+        // not, which made this endpoint a single call that bypassed a closed
+        // instance, email confirmation and admin approval at once.
+        if (!config.Current.RegistrationOpen)
+        {
+            throw ApiException.BadRequest("Registration is currently closed.");
+        }
+
+        var requiresConfirmation = config.Current.RequireEmailConfirmation;
         var email = Validation.NormalizeEmail(request.Email);
         if (await users.FindByEmailAsync(email) is not null)
         {
             throw ApiException.Conflict("Email address is already registered.");
         }
 
-        // New account created here is Active directly.
         var user = new ApplicationUser
         {
             UserName = username,
             Email = email,
             DisplayName = displayName,
-            Status = AccountStatus.Active,
-            EmailConfirmed = true,
+            Status = requiresConfirmation ? AccountStatus.Registered : AccountStatus.Active,
+            EmailConfirmed = !requiresConfirmation,
         };
         AssignDerivedIdentity(user, spacetime);
 
@@ -212,6 +224,26 @@ public static class AuthEndpoints
             throw TranslateIdentityFailure(created);
         }
 
+        if (requiresConfirmation)
+        {
+            try
+            {
+                await accountEmail.SendConfirmationEmailAsync(user);
+            }
+            catch (EmailDeliveryException)
+            {
+                // Same rollback as Register: without the mail the account could
+                // never advance past Registered, so don't leave it orphaned.
+                await users.DeleteAsync(user);
+                throw ApiException.ServiceUnavailable(
+                    "Your account couldn't be created because the confirmation email " +
+                    "couldn't be sent. Please try again later or contact the administrator.");
+            }
+        }
+
+        // Mirrors the existing-account branch above: an account still awaiting
+        // confirmation or approval gets a clear 401, never a usable session.
+        EnsureSignInAllowed(user);
         return BuildAuthResponse(user, await users.GetRolesAsync(user), tokens, spacetime);
     }
 
