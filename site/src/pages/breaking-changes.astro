@@ -5,10 +5,49 @@ import SiteFooter from "@/components/SiteFooter.astro";
 
 const changes = [
   {
+    version: "v1.0.0",
+    date: "August 2026",
+    items: [
+      "Production images are now pinned by tag: set LETSCHAT_VERSION in .env (e.g. LETSCHAT_VERSION=1.0.0). Unset, compose still resolves to latest, but a pinned deployment is what makes a rollback one line.",
+      "module-init now keeps its SpacetimeDB publisher identity in a module_init_home volume. Only the identity that created a database may update it, so this volume is what lets an upgrade republish the module at all.",
+      "The first account to register on an instance with no admin becomes the instance admin. Sign in once yourself before exposing a new instance publicly.",
+      "Images are published for linux/amd64 and linux/arm64, so ARM hosts no longer need a local build.",
+    ],
+    migration: "Deployments created BEFORE v1.0.0 have no module_init_home volume, so their publisher identity was already ephemeral and cannot be recovered. Treat the first 1.0.0 upgrade of such a deployment as a fresh install, or publish under a new database name, repoint DISCOVERY_DATABASE / SPACETIMEDB_MODULE_NAME, and rebuild from the cold archive. Confirm the archive worker is actually replicating first. Never delete module_init_home afterwards.",
+  },
+  {
+    version: "v0.9.x",
+    date: "August 2026",
+    items: [
+      "core-api became the OIDC issuer for SpacetimeDB; the database verifies access tokens against a published JWKS.",
+      "Identities are now derived deterministically from issuer plus account, so they survive a database wipe and never need relinking.",
+      "The cold-archive replication worker was wired into the production stack and needs its service identity registered once.",
+    ],
+    migration: "Breaking deploy: set SPACETIME_OIDC_PRIVATE_KEY before pulling, or core-api refuses to start. The issuer URL is a permanent constant — changing it later rederives every identity. After first start, register the archive worker with set_archive_service_identity using the 0x-prefixed identity from its logs, called by an instance admin.",
+  },
+  {
+    version: "v0.7.x",
+    date: "June 2026",
+    items: [
+      "SpacetimeDB moved 2.2 to 2.5 across the CLI, the npm SDK, the Rust crate, and the server image.",
+      "A hosted browser client was added at app.<domain>, with MinIO browser CORS rules.",
+    ],
+    migration: "Upgrade all four SpacetimeDB components together — a minor-version skew breaks module load and the client connection. Update the server image and republish the module in the same window.",
+  },
+  {
+    version: "v0.5.x",
+    date: "June 2026",
+    items: [
+      "The legacy Rust auth-service was removed. core-api (.NET, PostgreSQL) is the sole auth backend.",
+      "Auth data moved from SQLite to the PostgreSQL auth database, with EF Core migrations applied on startup.",
+    ],
+    migration: "Drop the auth-service container and its env vars, and point clients at core-api. If an old auth.db still exists, import it once with the CoreApi.Migrator tool before decommissioning.",
+  },
+  {
     version: "v0.3.x",
     date: "May 2026",
     items: [
-      "Service discovery moved into auth-service (replace legacy external discovery setup).",
+      "Service discovery moved into the auth backend (replace legacy external discovery setup).",
       "Production compose split into base plus topology overlays.",
       "Environment examples for tunnel and caddy tracks updated.",
     ],

@@ -4,7 +4,7 @@ import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
 import { GITHUB_DISCUSSIONS, GITHUB_ISSUE_NEW } from "@/lib/site";
 
-const updatedAt = "June 16, 2026";
+const updatedAt = "August 29, 2026";
 
 // Delivered and merged to main.
 const shipped = [
@@ -61,6 +61,17 @@ const shipped = [
       "Destructive schema migrations become a safe wipe-and-rebuild from the archive.",
       "Scheduled backups of all data, wired into the production compose stack.",
       "Part B (evicting cold history from the hot set to cap server RAM) remains ahead.",
+    ],
+  },
+  {
+    id: "v1.0",
+    focus: "1.0 Release",
+    blurb: "The first stable release — no half-finished surfaces left in the UI, and a deployment you can upgrade and roll back.",
+    items: [
+      "Pinned messages and in-channel message search — the last placeholder buttons are now live features.",
+      "Voice presence made server-owned: presence rows are connection-scoped and swept on disconnect, ending the join/leave desync.",
+      "The realtime module owns id allocation, so rebuilding from the cold archive can no longer collide with auto-increment.",
+      "Production images pinned by LETSCHAT_VERSION with immutable version and commit tags, published for amd64 and arm64, plus a documented upgrade/rollback runbook.",
     ],
   },
 ];
@@ -195,7 +206,7 @@ const upcoming = [
 
       <div class="roadmap-kpis">
         <article>
-          <p class="kpi-value">5</p>
+          <p class="kpi-value">6</p>
           <p class="kpi-label">Plans shipped</p>
         </article>
         <article>
