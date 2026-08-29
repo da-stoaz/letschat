@@ -2,8 +2,8 @@ use spacetimedb::rand::{Rng, distributions::Alphanumeric};
 use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
 
 use crate::helpers::{
-    assert_or_err, has_member_role, is_banned, member_key, next_id, require_invite_permission,
-    require_member_role,
+    assert_or_err, has_member_role, is_banned, member_key, next_id, require_account,
+    require_invite_permission, require_member_role,
 };
 use crate::schema::*;
 
@@ -62,6 +62,7 @@ pub fn create_invite(
     max_uses: Option<u32>,
     allowed_usernames: Vec<String>,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_invite_permission(ctx, server_id, ctx.sender())?;
     cleanup_stale_invites_internal(ctx);
     assert_or_err(
@@ -112,6 +113,7 @@ pub fn create_invite(
 
 #[spacetimedb::reducer]
 pub fn use_invite(ctx: &ReducerContext, token: String) -> Result<(), String> {
+    require_account(ctx)?;
     cleanup_stale_invites_internal(ctx);
 
     let mut invite_row = ctx
@@ -191,6 +193,7 @@ pub fn use_invite(ctx: &ReducerContext, token: String) -> Result<(), String> {
 
 #[spacetimedb::reducer]
 pub fn delete_invite(ctx: &ReducerContext, token: String) -> Result<(), String> {
+    require_account(ctx)?;
     let invite_row = ctx
         .db
         .invite()
@@ -221,6 +224,7 @@ pub fn delete_invite(ctx: &ReducerContext, token: String) -> Result<(), String> 
 /// Can be called by any moderator/owner of a server, or by anyone to clean up globally.
 #[spacetimedb::reducer]
 pub fn cleanup_expired_invites(ctx: &ReducerContext) -> Result<(), String> {
+    require_account(ctx)?;
     cleanup_stale_invites_internal(ctx);
     Ok(())
 }
@@ -233,6 +237,7 @@ pub fn send_dm_server_invite(
     recipient_identity: Identity,
     server_id: u64,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_invite_permission(ctx, server_id, ctx.sender())?;
     cleanup_stale_invites_internal(ctx);
     assert_or_err(
@@ -303,6 +308,7 @@ pub fn respond_dm_server_invite(
     invite_id: u64,
     accept: bool,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     cleanup_stale_invites_internal(ctx);
 
     let mut dm_invite = ctx

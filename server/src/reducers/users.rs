@@ -1,6 +1,7 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{assert_or_err, is_valid_username, normalize_username};
+use crate::reducers::system::require_trusted_issuer;
 use crate::schema::*;
 
 #[spacetimedb::reducer]
@@ -9,6 +10,12 @@ pub fn register_user(
     username: String,
     display_name: String,
 ) -> Result<(), String> {
+    // The only reducer that creates standing in the module out of nothing, so
+    // it is the one place the caller's token issuer has to be checked. Every
+    // other client-callable reducer relies on `require_account`, which can only
+    // succeed for an identity that got through here.
+    require_trusted_issuer(ctx)?;
+
     let normalized = normalize_username(&username);
     assert_or_err(
         is_valid_username(&normalized),

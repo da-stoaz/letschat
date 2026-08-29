@@ -232,6 +232,13 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
         <CodeBlock label="terminal" code={`curl -i https://auth.example.com/health
 curl -i https://files.example.com/minio/health/live
 curl -i https://auth.example.com/.well-known/letschat.json`} />
+        <Callout type="note" title="Register your own account first">
+          The first account on an instance with no admin becomes the instance admin — so create yours
+          <strong>before</strong> handing the address out. Signing in is also what lets <code>core-api</code> pin
+          its OIDC issuer into the chat module, which is what stops anyone from creating a chat account
+          straight over the public WebSocket. Confirm it took:
+        </Callout>
+        <CodeBlock label="terminal" code={`docker logs letschat-core-api 2>&1 | grep "trusted issuer"`} />
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">

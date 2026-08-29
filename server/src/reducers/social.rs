@@ -2,12 +2,13 @@ use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::helpers::{
     assert_or_err, block_key, dm_room_key, find_friend_row, friend_pair_key,
-    has_block_either_direction, normalize_username, ordered_pair,
+    has_block_either_direction, normalize_username, ordered_pair, require_account,
 };
 use crate::schema::*;
 
 #[spacetimedb::reducer]
 pub fn send_friend_request(ctx: &ReducerContext, target_identity: Identity) -> Result<(), String> {
+    require_account(ctx)?;
     assert_or_err(target_identity != ctx.sender(), "cannot friend yourself")?;
     assert_or_err(
         !has_block_either_direction(ctx, ctx.sender(), target_identity),
@@ -39,6 +40,7 @@ pub fn send_friend_request_by_username(
     ctx: &ReducerContext,
     username: String,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     let normalized = normalize_username(&username);
     let target = ctx
         .db
@@ -54,6 +56,7 @@ pub fn accept_friend_request(
     ctx: &ReducerContext,
     requester_identity: Identity,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     let key = friend_pair_key(ctx.sender(), requester_identity);
     let mut friend_row = ctx
         .db
@@ -83,6 +86,7 @@ pub fn decline_friend_request(
     ctx: &ReducerContext,
     requester_identity: Identity,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     ctx.db
         .friend()
         .pair_key()
@@ -93,6 +97,7 @@ pub fn decline_friend_request(
 
 #[spacetimedb::reducer]
 pub fn remove_friend(ctx: &ReducerContext, other_identity: Identity) -> Result<(), String> {
+    require_account(ctx)?;
     ctx.db
         .friend()
         .pair_key()
@@ -103,6 +108,7 @@ pub fn remove_friend(ctx: &ReducerContext, other_identity: Identity) -> Result<(
 
 #[spacetimedb::reducer]
 pub fn block_user(ctx: &ReducerContext, target_identity: Identity) -> Result<(), String> {
+    require_account(ctx)?;
     assert_or_err(target_identity != ctx.sender(), "cannot block yourself")?;
 
     let key = block_key(ctx.sender(), target_identity);
@@ -126,6 +132,7 @@ pub fn block_user(ctx: &ReducerContext, target_identity: Identity) -> Result<(),
 
 #[spacetimedb::reducer]
 pub fn unblock_user(ctx: &ReducerContext, target_identity: Identity) -> Result<(), String> {
+    require_account(ctx)?;
     ctx.db
         .block()
         .block_key()

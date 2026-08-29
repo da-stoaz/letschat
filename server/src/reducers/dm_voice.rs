@@ -2,7 +2,7 @@ use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::helpers::{
     assert_or_err, dm_room_key, dm_voice_key, find_friend_row, has_block_either_direction,
-    ordered_pair,
+    ordered_pair, require_account,
 };
 use crate::schema::*;
 
@@ -10,6 +10,7 @@ const DM_VOICE_PARTICIPANT_LIMIT: usize = 2;
 
 #[spacetimedb::reducer]
 pub fn join_dm_voice(ctx: &ReducerContext, other_identity: Identity) -> Result<(), String> {
+    require_account(ctx)?;
     assert_or_err(other_identity != ctx.sender(), "cannot call yourself")?;
     assert_or_err(
         !has_block_either_direction(ctx, ctx.sender(), other_identity),
@@ -67,6 +68,7 @@ pub fn join_dm_voice(ctx: &ReducerContext, other_identity: Identity) -> Result<(
 
 #[spacetimedb::reducer]
 pub fn leave_dm_voice(ctx: &ReducerContext, other_identity: Identity) -> Result<(), String> {
+    require_account(ctx)?;
     let room_key = dm_room_key(ctx.sender(), other_identity);
     ctx.db
         .dm_voice_participant()
@@ -84,6 +86,7 @@ pub fn update_dm_voice_state(
     sharing_screen: bool,
     sharing_camera: bool,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     let room_key = dm_room_key(ctx.sender(), other_identity);
     let mut row = ctx
         .db

@@ -1,7 +1,8 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err, has_member_role, is_banned, join_request_key, member_key, require_mod_or_owner,
+    assert_or_err, has_member_role, is_banned, join_request_key, member_key, require_account,
+    require_mod_or_owner,
 };
 use crate::schema::*;
 
@@ -11,6 +12,7 @@ use crate::schema::*;
 /// duplicate requests.
 #[spacetimedb::reducer]
 pub fn request_to_join(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     let caller = ctx.sender();
 
     let server_row = ctx
@@ -58,6 +60,7 @@ pub fn request_to_join(ctx: &ReducerContext, server_id: u64) -> Result<(), Strin
 /// The requester withdraws their own pending request. Idempotent.
 #[spacetimedb::reducer]
 pub fn cancel_join_request(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     ctx.db
         .join_request()
         .request_key()
@@ -74,6 +77,7 @@ pub fn approve_join_request(
     server_id: u64,
     target_identity: Identity,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_mod_or_owner(ctx, server_id, ctx.sender())?;
 
     let key = join_request_key(server_id, target_identity);
@@ -109,6 +113,7 @@ pub fn decline_join_request(
     server_id: u64,
     target_identity: Identity,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_mod_or_owner(ctx, server_id, ctx.sender())?;
 
     let key = join_request_key(server_id, target_identity);

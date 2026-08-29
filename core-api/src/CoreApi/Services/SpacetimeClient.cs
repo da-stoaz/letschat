@@ -489,6 +489,65 @@ public sealed class SpacetimeClient(
     }
 
     /// <summary>
+    /// Pins this instance's OIDC issuer in the SpacetimeDB module, so the module
+    /// only lets tokens core-api actually signed create an account.
+    ///
+    /// <para>
+    /// SpacetimeDB hands an identity to anyone who asks and the module can only
+    /// see <c>ctx.sender()</c>, so without this the chat WebSocket is an open
+    /// side door around every account control enforced on the HTTP path
+    /// (registration closed, e-mail unconfirmed, admin approval, disabled).
+    /// The module's <c>register_user</c> reducer compares the caller's <c>iss</c>
+    /// claim against the value pinned here; everything else needs a
+    /// <c>User</c> row, which only <c>register_user</c> creates.
+    /// </para>
+    ///
+    /// <para>
+    /// Best-effort and idempotent, and it needs an admin credential — which a
+    /// brand-new instance does not have until its first user registers (that
+    /// first registration is what creates the bootstrap admin). So it is called
+    /// both at startup and whenever an admin signs in, and the first call that
+    /// finds an admin wins; later calls are skipped via
+    /// <see cref="_trustedIssuerPinned"/>. Until it succeeds the module leaves
+    /// the check off rather than locking the instance out.
+    /// </para>
+    ///
+    /// <para>Returns <c>true</c> if the issuer is pinned (now or earlier).</para>
+    /// </summary>
+    public async Task<bool> PinTrustedIssuerAsync(CancellationToken ct = default)
+    {
+        if (Volatile.Read(ref _trustedIssuerPinned))
+        {
+            return true;
+        }
+
+        if ((await ResolveAdminTokensAsync()).Count == 0)
+        {
+            return false;
+        }
+
+        // set_trusted_issuer(Option<String>). SATS-JSON encodes `Some(v)` as
+        // `{ "some": v }` (and `None` as `{ "none": [] }`).
+        var args = new List<object> { new Dictionary<string, object>
+        {
+            ["some"] = options.SpacetimeOidcIssuer,
+        }};
+
+        await PostAdminReducerAsync("set_trusted_issuer", args, ct);
+        Volatile.Write(ref _trustedIssuerPinned, true);
+        logger.LogInformation(
+            "Pinned SpacetimeDB trusted issuer to {Issuer}.", options.SpacetimeOidcIssuer);
+        return true;
+    }
+
+    /// <summary>
+    /// Set once <see cref="PinTrustedIssuerAsync"/> has succeeded, so the retry
+    /// on every admin sign-in costs nothing after the first. Instance state on a
+    /// singleton; a lost race only means one redundant (idempotent) reducer call.
+    /// </summary>
+    private bool _trustedIssuerPinned;
+
+    /// <summary>
     /// Drives the OIDC identity-inversion migration in SpacetimeDB: re-keys every
     /// durable row from each <c>old</c> identity to its <c>new</c> derived one via
     /// the admin-gated <c>rekey_identities</c> reducer, in a single transaction.

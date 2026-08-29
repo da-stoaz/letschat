@@ -2,7 +2,7 @@ use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{
     assert_or_err, has_member_role, is_banned, is_system_admin, member_key, next_id,
-    require_member_role, require_owner, require_system_admin, voice_key,
+    require_account, require_member_role, require_owner, require_system_admin, voice_key,
 };
 use crate::schema::*;
 
@@ -11,6 +11,7 @@ const MAX_DISCOVERABLE_PER_OWNER: usize = 10;
 
 #[spacetimedb::reducer]
 pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
+    require_account(ctx)?;
     assert_or_err(
         (2..=100).contains(&name.len()),
         "server name must be 2-100 chars",
@@ -81,6 +82,7 @@ pub fn create_server(ctx: &ReducerContext, name: String) -> Result<(), String> {
 
 #[spacetimedb::reducer]
 pub fn rename_server(ctx: &ReducerContext, server_id: u64, new_name: String) -> Result<(), String> {
+    require_account(ctx)?;
     assert_or_err(
         (2..=100).contains(&new_name.len()),
         "server name must be 2-100 chars",
@@ -104,6 +106,7 @@ pub fn set_server_invite_policy(
     server_id: u64,
     invite_policy: InvitePolicy,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_owner(ctx, server_id, ctx.sender())?;
 
     let mut server_row = ctx
@@ -127,6 +130,7 @@ pub fn set_server_discovery(
     is_discoverable: bool,
     description: Option<String>,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_owner(ctx, server_id, ctx.sender())?;
 
     let normalized_description = description
@@ -173,6 +177,7 @@ pub fn set_server_tags(
     server_id: u64,
     tags: Vec<String>,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_owner(ctx, server_id, ctx.sender())?;
 
     let mut normalized: Vec<String> = Vec::new();
@@ -228,6 +233,7 @@ pub fn admin_unlist_server(ctx: &ReducerContext, server_id: u64) -> Result<(), S
 /// who are already members or are banned.
 #[spacetimedb::reducer]
 pub fn join_discoverable_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     let caller = ctx.sender();
 
     let server_row = ctx
@@ -269,6 +275,7 @@ pub fn set_server_icon(
     server_id: u64,
     icon_url: Option<String>,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_owner(ctx, server_id, ctx.sender())?;
 
     let normalized_icon_url = icon_url
@@ -295,6 +302,7 @@ pub fn set_server_icon(
 
 #[spacetimedb::reducer]
 pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     require_owner(ctx, server_id, ctx.sender())?;
 
     let channel_ids: Vec<u64> = ctx
@@ -380,6 +388,7 @@ pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String>
 
 #[spacetimedb::reducer]
 pub fn leave_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     let role = require_member_role(ctx, server_id, ctx.sender())?;
     assert_or_err(
         role != Role::Owner,

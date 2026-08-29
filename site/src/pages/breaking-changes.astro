@@ -5,6 +5,16 @@ import SiteFooter from "@/components/SiteFooter.astro";
 
 const changes = [
   {
+    version: "v1.0.2",
+    date: "August 2026",
+    items: [
+      "The SpacetimeDB module now requires a registered account for every action, and only accepts registrations signed by this instance's own OIDC issuer. Before this, anyone could mint an anonymous SpacetimeDB identity and call reducers directly over the public chat WebSocket, bypassing registration, email confirmation and admin approval.",
+      "core-api pins the issuer into the module itself, at startup and on every admin sign-in — there is no new setting to configure.",
+      "Publishing the updated module adds one column to system_settings and disconnects connected clients, which reconnect on their own. No data is deleted.",
+    ],
+    migration: "Nothing to set. A brand-new instance still has no admin until its first account registers, so that first registration stays ungated and the pin lands right after it — sign in once yourself before exposing a new instance publicly. Until the pin lands the check is off rather than on, so upgrading a running deployment cannot lock its users out. Verify with: SELECT trusted_issuer FROM system_settings.",
+  },
+  {
     version: "v1.0.0",
     date: "August 2026",
     items: [
