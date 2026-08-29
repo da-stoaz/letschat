@@ -36,7 +36,14 @@ export function useAttachmentResolver(attachments: ChatMessageAttachment[]) {
   const mountedRef = useRef(true)
   const inFlightRef = useRef<Set<string>>(new Set())
 
-  const attachmentKeys = useMemo(() => attachments.map((attachment) => attachment.storageKey), [attachments])
+  // Unknown keys already read as LOADING_STATE via getResolution, and entries
+  // for attachments that scrolled away are simply never read, so there is no
+  // seeding or pruning state pass — the only setState happens when async
+  // resolution completes.
+  const attachmentKeys = useMemo(
+    () => [...new Set(attachments.map((attachment) => attachment.storageKey))],
+    [attachments],
+  )
 
   useEffect(() => {
     mountedRef.current = true
@@ -46,51 +53,14 @@ export function useAttachmentResolver(attachments: ChatMessageAttachment[]) {
   }, [])
 
   useEffect(() => {
-    if (attachmentKeys.length === 0) {
-      setResolutions({})
-      return
-    }
-
-    const visibleKeys = new Set(attachmentKeys)
-    setResolutions((previous) => {
-      let changed = false
-      const next: Record<string, AttachmentResolution> = {}
-      for (const [key, value] of Object.entries(previous)) {
-        if (visibleKeys.has(key)) {
-          next[key] = value
-        } else {
-          changed = true
-        }
-      }
-      return changed ? next : previous
+    const keysToResolve = attachmentKeys.filter((storageKey) => {
+      if (inFlightRef.current.has(storageKey)) return false
+      const state = resolutions[storageKey]
+      if (!state) return true
+      return state.loading
     })
-  }, [attachmentKeys])
-
-  useEffect(() => {
-    if (attachments.length === 0) return
-
-    const keysToResolve = [...new Set(attachments.map((attachment) => attachment.storageKey))]
-      .filter((storageKey) => {
-        if (inFlightRef.current.has(storageKey)) return false
-        const state = resolutions[storageKey]
-        if (!state) return true
-        return state.loading
-      })
 
     if (keysToResolve.length === 0) return
-
-    setResolutions((previous) => {
-      let changed = false
-      const next = { ...previous }
-      for (const storageKey of keysToResolve) {
-        const current = next[storageKey]
-        if (!current || !current.loading || current.url !== null || current.error !== null) {
-          next[storageKey] = LOADING_STATE
-          changed = true
-        }
-      }
-      return changed ? next : previous
-    })
 
     for (const storageKey of keysToResolve) {
       inFlightRef.current.add(storageKey)
@@ -145,7 +115,7 @@ export function useAttachmentResolver(attachments: ChatMessageAttachment[]) {
         }
       }
     })()
-  }, [attachments, resolutions])
+  }, [attachmentKeys, resolutions])
 
   const retry = useCallback((storageKey: string) => {
     setResolutions((previous) => ({

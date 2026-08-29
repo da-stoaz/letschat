@@ -21,4 +21,5 @@ export default __t.row({
   deafened: __t.bool(),
   sharingScreen: __t.bool().name("sharing_screen"),
   sharingCamera: __t.bool().name("sharing_camera"),
+  connectionId: __t.option(__t.connectionId()).name("connection_id"),
 });

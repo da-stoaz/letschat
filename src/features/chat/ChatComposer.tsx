@@ -7,7 +7,7 @@ import type { ChatMessageAttachment } from '../../types/attachments'
 import { TypingIndicator } from './TypingIndicator'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 
 type UploadStage = 'requesting' | 'uploading' | 'confirming' | 'done'
 

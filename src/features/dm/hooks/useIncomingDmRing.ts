@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { notify } from '../../../lib/notifications'
 import type { DmVoiceParticipant, Identity, User } from '../../../types/domain'
 

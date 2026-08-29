@@ -21,13 +21,15 @@ export function matchesSearch(query: string, ...fields: string[]): boolean {
   return fields.some((field) => normalizeForSearch(field).includes(q))
 }
 
+const memberSinceFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
+
 export function formatMemberSince(joinedAt: string): string {
   const date = new Date(joinedAt)
   if (Number.isNaN(date.getTime())) return 'Unknown'
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
+  return memberSinceFormatter.format(date)
 }
 
 export function hasActiveTimeout(member: ServerMemberWithUser): boolean {

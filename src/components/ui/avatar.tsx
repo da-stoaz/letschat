@@ -27,42 +27,35 @@ function Avatar({
 }
 
 function AvatarImage({ className, src, ...props }: AvatarPrimitive.Image.Props) {
-  const [resolvedSrc, setResolvedSrc] = React.useState<string | undefined>(
-    typeof src === "string" && src.length > 0 ? src : undefined,
-  )
+  // Only `uploads/` keys need async resolution to a signed URL; everything
+  // else is derived directly from the prop during render.
+  const [signed, setSigned] = React.useState<{ key: string; url?: string } | null>(null)
 
   React.useEffect(() => {
+    if (typeof src !== "string" || !src.startsWith("uploads/")) return
     let cancelled = false
-
-    if (typeof src !== "string" || src.length === 0) {
-      setResolvedSrc(undefined)
-      return () => {
-        cancelled = true
-      }
-    }
-
-    if (!src.startsWith("uploads/")) {
-      setResolvedSrc(src)
-      return () => {
-        cancelled = true
-      }
-    }
-
-    setResolvedSrc(undefined)
     void getSignedDownloadUrl(src)
       .then((url) => {
         if (cancelled) return
-        setResolvedSrc(url)
+        setSigned({ key: src, url })
       })
       .catch(() => {
         if (cancelled) return
-        setResolvedSrc(undefined)
+        setSigned({ key: src, url: undefined })
       })
-
     return () => {
       cancelled = true
     }
   }, [src])
+
+  const resolvedSrc =
+    typeof src !== "string" || src.length === 0
+      ? undefined
+      : src.startsWith("uploads/")
+        ? signed?.key === src
+          ? signed.url
+          : undefined
+        : src
 
   return (
     <AvatarPrimitive.Image

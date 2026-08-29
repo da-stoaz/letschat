@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { BASE, DB } from './harness'
 
 // Publish the module to the throwaway test database with a clean slate before
@@ -13,8 +13,11 @@ export default function setup(): void {
   }
 
   console.log(`\n[security suite] publishing module to ${DB} @ ${BASE} (clean slate)…`)
-  execSync(
-    `spacetime publish --server ${BASE} ${DB} --module-path server --delete-data --yes`,
+  // execFileSync so BASE/DB (env-overridable) stay plain argv entries rather
+  // than shell input.
+  execFileSync(
+    'spacetime',
+    ['publish', '--server', BASE, DB, '--module-path', 'server', '--delete-data', '--yes'],
     { stdio: 'inherit', cwd: process.cwd() },
   )
 }

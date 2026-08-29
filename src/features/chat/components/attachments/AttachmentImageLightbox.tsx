@@ -33,11 +33,17 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
   const [zoomScale, setZoomScale] = useState(1)
   const open = initialIndex !== null
 
-  useEffect(() => {
-    if (!open || initialIndex === null) return
-    setActiveIndex(normalizeIndex(initialIndex, images.length))
-    setZoomScale(1)
-  }, [images.length, initialIndex, open])
+  // Adjust-state-during-render (react.dev "You Might Not Need an Effect"):
+  // when the lightbox opens on a new image, reset position and zoom before
+  // paint instead of one frame late in an effect.
+  const [lastInitialIndex, setLastInitialIndex] = useState(initialIndex)
+  if (initialIndex !== lastInitialIndex) {
+    setLastInitialIndex(initialIndex)
+    if (initialIndex !== null) {
+      setActiveIndex(normalizeIndex(initialIndex, images.length))
+      setZoomScale(1)
+    }
+  }
 
   useEffect(() => {
     if (!open) return

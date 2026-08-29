@@ -1,7 +1,7 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err, find_channel, member_key, require_member_role, require_mod_or_owner,
+    assert_or_err, find_channel, member_key, next_id, require_member_role, require_mod_or_owner,
 };
 use crate::schema::*;
 
@@ -32,7 +32,7 @@ pub fn send_message(ctx: &ReducerContext, channel_id: u64, content: String) -> R
     )?;
 
     ctx.db.message().insert(Message {
-        id: 0,
+        id: next_id!(ctx, message, id),
         channel_id,
         sender_identity: ctx.sender(),
         content,

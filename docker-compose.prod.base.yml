@@ -83,7 +83,7 @@ services:
   #   ssh -L 8788:127.0.0.1:48788 your-host
   # then open http://localhost:8788/admin in a browser.
   core-api:
-    image: ghcr.io/da-stoaz/letschat-core-api:latest
+    image: ghcr.io/da-stoaz/letschat-core-api:${LETSCHAT_VERSION:-latest}
     container_name: letschat-core-api
     ports:
       - "127.0.0.1:8787:8787"
@@ -179,7 +179,7 @@ services:
   #     --profile migration run --rm core-api-migrator
   # then remove the now-stale auth_data volume.
   core-api-migrator:
-    image: ghcr.io/da-stoaz/letschat-core-api-migrator:latest
+    image: ghcr.io/da-stoaz/letschat-core-api-migrator:${LETSCHAT_VERSION:-latest}
     container_name: letschat-core-api-migrator
     profiles: ["migration"]
     environment:
@@ -196,9 +196,19 @@ services:
   # Waits for SpacetimeDB to be healthy, then exits. Docker restarts it on
   # failure so transient network errors are retried automatically.
   module-init:
-    image: ghcr.io/da-stoaz/letschat-module:latest
+    image: ghcr.io/da-stoaz/letschat-module:${LETSCHAT_VERSION:-latest}
     container_name: letschat-module-init
     command: "publish --server http://spacetimedb:3000 letschat --bin-path /module/letschat_server.wasm --yes"
+    # PERSISTS THE PUBLISHER IDENTITY. `spacetime login` mints a NEW identity
+    # every time it runs, and only the identity that first created the database
+    # may update it. Without this volume the very next publish — i.e. every
+    # version upgrade — dies with:
+    #   403 Forbidden: <identity> is not authorized to perform action on
+    #   database <db>: update database
+    # and `restart: on-failure` turns that into a crash loop. Do NOT delete
+    # this volume: losing it means losing the ability to update the module.
+    volumes:
+      - module_init_home:/home/spacetime
     depends_on:
       spacetimedb:
         condition: service_healthy
@@ -221,7 +231,7 @@ services:
   # stable across restarts — do NOT delete that volume, or you'll have to
   # re-register a fresh identity.
   archive-worker:
-    image: ghcr.io/da-stoaz/letschat-archive-worker:latest
+    image: ghcr.io/da-stoaz/letschat-archive-worker:${LETSCHAT_VERSION:-latest}
     container_name: letschat-archive-worker
     depends_on:
       postgres:
@@ -327,6 +337,8 @@ services:
 
 volumes:
   spacetimedb_home:
+  # The module publisher's identity — see the module-init service.
+  module_init_home:
   postgres_data:
   # The archive-worker's SpacetimeDB identity token. Deleting this volume makes
   # the worker get a NEW identity on next start, which an admin must re-register

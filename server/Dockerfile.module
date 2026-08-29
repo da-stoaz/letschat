@@ -2,5 +2,5 @@
 # An unpinned `:latest` lets the bundled `spacetime` CLI drift ahead of the server,
 # which both breaks the publish wire-protocol and silently changes `spacetime publish`
 # argument grammar (the wasm is now passed via --bin-path, not as a positional).
-FROM clockworklabs/spacetime:v2.2.1
+FROM clockworklabs/spacetime:v2.5.0
 COPY target/wasm32-unknown-unknown/release/letschat_server.wasm /module/letschat_server.wasm

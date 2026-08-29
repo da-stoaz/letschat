@@ -59,6 +59,7 @@ pub fn join_dm_voice(ctx: &ReducerContext, other_identity: Identity) -> Result<(
         deafened: false,
         sharing_screen: false,
         sharing_camera: false,
+        connection_id: ctx.connection_id(),
     });
 
     Ok(())

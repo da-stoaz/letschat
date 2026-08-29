@@ -620,6 +620,12 @@ async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresencePara
 
   const attempt = ++joinAttemptSeq
   let room: Room | null = null
+
+  // Presence MUST be claimed before minting the token: core-api authorises the
+  // token against the SpacetimeDB presence row (LiveKitEndpoints.IssueToken ->
+  // HasVoicePresenceAsync) so that nobody can mint a token for a room they
+  // never joined. Minting first returns 403 "You are not a participant in this
+  // voice room." — do not reorder these.
   await params.onJoinPresence()
   try {
     const token = await tauriCommands.generateLivekitToken(params.roomName, identity)

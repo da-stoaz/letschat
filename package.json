@@ -1,7 +1,7 @@
 {
   "name": "letschat",
   "private": true,
-  "version": "0.9.5",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "version:bump": "bun scripts/bump-version.ts",
@@ -44,7 +44,6 @@
     "@tauri-apps/plugin-deep-link": "^2.4.9",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "framer-motion": "^12.40.0",
     "livekit-client": "^2.19.2",
     "lucide-react": "^1.17.0",
     "qrcode.react": "^4.2.0",

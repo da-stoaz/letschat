@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { toast } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { useServerConfigStore, parseJoinLink, type ServerConfig } from '../stores/serverConfigStore'
 import { initializeSpacetime } from '../lib/spacetimedb'
 
