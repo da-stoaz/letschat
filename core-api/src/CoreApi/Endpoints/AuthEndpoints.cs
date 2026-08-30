@@ -354,7 +354,6 @@ public static class AuthEndpoints
         ChangePasswordRequest request,
         UserManager<ApplicationUser> users,
         TokenService tokens,
-        SpacetimeTokenService spacetime,
         AccountAccessService access)
     {
         var user = await tokens.RequireAccountAsync(
@@ -370,12 +369,13 @@ public static class AuthEndpoints
         }
 
         // Changing a password is a revocation: every session issued under the
-        // old one dies, including any an attacker holds. That includes the
-        // caller's own, so hand back a replacement minted at the new generation
-        // — otherwise changing your password logs you out of the device you did
-        // it on, which trains people not to do it.
+        // old one dies, including any an attacker holds — and including the
+        // caller's own. Deliberately does NOT mint a replacement here: a
+        // credential-change endpoint that also hands out credentials is a wider
+        // surface than it needs to be. The client signs in again with the
+        // password it just set, which is one well-tested path instead of two.
         await access.RevokeTokensAsync(user);
-        return Results.Ok(BuildAuthResponse(user, await users.GetRolesAsync(user), tokens, spacetime));
+        return Results.NoContent();
     }
 
     /// <summary>Wire name for an account's lifecycle status.</summary>

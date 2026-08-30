@@ -51,6 +51,20 @@ public sealed class TokenRevocationTests : IClassFixture<LetsChatWebApplicationF
         return doc.RootElement.GetProperty("auth").Clone();
     }
 
+    /// <summary>Signs in and returns the auth payload.</summary>
+    private static async Task<JsonElement> LoginAsync(
+        HttpClient client, string username, string password)
+    {
+        var response = await LetsChatWebApplicationFactory.PostJsonAsync(
+            client, "/auth/login", new { username, password });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        // Login answers with the auth payload directly; register wraps it in
+        // an "auth" property alongside the account status.
+        var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return doc.RootElement.Clone();
+    }
+
     private static Task<HttpResponseMessage> AccountAsync(HttpClient client, JsonElement sessionToken) =>
         LetsChatWebApplicationFactory.PostJsonAsync(client, "/auth/account", new { sessionToken });
 
@@ -81,14 +95,12 @@ public sealed class TokenRevocationTests : IClassFixture<LetsChatWebApplicationF
                 currentPassword = OriginalPassword,
                 newPassword = "a-brand-new-secret-2",
             });
-        Assert.Equal(HttpStatusCode.OK, change.StatusCode);
-
-        using var doc = JsonDocument.Parse(await change.Content.ReadAsStringAsync());
-        var refreshed = doc.RootElement;
+        Assert.Equal(HttpStatusCode.NoContent, change.StatusCode);
 
         // Bumped, and — the half the module test cannot reach with its own
-        // SpacetimeDB-issued tokens — the replacement is above the new floor,
-        // so the user keeps working while the stolen one does not.
+        // SpacetimeDB-issued tokens — a token minted after the change is above
+        // the new floor, so the user keeps working while the stolen one does not.
+        var refreshed = await LoginAsync(client, "stamped_one", "a-brand-new-secret-2");
         Assert.Equal(1, GenerationOf(refreshed.GetProperty("spacetimeToken").GetString()!));
         Assert.Equal(
             1,
@@ -113,7 +125,7 @@ public sealed class TokenRevocationTests : IClassFixture<LetsChatWebApplicationF
                 currentPassword = OriginalPassword,
                 newPassword = "a-brand-new-secret-2",
             });
-        Assert.Equal(HttpStatusCode.OK, change.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, change.StatusCode);
 
         // …and not one request later. This is the whole point of the finding:
         // before, it stayed good for its full hour and could be renewed.
@@ -134,13 +146,13 @@ public sealed class TokenRevocationTests : IClassFixture<LetsChatWebApplicationF
                 currentPassword = OriginalPassword,
                 newPassword = "a-brand-new-secret-2",
             });
-        Assert.Equal(HttpStatusCode.OK, change.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, change.StatusCode);
 
-        using var doc = JsonDocument.Parse(await change.Content.ReadAsStringAsync());
-        var replacement = doc.RootElement.GetProperty("sessionToken");
-
-        // Revocation must not lock out the device that did the changing, or
-        // people learn to avoid changing their password.
+        // Revocation must not lock the owner out: signing in with the password
+        // they just set has to work immediately, which is what the client does
+        // instead of adopting a token returned by the change itself.
+        var replacement = (await LoginAsync(client, "rotated_one", "a-brand-new-secret-2"))
+            .GetProperty("sessionToken");
         Assert.Equal(HttpStatusCode.OK, (await AccountAsync(client, replacement)).StatusCode);
     }
 
@@ -164,7 +176,7 @@ public sealed class TokenRevocationTests : IClassFixture<LetsChatWebApplicationF
                 currentPassword = OriginalPassword,
                 newPassword = "a-brand-new-secret-2",
             });
-        Assert.Equal(HttpStatusCode.OK, change.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, change.StatusCode);
 
         // …and not after. Without this the chat token stays a renewable master
         // credential for its full 30 days, and revoking sessions achieves
