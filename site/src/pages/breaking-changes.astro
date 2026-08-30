@@ -5,6 +5,17 @@ import SiteFooter from "@/components/SiteFooter.astro";
 
 const changes = [
   {
+    version: "v1.0.3",
+    date: "August 2026",
+    items: [
+      "Disabling an account in the control panel now ends its chat access immediately. Previously it only blocked the next sign-in — the account kept reading and posting until its SpacetimeDB token expired, up to 30 days later.",
+      "Resetting or changing a password now signs out every other device. Previously a stolen session survived the reset for its full lifetime, and could be traded for fresh ones indefinitely.",
+      "A session's refresh token is no longer accepted in place of its access token, which had been silently buying a 7-day session where the design allows one hour.",
+      "Publishing the updated module adds two columns to the user table and disconnects connected clients, which reconnect on their own. No data is deleted.",
+    ],
+    migration: "Nothing to set — core-api pushes each account's state to the module on its own, and the database migration applies on startup. The push fails open: if SpacetimeDB is unreachable when an account is disabled, the change is still saved and only the revocation is delayed, with 'Could not push access state' in the core-api log. Any later status or credential change re-pushes it.",
+  },
+  {
     version: "v1.0.2",
     date: "August 2026",
     items: [

@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Text;
 using CoreApi.Configuration;
+using CoreApi.Data;
 using CoreApi.Models;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -21,6 +23,10 @@ namespace CoreApi.Services;
 public sealed class TokenService
 {
     private const string Issuer = "letschat-core-api";
+
+    /// <summary>The <c>token_use</c> value a session's access token must carry.</summary>
+    private const string AccessTokenUse = "access";
+    private const string RefreshTokenUse = "refresh";
     private static readonly TimeSpan AccessLifetime = TimeSpan.FromHours(1);
     private static readonly TimeSpan RefreshLifetime = TimeSpan.FromDays(7);
 
@@ -32,8 +38,16 @@ public sealed class TokenService
         _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.JwtSecret));
     }
 
-    /// <summary>Mints a fresh session for the (already normalised) username.</summary>
-    public SessionToken IssueSession(string username, IEnumerable<string> roles)
+    /// <summary>The claim carrying the account's token generation. See <see cref="GenerationClaim"/>.</summary>
+    public const string GenerationClaim = "gen";
+
+    /// <summary>
+    /// Mints a fresh session for the (already normalised) username.
+    /// <paramref name="generation"/> is the account's current
+    /// <c>TokenGeneration</c>; it is stamped into both tokens so a session
+    /// minted before a credential change can be told apart from one after it.
+    /// </summary>
+    public SessionToken IssueSession(string username, IEnumerable<string> roles, long generation)
     {
         var now = DateTime.UtcNow;
         var accessExpires = now.Add(AccessLifetime);
@@ -51,7 +65,8 @@ public sealed class TokenService
             {
                 ["sub"] = username,
                 ["jti"] = tokenId,
-                ["token_use"] = "access",
+                ["token_use"] = AccessTokenUse,
+                [GenerationClaim] = generation,
             },
         });
 
@@ -66,7 +81,8 @@ public sealed class TokenService
             {
                 ["sub"] = username,
                 ["jti"] = Guid.NewGuid().ToString(),
-                ["token_use"] = "refresh",
+                ["token_use"] = RefreshTokenUse,
+                [GenerationClaim] = generation,
             },
         });
 
@@ -117,14 +133,97 @@ public sealed class TokenService
             return null;
         }
 
+        // Both tokens are signed with the same key and issuer, and only this
+        // claim tells them apart. Without the check, a client that sends its
+        // 7-day refresh token in the access_token field gets a 7-day session
+        // where it should have had one hour — the longer-lived credential
+        // silently doing the shorter-lived one's job.
+        if (!result.Claims.TryGetValue("token_use", out var use)
+            || !string.Equals(use?.ToString(), AccessTokenUse, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
         if (!result.Claims.TryGetValue("sub", out var subject) || subject is null)
         {
             return null;
         }
 
         var username = subject.ToString();
-        return string.IsNullOrWhiteSpace(username)
-            ? null
-            : username.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return null;
+        }
+
+        return username.Trim().ToLowerInvariant();
     }
+
+    /// <summary>
+    /// Reads the <c>gen</c> claim out of an already-validated session token.
+    /// Absent or unparseable counts as generation 0 — the value every account
+    /// starts at, so a token minted before this claim existed still validates
+    /// against an account that has never had a credential change.
+    /// </summary>
+    public static long ReadGeneration(SessionToken? token)
+    {
+        if (token is null || string.IsNullOrWhiteSpace(token.access_token))
+        {
+            return 0;
+        }
+
+        try
+        {
+            var claim = new JsonWebToken(token.access_token).GetClaim(GenerationClaim);
+            return long.TryParse(claim?.Value, out var generation) ? generation : 0;
+        }
+        catch (ArgumentException)
+        {
+            // Malformed token — the caller already rejected it on validation.
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Resolves a session token to its account, refusing what a plain signature
+    /// check would still wave through: a token minted before the account's last
+    /// credential change, and an account that may no longer sign in.
+    ///
+    /// <para>
+    /// The generation check is what makes a password reset bite on the HTTP
+    /// side. Without it a stolen session token keeps working until it expires —
+    /// and since it can be traded for fresh ones at
+    /// <c>/auth/renew-session</c>, "until it expires" effectively means
+    /// "indefinitely".
+    /// </para>
+    ///
+    /// <para>Returns <c>null</c> for any failure; callers must not distinguish
+    /// between them, so an attacker learns nothing from the response.</para>
+    /// </summary>
+    public async Task<ApplicationUser?> ResolveAccountAsync(
+        SessionToken? sessionToken, UserManager<ApplicationUser> users)
+    {
+        var username = await ValidateAsync(sessionToken);
+        if (username is null)
+        {
+            return null;
+        }
+
+        var user = await users.FindByNameAsync(username);
+        if (user is null)
+        {
+            return null;
+        }
+
+        if (ReadGeneration(sessionToken) < user.TokenGeneration)
+        {
+            return null;
+        }
+
+        return user.Status is AccountStatus.Active ? user : null;
+    }
+
+    /// <summary><see cref="ResolveAccountAsync"/>, throwing a 401 instead of returning null.</summary>
+    public async Task<ApplicationUser> RequireAccountAsync(
+        SessionToken? sessionToken, UserManager<ApplicationUser> users, string message) =>
+        await ResolveAccountAsync(sessionToken, users) ?? throw ApiException.Unauthorized(message);
 }

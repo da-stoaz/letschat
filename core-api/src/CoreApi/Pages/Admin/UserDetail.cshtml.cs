@@ -13,7 +13,8 @@ public sealed class UserDetailModel(
     UserManager<ApplicationUser> users,
     AccountEmailService accountEmail,
     AuditService audit,
-    SpacetimeClient spacetime) : PageModel
+    SpacetimeClient spacetime,
+    AccountAccessService access) : PageModel
 {
     public ApplicationUser Target { get; private set; } = null!;
     public bool TargetIsAdmin { get; private set; }
@@ -201,6 +202,12 @@ public sealed class UserDetailModel(
         user.Status = status;
         user.UpdatedAtUtc = DateTime.UtcNow;
         await users.UpdateAsync(user);
+
+        // Disabling an account here only stops it signing in again; the chat
+        // client talks to SpacetimeDB directly and never asks core-api, so
+        // without this the account keeps reading and posting until its token
+        // expires. Best-effort: the status change itself has already been saved.
+        await access.SyncAsync(user);
     }
 
     private Task AuditAsync(string action, ApplicationUser user, string detail) =>

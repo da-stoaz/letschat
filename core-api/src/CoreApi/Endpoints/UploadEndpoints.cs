@@ -2,6 +2,7 @@ using System.Globalization;
 using CoreApi.Data;
 using CoreApi.Models;
 using CoreApi.Services;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreApi.Endpoints;
@@ -41,10 +42,11 @@ public static class UploadEndpoints
     private static async Task<UploadRequestResponse> RequestUpload(
         UploadRequestPayload payload,
         TokenService tokens,
+        UserManager<ApplicationUser> users,
         AppDbContext db,
         StorageService storage)
     {
-        var username = await RequireSession(payload.SessionToken, tokens);
+        var username = await RequireSession(payload.SessionToken, tokens, users);
 
         var fileName = payload.FileName.Trim();
         if (fileName.Length == 0)
@@ -118,10 +120,11 @@ public static class UploadEndpoints
     private static async Task<UploadConfirmResponse> ConfirmUpload(
         UploadConfirmPayload payload,
         TokenService tokens,
+        UserManager<ApplicationUser> users,
         AppDbContext db,
         StorageService storage)
     {
-        var username = await RequireSession(payload.SessionToken, tokens);
+        var username = await RequireSession(payload.SessionToken, tokens, users);
 
         var pending = await db.PendingUploads.FirstOrDefaultAsync(p => p.Id == payload.UploadId)
             ?? throw ApiException.BadRequest("Upload ID not found or already confirmed.");
@@ -171,9 +174,10 @@ public static class UploadEndpoints
     private static async Task<DownloadUrlResponse> DownloadUrl(
         DownloadUrlPayload payload,
         TokenService tokens,
+        UserManager<ApplicationUser> users,
         StorageService storage)
     {
-        await RequireSession(payload.SessionToken, tokens);
+        await RequireSession(payload.SessionToken, tokens, users);
 
         if (!payload.StorageKey.StartsWith("uploads/", StringComparison.Ordinal))
         {
@@ -187,9 +191,10 @@ public static class UploadEndpoints
     private static async Task<DownloadUrlsResponse> DownloadUrls(
         DownloadUrlsPayload payload,
         TokenService tokens,
+        UserManager<ApplicationUser> users,
         StorageService storage)
     {
-        await RequireSession(payload.SessionToken, tokens);
+        await RequireSession(payload.SessionToken, tokens, users);
 
         if (payload.StorageKeys is null || payload.StorageKeys.Count == 0)
         {
@@ -222,9 +227,16 @@ public static class UploadEndpoints
         return new DownloadUrlsResponse(items);
     }
 
-    private static async Task<string> RequireSession(SessionToken token, TokenService tokens) =>
-        await tokens.ValidateAsync(token)
-        ?? throw ApiException.Unauthorized("Invalid or expired session token.");
+    /// <summary>
+    /// The account behind a session token, or a 401. Goes through
+    /// <see cref="TokenService.RequireAccountAsync"/> rather than a bare
+    /// signature check so an upload cannot be made with a session that a
+    /// password reset or an account disable has already revoked.
+    /// </summary>
+    private static async Task<string> RequireSession(
+        SessionToken token, TokenService tokens, UserManager<ApplicationUser> users) =>
+        (await tokens.RequireAccountAsync(
+            token, users, "Invalid or expired session token.")).UserName!;
 
     private static long UnixNow() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 }

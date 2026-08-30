@@ -148,9 +148,64 @@ pub(crate) fn require_invite_permission(
 /// reducers (`init`, `client_disconnected`), which the host invokes with no
 /// caller at all.
 pub(crate) fn require_account(ctx: &ReducerContext) -> Result<(), String> {
+    let user = ctx
+        .db
+        .user()
+        .identity()
+        .find(ctx.sender())
+        .ok_or_else(|| "no account for this identity".to_string())?;
+
+    // An admin disabled the account. Refusing here rather than at token expiry
+    // is the whole point: the SpacetimeDB token is long-lived and the client
+    // talks to this module directly, so core-api's sign-in check never sees
+    // these calls.
+    assert_or_err(!user.suspended, "this account has been disabled")?;
+
+    require_current_token(ctx, &user)
+}
+
+/// Rejects a token minted before the account's last credential change.
+///
+/// core-api increments the account's token generation on every password reset
+/// or change and pushes the new floor onto the `User` row, so a token stolen
+/// beforehand — minted at a lower generation — stops working on the very next
+/// reducer call. Without this, "I was compromised, so I reset my password" does
+/// nothing: the client talks to this module directly, so nothing in the chat
+/// path ever consults core-api again and the stolen token keeps full access for
+/// its entire lifetime.
+///
+/// Fails **open** by construction, in two ways that both matter:
+///
+/// - A floor of `0` (never revoked — every account's starting state, and what
+///   an upgraded instance arrives with) skips the check for one integer
+///   compare.
+/// - `>=`, not `==`. The push from core-api is best-effort, so the floor can
+///   lag behind the generation the user's fresh token already carries. `>=`
+///   still admits them; an equality test would lock the legitimate user out of
+///   chat because SpacetimeDB happened to be unreachable during their reset.
+///
+/// ponytail: parses the JWT payload per call, but only for accounts that have
+/// actually been revoked at least once. If that ever shows up in a profile,
+/// cache it per connection id.
+fn require_current_token(ctx: &ReducerContext, user: &User) -> Result<(), String> {
+    if user.min_token_generation == 0 {
+        return Ok(());
+    }
+
+    let payload = ctx
+        .sender_auth()
+        .jwt()
+        .map(|claims| claims.raw_payload().to_string())
+        .ok_or_else(|| "session is no longer valid; sign in again".to_string())?;
+
+    let generation = serde_json::from_str::<serde_json::Value>(&payload)
+        .ok()
+        .and_then(|claims| claims.get("gen")?.as_u64())
+        .unwrap_or(0);
+
     assert_or_err(
-        ctx.db.user().identity().find(ctx.sender()).is_some(),
-        "no account for this identity",
+        generation >= user.min_token_generation,
+        "session is no longer valid; sign in again",
     )
 }
 

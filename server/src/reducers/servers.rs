@@ -212,6 +212,7 @@ pub fn set_server_tags(
 /// its membership untouched). The owner can re-list it later.
 #[spacetimedb::reducer]
 pub fn admin_unlist_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     require_system_admin(ctx, ctx.sender())?;
 
     let mut server_row = ctx

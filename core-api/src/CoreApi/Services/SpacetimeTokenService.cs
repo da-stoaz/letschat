@@ -113,8 +113,15 @@ public sealed class SpacetimeTokenService
             + "openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | base64");
     }
 
-    /// <summary>Mints the RS256 JWT the client hands to SpacetimeDB.</summary>
-    public string Mint(string subject)
+    /// <summary>
+    /// Mints the RS256 JWT the client hands to SpacetimeDB.
+    /// <paramref name="generation"/> is the account's <c>TokenGeneration</c>;
+    /// the module compares it against the floor it holds for the account and
+    /// refuses anything older, which is how a password reset ends a stolen
+    /// chat session. Callers that only read (never act as the account) may
+    /// leave it at 0.
+    /// </summary>
+    public string Mint(string subject, long generation = 0)
     {
         var now = DateTime.UtcNow;
         return _handler.CreateToken(new SecurityTokenDescriptor
@@ -125,7 +132,11 @@ public sealed class SpacetimeTokenService
             NotBefore = now,
             Expires = now.Add(TokenLifetime),
             SigningCredentials = _credentials,
-            Claims = new Dictionary<string, object> { ["sub"] = subject },
+            Claims = new Dictionary<string, object>
+            {
+                ["sub"] = subject,
+                [TokenService.GenerationClaim] = generation,
+            },
         });
     }
 
@@ -152,6 +163,30 @@ public sealed class SpacetimeTokenService
 
         if (!result.IsValid) return null;
         return result.Claims.TryGetValue("sub", out var sub) ? sub?.ToString() : null;
+    }
+
+    /// <summary>
+    /// Reads the <c>gen</c> claim from a SpacetimeDB token. Absent or
+    /// unparseable counts as generation 0 — the value every account starts at,
+    /// so a token minted before this claim existed still passes for an account
+    /// that has never had a credential change.
+    /// </summary>
+    public static long ReadGeneration(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return 0;
+        }
+
+        try
+        {
+            var claim = new JsonWebToken(token).GetClaim(TokenService.GenerationClaim);
+            return long.TryParse(claim?.Value, out var generation) ? generation : 0;
+        }
+        catch (ArgumentException)
+        {
+            return 0;
+        }
     }
 
     /// <summary>

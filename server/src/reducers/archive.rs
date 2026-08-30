@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
-use crate::helpers::{raise_id_counter, require_system_admin};
+use crate::helpers::{raise_id_counter, require_account, require_system_admin};
 use crate::schema::*;
 
 /// Singleton primary key for the `ArchiveService` row.
@@ -24,6 +24,7 @@ pub fn set_archive_service_identity(
     ctx: &ReducerContext,
     service_identity: Identity,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_system_admin(ctx, ctx.sender())?;
 
     let row = ArchiveService {

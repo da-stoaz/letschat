@@ -264,6 +264,8 @@ export const User = __t.object("User", {
   avatarUrl: __t.option(__t.string()),
   createdAt: __t.timestamp(),
   isAdmin: __t.bool(),
+  suspended: __t.bool(),
+  minTokenGeneration: __t.u64(),
 });
 export type User = __Infer<typeof User>;
 

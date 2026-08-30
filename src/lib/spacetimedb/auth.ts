@@ -4,7 +4,7 @@ import { syncUsers } from './sync'
 import { sameIdentity, normalizeUsername, toIdentityString } from './mappers'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useSelfStore } from '../../stores/selfStore'
-import { authServiceLogin, clearStoredAuthSessionToken } from '../authService'
+import { authServiceChangePassword, authServiceLogin, clearStoredAuthSessionToken } from '../authService'
 import { clearSignedDownloadUrlCache } from '../uploads'
 import { clearBadgeCount } from '../notifications'
 import type { DbConnection } from '../../generated'
@@ -70,6 +70,36 @@ async function ensureAuthenticatedUserRow(normalizedUsername: string, displayNam
   if (!useSelfStore.getState().user) {
     throw new Error('Login succeeded but user profile is not available for this identity.')
   }
+}
+
+/**
+ * Changes the password, then signs in again with it.
+ *
+ * The server revokes every token issued under the old password — that is the
+ * point — and this connection is still holding one of them. The module reads
+ * the token off the connection itself, so without a fresh sign-in the user's
+ * own reducers start failing the moment they change their password.
+ *
+ * Deliberately delegates to {@link loginWithPassword} rather than adopting a
+ * token returned by the change itself. That keeps every credential this client
+ * persists coming through one path — the one that also verifies the identity
+ * SpacetimeDB connected as actually matches the account core-api authenticated,
+ * and that ensures the module `User` row exists. A second, parallel adoption
+ * path would have to repeat both checks or quietly skip them.
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const username = useSelfStore.getState().user?.username
+  if (!username) throw new Error('No signed-in account to change the password for.')
+
+  await authServiceChangePassword({ currentPassword, newPassword })
+
+  // The old session is dead from here on. If this throws, the password HAS
+  // changed — surfacing that is better than pretending otherwise, and the user
+  // can sign in normally.
+  await loginWithPassword(username, newPassword)
 }
 
 export async function loginWithPassword(username: string, password: string): Promise<void> {

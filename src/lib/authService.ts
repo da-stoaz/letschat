@@ -304,6 +304,9 @@ export async function authServiceChangePassword(payload: {
   const sessionToken = getStoredAuthSessionToken()
   if (!sessionToken) throw new Error('No active sign-in session found.')
 
+  // Returns nothing: the change revokes every session issued under the old
+  // password, this device's included, and the caller signs in again rather than
+  // being handed a replacement here. See `changePassword` in spacetimedb/auth.
   await postJson<void, { sessionToken: AuthFrameworkToken; currentPassword: string; newPassword: string }>(
     '/auth/change-password',
     { sessionToken, ...payload },

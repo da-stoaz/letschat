@@ -35,6 +35,7 @@ import {
 
 // Import all reducer arg schemas
 import AcceptFriendRequestReducer from "./accept_friend_request_reducer";
+import AdminSetAccountAccessReducer from "./admin_set_account_access_reducer";
 import AdminUnlistServerReducer from "./admin_unlist_server_reducer";
 import ApproveJoinRequestReducer from "./approve_join_request_reducer";
 import ArchiveReseedIdCountersReducer from "./archive_reseed_id_counters_reducer";
@@ -411,6 +412,7 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("accept_friend_request", AcceptFriendRequestReducer),
+  __reducerSchema("admin_set_account_access", AdminSetAccountAccessReducer),
   __reducerSchema("admin_unlist_server", AdminUnlistServerReducer),
   __reducerSchema("approve_join_request", ApproveJoinRequestReducer),
   __reducerSchema("archive_reseed_id_counters", ArchiveReseedIdCountersReducer),

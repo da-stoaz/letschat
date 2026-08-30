@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { LogOutIcon } from 'lucide-react'
 import { signOut } from '../../lib/spacetimedb'
-import { authServiceChangePassword } from '../../lib/authService'
+import { changePassword } from '../../lib/spacetimedb/auth'
 import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -29,11 +29,11 @@ export function SecurityTab() {
     setError(null)
     setIsSaving(true)
     try {
-      await authServiceChangePassword({ currentPassword, newPassword })
+      await changePassword(currentPassword, newPassword)
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
-      toast.success('Password changed')
+      toast.success('Password changed — other devices have been signed out')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Could not change your password.'
       setError(message)
