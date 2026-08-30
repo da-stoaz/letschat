@@ -1,5 +1,5 @@
 import { DbConnection, tables } from '../../generated'
-import { watchLiveTables } from './events'
+import { cancelPendingRefreshes, watchLiveTables } from './events'
 import { syncAll, resetClientState } from './sync'
 import { notify } from '../notifications'
 import { useConnectionStore, type ConnectionStatus } from '../../stores/connectionStore'
@@ -73,6 +73,9 @@ function teardownConnection(closeSocket = false): void {
   subscriptionHandle?.unsubscribe()
   subscriptionHandle = null
   liveEventsEnabled = false
+  // A queued rebuild closes over THIS connection; running it after a reconnect
+  // would repopulate the stores from a dead connection's cache.
+  cancelPendingRefreshes()
   if (closeSocket) connection?.disconnect()
   connection = null
 }
@@ -175,7 +178,15 @@ function buildSpacetimeUriCandidates(raw: string): string[] {
 
 // ─── Connection lifecycle ─────────────────────────────────────────────────────
 
-const SPACETIMEDB_CONNECT_TIMEOUT_MS = 5_000
+// Budget for the whole handshake AND the initial sync — it is only cleared in
+// `onApplied`, once every subscribed row has arrived. 5s used to be the limit,
+// which the most active users could not meet: their history is the largest and
+// the initial apply was quadratic in it, so they saw "Connection Error" against
+// a perfectly healthy server, and it got worse with every message they sent.
+// The quadratic behaviour is gone (see watchLiveTables), but the transfer is
+// still unbounded until the message view is (BUG_ANALYSIS C3), so this stays
+// generous rather than tight.
+const SPACETIMEDB_CONNECT_TIMEOUT_MS = 45_000
 
 async function connectWithUri(uri: string, database: string, reportErrors: boolean): Promise<void> {
   let appliedOnce = false

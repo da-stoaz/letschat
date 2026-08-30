@@ -116,9 +116,9 @@ export function handleIncomingMessage(message: Message): void {
   const me = useConnectionStore.getState().identity
   if (!me || sameIdentity(message.senderIdentity, me)) return
 
-  recomputeUnreadStateFromReadCursors()
-  updateUnreadBadgeCount()
-
+  // Unread counts and the badge are recomputed once per coalesced flush, after
+  // the message store has been rebuilt — doing it here would run per message
+  // and read a store that has not caught up yet.
   const ui = useUiStore.getState()
   const channelId = message.channelId
   const serverId = findServerIdByChannelId(channelId)
@@ -149,9 +149,7 @@ export function handleIncomingDirectMessage(message: DirectMessage): void {
   const senderIsSelf = sameIdentity(message.senderIdentity, me)
   if (senderIsSelf) return
 
-  recomputeUnreadStateFromReadCursors()
-  updateUnreadBadgeCount()
-
+  // See handleIncomingMessage: unread + badge run once per coalesced flush.
   const partnerIdentity = message.senderIdentity
   const ui = useUiStore.getState()
 
@@ -193,26 +191,105 @@ export function handleFriendAccepted(username: string): void {
   void notify('friend_accepted', { username })
 }
 
+// ─── Coalesced store refreshes ────────────────────────────────────────────────
+//
+// Every live-table handler used to rebuild a whole store synchronously, and the
+// message handlers recomputed unread state on top of that — three full passes
+// over the entire local history for every single incoming message. Steady-state
+// chat therefore cost work proportional to all history held, per message.
+//
+// Instead each handler marks what went stale and one pass runs on a trailing
+// timer, so a burst of N rows costs one rebuild rather than N. `syncAll` on the
+// initial subscription apply is what populates everything up front, so nothing
+// here needs to run before the connection is live.
+
+/** Trailing-edge window. Long enough to absorb a burst, short enough to feel instant. */
+const REFRESH_COALESCE_MS = 30
+
+const pendingRefreshes = new Map<string, () => void>()
+let unreadIsStale = false
+let flushHandle: ReturnType<typeof setTimeout> | null = null
+
+function flushRefreshes(): void {
+  flushHandle = null
+  const refreshes = [...pendingRefreshes.values()]
+  pendingRefreshes.clear()
+  const recomputeUnread = unreadIsStale
+  unreadIsStale = false
+
+  for (const refresh of refreshes) refresh()
+
+  // After the stores, never before: unread counts are derived from them, and
+  // the badge from the counts.
+  if (recomputeUnread) {
+    recomputeUnreadStateFromReadCursors()
+    updateUnreadBadgeCount()
+  }
+}
+
+/**
+ * Mark a store stale. `key` dedupes, so ten rows landing in one burst schedule
+ * one rebuild. `alsoUnread` additionally recomputes unread counts and the badge
+ * once, after every pending rebuild has run.
+ */
+function scheduleRefresh(key: string, refresh: () => void, alsoUnread = false): void {
+  pendingRefreshes.set(key, refresh)
+  if (alsoUnread) unreadIsStale = true
+  if (flushHandle !== null) return
+  flushHandle = setTimeout(flushRefreshes, REFRESH_COALESCE_MS)
+}
+
+/**
+ * Drop anything still pending. Called on teardown: a queued rebuild holds the
+ * old `DbConnection` in its closure, and running it after a reconnect would
+ * repopulate the stores from a dead connection's cache.
+ */
+export function cancelPendingRefreshes(): void {
+  if (flushHandle !== null) clearTimeout(flushHandle)
+  flushHandle = null
+  pendingRefreshes.clear()
+  unreadIsStale = false
+}
+
 // ─── Live table watcher ───────────────────────────────────────────────────────
 
 export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void {
-  conn.db.my_visible_users.onInsert(() => syncUsers(conn))
-  conn.db.my_visible_users.onUpdate(() => syncUsers(conn))
-  conn.db.my_servers.onInsert(() => syncServerScopedState(conn))
-  conn.db.my_servers.onUpdate(() => syncServerScopedState(conn))
-  conn.db.my_servers.onDelete(() => syncServerScopedState(conn))
-  conn.db.my_server_members.onInsert(() => syncServerScopedState(conn))
-  conn.db.my_server_members.onUpdate(() => syncServerScopedState(conn))
-  conn.db.my_server_members.onDelete(() => syncServerScopedState(conn))
-  conn.db.my_channels.onInsert(() => syncChannels(conn))
-  conn.db.my_channels.onUpdate(() => syncChannels(conn))
-  conn.db.my_channels.onDelete(() => syncChannels(conn))
-  conn.db.my_voice_participants.onInsert(() => syncVoiceParticipants(conn))
-  conn.db.my_voice_participants.onUpdate(() => syncVoiceParticipants(conn))
-  conn.db.my_voice_participants.onDelete(() => syncVoiceParticipants(conn))
-  conn.db.my_friends.onInsert((_ctx, row) => {
-    syncFriends(conn)
+  // Every handler bails before doing any work until the subscription has been
+  // applied. During the initial apply `onInsert` fires once per row, and each
+  // of those used to rebuild every store from the rows received so far — O(N²)
+  // over the whole history, inside the same budget that has to cover connecting
+  // at all. `syncAll` in `onApplied` does that work once instead.
+  const stale = (key: string, refresh: () => void, alsoUnread = false) => () => {
     if (!isLive()) return
+    scheduleRefresh(key, refresh, alsoUnread)
+  }
+
+  const users = stale('users', () => syncUsers(conn))
+  conn.db.my_visible_users.onInsert(users)
+  conn.db.my_visible_users.onUpdate(users)
+
+  const serverScoped = stale('serverScoped', () => syncServerScopedState(conn))
+  conn.db.my_servers.onInsert(serverScoped)
+  conn.db.my_servers.onUpdate(serverScoped)
+  conn.db.my_servers.onDelete(serverScoped)
+  conn.db.my_server_members.onInsert(serverScoped)
+  conn.db.my_server_members.onUpdate(serverScoped)
+  conn.db.my_server_members.onDelete(serverScoped)
+
+  const channels = stale('channels', () => syncChannels(conn))
+  conn.db.my_channels.onInsert(channels)
+  conn.db.my_channels.onUpdate(channels)
+  conn.db.my_channels.onDelete(channels)
+
+  const voice = stale('voice', () => syncVoiceParticipants(conn))
+  conn.db.my_voice_participants.onInsert(voice)
+  conn.db.my_voice_participants.onUpdate(voice)
+  conn.db.my_voice_participants.onDelete(voice)
+
+  const friends = stale('friends', () => syncFriends(conn))
+  conn.db.my_friends.onInsert((_ctx, row) => {
+    if (!isLive()) return
+    scheduleRefresh('friends', () => syncFriends(conn))
     const me = useConnectionStore.getState().identity
     if (!me) return
 
@@ -222,8 +299,8 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
     }
   })
   conn.db.my_friends.onUpdate((_ctx, _oldRow, row) => {
-    syncFriends(conn)
     if (!isLive()) return
+    scheduleRefresh('friends', () => syncFriends(conn))
     const me = useConnectionStore.getState().identity
     if (!me) return
 
@@ -233,51 +310,51 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
       handleFriendAccepted(findDisplayNameByIdentity(otherIdentity))
     }
   })
-  conn.db.my_friends.onDelete(() => syncFriends(conn))
-  conn.db.my_blocks.onInsert(() => syncFriends(conn))
-  conn.db.my_blocks.onDelete(() => syncFriends(conn))
+  conn.db.my_friends.onDelete(friends)
+  conn.db.my_blocks.onInsert(friends)
+  conn.db.my_blocks.onDelete(friends)
+
+  const dms = stale('directMessages', () => syncDirectMessages(conn), true)
   conn.db.my_direct_messages.onInsert((_ctx, row) => {
-    syncDirectMessages(conn)
-    recomputeUnreadStateFromReadCursors()
     if (!isLive()) return
-    const message = mapDirectMessage(row)
-    handleIncomingDirectMessage(message)
+    scheduleRefresh('directMessages', () => syncDirectMessages(conn), true)
+    handleIncomingDirectMessage(mapDirectMessage(row))
   })
-  conn.db.my_direct_messages.onUpdate(() => {
-    syncDirectMessages(conn)
-    recomputeUnreadStateFromReadCursors()
-  })
-  conn.db.my_direct_messages.onDelete(() => {
-    syncDirectMessages(conn)
-    recomputeUnreadStateFromReadCursors()
-  })
-  conn.db.my_dm_voice_participants.onInsert(() => syncDmVoiceParticipants(conn))
-  conn.db.my_dm_voice_participants.onUpdate(() => syncDmVoiceParticipants(conn))
-  conn.db.my_dm_voice_participants.onDelete(() => syncDmVoiceParticipants(conn))
-  conn.db.my_presence_states.onInsert(() => syncPresenceStates(conn))
-  conn.db.my_presence_states.onUpdate(() => syncPresenceStates(conn))
-  conn.db.my_presence_states.onDelete(() => syncPresenceStates(conn))
-  conn.db.my_typing_states.onInsert(() => syncTypingStates(conn))
-  conn.db.my_typing_states.onUpdate(() => syncTypingStates(conn))
-  conn.db.my_typing_states.onDelete(() => syncTypingStates(conn))
-  conn.db.my_read_states.onInsert(() => {
-    syncReadStates(conn)
-    recomputeUnreadStateFromReadCursors()
-  })
-  conn.db.my_read_states.onUpdate(() => {
-    syncReadStates(conn)
-    recomputeUnreadStateFromReadCursors()
-  })
-  conn.db.my_read_states.onDelete(() => {
-    syncReadStates(conn)
-    recomputeUnreadStateFromReadCursors()
-  })
-  conn.db.my_invites.onInsert(() => syncInvites(conn))
-  conn.db.my_invites.onUpdate(() => syncInvites(conn))
-  conn.db.my_invites.onDelete(() => syncInvites(conn))
+  conn.db.my_direct_messages.onUpdate(dms)
+  conn.db.my_direct_messages.onDelete(dms)
+
+  const dmVoice = stale('dmVoice', () => syncDmVoiceParticipants(conn))
+  conn.db.my_dm_voice_participants.onInsert(dmVoice)
+  conn.db.my_dm_voice_participants.onUpdate(dmVoice)
+  conn.db.my_dm_voice_participants.onDelete(dmVoice)
+
+  // Presence heartbeats every 25s per visible user and typing fires per
+  // keystroke, so these are the highest-frequency events in the app and the
+  // ones coalescing helps most.
+  const presence = stale('presence', () => syncPresenceStates(conn))
+  conn.db.my_presence_states.onInsert(presence)
+  conn.db.my_presence_states.onUpdate(presence)
+  conn.db.my_presence_states.onDelete(presence)
+
+  const typing = stale('typing', () => syncTypingStates(conn))
+  conn.db.my_typing_states.onInsert(typing)
+  conn.db.my_typing_states.onUpdate(typing)
+  conn.db.my_typing_states.onDelete(typing)
+
+  const readStates = stale('readStates', () => syncReadStates(conn), true)
+  conn.db.my_read_states.onInsert(readStates)
+  conn.db.my_read_states.onUpdate(readStates)
+  conn.db.my_read_states.onDelete(readStates)
+
+  const invites = stale('invites', () => syncInvites(conn))
+  conn.db.my_invites.onInsert(invites)
+  conn.db.my_invites.onUpdate(invites)
+  conn.db.my_invites.onDelete(invites)
+
+  const dmServerInvites = stale('dmServerInvites', () => syncDmServerInvites(conn))
   conn.db.my_dm_server_invites.onInsert((_ctx, row) => {
-    syncDmServerInvites(conn)
     if (!isLive()) return
+    scheduleRefresh('dmServerInvites', () => syncDmServerInvites(conn))
     const me = useConnectionStore.getState().identity
     if (!me) return
     const inv = mapDmServerInvite(row)
@@ -290,25 +367,20 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
       })
     }
   })
-  conn.db.my_dm_server_invites.onUpdate(() => syncDmServerInvites(conn))
-  conn.db.my_dm_server_invites.onDelete(() => syncDmServerInvites(conn))
-  conn.db.my_channel_messages.onInsert((_ctx, row) => {
-    syncMessages(conn)
-    recomputeUnreadStateFromReadCursors()
-    if (!isLive()) return
+  conn.db.my_dm_server_invites.onUpdate(dmServerInvites)
+  conn.db.my_dm_server_invites.onDelete(dmServerInvites)
 
-    const message = mapMessage(row)
-    handleIncomingMessage(message)
+  const messages = stale('messages', () => syncMessages(conn), true)
+  conn.db.my_channel_messages.onInsert((_ctx, row) => {
+    if (!isLive()) return
+    scheduleRefresh('messages', () => syncMessages(conn), true)
+    handleIncomingMessage(mapMessage(row))
   })
-  conn.db.my_channel_messages.onUpdate(() => {
-    syncMessages(conn)
-    recomputeUnreadStateFromReadCursors()
-  })
-  conn.db.my_channel_messages.onDelete(() => {
-    syncMessages(conn)
-    recomputeUnreadStateFromReadCursors()
-  })
-  conn.db.my_pinned_messages.onInsert(() => syncPins(conn))
-  conn.db.my_pinned_messages.onUpdate(() => syncPins(conn))
-  conn.db.my_pinned_messages.onDelete(() => syncPins(conn))
+  conn.db.my_channel_messages.onUpdate(messages)
+  conn.db.my_channel_messages.onDelete(messages)
+
+  const pins = stale('pins', () => syncPins(conn))
+  conn.db.my_pinned_messages.onInsert(pins)
+  conn.db.my_pinned_messages.onUpdate(pins)
+  conn.db.my_pinned_messages.onDelete(pins)
 }
