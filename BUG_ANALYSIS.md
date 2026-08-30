@@ -28,7 +28,7 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A1](#a1) | ~~SpacetimeDB akzeptiert anonyme Identities — Account-Kontrollen der core-api greifen nicht~~ · **✅ behoben (PR #71)** | ~~S1~~ | Auth |
 | [A2](#a2) | ~~Rate-Limiting partitioniert nach Proxy-IP statt Client-IP~~ · **✅ behoben (PR #70)** | ~~S1~~ | Auth |
 | [A3](#a3) | ~~`/auth/link` umgeht Registrierungssperre, E-Mail-Bestätigung und Rate-Limit~~ · **✅ behoben (PR #70)** | ~~S1~~ | Auth |
-| [A4](#a4) | Keine Token-Revokation: Passwort-Reset und Account-Sperre wirken nicht | S1 | Auth |
+| [A4](#a4) | ~~Keine Token-Revokation: Passwort-Reset und Account-Sperre wirken nicht~~ · **✅ behoben (PR #72)** | ~~S1~~ | Auth |
 | [A5](#a5) | Upload-Größenlimit und Tagesquote sind clientseitig deklariert, nicht durchgesetzt | S2 | Storage |
 | [A6](#a6) | Presigned Download-URLs ohne Zugriffsprüfung auf den Storage-Key | S2 | Storage |
 | [A7](#a7) | Kein Account-Lockout, keine Passwort-Längenobergrenze → Argon2-DoS | S2 | Auth |
@@ -153,50 +153,45 @@ gegen den unkorrigierten Endpunkt fallen 2 der 3 Tests.
 ---
 
 <a id="a4"></a>
-## A4 — Keine Token-Revokation: Passwort-Reset und Account-Sperre wirken nicht · **S1**
+## A4 — Keine Token-Revokation · ✅ **behoben**
 
-**Stellen:** `core-api/src/CoreApi/Services/TokenService.cs:36-90`,
-`Services/SpacetimeTokenService.cs:166` und `:247-260`,
-`Endpoints/AuthEndpoints.cs:319-342` (`ChangePassword`), `:536-584` (`ResetPassword`),
-`Pages/Admin/UserDetail.cshtml.cs`
+**Behoben in PR #72** (`fix/token-revocation`).
 
-Beide Token-Arten sind vollständig zustandslose JWTs. Es gibt keine Denylist, keine
-`SecurityStamp`-Prüfung und keine Sitzungstabelle. Die SpacetimeDB-Token laufen
-**30 Tage**:
+Jeder Account trägt jetzt eine monotone `TokenGeneration`, die core-api in **beide**
+Token als `gen`-Claim schreibt. Das Modul hält pro Account zwei Werte, die core-api
+pusht — `suspended` und `min_token_generation` — und `require_account` (aus [A1](#a1),
+in allen 60 client-aufrufbaren Reducern) erzwingt beide. Damit greifen alle drei
+Teilprobleme:
 
-```csharp
-private static readonly TimeSpan TokenLifetime = TimeSpan.FromDays(30);
-```
+1. **Passwort-Reset/-Änderung** erhöht die Generation und pusht die neue Untergrenze.
+   Das gestohlene Token liegt darunter und wird beim nächsten Reducer-Aufruf
+   abgelehnt — nicht erst nach 30 Tagen. `/auth/renew-session` prüft die Generation
+   ebenfalls, sonst könnte der Angreifer sich einfach weiter neue Sitzungen ausstellen.
+2. **Account-Sperre** setzt `suspended`; das Modul verweigert daraufhin jeden Reducer,
+   auch die admin-gateten. (`rekey_identities` ist bewusst ausgenommen: einmaliger
+   Pre-OIDC-Migrationspfad mit statischem Token ohne `gen`.)
+3. **`token_use`** wird in `TokenService.ValidateAsync` geprüft.
 
-Daraus folgen drei Probleme:
+**Bewusst ein Zähler statt `SecurityStamp`.** Der Push ins Modul ist best-effort; ein
+Gleichheitsvergleich würde den *legitimen* Nutzer aus dem Chat aussperren, sobald der
+Push fehlschlägt (SpacetimeDB kurz nicht erreichbar). `>=` fällt stattdessen auf „noch
+nicht widerrufen" zurück. Aus demselben Grund wird die Generation **vor** dem Push
+persistiert.
 
-1. **Passwort-Reset entzieht dem Angreifer nichts.** Der klassische
-   Wiederherstellungsfall — „mein Account wurde übernommen, ich setze das Passwort
-   zurück" — funktioniert nicht. Weder `ChangePassword` noch `ResetPassword` machen
-   ein ausgestelltes Token ungültig. Das gestohlene SpacetimeDB-Token bleibt bis zu
-   30 Tage gültig und gewährt vollen Chat-Zugriff.
+**Kein kurzlebigeres Token.** Der Lehrbuchansatz (kurze TTL + Refresh) scheitert hier
+zweifach: `/auth/refresh-spacetime-token` existiert gar nicht (nur im Doc-Kommentar
+`AuthEndpoints.cs:13` erwähnt), und SpacetimeDB prüft das Token **beim Verbinden**,
+nicht pro Aufruf — eine kürzere TTL würde eine bereits offene WebSocket-Sitzung eines
+Angreifers nie beenden. Nur die Prüfung im Modul tut das.
 
-2. **Das Sperren eines Accounts im Admin-Panel wirkt nicht.**
-   `EnsureSignInAllowed` (`AuthEndpoints.cs:603-624`) prüft `AccountStatus` beim
-   Login gegen die core-api. Der Client spricht danach aber **direkt** mit
-   SpacetimeDB — die core-api ist auf diesem Weg gar nicht beteiligt. Das Modul kennt
-   `AccountStatus` nicht. Ein auf `Disabled` gesetzter Nutzer liest und schreibt bis
-   zum Token-Ablauf ungestört weiter.
+Verifiziert gegen eine echte SpacetimeDB-Instanz: 7 neue Fälle in
+`tests/security/token-revocation.test.ts`, die alle gegen das ungepatchte Modul
+fehlschlagen, plus 6 core-api-Tests.
 
-3. **`token_use` wird nie geprüft.** `IssueSession` setzt den Claim
-   `token_use: "access"` bzw. `"refresh"` (`TokenService.cs:54`, `:69`), aber
-   `ValidateAsync` (`:97-129`) prüft ihn nicht. Beide Token sind mit demselben
-   Schlüssel und Issuer signiert. Ein Client, der das 7-Tage-`refresh_token` im Feld
-   `access_token` einreicht, erhält damit eine 7-Tage- statt einer 1-Stunden-Sitzung.
-   (Randnotiz: einen Refresh-Endpunkt gibt es gar nicht — `/auth/renew-session`
-   arbeitet mit dem SpacetimeDB-Token —, das `refresh_token` ist also ansonsten
-   funktionslos.)
-
-Verschärfend: beide Token liegen im `localStorage`
-(`src/lib/spacetimedb/connection.ts:82-95`, `src/lib/authService.ts:333-347`). Im
-gehosteten Web-Build bedeutet ein XSS damit eine 30-tägige, nicht widerrufbare
-Account-Übernahme — und die CSP, die genau das verhindern soll, ist nicht scharf
-geschaltet ([E4](#e4)).
+**Rest-Lücke:** Ein widerrufenes Token kann über `/sql` weiterhin die `my_*`-Views
+**lesen** — Views sind keine Reducer und liegen nicht auf dem `require_account`-Pfad.
+Schreibzugriff ist vollständig unterbunden. Der `localStorage`-Aspekt bleibt ebenfalls
+offen (siehe [E4](#e4): CSP nur im Report-Only-Modus).
 
 ---
 
@@ -1452,7 +1447,9 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 ## Vorschlag zur Priorisierung
 
 **Erledigt:** [A2](#a2) (Forwarded Headers) und [A3](#a3) (`/auth/link` absichern)
-sind in PR #70 behoben, [A1](#a1) (Gate für anonyme Identities) in PR #71.
+sind in PR #70 behoben, [A1](#a1) (Gate für anonyme Identities) in PR #71,
+[A4](#a4) (Token-Revokation) in PR #72. Damit sind alle S1-Befunde im
+Auth-Bereich geschlossen; offen bleibt das S1-Cluster [C1](#c1)/[C2](#c2)/[C3](#c3).
 
 **Zuerst — Sicherheit, kleiner Aufwand, große Wirkung:**
 [B1](#b1)/[B2](#b2) (Selbstbezug-Prüfungen, je eine Zeile), [B3](#b3) (Block-Prüfung
@@ -1464,5 +1461,4 @@ View begrenzen, inkrementell statt vollständig synchronisieren, `recompute` ent
 und einmal statt dreimal aufrufen.
 
 **Strukturell — braucht eine Entwurfsentscheidung:**
-[A4](#a4) (Token-Revokation), [A6](#a6) (Autorisierung für Anhänge),
-[C4](#c4) (Discover-Mitgliederzahl aggregieren).
+[A6](#a6) (Autorisierung für Anhänge), [C4](#c4) (Discover-Mitgliederzahl aggregieren).
