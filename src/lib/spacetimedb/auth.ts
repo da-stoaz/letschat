@@ -4,7 +4,7 @@ import { syncUsers } from './sync'
 import { sameIdentity, normalizeUsername, toIdentityString } from './mappers'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useSelfStore } from '../../stores/selfStore'
-import { authServiceLogin, clearStoredAuthSessionToken } from '../authService'
+import { authServiceChangePassword, authServiceLogin, clearStoredAuthSessionToken } from '../authService'
 import { clearSignedDownloadUrlCache } from '../uploads'
 import { clearBadgeCount } from '../notifications'
 import type { DbConnection } from '../../generated'
@@ -70,6 +70,26 @@ async function ensureAuthenticatedUserRow(normalizedUsername: string, displayNam
   if (!useSelfStore.getState().user) {
     throw new Error('Login succeeded but user profile is not available for this identity.')
   }
+}
+
+/**
+ * Changes the password and re-establishes the chat connection with the token
+ * that comes back.
+ *
+ * The server revokes every token issued under the old password — that is the
+ * point — and this connection is still holding one of them. The module reads
+ * the token off the connection itself, so without a reconnect the user's own
+ * reducers start failing immediately after they change their password.
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const auth = await authServiceChangePassword({ currentPassword, newPassword })
+
+  disconnect()
+  setStoredToken(auth.spacetimeToken)
+  await connect()
 }
 
 export async function loginWithPassword(username: string, password: string): Promise<void> {

@@ -17,4 +17,6 @@ export default __t.row({
   avatarUrl: __t.option(__t.string()).name("avatar_url"),
   createdAt: __t.timestamp().name("created_at"),
   isAdmin: __t.bool().name("is_admin"),
+  suspended: __t.bool(),
+  minTokenGeneration: __t.u64().name("min_token_generation"),
 });

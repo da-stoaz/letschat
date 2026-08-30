@@ -300,14 +300,21 @@ export async function authServiceVerify(): Promise<boolean> {
 export async function authServiceChangePassword(payload: {
   currentPassword: string
   newPassword: string
-}): Promise<void> {
+}): Promise<AuthServiceResponse> {
   const sessionToken = getStoredAuthSessionToken()
   if (!sessionToken) throw new Error('No active sign-in session found.')
 
-  await postJson<void, { sessionToken: AuthFrameworkToken; currentPassword: string; newPassword: string }>(
-    '/auth/change-password',
-    { sessionToken, ...payload },
-  )
+  // Changing a password revokes every session issued under the old one — the
+  // point of the fix, but that includes this device's. The server hands back a
+  // replacement pair, so store both or the next action silently 401s and the
+  // chat connection is refused on its next reducer call.
+  const result = await postJson<
+    AuthServiceResponse,
+    { sessionToken: AuthFrameworkToken; currentPassword: string; newPassword: string }
+  >('/auth/change-password', { sessionToken, ...payload })
+
+  setStoredAuthSessionToken(result.sessionToken)
+  return result
 }
 
 export interface AccountDetails {

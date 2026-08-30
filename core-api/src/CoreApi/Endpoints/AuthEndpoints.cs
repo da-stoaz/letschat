@@ -306,10 +306,11 @@ public static class AuthEndpoints
         }
     }
 
-    private static async Task<VerifyResponse> Verify(VerifyRequest request, TokenService tokens)
+    private static async Task<VerifyResponse> Verify(
+        VerifyRequest request, UserManager<ApplicationUser> users, TokenService tokens)
     {
-        var username = await tokens.ValidateAsync(request.SessionToken);
-        return new VerifyResponse(username is not null);
+        var user = await tokens.ResolveAccountAsync(request.SessionToken, users);
+        return new VerifyResponse(user is not null);
     }
 
     /// <summary>
@@ -323,11 +324,8 @@ public static class AuthEndpoints
         UserManager<ApplicationUser> users,
         TokenService tokens)
     {
-        var username = await tokens.ValidateAsync(request.SessionToken)
-            ?? throw ApiException.Unauthorized("Not signed in.");
-
-        var user = await users.FindByNameAsync(username)
-            ?? throw ApiException.Unauthorized("Not signed in.");
+        var user = await tokens.RequireAccountAsync(
+            request.SessionToken, users, "Not signed in.");
 
         return new AccountResponse(
             user.UserName!,
@@ -355,13 +353,12 @@ public static class AuthEndpoints
     private static async Task<IResult> ChangePassword(
         ChangePasswordRequest request,
         UserManager<ApplicationUser> users,
-        TokenService tokens)
+        TokenService tokens,
+        SpacetimeTokenService spacetime,
+        AccountAccessService access)
     {
-        var username = await tokens.ValidateAsync(request.SessionToken)
-            ?? throw ApiException.Unauthorized("Sign in before changing your password.");
-
-        var user = await users.FindByNameAsync(username)
-            ?? throw ApiException.Unauthorized("Sign in before changing your password.");
+        var user = await tokens.RequireAccountAsync(
+            request.SessionToken, users, "Sign in before changing your password.");
 
         Validation.ValidatePassword(request.NewPassword ?? string.Empty);
 
@@ -372,9 +369,13 @@ public static class AuthEndpoints
             throw TranslateIdentityFailure(result);
         }
 
-        user.UpdatedAtUtc = DateTime.UtcNow;
-        await users.UpdateAsync(user);
-        return Results.NoContent();
+        // Changing a password is a revocation: every session issued under the
+        // old one dies, including any an attacker holds. That includes the
+        // caller's own, so hand back a replacement minted at the new generation
+        // — otherwise changing your password logs you out of the device you did
+        // it on, which trains people not to do it.
+        await access.RevokeTokensAsync(user);
+        return Results.Ok(BuildAuthResponse(user, await users.GetRolesAsync(user), tokens, spacetime));
     }
 
     /// <summary>Wire name for an account's lifecycle status.</summary>
@@ -402,9 +403,17 @@ public static class AuthEndpoints
         var user = await users.FindByIdAsync(subject)
             ?? throw ApiException.Unauthorized("Could not renew session for this account.");
 
+        // The SpacetimeDB token is the credential that buys new sessions here, so
+        // a revoked one has to be refused or a password reset achieves nothing:
+        // the attacker would simply keep renewing.
+        if (SpacetimeTokenService.ReadGeneration(request.SpacetimeToken) < user.TokenGeneration)
+        {
+            throw ApiException.Unauthorized("Could not renew session for this account.");
+        }
+
         EnsureSignInAllowed(user);
         var roles = await users.GetRolesAsync(user);
-        return new RenewSessionResponse(tokens.IssueSession(user.UserName!, roles));
+        return new RenewSessionResponse(tokens.IssueSession(user.UserName!, roles, user.TokenGeneration));
     }
 
     /// <summary>
@@ -571,7 +580,8 @@ public static class AuthEndpoints
     /// </summary>
     private static async Task<IResult> ResetPassword(
         HttpContext http,
-        UserManager<ApplicationUser> users)
+        UserManager<ApplicationUser> users,
+        AccountAccessService access)
     {
         var form = await http.Request.ReadFormAsync();
         var userId = form["userId"].ToString();
@@ -614,19 +624,25 @@ public static class AuthEndpoints
                 ok: false);
         }
 
+        // The reason people reset a password is that someone else may have it.
+        // Without this the reset changes nothing for the attacker, whose chat
+        // token stays valid for its full 30 days.
+        await access.RevokeTokensAsync(user);
+
         return HtmlPage(
             "Password updated",
-            "Your password has been reset. You can now sign in to LetsChat with your new password.",
+            "Your password has been reset, and every device that was signed in has been "
+            + "signed out. You can now sign in to LetsChat with your new password.",
             ok: true);
     }
 
     private static AuthResponse BuildAuthResponse(
         ApplicationUser user, IEnumerable<string> roles, TokenService tokens, SpacetimeTokenService spacetime)
     {
-        var session = tokens.IssueSession(user.UserName!, roles);
+        var session = tokens.IssueSession(user.UserName!, roles, user.TokenGeneration);
         // The SpacetimeDB token is minted fresh (never stored); the client
         // presents it to SpacetimeDB, which derives the same identity we hold.
-        var spacetimeToken = spacetime.Mint(user.Id);
+        var spacetimeToken = spacetime.Mint(user.Id, user.TokenGeneration);
         return new AuthResponse(
             user.UserName!,
             user.DisplayName,

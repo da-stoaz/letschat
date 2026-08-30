@@ -45,7 +45,10 @@ public sealed class ChangePasswordTests : IClassFixture<LetsChatWebApplicationFa
         var change = await LetsChatWebApplicationFactory.PostJsonAsync(
             client, "/auth/change-password",
             new { sessionToken, currentPassword = OriginalPassword, newPassword = "a-brand-new-secret-2" });
-        Assert.Equal(HttpStatusCode.NoContent, change.StatusCode);
+        // Answers with a fresh auth payload rather than 204: the change revokes
+        // every session issued under the old password, this caller's included,
+        // so it has to be handed a replacement.
+        Assert.Equal(HttpStatusCode.OK, change.StatusCode);
 
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(client, "wilhelmina", "a-brand-new-secret-2")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(client, "wilhelmina", OriginalPassword)).StatusCode);

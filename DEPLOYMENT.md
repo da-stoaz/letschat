@@ -378,6 +378,46 @@ An empty result means no admin existed when core-api last tried. Sign in with an
 admin account and check again; `core-api` logs
 `Pinned SpacetimeDB trusted issuer to …` when it succeeds.
 
+## Ending a session: disables and password resets
+
+The chat client talks to SpacetimeDB directly, so core-api's account checks are
+not on that path. Two things follow, and both are now enforced in the module
+rather than left to token expiry:
+
+- **Disabling an account in the control panel takes effect immediately.** It
+  used to only block the next sign-in; the account kept reading and posting
+  until its SpacetimeDB token expired, which could be up to 30 days.
+- **A password reset or change ends every other session.** Each account carries
+  a token generation that increments on any credential change; core-api stamps
+  it into every token it mints and pushes the new floor to the module, which
+  refuses anything older on its next reducer call. The device that performed the
+  change is handed a replacement, so it stays signed in.
+
+**You do not configure this.** The push happens automatically and needs an
+instance admin to exist (the same credential the admin panel already uses).
+
+**It fails open, deliberately.** If SpacetimeDB is unreachable when an account is
+disabled or a password reset, the change is still saved in core-api — only the
+push is lost, and the module keeps admitting the old tokens until the next push
+succeeds. The alternative would be locking legitimate users out of chat because
+the database blinked. core-api logs the failure:
+
+```
+Could not push access state for <user> to SpacetimeDB.
+```
+
+If you see it, the account's core-api side is correct but its chat sessions are
+not yet revoked. Any later status change or credential change re-pushes; to
+force it, toggle the account's status in the control panel once SpacetimeDB is
+back.
+
+To confirm the module's view of an account:
+
+```
+spacetime sql -s <server> <database> \
+  "SELECT username, suspended, min_token_generation FROM user WHERE username = '<name>'"
+```
+
 ## Admin Control Panel
 
 `core-api` serves the admin Razor area on container port `8788`. The

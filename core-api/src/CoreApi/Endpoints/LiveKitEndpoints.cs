@@ -28,11 +28,11 @@ public static class LiveKitEndpoints
         var room = Validation.Required(request.Room, "Room is required.");
         var identity = Validation.Required(request.Identity, "Identity is required.");
 
-        var username = await tokens.ValidateAsync(request.SessionToken)
-            ?? throw ApiException.Unauthorized("Invalid auth session.");
-
-        var user = await users.FindByNameAsync(username)
-            ?? throw ApiException.Unauthorized("Account not found for session token.");
+        // Resolves the account AND rejects a session revoked by a credential
+        // change or a disabled account — a voice token is full room access, so
+        // it must not outlive the session that asked for it.
+        var user = await tokens.RequireAccountAsync(
+            request.SessionToken, users, "Invalid auth session.");
 
         if (!string.Equals(
                 Validation.NormalizeIdentity(user.SpacetimeIdentity),

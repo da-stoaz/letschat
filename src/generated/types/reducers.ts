@@ -7,6 +7,7 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import AcceptFriendRequestReducer from "../accept_friend_request_reducer";
+import AdminSetAccountAccessReducer from "../admin_set_account_access_reducer";
 import AdminUnlistServerReducer from "../admin_unlist_server_reducer";
 import ApproveJoinRequestReducer from "../approve_join_request_reducer";
 import ArchiveReseedIdCountersReducer from "../archive_reseed_id_counters_reducer";
@@ -91,6 +92,7 @@ import UpdateVoiceStateReducer from "../update_voice_state_reducer";
 import UseInviteReducer from "../use_invite_reducer";
 
 export type AcceptFriendRequestParams = __Infer<typeof AcceptFriendRequestReducer>;
+export type AdminSetAccountAccessParams = __Infer<typeof AdminSetAccountAccessReducer>;
 export type AdminUnlistServerParams = __Infer<typeof AdminUnlistServerReducer>;
 export type ApproveJoinRequestParams = __Infer<typeof ApproveJoinRequestReducer>;
 export type ArchiveReseedIdCountersParams = __Infer<typeof ArchiveReseedIdCountersReducer>;

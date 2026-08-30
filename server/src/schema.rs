@@ -123,6 +123,31 @@ pub struct User {
     /// `init` reducer (publisher becomes admin) and by `set_user_admin`.
     #[default(false)]
     pub is_admin: bool,
+    /// Instance-level lockout. `true` makes `require_account` refuse every
+    /// client-callable reducer, so an account an admin disabled stops acting on
+    /// the chat side immediately rather than when its (long-lived) SpacetimeDB
+    /// token happens to expire. Pushed by core-api from `AccountStatus`.
+    #[default(false)]
+    pub suspended: bool,
+    /// Lowest token generation this account still accepts. A caller's token
+    /// must carry a `gen` claim of at least this value.
+    ///
+    /// This is what makes a password reset actually end the attacker's session:
+    /// core-api increments the account's generation on every credential change
+    /// and pushes the new floor here, so the stolen token — minted at a lower
+    /// generation — stops being accepted on the very next reducer call.
+    ///
+    /// Deliberately a monotonic counter rather than an opaque stamp, because
+    /// the comparison has to fail OPEN. If the push to this module fails (it is
+    /// best-effort — SpacetimeDB may be briefly unreachable), the floor stays
+    /// behind while the user's fresh token is already at the higher generation.
+    /// `>=` still admits them and a later push closes the gap; an equality test
+    /// would instead lock the legitimate user out of chat with no signal.
+    ///
+    /// `0` means "never revoked" and skips the check entirely — the state every
+    /// account starts in, and the state an upgraded instance arrives in.
+    #[default(0u64)]
+    pub min_token_generation: u64,
 }
 
 // Private: clients read servers they're a member of (or that are discoverable)

@@ -82,7 +82,7 @@ public sealed class SpacetimeClient(
                 .GetRequiredService<UserManager<Data.ApplicationUser>>();
             foreach (var admin in await users.GetUsersInRoleAsync(DbInitializer.AdminRole))
             {
-                candidates.Add(tokens.Mint(admin.Id));
+                candidates.Add(tokens.Mint(admin.Id, admin.TokenGeneration));
             }
         }
         catch
@@ -546,6 +546,46 @@ public sealed class SpacetimeClient(
     /// singleton; a lost race only means one redundant (idempotent) reducer call.
     /// </summary>
     private bool _trustedIssuerPinned;
+
+    /// <summary>
+    /// Pushes an account's chat-side access state onto its module <c>User</c>
+    /// row via the <c>admin_set_account_access</c> reducer: whether it is
+    /// suspended, and the lowest token generation it still accepts.
+    ///
+    /// <para>
+    /// No-ops (returns <c>false</c>) when no admin credential is available or
+    /// the account has no SpacetimeDB identity. Throws if SpacetimeDB rejects
+    /// the call, so <see cref="AccountAccessService"/> can log it — the reducer
+    /// itself no-ops for an account that never registered in chat, so a throw
+    /// really does mean something went wrong.
+    /// </para>
+    /// </summary>
+    public async Task<bool> SetAccountAccessAsync(
+        string? spacetimeIdentity,
+        bool suspended,
+        long minTokenGeneration,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(spacetimeIdentity))
+        {
+            return false;
+        }
+
+        if ((await ResolveAdminTokensAsync()).Count == 0)
+        {
+            return false;
+        }
+
+        // admin_set_account_access(target, suspended, min_token_generation) —
+        // an Identity arg is a 1-element tuple of its hex string.
+        var hex = spacetimeIdentity.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? spacetimeIdentity
+            : "0x" + spacetimeIdentity;
+        var args = new List<object> { new[] { hex }, suspended, minTokenGeneration };
+
+        await PostAdminReducerAsync("admin_set_account_access", args, ct);
+        return true;
+    }
 
     /// <summary>
     /// Drives the OIDC identity-inversion migration in SpacetimeDB: re-keys every

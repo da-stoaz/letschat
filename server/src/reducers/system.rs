@@ -1,6 +1,6 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, require_system_admin};
+use crate::helpers::{assert_or_err, require_account, require_system_admin};
 use crate::schema::*;
 
 /// Singleton primary key. `SystemSettings` is intentionally a 1-row table.
@@ -114,6 +114,7 @@ pub(crate) fn require_trusted_issuer(ctx: &ReducerContext) -> Result<(), String>
 /// from the issuer that actually signs the tokens. Idempotent.
 #[spacetimedb::reducer]
 pub fn set_trusted_issuer(ctx: &ReducerContext, issuer: Option<String>) -> Result<(), String> {
+    require_account(ctx)?;
     require_system_admin(ctx, ctx.sender())?;
 
     let issuer = issuer
@@ -131,11 +132,46 @@ pub fn set_space_create_policy(
     ctx: &ReducerContext,
     policy: SpaceCreatePolicy,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_system_admin(ctx, ctx.sender())?;
 
     let mut row = current_settings(ctx);
     row.space_create_policy = policy;
     save_settings(ctx, row);
+    Ok(())
+}
+
+/// Pushes an account's chat-side access state: whether it is disabled, and the
+/// token stamp that its tokens must now carry. Instance-admin gated.
+///
+/// core-api owns both facts and calls this whenever either changes — an admin
+/// disabling or re-enabling an account, and any credential change (password
+/// reset or change, which rolls the stamp). It exists because the client talks
+/// to this module directly: core-api's own sign-in checks are simply not on
+/// that path, so without this a disabled account keeps chatting and a password
+/// reset does not end a stolen session.
+///
+/// The generation floor only ever rises: a stale retry or an out-of-order call
+/// cannot re-open a window that a newer one already closed. Idempotent. No-ops
+/// rather than failing when the account has no `User` row — an account that
+/// never signed into the chat client has nothing to revoke, and core-api's
+/// disable flow must not fail because of that.
+#[spacetimedb::reducer]
+pub fn admin_set_account_access(
+    ctx: &ReducerContext,
+    target: Identity,
+    suspended: bool,
+    min_token_generation: u64,
+) -> Result<(), String> {
+    require_account(ctx)?;
+    require_system_admin(ctx, ctx.sender())?;
+
+    let Some(mut user) = ctx.db.user().identity().find(target) else {
+        return Ok(());
+    };
+    user.suspended = suspended;
+    user.min_token_generation = user.min_token_generation.max(min_token_generation);
+    ctx.db.user().identity().update(user);
     Ok(())
 }
 
@@ -148,6 +184,7 @@ pub fn set_user_admin(
     target: Identity,
     is_admin: bool,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_system_admin(ctx, ctx.sender())?;
 
     // Last-admin guard — never let the system end up with zero admins, which

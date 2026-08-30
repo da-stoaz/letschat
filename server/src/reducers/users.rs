@@ -51,6 +51,10 @@ pub fn register_user(
         avatar_url: None,
         created_at: ctx.timestamp,
         is_admin: is_first_admin,
+        suspended: false,
+        // No floor until core-api first revokes (a credential change), so the
+        // token check costs one integer compare for accounts that never need it.
+        min_token_generation: 0,
     });
     Ok(())
 }

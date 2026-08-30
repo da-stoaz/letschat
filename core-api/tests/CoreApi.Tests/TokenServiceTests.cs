@@ -51,7 +51,7 @@ public sealed class TokenServiceTests
     {
         var service = new TokenService(Options(Secret));
 
-        var token = service.IssueSession("alice", ["Member"]);
+        var token = service.IssueSession("alice", ["Member"], 0);
 
         Assert.Equal("alice", token.user_id);
         Assert.NotEmpty(token.access_token);
@@ -66,7 +66,7 @@ public sealed class TokenServiceTests
     public async Task ValidateAsync_AcceptsAFreshlyIssuedToken()
     {
         var service = new TokenService(Options(Secret));
-        var token = service.IssueSession("bob", []);
+        var token = service.IssueSession("bob", [], 0);
 
         var username = await service.ValidateAsync(token);
 
@@ -77,7 +77,7 @@ public sealed class TokenServiceTests
     public async Task ValidateAsync_NormalisesTheUsername()
     {
         var service = new TokenService(Options(Secret));
-        var token = service.IssueSession("MixedCase", []);
+        var token = service.IssueSession("MixedCase", [], 0);
 
         Assert.Equal("mixedcase", await service.ValidateAsync(token));
     }
@@ -86,7 +86,7 @@ public sealed class TokenServiceTests
     public async Task ValidateAsync_RejectsATokenSignedWithADifferentSecret()
     {
         var issuer = new TokenService(Options(Secret));
-        var token = issuer.IssueSession("carol", []);
+        var token = issuer.IssueSession("carol", [], 0);
 
         var validator = new TokenService(Options("a-completely-different-secret-value-here"));
 
@@ -97,7 +97,7 @@ public sealed class TokenServiceTests
     public async Task ValidateAsync_RejectsATamperedAccessToken()
     {
         var service = new TokenService(Options(Secret));
-        var token = service.IssueSession("dave", []);
+        var token = service.IssueSession("dave", [], 0);
         token.access_token = token.access_token[..^4] + "AAAA";
 
         Assert.Null(await service.ValidateAsync(token));
