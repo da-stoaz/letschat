@@ -74,20 +74,6 @@ jobs:
           cache-from: type=gha,scope=core-api
           cache-to: type=gha,scope=core-api,mode=max
 
-      - name: Build and push migrator image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./core-api
-          file: ./core-api/tools/CoreApi.Migrator/Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/letschat-core-api-migrator:latest
-            ghcr.io/${{ github.repository_owner }}/letschat-core-api-migrator:${{ steps.version.outputs.version }}
-            ghcr.io/${{ github.repository_owner }}/letschat-core-api-migrator:sha-${{ steps.sha.outputs.short }}
-          cache-from: type=gha,scope=core-api-migrator
-          cache-to: type=gha,scope=core-api-migrator,mode=max
-
       # Cold-archive replication worker (storage-tiering plan 2, Part A). Build
       # context is the repo root, not ./archive-worker — the Dockerfile COPYs
       # `archive-worker/...` paths so it needs the parent directory.

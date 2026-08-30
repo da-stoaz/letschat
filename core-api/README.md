@@ -74,9 +74,13 @@ dotnet ef database update --project core-api/src/CoreApi/CoreApi.csproj
 users into PostgreSQL. Argon2id hashes are copied verbatim — migrated users
 keep their passwords. The run is idempotent (existing username/identity skipped).
 
+The cutover is done, so this is a plain local CLI now: there is no migrator
+image and no compose service. It exists for one case — an `auth.db` file
+rescued off an old machine. Copy the file next to the repo and point at it.
+
 ```bash
 dotnet run --project core-api/tools/CoreApi.Migrator -- \
-  --sqlite auth-service/auth.db \
+  --sqlite ./legacy-auth.db \
   --postgres "Host=localhost;Port=5433;Database=auth;Username=letschat;Password=letschat"
 # add --dry-run to preview without writing
 ```
@@ -103,9 +107,8 @@ or, in Development, from `appsettings.Development.json`.
 docker build -t letschat-core-api core-api
 ```
 
-## Production cutover (not yet done — kept for the deployment flip)
+## Production cutover — done
 
-The legacy `auth-service/` is intentionally left in place as a fallback. To cut
-over: point the production compose files / reverse proxy at the core-api image
-instead of `auth-service`, stand up the PostgreSQL `auth` database, run the
-migrator once, then retire `auth-service/`.
+core-api is the sole auth backend in dev and prod. The Rust `auth-service/` has
+been removed from the repo, along with the `core-api-migrator` compose service,
+its published image, and the `auth_data` volume.

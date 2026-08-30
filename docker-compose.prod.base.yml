@@ -168,29 +168,6 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  # ── Legacy auth-service data → core-api Postgres migrator ───────────────────
-  # Profile-gated one-shot. Reads /data/auth.db (the legacy auth-service SQLite
-  # volume, mounted read-only) and writes ASP.NET Core Identity rows into the
-  # core-api Postgres `auth` database. Idempotent: re-running skips users that
-  # already exist by username or SpacetimeDB identity.
-  #
-  # Trigger explicitly during the cutover from auth-service to core-api:
-  #   docker compose -f docker-compose.prod.base.yml \
-  #     --profile migration run --rm core-api-migrator
-  # then remove the now-stale auth_data volume.
-  core-api-migrator:
-    image: ghcr.io/da-stoaz/letschat-core-api-migrator:${LETSCHAT_VERSION:-latest}
-    container_name: letschat-core-api-migrator
-    profiles: ["migration"]
-    environment:
-      AUTH_DATABASE_URL: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-auth};Username=${POSTGRES_USER:-letschat};Password=${POSTGRES_PASSWORD}"
-    volumes:
-      - auth_data:/data:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: "no"
-
   # ── SpacetimeDB module init ──────────────────────────────────────────────────
   # Publishes the server module on first start and after updates.
   # Waits for SpacetimeDB to be healthy, then exits. Docker restarts it on
@@ -344,8 +321,4 @@ volumes:
   # the worker get a NEW identity on next start, which an admin must re-register
   # via set_archive_service_identity before replication resumes.
   archive_worker_data:
-  # Retained ONLY for the one-time migration from the legacy Rust auth-service.
-  # Safe to remove (`docker volume rm letschat_auth_data`) once the migrator
-  # has been run and core-api is verified.
-  auth_data:
   minio_data:

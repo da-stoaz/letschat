@@ -9,17 +9,17 @@ Use this file as a compact operator reference.
 
 > **Backend service:** production runs **`core-api`** (.NET / ASP.NET Core
 > Identity + PostgreSQL). The legacy Rust `auth-service` has been **removed**
-> from the repo; only its migrator (`CoreApi.Migrator`) remains. If you're
-> upgrading from an old `auth-service` deployment, hand its SQLite `auth.db` to
-> the migrator (**First-time cutover** below) before bringing the new stack up.
+> from the repo, and so has the containerised migration path that imported its
+> SQLite `auth.db`. If you are still sitting on an un-migrated `auth.db`, see
+> **Legacy `auth.db` import** below before bringing the stack up.
 
 ## Production Compose Entry Points
 
 Shared core services:
 
 - `docker-compose.prod.base.yml` — `spacetimedb`, `postgres`, `core-api`,
-  `module-init`, `livekit`, `minio`, `minio-init`, `web` (hosted browser SPA),
-  plus the profile-gated `core-api-migrator` one-shot.
+  `module-init`, `archive-worker`, `livekit`, `minio`, `minio-init`, `web`
+  (hosted browser SPA).
 
 Topology overlays:
 
@@ -88,45 +88,32 @@ Routing:
 > `VITE_WEB_CONNECT_URL` you must rebuild**: `docker compose ... build web` then
 > `up -d web`.
 
-## First-time cutover from `auth-service`
+## Legacy `auth.db` import
 
-Skip this section for fresh deployments.
+Not applicable to fresh deployments, and not applicable to any deployment
+already running core-api — which is all of them. The Rust `auth-service` is
+gone, and with it the `core-api-migrator` compose service, the
+`letschat-core-api-migrator` image, and the `auth_data` volume.
+
+The importer itself is still in the repo as a plain CLI tool for the one case it
+still serves: an `auth.db` file rescued from an old machine.
 
 ```bash
-# 1. Pull the new images (core-api, postgres, migrator) without starting yet.
-docker compose -f docker-compose.prod.base.yml pull
-
-# 2. Stop the legacy auth-service so the SQLite file is no longer being
-#    written to during migration. Other services can keep serving until step 5.
-docker stop letschat-auth || true
-
-# 3. Bring postgres up so the migrator has a target.
-docker compose -f docker-compose.prod.base.yml up -d postgres
-
-# 4. Run the migrator. It mounts the legacy `auth_data` SQLite volume
-#    read-only at /data/auth.db and writes Identity rows into postgres.
-#    Idempotent: re-running skips users already present by username or
-#    SpacetimeDB identity. Migrated accounts get an `<username>@migrated.local`
-#    placeholder email; ask users to set a real one after first sign-in.
-docker compose -f docker-compose.prod.base.yml \
-    --profile migration run --rm core-api-migrator
-
-# 5. Bring the rest of the stack up (core-api + overlay).
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
-
-# 6. Verify before exposing publicly.
-curl -fsSL http://localhost/health             # via proxy
-curl -fsSL http://localhost/.well-known/letschat.json
-docker compose logs core-api --tail=80
-
-# 7. Once you're satisfied, the legacy SQLite volume is no longer needed.
-#    Snapshot it first if you want a paranoid backup, then drop it.
-docker volume rm letschat_auth_data
+# Copy the file off the old host first, then, against the new stack's postgres:
+dotnet run --project core-api/tools/CoreApi.Migrator -- \
+    --sqlite ./legacy-auth.db \
+    --postgres "Host=localhost;Port=5433;Database=auth;Username=letschat;Password=..."
+# --dry-run previews without writing.
 ```
 
-Rollback: redeploy the previous git tag's compose files and `pull` the
-older `letschat-auth:vX.Y.Z` image. The `auth_data` volume is left intact
-until step 7 specifically to make this safe.
+Idempotent: re-running skips users already present by username or SpacetimeDB
+identity. Argon2id hashes are copied verbatim, so migrated users keep their
+passwords. Imported accounts get an `<username>@migrated.local` placeholder
+email — ask those users to set a real one after their first sign-in.
+
+If you have an old `letschat_auth_data` Docker volume still lying around, it
+holds nothing but that SQLite file. Snapshot it if you're feeling paranoid,
+then `docker volume rm letschat_auth_data`.
 
 ## SpacetimeDB Publish (Production)
 
