@@ -3,6 +3,7 @@ import { MonitorDownIcon, XIcon } from 'lucide-react'
 import { isHostedWebBuild } from '../../lib/tauri'
 import { normalizeServerUrl } from '../../lib/discovery'
 import { Button } from '@/components/ui/button'
+import { webConnectUrl } from '../../lib/webRuntimeConfig'
 
 const DISMISS_KEY = 'letschat.web.desktopBannerDismissed'
 
@@ -15,7 +16,7 @@ function detectOs(): 'macos' | 'windows' | 'linux' {
 }
 
 /** The connect URL baked into a hosted-web build; the downloads resolver lives there. */
-const WEB_CONNECT_URL = (import.meta.env.VITE_WEB_CONNECT_URL as string | undefined)?.trim() || undefined
+
 
 /**
  * Dismissable "also available as a desktop app" banner. Renders only on the
@@ -26,9 +27,10 @@ const WEB_CONNECT_URL = (import.meta.env.VITE_WEB_CONNECT_URL as string | undefi
 export function DesktopAppBanner() {
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISS_KEY) === '1')
 
-  if (!isHostedWebBuild() || !WEB_CONNECT_URL || dismissed) return null
+  const connectUrl = webConnectUrl()
+  if (!isHostedWebBuild() || !connectUrl || dismissed) return null
 
-  const downloadUrl = `${normalizeServerUrl(WEB_CONNECT_URL)}/downloads/${detectOs()}`
+  const downloadUrl = `${normalizeServerUrl(connectUrl)}/downloads/${detectOs()}`
 
   const dismiss = () => {
     localStorage.setItem(DISMISS_KEY, '1')

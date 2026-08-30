@@ -35,6 +35,10 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Runtime config for the hosted browser client; the web container fills
+         this in from its environment. A no-op placeholder everywhere else.
+         Must load before the bundle. -->
+    <script src="/config.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -5,6 +5,17 @@ import SiteFooter from "@/components/SiteFooter.astro";
 
 const changes = [
   {
+    version: "v1.0.6",
+    date: "August 2026",
+    items: [
+      "The hosted web client is now a published image (ghcr.io/da-stoaz/letschat-web) instead of the one build: in the production compose. Deployments pull it like every other service.",
+      "Previously every operator compiled the frontend on their own deployment target — bun install plus vite build, the heaviest step in the stack, at the point in a deploy where the old containers are already down. On a small VPS that is the most likely thing to run out of memory, and the worst moment for it to happen.",
+      "The image is instance-agnostic: the connect URL is served to the page at runtime as /config.js by the container, not baked into the bundle. Changing it needs a container restart, not a rebuild.",
+      "WEB_CONNECT_URL and WEB_WS_COMPRESSION are the current variable names; VITE_WEB_CONNECT_URL and VITE_WEB_WS_COMPRESSION still work, so existing .env files need no edit.",
+    ],
+    migration: "Pull the new compose file with the images — the web service definition changed from build: to image:. Nothing else to do: your existing VITE_WEB_* values are still read. A source checkout can still build locally with docker compose build web.",
+  },
+  {
     version: "v1.0.5",
     date: "August 2026",
     items: [

@@ -5,6 +5,7 @@ import { clearSignedDownloadUrlCache } from './uploads'
 import { withSessionTokenRetry } from './uploadSession'
 import { useServerConfigStore } from '../stores/serverConfigStore'
 import type { Identity } from '../types/domain'
+import { webConnectUrl } from './webRuntimeConfig'
 export type NotificationPermissionState = NotificationPermission | 'unsupported'
 export type AttachmentDownloadProgressEvent = {
   operationId: string
@@ -24,13 +25,12 @@ export function isDesktopTauriRuntime(): boolean {
 
 /**
  * True for the hosted browser build: running in a real browser (not the Tauri
- * desktop shell) with a connect URL baked in at build time. Such a build is
+ * desktop shell) with a connect URL configured for it. Such a deployment is
  * single-tenant — locked to its own deployment — so server-picker / change-server
  * affordances must be hidden (it would strand the locked-instance bootstrap).
  */
 export function isHostedWebBuild(): boolean {
-  const connectUrl = (import.meta.env.VITE_WEB_CONNECT_URL as string | undefined)?.trim()
-  return !isDesktopTauriRuntime() && !!connectUrl
+  return !isDesktopTauriRuntime() && webConnectUrl() !== undefined
 }
 
 function isInvalidAuthSessionError(error: unknown): boolean {
