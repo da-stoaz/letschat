@@ -103,6 +103,7 @@ import SetServerIconReducer from "./set_server_icon_reducer";
 import SetServerInvitePolicyReducer from "./set_server_invite_policy_reducer";
 import SetServerTagsReducer from "./set_server_tags_reducer";
 import SetSpaceCreatePolicyReducer from "./set_space_create_policy_reducer";
+import SetTrustedIssuerReducer from "./set_trusted_issuer_reducer";
 import SetTypingStateReducer from "./set_typing_state_reducer";
 import SetUserAdminReducer from "./set_user_admin_reducer";
 import TimeoutMemberReducer from "./timeout_member_reducer";
@@ -478,6 +479,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_server_invite_policy", SetServerInvitePolicyReducer),
   __reducerSchema("set_server_tags", SetServerTagsReducer),
   __reducerSchema("set_space_create_policy", SetSpaceCreatePolicyReducer),
+  __reducerSchema("set_trusted_issuer", SetTrustedIssuerReducer),
   __reducerSchema("set_typing_state", SetTypingStateReducer),
   __reducerSchema("set_user_admin", SetUserAdminReducer),
   __reducerSchema("timeout_member", TimeoutMemberReducer),

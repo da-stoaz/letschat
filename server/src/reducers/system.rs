@@ -22,6 +22,7 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
         ctx.db.system_settings().insert(SystemSettings {
             id: SETTINGS_ID,
             space_create_policy: SpaceCreatePolicy::Anyone,
+            trusted_issuer: None,
         });
     }
 
@@ -52,7 +53,76 @@ pub(crate) fn current_settings(ctx: &ReducerContext) -> SystemSettings {
         .unwrap_or(SystemSettings {
             id: SETTINGS_ID,
             space_create_policy: SpaceCreatePolicy::Anyone,
+            trusted_issuer: None,
         })
+}
+
+/// Writes the singleton settings row back, inserting it if `init` never ran
+/// (or the row was lost). Shared by every settings mutator so the
+/// insert-or-update branch lives in exactly one place.
+fn save_settings(ctx: &ReducerContext, row: SystemSettings) {
+    if ctx.db.system_settings().id().find(SETTINGS_ID).is_some() {
+        ctx.db.system_settings().id().update(row);
+    } else {
+        ctx.db.system_settings().insert(row);
+    }
+}
+
+/// Requires that the caller's token was issued by the instance's configured
+/// OIDC issuer — i.e. by core-api, the only thing that mints a token after
+/// checking the account is registered, confirmed, approved and not disabled.
+///
+/// This guards `register_user`, the one reducer that creates standing in the
+/// module out of nothing. Everything else is guarded by `require_account`,
+/// which is cheaper and, since a `User` row can only come from here, equally
+/// strict.
+///
+/// Two deliberate holes, both of which only exist while an instance is not yet
+/// configured:
+///
+/// - **No issuer configured yet** (`trusted_issuer == None`): the check passes.
+///   Publishing this module onto a running instance must never lock out its
+///   existing users, and on a fresh instance nothing *could* have set the
+///   issuer — `set_trusted_issuer` is admin-gated and the first admin is
+///   created by the first `register_user`. core-api closes the window by
+///   pushing the issuer as soon as an admin exists (at startup, and again on an
+///   admin sign-in).
+/// - **Caller has no JWT at all**: rejected as soon as an issuer is configured.
+///
+/// The issuer string is trustworthy: SpacetimeDB validates the token signature
+/// against that issuer's published JWKS before the module ever sees the call,
+/// so a caller cannot simply claim someone else's `iss`.
+pub(crate) fn require_trusted_issuer(ctx: &ReducerContext) -> Result<(), String> {
+    let Some(expected) = current_settings(ctx).trusted_issuer else {
+        return Ok(());
+    };
+
+    let actual = ctx
+        .sender_auth()
+        .jwt()
+        .map(|claims| claims.issuer().to_string())
+        .ok_or_else(|| "registration requires an account token".to_string())?;
+
+    assert_or_err(actual == expected, "registration requires an account token")
+}
+
+/// Pins the OIDC issuer whose tokens may register accounts (`None` clears it,
+/// which disables the check). Instance-admin gated.
+///
+/// Normally called by core-api rather than a human: it knows its own
+/// `SPACETIME_OIDC_ISSUER` and pushes it here, so the pinned value cannot drift
+/// from the issuer that actually signs the tokens. Idempotent.
+#[spacetimedb::reducer]
+pub fn set_trusted_issuer(ctx: &ReducerContext, issuer: Option<String>) -> Result<(), String> {
+    require_system_admin(ctx, ctx.sender())?;
+
+    let issuer = issuer
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let mut row = current_settings(ctx);
+    row.trusted_issuer = issuer;
+    save_settings(ctx, row);
+    Ok(())
 }
 
 /// Updates the create-policy. Instance-admin gated.
@@ -65,17 +135,7 @@ pub fn set_space_create_policy(
 
     let mut row = current_settings(ctx);
     row.space_create_policy = policy;
-    if ctx
-        .db
-        .system_settings()
-        .id()
-        .find(SETTINGS_ID)
-        .is_some()
-    {
-        ctx.db.system_settings().id().update(row);
-    } else {
-        ctx.db.system_settings().insert(row);
-    }
+    save_settings(ctx, row);
     Ok(())
 }
 

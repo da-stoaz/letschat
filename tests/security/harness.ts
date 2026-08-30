@@ -126,16 +126,26 @@ export function uniqueName(prefix = 'u'): string {
   return base.slice(0, 32)
 }
 
-/** Mint a fresh identity and register a user for it. */
-export async function makeUser(prefix = 'u'): Promise<TestUser> {
+/**
+ * Mint a fresh SpacetimeDB identity WITHOUT registering an account for it.
+ *
+ * This is exactly what an attacker has: `POST /v1/identity` is unauthenticated,
+ * so anyone can hold an identity and a token for it. Tests that assert the
+ * account gate use this; everything else wants `makeUser`.
+ */
+export async function mintIdentity(prefix = 'u'): Promise<TestUser> {
   const res = await fetch(`${BASE}/v1/identity`, { method: 'POST', headers: JSON_HEADERS })
   if (!res.ok) {
     throw new Error(`failed to mint identity: HTTP ${res.status}`)
   }
   const { identity, token } = (await res.json()) as { identity: string; token: string }
-  const username = uniqueName(prefix)
-  const user = new TestUser(username, identity, token)
-  await user.call('register_user', [username, username])
+  return new TestUser(uniqueName(prefix), identity, token)
+}
+
+/** Mint a fresh identity and register a user for it. */
+export async function makeUser(prefix = 'u'): Promise<TestUser> {
+  const user = await mintIdentity(prefix)
+  await user.call('register_user', [user.username, user.username])
   return user
 }
 

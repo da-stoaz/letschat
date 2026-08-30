@@ -340,6 +340,44 @@ automatically on first start, re-keying SpacetimeDB's rows and its own records
 in one pass. No manual steps, no wipe. If SpacetimeDB is unreachable at that
 moment the migration is deferred and retried on the next start.
 
+## Who may create a chat account
+
+SpacetimeDB hands an identity to anyone who asks — `POST /v1/identity` is
+unauthenticated — and `chat.<domain>` is public, so the module cannot assume the
+caller came through core-api. Two checks in the module close that door:
+
+- Every client-callable reducer requires the caller to have a `User` row, i.e. a
+  registered account on this instance.
+- `register_user`, the only reducer that creates one, requires the caller's
+  token to carry the `iss` claim of this instance's OIDC issuer — which only
+  core-api can sign for. That is what makes `REGISTRATION_OPEN`,
+  `REQUIRE_EMAIL_CONFIRMATION` and `REQUIRE_ADMIN_APPROVAL` binding on the chat
+  side and not just on the HTTP API.
+
+**You do not configure this.** core-api pushes its own `SPACETIME_OIDC_ISSUER`
+into the module with the `set_trusted_issuer` reducer, at startup and again
+whenever an instance admin signs in. Two things follow:
+
+1. **The pin needs an instance admin to exist.** A brand-new instance has none
+   until its first account registers (see the first-admin bootstrap above), so
+   that first registration is deliberately ungated and the pin lands moments
+   later. This is the operational reason to **sign in once yourself before
+   exposing a new instance publicly** — unchanged advice, now load-bearing.
+
+2. **Until it is pinned, the check is off, not on.** An unpinned instance
+   behaves exactly as it did before, so publishing a new module to a running
+   deployment can never lock out its users.
+
+Confirm it took, as an instance admin:
+
+```
+spacetime sql -s <server> <database> "SELECT trusted_issuer FROM system_settings"
+```
+
+An empty result means no admin existed when core-api last tried. Sign in with an
+admin account and check again; `core-api` logs
+`Pinned SpacetimeDB trusted issuer to …` when it succeeds.
+
 ## Admin Control Panel
 
 `core-api` serves the admin Razor area on container port `8788`. The

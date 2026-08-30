@@ -245,6 +245,7 @@ export const SystemSettings = __t.object("SystemSettings", {
   get spaceCreatePolicy() {
     return SpaceCreatePolicy;
   },
+  trustedIssuer: __t.option(__t.string()),
 });
 export type SystemSettings = __Infer<typeof SystemSettings>;
 

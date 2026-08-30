@@ -33,12 +33,20 @@ describe('instance admin bootstrap', () => {
       const first = await makeUser('firstadm')
       expect(await isAdmin(first)).toBe(true)
     }
-    expect(adminIdentities()).toHaveLength(1)
+
+    // Compare against a baseline rather than asserting a global count of one.
+    // The suite shares a database and other files legitimately promote admins
+    // of their own (`makeAdmin`), so "exactly one admin exists" is a claim about
+    // the whole suite's ordering, not about this bootstrap — and it made this
+    // test fail on roughly half of all runs. What actually matters is that
+    // registering does not ADD an admin once the instance has one.
+    const baseline = adminIdentities()
+    expect(baseline.length).toBeGreaterThanOrEqual(1)
 
     // The instance now has an admin, so nobody else is promoted on registration.
     const later = await makeUser('late')
     expect(await isAdmin(later)).toBe(false)
-    expect(adminIdentities()).toHaveLength(1)
+    expect(adminIdentities()).toEqual(baseline)
 
     // …and a non-admin cannot promote itself,
     await expect(later.call('set_user_admin', [later.idArg, true])).rejects.toThrow(ReducerError)
@@ -47,6 +55,6 @@ describe('instance admin bootstrap', () => {
       ReducerError,
     )
 
-    expect(adminIdentities()).toHaveLength(1)
+    expect(adminIdentities()).toEqual(baseline)
   })
 })

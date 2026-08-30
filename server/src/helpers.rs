@@ -126,6 +126,34 @@ pub(crate) fn require_invite_permission(
     assert_or_err(allowed, "insufficient permissions to invite users")
 }
 
+/// The gate every client-callable reducer opens with: the caller must have a
+/// `User` row, i.e. a registered account on this instance.
+///
+/// This is the load-bearing half of the anonymous-identity fix. SpacetimeDB
+/// hands out an identity to anyone who asks (`POST /v1/identity`) and the
+/// module only ever sees `ctx.sender()`, so without this check any stranger
+/// could connect over the public WebSocket and call reducers directly —
+/// bypassing every account control core-api enforces on the HTTP path
+/// (registration open/closed, e-mail confirmation, admin approval, disabled
+/// accounts). Requiring an account here, plus `require_trusted_issuer` on
+/// `register_user` (the one reducer that *creates* an account), means the only
+/// way to obtain standing in the module is through core-api.
+///
+/// Deliberately a point lookup on the primary key rather than a JWT inspection:
+/// it costs one index probe per call, and because a `User` row can only be
+/// created by a trusted-issuer caller, it enforces the issuer transitively.
+///
+/// Not for the reducers with their own, stricter trust boundary — the
+/// `archive_*` restores (registered worker identity) and the lifecycle
+/// reducers (`init`, `client_disconnected`), which the host invokes with no
+/// caller at all.
+pub(crate) fn require_account(ctx: &ReducerContext) -> Result<(), String> {
+    assert_or_err(
+        ctx.db.user().identity().find(ctx.sender()).is_some(),
+        "no account for this identity",
+    )
+}
+
 /// True if `identity` has a `User` row with `is_admin = true`. Used by the
 /// instance-level admin gate (distinct from per-server Owner/Moderator).
 pub(crate) fn is_system_admin(ctx: &ReducerContext, identity: Identity) -> bool {

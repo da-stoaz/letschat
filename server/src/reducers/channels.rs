@@ -1,6 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, find_channel, next_id, require_mod_or_owner};
+use crate::helpers::{assert_or_err, find_channel, next_id, require_account, require_mod_or_owner};
 use crate::schema::*;
 
 const CHANNEL_SECTION_MAX_LEN: usize = 40;
@@ -144,6 +144,7 @@ pub fn create_channel(
     section: Option<String>,
     moderator_only: bool,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_mod_or_owner(ctx, server_id, ctx.sender())?;
     assert_or_err(
         (1..=100).contains(&name.len()),
@@ -174,6 +175,7 @@ pub fn update_channel(
     moderator_only: Option<bool>,
     position: Option<u32>,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     let mut channel_row = find_channel(ctx, channel_id)?;
     require_mod_or_owner(ctx, channel_row.server_id, ctx.sender())?;
 
@@ -201,6 +203,7 @@ pub fn set_channel_section(
     channel_id: u64,
     section: Option<String>,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     let channel_row = find_channel(ctx, channel_id)?;
     require_mod_or_owner(ctx, channel_row.server_id, ctx.sender())?;
 
@@ -220,6 +223,7 @@ pub fn set_channel_section(
 
 #[spacetimedb::reducer]
 pub fn move_channel(ctx: &ReducerContext, channel_id: u64, direction: i32) -> Result<(), String> {
+    require_account(ctx)?;
     assert_or_err(
         direction == -1 || direction == 1,
         "direction must be either -1 or 1",
@@ -258,6 +262,7 @@ pub fn move_channel_to(
     section: Option<String>,
     position: u32,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     let channel_row = find_channel(ctx, channel_id)?;
     require_mod_or_owner(ctx, channel_row.server_id, ctx.sender())?;
 
@@ -273,6 +278,7 @@ pub fn move_channel_relative(
     target_channel_id: u64,
     place_after: bool,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     assert_or_err(channel_id != target_channel_id, "source and target channel must differ")?;
 
     let channel_row = find_channel(ctx, channel_id)?;
@@ -307,6 +313,7 @@ pub fn move_channel_relative(
 
 #[spacetimedb::reducer]
 pub fn delete_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     let channel_row = find_channel(ctx, channel_id)?;
     require_mod_or_owner(ctx, channel_row.server_id, ctx.sender())?;
 
@@ -333,6 +340,7 @@ pub fn delete_channel_section(
     server_id: u64,
     section: Option<String>,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_mod_or_owner(ctx, server_id, ctx.sender())?;
 
     let normalized_section = normalize_channel_section(section)?;

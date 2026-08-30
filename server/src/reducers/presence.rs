@@ -1,6 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, find_channel};
+use crate::helpers::{assert_or_err, find_channel, require_account};
 use crate::schema::*;
 
 fn normalize_identity(value: &str) -> String {
@@ -86,12 +86,14 @@ fn upsert_presence(ctx: &ReducerContext, online: bool, bump_interaction: bool) {
 
 #[spacetimedb::reducer]
 pub fn touch_presence(ctx: &ReducerContext) -> Result<(), String> {
+    require_account(ctx)?;
     upsert_presence(ctx, true, true);
     Ok(())
 }
 
 #[spacetimedb::reducer]
 pub fn set_presence_offline(ctx: &ReducerContext) -> Result<(), String> {
+    require_account(ctx)?;
     upsert_presence(ctx, false, false);
     Ok(())
 }
@@ -102,6 +104,7 @@ pub fn set_typing_state(
     scope_key: String,
     is_typing: bool,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     assert_or_err(
         !scope_key.trim().is_empty() && scope_key.len() <= 160,
         "invalid typing scope",

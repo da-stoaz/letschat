@@ -1,12 +1,14 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err, find_channel, member_key, next_id, require_member_role, require_mod_or_owner,
+    assert_or_err, find_channel, member_key, next_id, require_account, require_member_role,
+    require_mod_or_owner,
 };
 use crate::schema::*;
 
 #[spacetimedb::reducer]
 pub fn send_message(ctx: &ReducerContext, channel_id: u64, content: String) -> Result<(), String> {
+    require_account(ctx)?;
     let channel_row = find_channel(ctx, channel_id)?;
     let role = require_member_role(ctx, channel_row.server_id, ctx.sender())?;
 
@@ -50,6 +52,7 @@ pub fn edit_message(
     message_id: u64,
     new_content: String,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     assert_or_err(
         (1..=4000).contains(&new_content.len()),
         "message must be 1-4000 chars",
@@ -76,6 +79,7 @@ pub fn edit_message(
 
 #[spacetimedb::reducer]
 pub fn delete_message(ctx: &ReducerContext, message_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     let mut message_row = ctx
         .db
         .message()

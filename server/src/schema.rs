@@ -44,6 +44,18 @@ pub struct SystemSettings {
     #[primary_key]
     pub id: u8,
     pub space_create_policy: SpaceCreatePolicy,
+    /// The OIDC issuer (`iss` claim) that core-api signs SpacetimeDB tokens
+    /// with. When set, `register_user` accepts only callers whose token came
+    /// from it — which is what stops a self-minted / anonymous SpacetimeDB
+    /// identity from creating an account, and transitively from doing anything
+    /// at all, because every other client-callable reducer requires a `User`
+    /// row (`require_account`).
+    ///
+    /// `None` disables the check. That is the default so publishing this module
+    /// onto a running instance can never lock its users out; core-api pushes the
+    /// real value via `set_trusted_issuer` on startup and on an admin sign-in.
+    #[default(None::<String>)]
+    pub trusted_issuer: Option<String>,
 }
 
 /// Records the identity of the archive replication worker (storage-tiering,

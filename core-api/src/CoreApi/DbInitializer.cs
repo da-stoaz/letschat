@@ -97,11 +97,43 @@ public static class DbInitializer
         }
 
         await SeedBootstrapAdminAsync(services, logger);
+        await PinTrustedIssuerBestEffortAsync(
+            services.GetRequiredService<Services.SpacetimeClient>(), logger);
         await MigrateLegacyIdentitiesAsync(
             services.GetRequiredService<AppDbContext>(),
             services.GetRequiredService<Services.SpacetimeTokenService>(),
             services.GetRequiredService<Services.SpacetimeClient>(),
             logger);
+    }
+
+    /// <summary>
+    /// Tells the SpacetimeDB module which OIDC issuer may register accounts, so
+    /// an anonymous WebSocket client can't create one behind core-api's back.
+    /// See <see cref="Services.SpacetimeClient.PinTrustedIssuerAsync"/>.
+    ///
+    /// <para>
+    /// Never fatal: a brand-new instance has no admin to sign the call with
+    /// until its first user registers, and SpacetimeDB may simply not be up yet.
+    /// Both are expected, and an admin sign-in retries.
+    /// </para>
+    /// </summary>
+    private static async Task PinTrustedIssuerBestEffortAsync(
+        Services.SpacetimeClient spacetime, ILogger logger)
+    {
+        try
+        {
+            if (!await spacetime.PinTrustedIssuerAsync())
+            {
+                logger.LogInformation(
+                    "SpacetimeDB trusted issuer not pinned yet: no instance admin exists. "
+                    + "It is pinned automatically once an admin signs in.");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex, "Could not pin the SpacetimeDB trusted issuer; retrying on the next admin sign-in.");
+        }
     }
 
     /// <summary>A 32-byte SpacetimeDB identity as lower/upper-case hex (64 chars).</summary>

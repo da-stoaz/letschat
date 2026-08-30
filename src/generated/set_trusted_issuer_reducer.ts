@@ -9,15 +9,7 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
-import {
-  SpaceCreatePolicy,
-} from "./types";
 
-
-export default __t.row({
-  id: __t.u8().primaryKey(),
-  get spaceCreatePolicy() {
-    return SpaceCreatePolicy.name("space_create_policy");
-  },
-  trustedIssuer: __t.option(__t.string()).name("trusted_issuer"),
-});
+export default {
+  issuer: __t.option(__t.string()),
+};

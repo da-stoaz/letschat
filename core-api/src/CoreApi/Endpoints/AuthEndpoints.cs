@@ -293,6 +293,10 @@ public static class AuthEndpoints
             if (await users.IsInRoleAsync(user, DbInitializer.AdminRole))
             {
                 await spacetime.SyncUserAdminAsync(user.SpacetimeIdentity, true);
+                // A fresh instance has no admin at core-api startup, so that is
+                // the earliest moment the issuer can actually be pinned. No-ops
+                // once it has been.
+                await spacetime.PinTrustedIssuerAsync();
             }
         }
         catch (Exception ex)

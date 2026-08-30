@@ -1,6 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, find_channel, next_id, require_mod_or_owner};
+use crate::helpers::{assert_or_err, find_channel, next_id, require_account, require_mod_or_owner};
 use crate::schema::*;
 
 /// Bound the pinned-message table per channel so it can't grow without limit.
@@ -8,6 +8,7 @@ const MAX_PINS_PER_CHANNEL: usize = 50;
 
 #[spacetimedb::reducer]
 pub fn pin_message(ctx: &ReducerContext, channel_id: u64, message_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     let channel_row = find_channel(ctx, channel_id)?;
     require_mod_or_owner(ctx, channel_row.server_id, ctx.sender())?;
 
@@ -47,6 +48,7 @@ pub fn pin_message(ctx: &ReducerContext, channel_id: u64, message_id: u64) -> Re
 
 #[spacetimedb::reducer]
 pub fn unpin_message(ctx: &ReducerContext, channel_id: u64, message_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     let channel_row = find_channel(ctx, channel_id)?;
     require_mod_or_owner(ctx, channel_row.server_id, ctx.sender())?;
 

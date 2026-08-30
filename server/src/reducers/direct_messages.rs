@@ -1,6 +1,8 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, find_friend_row, has_block_either_direction, next_id};
+use crate::helpers::{
+    assert_or_err, find_friend_row, has_block_either_direction, next_id, require_account,
+};
 use crate::schema::*;
 
 #[spacetimedb::reducer]
@@ -9,6 +11,7 @@ pub fn send_direct_message(
     recipient_identity: Identity,
     content: String,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     assert_or_err(
         (1..=4000).contains(&content.len()),
         "message must be 1-4000 chars",
@@ -45,6 +48,7 @@ pub fn edit_direct_message(
     message_id: u64,
     new_content: String,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     assert_or_err(
         (1..=4000).contains(&new_content.len()),
         "message must be 1-4000 chars",
@@ -71,6 +75,7 @@ pub fn edit_direct_message(
 
 #[spacetimedb::reducer]
 pub fn delete_direct_message(ctx: &ReducerContext, message_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     let mut dm_row = ctx
         .db
         .direct_message()

@@ -2,6 +2,7 @@ use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::helpers::{
     assert_or_err, find_channel, find_friend_row, normalize_identity_string, ordered_pair,
+    require_account,
 };
 use crate::schema::*;
 
@@ -31,6 +32,7 @@ fn dm_scope_key(a: Identity, b: Identity) -> String {
 
 #[spacetimedb::reducer]
 pub fn mark_channel_read(ctx: &ReducerContext, channel_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     let channel_row = find_channel(ctx, channel_id)?;
     let is_member = ctx
         .db
@@ -46,6 +48,7 @@ pub fn mark_channel_read(ctx: &ReducerContext, channel_id: u64) -> Result<(), St
 
 #[spacetimedb::reducer]
 pub fn mark_dm_read(ctx: &ReducerContext, other_identity: Identity) -> Result<(), String> {
+    require_account(ctx)?;
     assert_or_err(other_identity != ctx.sender(), "cannot mark self dm scope")?;
 
     let friend_row = find_friend_row(ctx, ctx.sender(), other_identity)

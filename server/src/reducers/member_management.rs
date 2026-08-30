@@ -1,8 +1,8 @@
 use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
 
 use crate::helpers::{
-    assert_or_err, ban_key, member_key, require_member_role, require_mod_or_owner, require_owner,
-    voice_key,
+    assert_or_err, ban_key, member_key, require_account, require_member_role, require_mod_or_owner,
+    require_owner, voice_key,
 };
 use crate::schema::*;
 
@@ -12,6 +12,7 @@ pub fn kick_member(
     server_id: u64,
     target_identity: Identity,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     let caller_role = require_mod_or_owner(ctx, server_id, ctx.sender())?;
     let target_role = require_member_role(ctx, server_id, target_identity)?;
 
@@ -52,6 +53,7 @@ pub fn ban_member(
     target_identity: Identity,
     reason: Option<String>,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     let caller_role = require_mod_or_owner(ctx, server_id, ctx.sender())?;
     let target_role = require_member_role(ctx, server_id, target_identity)?;
 
@@ -88,6 +90,7 @@ pub fn unban_member(
     server_id: u64,
     target_identity: Identity,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_mod_or_owner(ctx, server_id, ctx.sender())?;
     ctx.db
         .ban()
@@ -103,6 +106,7 @@ pub fn timeout_member(
     target_identity: Identity,
     duration_seconds: u64,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     let caller_role = require_mod_or_owner(ctx, server_id, ctx.sender())?;
     let target_role = require_member_role(ctx, server_id, target_identity)?;
 
@@ -137,6 +141,7 @@ pub fn remove_timeout(
     server_id: u64,
     target_identity: Identity,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_mod_or_owner(ctx, server_id, ctx.sender())?;
     require_member_role(ctx, server_id, target_identity)?;
 
@@ -159,6 +164,7 @@ pub fn set_member_role(
     target_identity: Identity,
     new_role: Role,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_owner(ctx, server_id, ctx.sender())?;
     assert_or_err(
         new_role != Role::Owner,
@@ -183,6 +189,7 @@ pub fn transfer_ownership(
     server_id: u64,
     target_identity: Identity,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     require_owner(ctx, server_id, ctx.sender())?;
 
     let mut target_row = ctx

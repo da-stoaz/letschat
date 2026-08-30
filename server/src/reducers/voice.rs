@@ -1,10 +1,13 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, find_channel, require_member_role, voice_key};
+use crate::helpers::{
+    assert_or_err, find_channel, require_account, require_member_role, voice_key,
+};
 use crate::schema::*;
 
 #[spacetimedb::reducer]
 pub fn join_voice_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     let channel_row = find_channel(ctx, channel_id)?;
     assert_or_err(
         channel_row.kind == ChannelKind::Voice,
@@ -98,6 +101,7 @@ pub fn on_client_disconnected(ctx: &ReducerContext) {
 
 #[spacetimedb::reducer]
 pub fn leave_voice_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), String> {
+    require_account(ctx)?;
     ctx.db
         .voice_participant()
         .voice_key()
@@ -114,6 +118,7 @@ pub fn update_voice_state(
     sharing_screen: bool,
     sharing_camera: bool,
 ) -> Result<(), String> {
+    require_account(ctx)?;
     let mut participant_row = ctx
         .db
         .voice_participant()
