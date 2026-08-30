@@ -94,6 +94,18 @@ services:
       AUTH_DATABASE_URL: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-auth};Username=${POSTGRES_USER:-letschat};Password=${POSTGRES_PASSWORD}"
       AUTH_JWT_SECRET: "${AUTH_JWT_SECRET}"
 
+      # ── SpacetimeDB HTTP (reducer + /sql calls) ──────────────────────────
+      # REQUIRED IN COMPOSE. ServiceOptions defaults this to http://localhost:4300,
+      # which is correct for `bun run core-api:dev` (core-api on the host, database
+      # on a published port) and wrong for every containerised deployment, where
+      # localhost is the core-api container itself. Omitting it does not fail the
+      # deploy — it silently breaks voice authorization, instance-admin
+      # propagation, the trusted-issuer pin and the identity migration.
+      SPACETIMEDB_HTTP_URL: "${SPACETIMEDB_HTTP_URL:-http://spacetimedb:3000}"
+      SPACETIMEDB_MODULE_NAME: "${SPACETIMEDB_MODULE_NAME:-letschat}"
+      # Optional; see "Promoting core-api as a SpacetimeDB admin" in DEPLOYMENT.md.
+      SPACETIMEDB_SERVICE_TOKEN: "${SPACETIMEDB_SERVICE_TOKEN:-}"
+
       # ── Cold archive (storage-tiering, plan 2 Part A) ────────────────────
       # core-api OWNS this schema: EF migrations run on startup and create the
       # `archive` database if it doesn't exist. The archive-worker below then

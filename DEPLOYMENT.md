@@ -265,8 +265,29 @@ generally is **not** one of them. Write the row directly as the module owner
 instead:
 
 ```bash
+# On a fresh instance there is no row yet — `init` does not seed one, the reducer
+# inserts it on first call — so an UPDATE would match zero rows and report
+# success while changing nothing. INSERT the singleton (id is fixed at 1):
+spacetime sql letschat \
+  "INSERT INTO archive_service (id, service_identity) VALUES (1, 0x<identity-from-logs>)"
+
+# Re-pointing an ALREADY registered worker (e.g. after its volume was recreated)
+# is the UPDATE instead:
 spacetime sql letschat \
   "UPDATE archive_service SET service_identity = 0x<identity-from-logs> WHERE id = 1"
+```
+
+Check which one you need with
+`spacetime sql letschat "SELECT * FROM archive_service"` — no rows means INSERT.
+
+If you have no `spacetime` CLI on the host, run it through the module image using
+the publisher identity that compose already persists:
+
+```bash
+docker run --rm --network letschat_default \
+  -v letschat_module_init_home:/home/spacetime \
+  ghcr.io/da-stoaz/letschat-module:${LETSCHAT_VERSION} \
+  sql -s http://spacetimedb:3000 letschat "SELECT * FROM archive_service"
 ```
 
 The identity is persisted to the `archive_worker_data` volume so it survives
@@ -441,6 +462,7 @@ unset those env vars on the next deploy.
 | Area | Key env / file | Notes |
 |---|---|---|
 | Auth backend | `AUTH_JWT_SECRET` | Required. Signs the client session tokens (HS256) |
+| SpacetimeDB HTTP | `SPACETIMEDB_HTTP_URL`, `SPACETIMEDB_MODULE_NAME` | Where core-api reaches the module for reducer and `/sql` calls. Wired in compose to `http://spacetimedb:3000`; the code default (`localhost:4300`) is for host-run dev only and is wrong inside a container. See "Voice fails" below |
 | SpacetimeDB identity | `SPACETIME_OIDC_PRIVATE_KEY` | **Required.** Signs the SpacetimeDB access token (RS256); supply a base64-encoded PEM. Generate once — replacing it forces every user to sign in again. `SPACETIME_OIDC_ISSUER` is fixed in compose and must never change (see below) |
 | PostgreSQL | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Only the password is mandatory; defaults are `letschat` / `auth` |
 | Cold archive | `ARCHIVE_DB` | Database name for the durable mirror, default `archive` (same Postgres instance as auth). Wired in compose for both `core-api` and `archive-worker`; needs a one-time identity registration — see "Cold archive" above |
@@ -453,7 +475,37 @@ unset those env vars on the next deploy.
 | MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT` | Public endpoint is used in presigned URLs |
 | Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_DATABASE` | Served by core-api at `/.well-known/letschat.json` |
 | Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
-| Caddy only | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | Used by `deploy/caddy/Caddyfile` |
+| Service domains | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | Used by `deploy/caddy/Caddyfile` (Caddy track) **and by the `web` container on both tracks** — `deploy/web/Caddyfile` builds the browser client's Content-Security-Policy from them. Left unset on the tunnel track the CSP is emitted with empty hosts; it is report-only, so nothing breaks, but the policy protects nothing |
+
+## Troubleshooting: voice fails with "You are not a participant"
+
+`/livekit/token` authorizes a room by reading the caller's voice-presence row
+out of the module over `/sql`. If core-api cannot reach SpacetimeDB, that read
+cannot happen — and before v1.0.5 the failure was reported to the user as a
+permission denial, which is the wrong place to go looking.
+
+Since v1.0.5 the two are distinguished:
+
+- **`403` "You are not a participant in this voice room."** — the module
+  answered and you hold no presence row. A real authorization decision.
+- **`503` "Voice is temporarily unavailable…"** — the module never answered.
+  An outage or a misconfiguration, and worth retrying.
+
+For the `503`, check core-api's log for the line naming the address it tried:
+
+```bash
+docker compose -f docker-compose.prod.base.yml logs core-api | grep -i "CANNOT REACH\|Voice presence"
+```
+
+core-api probes SpacetimeDB once at startup and logs at `Error` if it is
+unreachable, naming the configured URL. The usual cause is
+`SPACETIMEDB_HTTP_URL` missing or pointing at `localhost` — inside a container
+that resolves to core-api itself, not to the database. Compose sets it to
+`http://spacetimedb:3000`; a deployment whose compose file predates v1.0.5 does
+not set it at all, and should be updated (or the variable added by hand).
+
+Same root cause, other symptoms: `trusted_issuer` stays empty, instance-admin
+changes never reach the module, and the OIDC identity migration defers forever.
 
 ## Discovery Contract (`/.well-known/letschat.json`)
 
