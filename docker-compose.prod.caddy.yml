@@ -23,7 +23,6 @@ services:
       - spacetimedb
       - minio
       - livekit
-      - web
     restart: unless-stopped
 
 volumes:

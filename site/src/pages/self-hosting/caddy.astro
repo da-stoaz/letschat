@@ -74,8 +74,15 @@ wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.b
 
 mkdir livekit
 wget -O livekit/config.prod.yaml \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml`} />
-        <p class="guide-prose text-sm">All images are pre-built — no Rust or Node toolchains needed on the server (the browser client compiles itself in the <code>web</code> container on first start).</p>
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml
+
+# the SpacetimeDB keepalive config — BIND-MOUNTED by the compose file, so
+# without it Docker creates a directory in its place and the database never starts
+mkdir spacetimedb
+wget -O spacetimedb/config.prod.toml \\
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/spacetimedb/config.prod.toml
+`} />
+        <p class="guide-prose text-sm">Every image is pre-built and pulled — nothing is compiled on the server, so no Rust, Node or Bun toolchain is needed. These few files are all the server ever needs from the repository; there is no reason to clone it.</p>
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
@@ -220,10 +227,13 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`} />
         <p class="guide-prose"><code>module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
         <CodeBlock label="terminal" code={`docker logs letschat-module-init`} />
-        <Callout type="note">
-          Hosting the browser client? The <code>web</code> container builds the React bundle on first start —
-          give it a couple of minutes. If you change <code>VITE_WEB_CONNECT_URL</code> later, rebuild with
-          <code>docker compose … build web && docker compose … up -d web</code>.
+        <Callout type="note" title="Want the browser client too?">
+          The hosted browser client (<code>app.&lt;domain&gt;</code>) is opt-in — plenty of instances only ever
+          hand out the desktop app, and without its own public hostname nothing can reach it. To run it, set
+          <code>APP_DOMAIN</code> and <code>WEB_CONNECT_URL</code> in <code>.env</code>, point DNS at this host,
+          and add <code>--profile web</code> to every compose command. It is a pulled image like the rest —
+          nothing compiles on your server, and <code>WEB_CONNECT_URL</code> is read at runtime, so changing it
+          only needs a container restart.
         </Callout>
       </article>
 

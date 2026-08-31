@@ -59,6 +59,20 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
 
 ## Hosted web client (`app.<domain>`)
 
+> **Opt-in.** The `web` service sits behind a compose profile, because it needs
+> its own public hostname to be reachable and plenty of instances only hand out
+> the desktop app. Add `--profile web` to every compose command that should
+> include it:
+>
+> ```
+> docker compose --profile web -f docker-compose.prod.base.yml \
+>   -f docker-compose.prod.tunnel.yml up -d
+> ```
+>
+> Without the flag it is not started — which is the right default for an
+> instance with no `app.<domain>` route, where it would otherwise run serving a
+> client nothing can reach.
+
 The `web` service serves the React/Vite bundle as static files, so users can
 reach LetsChat from a browser without installing the desktop app. A browser
 hitting `app.<domain>` auto-discovers this instance via

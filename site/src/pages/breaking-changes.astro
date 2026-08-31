@@ -12,8 +12,10 @@ const changes = [
       "Previously every operator compiled the frontend on their own deployment target — bun install plus vite build, the heaviest step in the stack, at the point in a deploy where the old containers are already down. On a small VPS that is the most likely thing to run out of memory, and the worst moment for it to happen.",
       "The image is instance-agnostic: the connect URL is served to the page at runtime as /config.js by the container, not baked into the bundle. Changing it needs a container restart, not a rebuild.",
       "WEB_CONNECT_URL and WEB_WS_COMPRESSION are the current variable names; VITE_WEB_CONNECT_URL and VITE_WEB_WS_COMPRESSION still work, so existing .env files need no edit.",
+      "The web client is now OPT-IN, behind a compose profile. It needs its own public hostname to be reachable at all, so an instance that never set one was running a container nothing could route to. If you serve the browser client, add --profile web to your compose commands or it will not start.",
+      "The server now only needs five files from this repository — the two compose files, .env, livekit/config.prod.yaml and spacetimedb/config.prod.toml. Nothing is compiled there any more, so there is no reason to clone the repo onto a deployment target.",
     ],
-    migration: "Pull the new compose file with the images — the web service definition changed from build: to image:. Nothing else to do: your existing VITE_WEB_* values are still read. A source checkout can still build locally with docker compose build web.",
+    migration: "Pull the new compose file with the images — the web service definition changed from build: to image:. Your existing VITE_WEB_* values are still read. IF YOU SERVE THE BROWSER CLIENT: add --profile web to every compose command (docker compose --profile web -f ... up -d), or it will silently stop being started. If you don't, nothing to do — and you can drop the now-unused source checkout.",
   },
   {
     version: "v1.0.5",

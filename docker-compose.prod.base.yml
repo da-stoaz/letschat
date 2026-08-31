@@ -341,6 +341,11 @@ services:
     build:
       context: .
       dockerfile: deploy/web/Dockerfile
+    # OPT-IN. Plenty of instances only ever hand out the desktop app, and for
+    # those this is a container serving a client nothing routes to — it needs
+    # its own public hostname (app.<domain>) to be reachable at all. Start it
+    # with:  docker compose --profile web ... up -d
+    profiles: ["web"]
     container_name: letschat-web
     environment:
       # Which instance this browser client connects to. Read at runtime, so one

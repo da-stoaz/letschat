@@ -159,13 +159,19 @@ mkdir livekit
 wget -O livekit/config.prod.yaml \\
   https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml
 
+# the SpacetimeDB keepalive config — BIND-MOUNTED by the compose file, so
+# without it Docker creates a directory in its place and the database never starts
+mkdir spacetimedb
+wget -O spacetimedb/config.prod.toml \\
+  https://raw.githubusercontent.com/${GITHUB_REPO}/main/spacetimedb/config.prod.toml
+
 # your settings file
 wget -O .env \\
   https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.tunnel.example`} />
         <Callout type="note">
-          All images are pre-built — no Rust/Node toolchains needed on the server. The one exception is
-          the browser client, which is compiled from source in the <code>web</code> container on first start
-          (it bakes in your server address). That build is automatic.
+          Every image is pre-built and pulled — nothing is compiled on the server, so no Rust, Node or Bun
+          toolchain is needed. These few files are all the server ever needs from the repository; there is
+          no reason to clone it.
         </Callout>
       </article>
 
@@ -315,10 +321,13 @@ app.example.com    ->  http://web:80               # browser client (omit if not
           database is healthy — no manual <code>spacetime publish</code>. Watch it finish with:
         </p>
         <CodeBlock label="terminal" code={`docker logs -f letschat-module-init`} />
-        <Callout type="note" title="First start is slower">
-          If you're hosting the browser client, the <code>web</code> container compiles the React bundle on
-          first build — give it a couple of minutes. Changed <code>VITE_WEB_CONNECT_URL</code> later? Rebuild it
-          with <code>docker compose … build web && docker compose … up -d web</code>.
+        <Callout type="note" title="Want the browser client too?">
+          The hosted browser client is opt-in — plenty of instances only ever hand out the desktop app. To run
+          it, add an <code>app.&lt;domain&gt; → http://web:80</code> public hostname to your tunnel, set
+          <code>APP_DOMAIN</code> and <code>WEB_CONNECT_URL</code> in <code>.env</code>, and add
+          <code>--profile web</code> to every compose command. It is a pulled image like the rest — nothing
+          compiles on your server, and <code>WEB_CONNECT_URL</code> is read at runtime, so changing it only
+          needs a container restart.
         </Callout>
       </article>
 
