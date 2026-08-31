@@ -5,6 +5,18 @@ import SiteFooter from "@/components/SiteFooter.astro";
 
 const changes = [
   {
+    version: "v1.0.5",
+    date: "August 2026",
+    items: [
+      "Fixed: the production compose never passed SPACETIMEDB_HTTP_URL to core-api, so it fell back to a development default pointing at localhost — which, inside a container, is core-api itself. Every core-api call into the chat module failed in transport. This affected every deployment made from the shipped compose file.",
+      "Symptoms it caused: voice always refused with 'You are not a participant in this voice room', the trusted-issuer pin never landed, instance-admin changes never reached the module, and the OIDC identity migration deferred indefinitely.",
+      "Voice authorization now distinguishes a refusal from an outage: 403 still means the module says you are not in the room, while an unreachable module returns 503 and says so. The gate still fails closed either way — no token is minted without a presence row.",
+      "core-api probes the database once at startup and logs an error naming the configured URL if it cannot reach it, instead of failing silently across four separate best-effort paths.",
+      "The service domain variables (AUTH_DOMAIN, CHAT_DOMAIN, FILES_DOMAIN, LIVEKIT_DOMAIN) are documented for the tunnel track too — the web container builds the browser client's Content-Security-Policy from them on both topologies, not just on Caddy.",
+    ],
+    migration: "Pull the new compose file along with the images; the fix is in docker-compose.prod.base.yml, not only in the container. If you keep a customised compose file, add SPACETIMEDB_HTTP_URL, SPACETIMEDB_MODULE_NAME and SPACETIMEDB_SERVICE_TOKEN to the core-api service yourself. After restarting, confirm with: docker compose logs core-api | grep -i 'SpacetimeDB reachable'. Nothing else to set, and no data is touched.",
+  },
+  {
     version: "v1.0.3",
     date: "August 2026",
     items: [

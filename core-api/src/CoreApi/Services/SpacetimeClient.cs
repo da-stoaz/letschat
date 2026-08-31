@@ -187,8 +187,16 @@ public sealed class SpacetimeClient(
     /// minted here from <paramref name="accountId"/> rather than taken from the
     /// caller: core-api is the OIDC issuer, tokens are never stored, and minting
     /// in one place means no caller can authorize a room against the wrong
-    /// credential. Fails closed (returns <c>false</c>) on any transport error or
-    /// non-success response — we never issue a token we couldn't authorize.
+    /// credential.
+    /// </para>
+    ///
+    /// <para>
+    /// Never issues a token it could not authorize, but distinguishes the two
+    /// ways that happens: <see cref="VoicePresence.Denied"/> means the module
+    /// answered and the caller is not in the room; <see cref="VoicePresence.Unavailable"/>
+    /// means the module never answered, so there is no authorization decision to
+    /// report. Collapsing the second into the first is what makes an unreachable
+    /// database indistinguishable from a permission problem — see the endpoint.
     /// </para>
     /// </summary>
     /// <param name="accountId">
@@ -196,7 +204,7 @@ public sealed class SpacetimeClient(
     /// SpacetimeDB identity the minted token resolves to, so it must be the same
     /// account <paramref name="userIdentity"/> belongs to.
     /// </param>
-    public async Task<bool> HasVoicePresenceAsync(
+    public async Task<VoicePresence> HasVoicePresenceAsync(
         string accountId,
         string userIdentity,
         VoiceRoom room,
@@ -211,32 +219,76 @@ public sealed class SpacetimeClient(
         // all. Re-read a few times before concluding the row isn't there. This does
         // not weaken the gate: a user who was never admitted still finds nothing, no
         // matter how often we look.
+        var outcome = VoicePresence.Denied;
         for (var attempt = 0; ; attempt++)
         {
-            if (await QueryVoicePresenceAsync(accountId, userIdentity, room, ct))
+            outcome = await QueryVoicePresenceAsync(accountId, userIdentity, room, ct);
+            if (outcome == VoicePresence.Admitted)
             {
-                return true;
+                return outcome;
             }
             if (attempt >= PresenceReadAttempts - 1)
             {
-                // A genuine, final refusal — not the retry loop still finding nothing
-                // on an early pass. Logged (rather than only surfaced as a 403) so a
-                // real incident is diagnosable from normal logs instead of needing
-                // ad-hoc Console output added under pressure.
-                //
-                // Deliberately the SpacetimeDB identity here, never accountId (the
-                // ASP.NET Identity primary key): the identity is public — every client
-                // in a room already sees it, and it's what SpacetimeDB's own connection
-                // logs use, so this line actually cross-references. accountId is an
-                // internal key with no reason to ever reach a log.
-                var normalizedIdentity = NormalizeIdentityHex(userIdentity);
-                logger.LogInformation(
-                    "Voice presence refused: identity={IdentityPrefix}… room={Room} attempts={Attempts}",
-                    normalizedIdentity[..Math.Min(8, normalizedIdentity.Length)],
-                    RoomDescription(room), PresenceReadAttempts);
-                return false;
+                break;
             }
             await Task.Delay(PresenceReadRetryDelay, ct);
+        }
+
+        if (outcome == VoicePresence.Unavailable)
+        {
+            // NOT a refusal — we never got an answer to refuse on. Error rather than
+            // Information because this is always an operator fault (SpacetimeDB down,
+            // or SPACETIMEDB_HTTP_URL pointing at something that isn't it), and it
+            // takes out every voice join on the instance until it is fixed.
+            logger.LogError(
+                "Voice presence UNRESOLVED for room={Room}: SpacetimeDB at {Url} did not answer "
+                + "in {Attempts} attempts. No voice token can be authorized until this is fixed.",
+                RoomDescription(room), options.SpacetimeHttpUrl, PresenceReadAttempts);
+            return outcome;
+        }
+
+        // A genuine, final refusal — not the retry loop still finding nothing
+        // on an early pass. Logged (rather than only surfaced as a 403) so a
+        // real incident is diagnosable from normal logs instead of needing
+        // ad-hoc Console output added under pressure.
+        //
+        // Deliberately the SpacetimeDB identity here, never accountId (the
+        // ASP.NET Identity primary key): the identity is public — every client
+        // in a room already sees it, and it's what SpacetimeDB's own connection
+        // logs use, so this line actually cross-references. accountId is an
+        // internal key with no reason to ever reach a log.
+        var normalizedIdentity = NormalizeIdentityHex(userIdentity);
+        logger.LogInformation(
+            "Voice presence refused: identity={IdentityPrefix}… room={Room} attempts={Attempts}",
+            normalizedIdentity[..Math.Min(8, normalizedIdentity.Length)],
+            RoomDescription(room), PresenceReadAttempts);
+        return outcome;
+    }
+
+    /// <summary>
+    /// One cheap request that proves only one thing: core-api can open a
+    /// connection to the configured SpacetimeDB address. Returns <c>null</c> when
+    /// it can, or the transport failure's message when it cannot.
+    ///
+    /// <para>
+    /// Any HTTP answer counts as reachable, including 404 — the status is
+    /// deliberately ignored, because a wrong path still proves the host resolves
+    /// and accepts connections, and this must not start failing if SpacetimeDB
+    /// renames an endpoint. Startup only; never on a request path.
+    /// </para>
+    /// </summary>
+    public async Task<string?> ProbeUnreachableReasonAsync(CancellationToken ct = default)
+    {
+        var http = httpFactory.CreateClient(ClientName);
+        try
+        {
+            using var response = await http.GetAsync(
+                $"{options.SpacetimeHttpUrl.TrimEnd('/')}/v1/ping", ct);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
         }
     }
 
@@ -250,7 +302,7 @@ public sealed class SpacetimeClient(
     /// <summary>Gap between reads — comfortably over the observed replication lag.</summary>
     private static readonly TimeSpan PresenceReadRetryDelay = TimeSpan.FromMilliseconds(120);
 
-    private async Task<bool> QueryVoicePresenceAsync(
+    private async Task<VoicePresence> QueryVoicePresenceAsync(
         string accountId,
         string userIdentity,
         VoiceRoom room,
@@ -277,9 +329,13 @@ public sealed class SpacetimeClient(
         }
         catch (Exception ex)
         {
+            // The URL is in the message on purpose: the one production outage this
+            // ever caused was a compose file that never passed SPACETIMEDB_HTTP_URL,
+            // leaving it on its dev default of localhost inside the container.
             logger.LogWarning(
-                ex, "Voice presence query transport error for room={Room}", RoomDescription(room));
-            return false;
+                ex, "Voice presence query transport error for room={Room} (url={Url})",
+                RoomDescription(room), url);
+            return VoicePresence.Unavailable;
         }
 
         if (!response.IsSuccessStatusCode)
@@ -287,13 +343,13 @@ public sealed class SpacetimeClient(
             logger.LogWarning(
                 "Voice presence query got {Status} from SpacetimeDB for room={Room}",
                 (int)response.StatusCode, RoomDescription(room));
-            return false;
+            return VoicePresence.Unavailable;
         }
 
         var rows = await ReadSqlRowsAsync(response, ct);
         if (rows is null)
         {
-            return false;
+            return VoicePresence.Unavailable;
         }
 
         var me = NormalizeIdentityHex(userIdentity);
@@ -301,11 +357,11 @@ public sealed class SpacetimeClient(
         {
             if (row.Count > 0 && NormalizeIdentityHex(IdentityText(row[0])) == me)
             {
-                return true;
+                return VoicePresence.Admitted;
             }
         }
 
-        return false;
+        return VoicePresence.Denied;
     }
 
     /// <summary>One statement's result from the SpacetimeDB <c>/sql</c> endpoint.</summary>
