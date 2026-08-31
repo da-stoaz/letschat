@@ -202,7 +202,15 @@ ADMIN_BOOTSTRAP_EMAIL=you@example.com
 MINIO_PUBLIC_ENDPOINT=https://files.example.com
 DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
 DISCOVERY_AUTH_URL=https://auth.example.com
-DISCOVERY_LIVEKIT_URL=wss://lk.example.com`} />
+DISCOVERY_LIVEKIT_URL=wss://lk.example.com
+
+# Same hostnames again, for the browser client's Content-Security-Policy.
+# Your tunnel ingress does the routing; these only tell the web container which
+# origins the page is allowed to talk to.
+AUTH_DOMAIN=auth.example.com
+CHAT_DOMAIN=chat.example.com
+FILES_DOMAIN=files.example.com
+LIVEKIT_DOMAIN=lk.example.com`} />
 
         <Callout type="warning" title="Generate SPACETIME_OIDC_PRIVATE_KEY once, then never change it">
           <p>

@@ -97,6 +97,12 @@ public static class DbInitializer
         }
 
         await SeedBootstrapAdminAsync(services, logger);
+        // Detached on purpose: a diagnostic, never a dependency. Awaiting it would
+        // add its whole retry budget to every cold start — and to every
+        // integration-test host — to learn something startup does not act on.
+        _ = Task.Run(() => WarnIfSpacetimeUnreachableAsync(
+            services.GetRequiredService<Services.SpacetimeClient>(),
+            services.GetRequiredService<ServiceOptions>(), logger));
         await PinTrustedIssuerBestEffortAsync(
             services.GetRequiredService<Services.SpacetimeClient>(), logger);
         await MigrateLegacyIdentitiesAsync(
@@ -104,6 +110,76 @@ public static class DbInitializer
             services.GetRequiredService<Services.SpacetimeTokenService>(),
             services.GetRequiredService<Services.SpacetimeClient>(),
             logger);
+    }
+
+    /// <summary>Startup reachability probe: attempts before giving up.</summary>
+    private const int SpacetimeProbeAttempts = 3;
+
+    /// <summary>Gap between probes — SpacetimeDB is only <c>depends_on: service_started</c>.</summary>
+    private static readonly TimeSpan SpacetimeProbeRetryDelay = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Proves at startup that core-api can actually reach SpacetimeDB, and says so
+    /// loudly if it cannot.
+    ///
+    /// <para>
+    /// Every core-api → module call is individually fail-soft by design: the
+    /// issuer pin is best-effort, the identity migration defers, and the voice
+    /// gate fails closed. Each of those is right on its own, but together they
+    /// meant a wholly unreachable module produced nothing louder than scattered
+    /// warnings — and surfaced to users as a wrong answer about voice permissions.
+    /// This is the one place that names the actual fault, once, at Error.
+    /// </para>
+    ///
+    /// <para>
+    /// Deliberately NOT fatal. SpacetimeDB is only <c>depends_on:
+    /// service_started</c>, so it routinely lags core-api on a cold boot; refusing
+    /// to start would turn a slow dependency into a crash loop. It retries a few
+    /// times first for the same reason.
+    /// </para>
+    /// </summary>
+    private static async Task WarnIfSpacetimeUnreachableAsync(
+        Services.SpacetimeClient spacetime, ServiceOptions options, ILogger logger)
+    {
+        try
+        {
+            await ProbeSpacetimeAsync(spacetime, options, logger);
+        }
+        catch (Exception ex)
+        {
+            // Detached, so nothing is awaiting this to observe a fault — and a
+            // host shutting down mid-probe must not surface as an unhandled task.
+            logger.LogDebug(ex, "SpacetimeDB reachability probe ended early.");
+        }
+    }
+
+    private static async Task ProbeSpacetimeAsync(
+        Services.SpacetimeClient spacetime, ServiceOptions options, ILogger logger)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var reason = await spacetime.ProbeUnreachableReasonAsync();
+            if (reason is null)
+            {
+                logger.LogInformation(
+                    "SpacetimeDB reachable at {Url}.", options.SpacetimeHttpUrl);
+                return;
+            }
+
+            if (attempt >= SpacetimeProbeAttempts)
+            {
+                logger.LogError(
+                    "core-api CANNOT REACH SpacetimeDB at {Url} ({Reason}). Voice authorization, "
+                    + "instance-admin propagation, the trusted-issuer pin and the identity "
+                    + "migration will all fail until this is fixed. In Docker this must be the "
+                    + "compose service address (SPACETIMEDB_HTTP_URL=http://spacetimedb:3000) — "
+                    + "'localhost' resolves to the core-api container itself, not the database.",
+                    options.SpacetimeHttpUrl, reason);
+                return;
+            }
+
+            await Task.Delay(SpacetimeProbeRetryDelay);
+        }
     }
 
     /// <summary>

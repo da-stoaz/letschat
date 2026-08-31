@@ -52,9 +52,21 @@ public static class LiveKitEndpoints
         // Authenticating as the session is not enough — without this anyone could
         // mint a publish/subscribe token for any room (any channel, any DM) just
         // by naming it.
-        var admitted = await spacetime.HasVoicePresenceAsync(
+        var presence = await spacetime.HasVoicePresenceAsync(
             user.Id, user.SpacetimeIdentity, voiceRoom, ct);
-        if (!admitted)
+
+        // Still fails closed — no token is minted unless the module actually
+        // admitted the caller — but an unreachable module is reported as the
+        // outage it is, not as a permission the caller doesn't have. 503 is also
+        // honest to the client: this one is worth retrying, a 403 never is.
+        if (presence == VoicePresence.Unavailable)
+        {
+            throw ApiException.ServiceUnavailable(
+                "Voice is temporarily unavailable: could not reach the chat database to "
+                + "confirm you joined this room. Please try again in a moment.");
+        }
+
+        if (presence != VoicePresence.Admitted)
         {
             throw ApiException.Forbidden("You are not a participant in this voice room.");
         }

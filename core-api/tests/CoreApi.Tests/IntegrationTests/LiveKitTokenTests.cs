@@ -147,6 +147,47 @@ public sealed class LiveKitTokenTests
     }
 
     /// <summary>
+    /// The production regression. <c>docker-compose.prod.base.yml</c> never passed
+    /// <c>SPACETIMEDB_HTTP_URL</c> to core-api, so it fell back to its dev default
+    /// (<c>localhost:4300</c> — inside the core-api container) and every /sql call
+    /// died in transport. That was reported to users as 403 "You are not a
+    /// participant in this voice room": a confident, wrong claim about their own
+    /// permissions, which sent debugging at the permission model instead of at the
+    /// unreachable database.
+    ///
+    /// <para>
+    /// The gate still fails closed — no token is minted — but an unanswered gate
+    /// must report as an outage, and as a retryable one.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Reports_Unavailable_Rather_Than_Denied_When_The_Module_Is_Unreachable()
+    {
+        using var spacetime = new UnreachableStub();
+        using var factory = new LetsChatWebApplicationFactory { SpacetimeTransport = spacetime };
+        var client = factory.CreateClient();
+
+        var (sessionToken, identity) = await RegisterAsync(client, "stranded");
+
+        var response = await RequestTokenAsync(client, "42", identity, sessionToken);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+
+        // And it must not say anything about the caller's membership, because it
+        // does not know anything about the caller's membership.
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("not a participant", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A SpacetimeDB that cannot be reached at all — no response, ever.</summary>
+    private sealed class UnreachableStub : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new HttpRequestException("Connection refused (127.0.0.1:4300)");
+    }
+
+    /// <summary>
     /// Stands in for SpacetimeDB's <c>/sql</c> endpoint. <see cref="Rows"/> is the
     /// row array of the single statement result, settable per case because the
     /// account's identity is only known after registration.

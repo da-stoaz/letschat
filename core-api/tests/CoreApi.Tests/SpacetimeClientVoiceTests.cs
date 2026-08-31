@@ -54,9 +54,9 @@ public sealed class SpacetimeClientVoiceTests
         var handler = Json("[{\"rows\":[[[\"0xabc\"]]]}]");
         VoiceRoom.TryParse("42", out var room);
 
-        var ok = await Client(handler).HasVoicePresenceAsync(AccountId, "0xABC", room);
+        var outcome = await Client(handler).HasVoicePresenceAsync(AccountId, "0xABC", room);
 
-        Assert.True(ok);
+        Assert.Equal(VoicePresence.Admitted, outcome);
         Assert.Contains("my_voice_participants", handler.LastBody);
         Assert.Contains("channel_id = 42", handler.LastBody);
     }
@@ -67,9 +67,9 @@ public sealed class SpacetimeClientVoiceTests
         var handler = Json("[{\"rows\":[[[\"0xA\"]]]}]");
         VoiceRoom.TryParse("dm:0xa:0xb", out var room);
 
-        var ok = await Client(handler).HasVoicePresenceAsync(AccountId, "0xa", room);
+        var outcome = await Client(handler).HasVoicePresenceAsync(AccountId, "0xa", room);
 
-        Assert.True(ok);
+        Assert.Equal(VoicePresence.Admitted, outcome);
         Assert.Contains("my_dm_voice_participants", handler.LastBody);
         // The module's room_key is "<identity>:<identity>" — the "dm:" prefix and
         // any "0x" belong to the LiveKit room name, not to the stored key. Asserting
@@ -85,9 +85,10 @@ public sealed class SpacetimeClientVoiceTests
         var handler = Json("[{\"rows\":[[[\"0xother1\"]],[[\"0xother2\"]]]}]");
         VoiceRoom.TryParse("42", out var room);
 
-        var ok = await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room);
+        var outcome = await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room);
 
-        Assert.False(ok);
+        // Denied, not Unavailable: the module answered, the answer was "no".
+        Assert.Equal(VoicePresence.Denied, outcome);
     }
 
     [Fact]
@@ -96,25 +97,40 @@ public sealed class SpacetimeClientVoiceTests
         var handler = Json("[{\"rows\":[]}]");
         VoiceRoom.TryParse("42", out var room);
 
-        Assert.False(await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
+        Assert.Equal(
+            VoicePresence.Denied,
+            await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
     }
 
     [Fact]
-    public async Task FailsClosed_OnNonSuccessResponse()
+    public async Task ReportsUnavailable_NotDenied_OnNonSuccessResponse()
     {
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
         VoiceRoom.TryParse("42", out var room);
 
-        Assert.False(await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
+        // Still fails closed — the caller mints no token — but the reason is
+        // reported as an outage rather than as a permission decision.
+        Assert.Equal(
+            VoicePresence.Unavailable,
+            await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
     }
 
+    /// <summary>
+    /// The production regression this whole distinction exists for: the prod
+    /// compose never passed <c>SPACETIMEDB_HTTP_URL</c>, so core-api used its dev
+    /// default and every /sql call died in transport. Collapsed into <c>false</c>,
+    /// that surfaced to users as "You are not a participant in this voice room" —
+    /// a confident, wrong statement about their permissions.
+    /// </summary>
     [Fact]
-    public async Task FailsClosed_OnTransportError()
+    public async Task ReportsUnavailable_NotDenied_OnTransportError()
     {
         var handler = new StubHandler(_ => throw new HttpRequestException("connection refused"));
         VoiceRoom.TryParse("42", out var room);
 
-        Assert.False(await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
+        Assert.Equal(
+            VoicePresence.Unavailable,
+            await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
     }
 
     /// <summary>
@@ -139,7 +155,9 @@ public sealed class SpacetimeClientVoiceTests
         });
         VoiceRoom.TryParse("42", out var room);
 
-        Assert.True(await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
+        Assert.Equal(
+            VoicePresence.Admitted,
+            await Client(handler).HasVoicePresenceAsync(AccountId, "0xabc", room));
         Assert.True(reads > 1, "expected the lagging first read to be retried");
     }
 
