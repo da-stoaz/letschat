@@ -1,6 +1,6 @@
 [package]
 name = "letschat_server"
-version = "1.0.5"
+version = "1.0.7"
 edition = "2024"
 
 [lib]
