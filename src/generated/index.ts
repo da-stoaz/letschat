@@ -120,6 +120,8 @@ import UpdateVoiceStateReducer from "./update_voice_state_reducer";
 import UseInviteReducer from "./use_invite_reducer";
 
 // Import all procedure arg schemas
+import * as LoadOlderChannelMessagesProcedure from "./load_older_channel_messages_procedure";
+import * as LoadOlderDirectMessagesProcedure from "./load_older_direct_messages_procedure";
 
 // Import all table schema definitions
 import ArchiveBansRow from "./archive_bans_table";
@@ -499,6 +501,8 @@ const reducersSchema = __reducers(
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
+  __procedureSchema("load_older_channel_messages", LoadOlderChannelMessagesProcedure.params, LoadOlderChannelMessagesProcedure.returnType),
+  __procedureSchema("load_older_direct_messages", LoadOlderDirectMessagesProcedure.params, LoadOlderDirectMessagesProcedure.returnType),
 );
 
 /** The remote SpacetimeDB module schema, both runtime and type information. */

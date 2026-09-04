@@ -9,6 +9,7 @@ import { usePinsStore } from '../../stores/pinsStore'
 import { useUiStore } from '../../stores/uiStore'
 import { useServerRole } from '../../hooks/useServerRole'
 import { warnOnce } from '../../lib/devWarnings'
+import { loadOlderChannelMessages } from '../../lib/spacetimedb/history'
 import { ChatMessageFeed, type ChatMessageFeedHandle } from '../chat/ChatMessageFeed'
 import { ChatComposer } from '../chat/ChatComposer'
 import { ChannelMessageSearch } from './ChannelMessageSearch'
@@ -120,6 +121,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         ref={feedRef}
         scopeKey={`channel:${channelId}`}
         messages={messages}
+        onLoadOlder={channelId === null ? undefined : () => void loadOlderChannelMessages(channelId)}
         selfIdentity={selfIdentity}
         unreadCount={unreadCount}
         canDeleteAny={canModerate}

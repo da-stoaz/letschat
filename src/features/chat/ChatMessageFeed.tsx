@@ -62,6 +62,12 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   scrollToBottomToken?: number
   pinnedMessageIds?: Set<number> | null
   onTogglePin?: (message: RenderableMessage, pinned: boolean) => void
+  /**
+   * Called when the reader scrolls past the oldest message held locally. The
+   * subscription only carries a recent window, so this is where the next page
+   * of older history gets fetched.
+   */
+  onLoadOlder?: () => void
 }>(function ChatMessageFeed({
   scopeKey,
   messages,
@@ -74,6 +80,7 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   scrollToBottomToken = 0,
   pinnedMessageIds = null,
   onTogglePin,
+  onLoadOlder,
 }, ref) {
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE_SIZE)
   const [isAtBottom, setIsAtBottom] = useState(true)
@@ -212,10 +219,13 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
           setIsAtBottom((previous) => (previous === atBottom ? previous : atBottom))
 
           if (target.scrollTop <= 60) {
-            setHistoryLimit((previous) => {
-              const next = Math.min(sortedMessages.length, previous + HISTORY_PAGE_SIZE)
-              return next === previous ? previous : next
-            })
+            if (historyLimit >= sortedMessages.length) {
+              // Everything the client holds is on screen — ask for the next
+              // page from the module.
+              onLoadOlder?.()
+            } else {
+              setHistoryLimit((previous) => Math.min(sortedMessages.length, previous + HISTORY_PAGE_SIZE))
+            }
           }
         }}
       >

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::Bound;
 
 use spacetimedb::{Identity, Timestamp, ViewContext};
@@ -13,6 +13,28 @@ use crate::schema::{
     read_state__view, server__view, server_member__view, typing_state__view, user__view,
     voice_participant__view,
 };
+
+/// How many of the newest messages per channel — and per DM conversation — the
+/// subscription carries. Anything older is fetched a page at a time through the
+/// `load_older_*` procedures.
+///
+/// Unbounded, these two views handed every client the complete history of every
+/// channel of every space it belongs to on every connect (BUG_ANALYSIS C3):
+/// client memory and per-reconnect bandwidth grew without limit, and that full
+/// set was the multiplier that made C1/C2 quadratic.
+pub(crate) const RECENT_MESSAGE_WINDOW: usize = 200;
+
+/// The newest `RECENT_MESSAGE_WINDOW` of `rows`, oldest first.
+///
+/// ponytail: sorts the channel's whole history — the same scan the view already
+/// did, it just no longer ships the result. The index accessors iterate
+/// ascending only, so "newest N" needs the full range either way; worth
+/// revisiting if view evaluation itself ever shows up in a server profile.
+fn newest<T>(mut rows: Vec<T>, sent_at: impl Fn(&T) -> Timestamp) -> Vec<T> {
+    rows.sort_by_key(|row| sent_at(row));
+    let start = rows.len().saturating_sub(RECENT_MESSAGE_WINDOW);
+    rows.split_off(start)
+}
 
 /// Server ids the caller is a member of. Shared by several scoped views below.
 fn my_server_ids(ctx: &ViewContext) -> HashSet<u64> {
@@ -249,7 +271,8 @@ pub fn my_channel_messages(ctx: &ViewContext) -> Vec<Message> {
     let mut rows = Vec::<Message>::new();
     for server_id in &mine {
         for channel in ctx.db.channel().server_id().filter(*server_id) {
-            rows.extend(ctx.db.message().channel_id().filter(channel.id));
+            let history: Vec<Message> = ctx.db.message().channel_id().filter(channel.id).collect();
+            rows.extend(newest(history, |message| message.sent_at));
         }
     }
     rows
@@ -272,10 +295,30 @@ pub fn my_pinned_messages(ctx: &ViewContext) -> Vec<PinnedMessage> {
 #[spacetimedb::view(accessor = my_direct_messages, public)]
 pub fn my_direct_messages(ctx: &ViewContext) -> Vec<DirectMessage> {
     let me = ctx.sender();
-    let mut rows: Vec<DirectMessage> =
-        ctx.db.direct_message().sender_identity().filter(me).collect();
-    rows.extend(ctx.db.direct_message().recipient_identity().filter(me));
-    rows
+
+    // Bounded per conversation, not per caller: one busy thread must not push
+    // every other thread out of the window.
+    let mut by_partner: HashMap<Identity, Vec<DirectMessage>> = HashMap::new();
+    let mut seen = HashSet::new();
+    let sent = ctx.db.direct_message().sender_identity().filter(me);
+    let received = ctx.db.direct_message().recipient_identity().filter(me);
+    for row in sent.chain(received) {
+        // A note to self matches both filters.
+        if !seen.insert(row.id) {
+            continue;
+        }
+        let partner = if row.sender_identity == me {
+            row.recipient_identity
+        } else {
+            row.sender_identity
+        };
+        by_partner.entry(partner).or_default().push(row);
+    }
+
+    by_partner
+        .into_values()
+        .flat_map(|thread| newest(thread, |message| message.sent_at))
+        .collect()
 }
 
 /// Invites for spaces the caller belongs to (management UI). Joining uses the
