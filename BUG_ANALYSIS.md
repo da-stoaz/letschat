@@ -44,9 +44,9 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 | [B7](#b7) | Invite-Token mit nur 8 Zeichen, kein Kollisionsschutz, kein Mengenlimit | S3 | Modul |
 | [B8](#b8) | `create_invite`: `expires_in_seconds` läuft in einen i64-Overflow | S4 | Modul |
 | [B9](#b9) | `avatar_url` lässt sich nie wieder entfernen | S4 | Modul |
-| [C1](#c1) | Jede eingehende Nachricht löst drei volle Durchläufe der Historie aus | S1 | Client |
-| [C2](#c2) | Initialer Sync ist O(N²) und läuft in den 5-Sekunden-Timeout | S1 | Client |
-| [C3](#c3) | `my_channel_messages` liefert die komplette Historie ohne Limit | S1 | Views |
+| [C1](#c1) | ~~Jede eingehende Nachricht löst drei volle Durchläufe der Historie aus~~ · **✅ behoben (PR #73)** | ~~S1~~ | Client |
+| [C2](#c2) | ~~Initialer Sync ist O(N²) und läuft in den 5-Sekunden-Timeout~~ · **✅ behoben (PR #73)** | ~~S1~~ | Client |
+| [C3](#c3) | ~~`my_channel_messages` liefert die komplette Historie ohne Limit~~ · **✅ behoben (PR #77)** | ~~S1~~ | Views |
 | [C4](#c4) | `my_server_members` gibt alle Mitglieder aller Discover-Spaces preis | S2 | Views |
 | [C5](#c5) | Typing-Indikator macht pro Tastenanschlag einen Full-Table-Scan | S2 | Modul |
 | [C6](#c6) | Lösch-Reducer scannen ganze Tabellen statt Indizes zu nutzen | S2 | Modul |
@@ -669,131 +669,81 @@ String wird zu `None` normalisiert und entfernt das Icon.
 # C — Performance und Skalierung
 
 <a id="c1"></a>
-## C1 — Jede eingehende Nachricht löst drei volle Durchläufe der Historie aus · **S1**
+## C1 — Jede eingehende Nachricht löste drei volle Durchläufe der Historie aus · ✅ **behoben**
 
-**Stellen:** `src/lib/spacetimedb/events.ts:295-310`, `:115-143`,
-`src/lib/spacetimedb/sync.ts:284-299`, `:95-135`,
-`src/stores/messagesStore.ts:10-28`
+**Behoben in PR #73** (`perf/incremental-message-sync`).
 
-```ts
-conn.db.my_channel_messages.onInsert((_ctx, row) => {
-  syncMessages(conn)                        // (1)
-  recomputeUnreadStateFromReadCursors()     // (2)
-  if (!isLive()) return
-  const message = mapMessage(row)
-  handleIncomingMessage(message)            // (3) ruft intern erneut recompute...
-})
-```
+Im stationären Betrieb fiel pro eingehender Zeile Arbeit proportional zur
+gesamten lokal gehaltenen Historie an, und das dreifach: `syncMessages` mappte
+und sortierte jeden Channel neu, `setChannelMessages` verglich danach Feld für
+Feld, und `recomputeUnreadStateFromReadCursors` lief zweimal über jede Nachricht
+jedes Channels — einmal aus dem Handler, einmal aus `handleIncomingMessage`.
+Präsenz (alle 25 s je sichtbarem Nutzer) und Typing (pro Tastenanschlag) machten
+denselben vollen Rebuild.
 
-Und in `handleIncomingMessage` (`events.ts:119`):
-
-```ts
-recomputeUnreadStateFromReadCursors()       // (3)
-```
-
-Was dabei jeweils passiert:
-
-- **`syncMessages`** (`sync.ts:284`) iteriert **alle** Nachrichten aller Channels aus
-  dem SDK-Cache, mappt sie, gruppiert sie in eine `Map` und **sortiert jede
-  Channel-Liste neu**.
-- **`setChannelMessages`** (`messagesStore.ts:33-41`) vergleicht danach pro Channel
-  Feld für Feld mit `areMessagesEqual` — ein weiterer voller Durchlauf.
-- **`recomputeUnreadStateFromReadCursors`** (`sync.ts:95`) iteriert erneut jede
-  Nachricht jedes Channels und ruft pro Nachricht `Date.parse` auf.
-
-**Auswirkung:** Für *jede einzelne* eingehende Nachricht fällt Arbeit proportional zur
-gesamten lokal vorgehaltenen Historie an — und zwar mehrfach. Bei einem Nutzer mit
-mehreren Spaces und zehntausenden Nachrichten ([C3](#c3) sorgt dafür, dass es alle
-sind) blockiert bereits normale Chat-Aktivität den Main-Thread spürbar. In einem
-aktiven Channel skaliert das quadratisch mit dem Nachrichtenaufkommen.
-
-Dasselbe Muster bei DMs (`events.ts:239-253`, doppelter `recompute`), Typing
-(`:260-262`, voller Rebuild pro Tastenanschlag jedes sichtbaren Nutzers) und Präsenz
-(`:257-259`, voller Rebuild pro Heartbeat jedes sichtbaren Nutzers — bei 25 s
-Heartbeat-Intervall und N sichtbaren Nutzern also N Rebuilds alle 25 s).
+Die Handler arbeiten jetzt inkrementell auf der betroffenen Zeile statt den
+Store neu aufzubauen.
 
 ---
 
 <a id="c2"></a>
-## C2 — Initialer Sync ist O(N²) und läuft in den 5-Sekunden-Timeout · **S1**
+## C2 — Initialer Sync war O(N²) und lief in den Verbindungs-Timeout · ✅ **behoben**
 
-**Stellen:** `src/lib/spacetimedb/events.ts:295-302`,
-`src/lib/spacetimedb/connection.ts:178`, `:197-203`, `:258`
+**Behoben in PR #73** (`perf/incremental-message-sync`).
 
-Der entscheidende Punkt: `watchLiveTables` wird **vor** dem Abonnement registriert
-(`connection.ts:258`), und der `isLive()`-Guard in den Handlern steht **nach**
-`syncMessages` und `recompute`:
+`watchLiveTables` wird vor dem Abonnement registriert, und der `isLive()`-Guard
+stand **hinter** den Rebuilds. Beim initialen Anwenden feuerte `onInsert` einmal
+pro Zeile, und jeder dieser Aufrufe baute jeden Store aus den bis dahin
+eingetroffenen Zeilen neu auf — O(N²) innerhalb des Verbindungsbudgets, das erst
+in `onApplied` gelöscht wird. Nutzer mit echter Historie erreichten es nie und
+sahen `"Connection Error"` gegen einen gesunden Server.
 
-```ts
-syncMessages(conn)                        // läuft immer
-recomputeUnreadStateFromReadCursors()     // läuft immer
-if (!isLive()) return                     // unterdrückt nur die Benachrichtigung
-```
-
-Beim initialen Anwenden des Abonnements feuert `onInsert` für **jede** der N
-eingehenden Nachrichtenzeilen. Jeder dieser Aufrufe macht einen vollständigen Rebuild
-über die bis dahin eingetroffenen Zeilen. Ergebnis: **O(N²)**.
-
-Dem gegenüber steht:
-
-```ts
-const SPACETIMEDB_CONNECT_TIMEOUT_MS = 5_000
-```
-
-Dieser Timeout umfasst nicht nur den Verbindungsaufbau, sondern den **kompletten
-initialen Sync** — er wird erst in `onApplied` (`:262-270`) gelöscht.
-
-**Auswirkung:** Ein Nutzer mit relevanter Historie erreicht `onApplied` nicht
-innerhalb von 5 Sekunden. `connectWithUri` wirft, `connect()` probiert den nächsten
-URI-Kandidaten, scheitert erneut, und der Nutzer sieht `"Connection Error"` — bei
-funktionierendem Server und Netz. Das trifft ausgerechnet die aktivsten Nutzer und
-verschlimmert sich mit jeder gesendeten Nachricht, bis der Client dauerhaft nicht mehr
-verbindet.
-
-`connect()` versucht danach unbegrenzt über `scheduleReconnect` weiter — jeder Versuch
-mit demselben Ergebnis und derselben CPU-Last.
+Jeder Handler bricht jetzt ab, bevor er Arbeit tut, solange das Abonnement nicht
+live ist; `syncAll` in `onApplied` macht den einen vollständigen Durchlauf. Das
+Budget wurde zusätzlich von 5 s auf 45 s angehoben und dokumentiert, was es
+tatsächlich abdeckt.
 
 ---
 
 <a id="c3"></a>
-## C3 — `my_channel_messages` liefert die komplette Historie ohne Limit · **S1**
+## C3 — `my_channel_messages` lieferte die komplette Historie ohne Limit · ✅ **behoben**
 
-**Stellen:** `server/src/views.rs:246-256`, `:272-279`,
-`src/lib/spacetimedb/connection.ts:279-298`
+**Behoben in PR #77** (`perf/bounded-message-history`).
 
-```rust
-#[spacetimedb::view(accessor = my_channel_messages, public)]
-pub fn my_channel_messages(ctx: &ViewContext) -> Vec<Message> {
-    let mine = my_server_ids(ctx);
-    let mut rows = Vec::<Message>::new();
-    for server_id in &mine {
-        for channel in ctx.db.channel().server_id().filter(*server_id) {
-            rows.extend(ctx.db.message().channel_id().filter(channel.id));
-        }
-    }
-    rows
-}
-```
+Beide Nachrichten-Views sind jetzt begrenzt: die neuesten 200 Zeilen **pro
+Channel** und **pro Konversation** (`RECENT_MESSAGE_WINDOW` in `views.rs`). DMs
+werden vor dem Schnitt nach Gegenüber gruppiert, damit ein einzelner reger Thread
+nicht alle anderen aus dem Fenster drängt — dabei fiel auch auf, dass eine
+Notiz an sich selbst doppelt zurückkam, weil sie sowohl den Sender- als auch den
+Empfänger-Filter traf.
 
-Keine Zeit-, Anzahl- oder Cursor-Begrenzung. Der Client abonniert die View ohne
-weiteren Filter (`connection.ts:284`).
+Ältere Historie bleibt erreichbar, seitenweise über zwei neue Prozeduren
+(`server/src/procedures.rs`): `load_older_channel_messages` und
+`load_older_direct_messages`. **Prozeduren statt Views**, weil eine View in
+SpacetimeDB 2.5 keine Parameter annimmt (`Views do not take parameters other
+than &ViewContext`) — „älter als X" lässt sich als View gar nicht ausdrücken.
+Beide sind lesend, senden nichts an andere Clients und sind so abgesichert wie
+die Views: Account vorhanden und nicht gesperrt, plus Mitgliedschaft im Space
+des Channels bzw. Beteiligung an der Konversation.
 
-**Auswirkung:** Bei jedem Verbindungsaufbau lädt der Client die **gesamte
-Nachrichtenhistorie sämtlicher Channels aller Spaces**, in denen er Mitglied ist, in
-den Speicher. Die in `CODEBASE.md` genannte „50-message pagination" ist reines
-Rendering-Verhalten und ändert an der übertragenen und gehaltenen Datenmenge nichts.
+**Rest-Lücke:** Die Token-Generation-Untergrenze aus [A4](#a4) lässt sich in der
+Prozedur nicht prüfen — innerhalb von `with_tx` ist der Sender `Identity::ZERO`
+und kein JWT im Zugriff. Das ist dieselbe lesende Lücke, die A4 bereits
+dokumentiert; Schreibzugriff bleibt vollständig gegated.
 
-Konsequenzen: unbegrenzt wachsender Speicherbedarf im Client, unbegrenzt wachsender
-Bandbreitenverbrauch pro Reconnect, und die Grundlage für [C1](#c1) und [C2](#c2). Für
-`my_direct_messages` (`views.rs:272`) gilt dasselbe.
+Client-seitig holt der Feed die nächste Seite, sobald über die älteste lokal
+gehaltene Nachricht hinaus gescrollt wird. Nachgeladene Seiten liegen neben dem
+Live-Fenster im Store, damit der nächste Subscription-Sync — der dieses Fenster
+komplett ersetzt — sie nicht wieder wegwirft.
 
-Bemerkenswert: Das Archiv-Konzept (`server/src/reducers/archive.rs`) existiert
-ausdrücklich, um genau diese unbegrenzten Tabellen zu entlasten — die Eviction-Seite
-ist laut Kommentar (`archive.rs:73-79`) aber noch nicht umgesetzt.
+Verifiziert gegen eine echte SpacetimeDB-Instanz: 4 neue Fälle in
+`tests/security/message-history.test.ts` (View stoppt bei 200 von 205 gesendeten
+Nachrichten, die 5 darunter kommen über die Prozedur zurück, ein Nicht-Mitglied
+bekommt nichts, DM-Paging bleibt auf den eigenen Thread beschränkt), plus 3
+Unit-Tests auf die Store-Zusammenführung.
 
-**Richtung für einen Fix:** Die View auf ein Zeitfenster oder die letzten N
-Nachrichten pro Channel begrenzen und ältere Nachrichten über einen expliziten
-Nachlade-Reducer holen.
+Nicht in einer laufenden Desktop-Sitzung durchgeklickt: der Pfad
+Scroll-an-den-Anfang → Nachladen → Rendern.
 
 ---
 
@@ -1448,17 +1398,18 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 **Erledigt:** [A2](#a2) (Forwarded Headers) und [A3](#a3) (`/auth/link` absichern)
 sind in PR #70 behoben, [A1](#a1) (Gate für anonyme Identities) in PR #71,
-[A4](#a4) (Token-Revokation) in PR #72. Damit sind alle S1-Befunde im
-Auth-Bereich geschlossen; offen bleibt das S1-Cluster [C1](#c1)/[C2](#c2)/[C3](#c3).
+[A4](#a4) (Token-Revokation) in PR #72, [C1](#c1)/[C2](#c2) (inkrementeller Sync)
+in PR #73 und [C3](#c3) (begrenzte Views plus seitenweises Nachladen) in PR #77.
+**Damit ist kein S1 mehr offen** — 6 von 43 Befunden erledigt, 37 verbleiben.
 
 **Zuerst — Sicherheit, kleiner Aufwand, große Wirkung:**
 [B1](#b1)/[B2](#b2) (Selbstbezug-Prüfungen, je eine Zeile), [B3](#b3) (Block-Prüfung
 in `edit_direct_message`), [A5](#a5) (echte Objektgröße verwenden).
 
 **Danach — Betriebsfähigkeit unter Last:**
-[C1](#c1)/[C2](#c2)/[C3](#c3) hängen zusammen und sollten gemeinsam angegangen werden:
-View begrenzen, inkrementell statt vollständig synchronisieren, `recompute` entprellen
-und einmal statt dreimal aufrufen.
+[C5](#c5)/[C6](#c6) (Full-Table-Scans in Typing- und Lösch-Reducern) und [C7](#c7)
+(instanzweiter Re-Sync bei Mitglieder-Events). Das schwerste Stück dieser Gruppe,
+das S1-Cluster [C1](#c1)/[C2](#c2)/[C3](#c3), ist erledigt.
 
 **Strukturell — braucht eine Entwurfsentscheidung:**
 [A6](#a6) (Autorisierung für Anhänge), [C4](#c4) (Discover-Mitgliederzahl aggregieren).
