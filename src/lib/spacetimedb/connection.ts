@@ -5,6 +5,7 @@ import { notify } from '../notifications'
 import { useConnectionStore, type ConnectionStatus } from '../../stores/connectionStore'
 import { useServerConfigStore } from '../../stores/serverConfigStore'
 import { isDesktopTauriRuntime } from '../tauri'
+import { webWsCompression } from '../webRuntimeConfig'
 
 export type SpacetimeDBClient = {
   connection: DbConnection | null
@@ -51,11 +52,12 @@ const RECONNECT_MAX_DELAY_MS = 30_000
 
 // Picks the WebSocket compression mode for the next connection attempt.
 // Desktop (WKWebView): always 'none'. Web: 'gzip' by default, unless an operator
-// forces it off via VITE_WEB_WS_COMPRESSION='none' or a prior gzip connect
+// forces it off (VITE_WEB_WS_COMPRESSION at build time, or WEB_WS_COMPRESSION
+// on the web container at runtime) or a prior gzip connect
 // failed and we auto-downgraded this session.
 function pickCompression(): 'gzip' | 'none' {
   if (isDesktopTauriRuntime()) return 'none'
-  if (import.meta.env.VITE_WEB_WS_COMPRESSION === 'none') return 'none'
+  if (webWsCompression() === 'none') return 'none'
   return webCompressionDowngraded ? 'none' : 'gzip'
 }
 

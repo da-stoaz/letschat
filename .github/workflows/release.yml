@@ -105,6 +105,26 @@ jobs:
           cache-from: type=gha,scope=archive-worker
           cache-to: type=gha,scope=archive-worker,mode=max
 
+      # Hosted browser client. Published so deployments PULL it instead of running
+      # `bun install` + `vite build` on the deployment target — the heaviest step
+      # in the stack, and the likeliest to exhaust RAM on a small VPS, at the
+      # worst possible moment (mid-deploy, old containers already down).
+      # The image is instance-agnostic: the connect URL is served at runtime as
+      # /config.js by the container's Caddy, not baked in as a build arg.
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./deploy/web/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/letschat-web:latest
+            ghcr.io/${{ github.repository_owner }}/letschat-web:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/letschat-web:sha-${{ steps.sha.outputs.short }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown

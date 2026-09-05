@@ -24,5 +24,4 @@ services:
       - core-api
       - spacetimedb
       - minio
-      - web
     restart: unless-stopped

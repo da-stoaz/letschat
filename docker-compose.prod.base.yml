@@ -329,16 +329,33 @@ services:
   # file server (no SSR runtime to crash) — reached by service name `web:80`
   # from Caddy or the Cloudflare Tunnel. Loopback-only host port for debugging.
   web:
+    # PULLED, not built. `bun install` + `vite build` is the heaviest step in the
+    # stack and the likeliest thing to exhaust RAM on a small VPS — and it would
+    # do so mid-deploy, after the old containers are already down. The image is
+    # instance-agnostic; everything specific to this deployment is handed to it
+    # below and served as /config.js at runtime.
+    #
+    # `build:` is kept as a local escape hatch: `docker compose build web` still
+    # works for a source checkout, but `up -d` uses the published image.
+    image: ghcr.io/da-stoaz/letschat-web:${LETSCHAT_VERSION:-latest}
     build:
       context: .
       dockerfile: deploy/web/Dockerfile
-      args:
-        VITE_WEB_CONNECT_URL: "${VITE_WEB_CONNECT_URL}"
-        VITE_WEB_WS_COMPRESSION: "${VITE_WEB_WS_COMPRESSION:-gzip}"
+    # OPT-IN. Plenty of instances only ever hand out the desktop app, and for
+    # those this is a container serving a client nothing routes to — it needs
+    # its own public hostname (app.<domain>) to be reachable at all. Start it
+    # with:  docker compose --profile web ... up -d
+    profiles: ["web"]
     container_name: letschat-web
-    # Service domains for the Content-Security-Policy in deploy/web/Caddyfile.
-    # Same values the edge proxy uses; Caddy reads them as `{$VAR}` at startup.
     environment:
+      # Which instance this browser client connects to. Read at runtime, so one
+      # published image serves every deployment. VITE_WEB_CONNECT_URL is still
+      # honoured as the name older .env files use.
+      WEB_CONNECT_URL: "${WEB_CONNECT_URL:-${VITE_WEB_CONNECT_URL:-}}"
+      WEB_WS_COMPRESSION: "${WEB_WS_COMPRESSION:-${VITE_WEB_WS_COMPRESSION:-gzip}}"
+
+      # Service domains for the Content-Security-Policy in deploy/web/Caddyfile.
+      # Same values the edge proxy uses; Caddy reads them as `{$VAR}` at startup.
       AUTH_DOMAIN: "${AUTH_DOMAIN}"
       CHAT_DOMAIN: "${CHAT_DOMAIN}"
       FILES_DOMAIN: "${FILES_DOMAIN}"

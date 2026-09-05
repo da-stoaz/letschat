@@ -59,21 +59,50 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
 
 ## Hosted web client (`app.<domain>`)
 
-The `web` service builds the React/Vite bundle and serves it as static files, so
-users can reach LetsChat from a browser without installing the desktop app. It is
-**single-tenant**: the bundle is built with `VITE_WEB_CONNECT_URL` baked in, so a
-browser hitting `app.<domain>` auto-discovers this instance via
-`auth.<domain>/.well-known/letschat.json` and goes straight to login — no
-setup screen. Desktop builds are unaffected (the var is unset there).
+> **Opt-in.** The `web` service sits behind a compose profile, because it needs
+> its own public hostname to be reachable and plenty of instances only hand out
+> the desktop app. Add `--profile web` to every compose command that should
+> include it:
+>
+> ```
+> docker compose --profile web -f docker-compose.prod.base.yml \
+>   -f docker-compose.prod.tunnel.yml up -d
+> ```
+>
+> Without the flag it is not started — which is the right default for an
+> instance with no `app.<domain>` route, where it would otherwise run serving a
+> client nothing can reach.
+
+The `web` service serves the React/Vite bundle as static files, so users can
+reach LetsChat from a browser without installing the desktop app. A browser
+hitting `app.<domain>` auto-discovers this instance via
+`auth.<domain>/.well-known/letschat.json` and goes straight to login — no setup
+screen. Desktop builds are unaffected.
+
+**It is pulled, not built.** `ghcr.io/da-stoaz/letschat-web` is published with
+every release alongside the other images. Before v1.0.6 this service was the one
+`build:` in the production compose, so every operator compiled the frontend on
+their own deployment target — `bun install` + `vite build`, the heaviest step in
+the stack, at the point in a deploy where the old containers are already down.
+
+The image is **instance-agnostic**: the connect URL is served to the page at
+runtime as `/config.js` by the container's own Caddy, rather than baked into the
+bundle. Change it and restart the container; there is nothing to rebuild.
+(`docker compose build web` still works from a source checkout if you want a
+local image.)
 
 Required env (see the `.env.production.*.example` files):
 
 - `APP_DOMAIN=app.example.com` — Caddy hostname (Caddy track only).
-- `VITE_WEB_CONNECT_URL=https://auth.example.com` — baked into the bundle
-  (auth.<domain> serves the discovery document).
-- `VITE_WEB_WS_COMPRESSION=gzip` — DB WebSocket compression in browsers
-  (`gzip` default, or `none`). The client auto-downgrades to `none` if a gzip
-  socket fails to establish, so this never strands a user.
+- `WEB_CONNECT_URL=https://auth.example.com` — the instance this client connects
+  to (auth.<domain> serves the discovery document). `VITE_WEB_CONNECT_URL` is
+  still accepted under its old name, so existing `.env` files keep working.
+- `WEB_WS_COMPRESSION=gzip` — DB WebSocket compression in browsers (`gzip`
+  default, or `none`). The client auto-downgrades to `none` if a gzip socket
+  fails to establish, so this never strands a user. Old name:
+  `VITE_WEB_WS_COMPRESSION`.
+- `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN` — the browser
+  client's Content-Security-Policy is built from these, on **both** topologies.
 - `MINIO_CORS_ALLOW_ORIGIN=https://app.example.com` — lets the browser
   `fetch()` presigned download URLs (`*` also works).
 
@@ -84,9 +113,9 @@ Routing:
 - **Tunnel track**: add an ingress rule `app.<domain> -> http://web:80` in the
   Cloudflare Zero Trust dashboard (WebSocket not required — static files only).
 
-> The bundle is built at image-build time, so **after changing
-> `VITE_WEB_CONNECT_URL` you must rebuild**: `docker compose ... build web` then
-> `up -d web`.
+> Changing `WEB_CONNECT_URL` takes effect on the next page load after
+> `docker compose ... up -d web` — `/config.js` is served `no-store` precisely so
+> a stale copy cannot outlive the change.
 
 ## First-time cutover from `auth-service`
 
