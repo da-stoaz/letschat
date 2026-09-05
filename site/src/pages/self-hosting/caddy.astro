@@ -136,7 +136,10 @@ ADMIN_BOOTSTRAP_USERNAME=admin
 ADMIN_BOOTSTRAP_PASSWORD=  # a strong password
 ADMIN_BOOTSTRAP_EMAIL=you@example.com
 
-# Public endpoints — your domains (auth.<domain> also serves discovery)
+# Public endpoints — your domains (auth.<domain> also serves discovery).
+# These four are handed to clients verbatim, so they must be the public
+# addresses, not localhost or a container name. core-api refuses to start
+# if any of them is left pointing at the server itself.
 MINIO_PUBLIC_ENDPOINT=https://files.example.com
 DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
 DISCOVERY_AUTH_URL=https://auth.example.com

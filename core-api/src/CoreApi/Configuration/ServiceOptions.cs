@@ -1,3 +1,5 @@
+using System.Net;
+
 namespace CoreApi.Configuration;
 
 /// <summary>
@@ -252,5 +254,68 @@ public sealed class ServiceOptions
         }
 
         return issues;
+    }
+
+    /// <summary>
+    /// Returns problems with the endpoints handed to CLIENTS — the presigned-URL
+    /// host and the three addresses in `/.well-known/letschat.json`. Every one of
+    /// them defaults to something only this machine can reach, so leaving one
+    /// unset in production is silent: the service starts, logs nothing, and every
+    /// client fails on an address it cannot resolve. Uploads and avatars die with
+    /// a bare "network error", and the app cannot connect at all.
+    ///
+    /// Two rules, both chosen to have no false positives:
+    ///
+    /// - `MINIO_PUBLIC_ENDPOINT` equal to `MINIO_INTERNAL_ENDPOINT` is exactly the
+    ///   unset case — the fallback is the internal value — and a Docker service
+    ///   name resolves nowhere outside the compose network.
+    /// - A loopback host on any of them is wrong by definition for an address a
+    ///   remote client is told to use. It also breaks a packaged macOS build even
+    ///   locally: App Transport Security exempts the `localhost` hostname but not
+    ///   the bare `127.0.0.1` address.
+    ///
+    /// Not checked: a plain-http public endpoint. It fails on macOS desktop for
+    /// the same ATS reason, but a browser-only or LAN deployment can legitimately
+    /// run without TLS, and refusing to boot would break those on upgrade.
+    /// </summary>
+    public IReadOnlyList<string> FindClientUnreachableEndpoints()
+    {
+        var issues = new List<string>();
+
+        if (string.Equals(MinioPublicEndpoint, MinioInternalEndpoint, StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(
+                $"MINIO_PUBLIC_ENDPOINT is unset, so it fell back to MINIO_INTERNAL_ENDPOINT " +
+                $"('{MinioInternalEndpoint}') — an address only this host can reach. Every presigned " +
+                "upload and download URL would point there. Set it to the public files host, " +
+                "e.g. https://files.<domain>.");
+        }
+
+        CheckNotLoopback("MINIO_PUBLIC_ENDPOINT", MinioPublicEndpoint);
+        CheckNotLoopback("DISCOVERY_AUTH_URL", DiscoveryAuthUrl);
+        CheckNotLoopback("DISCOVERY_SPACETIMEDB_URI", DiscoverySpacetimeDbUri);
+        CheckNotLoopback("DISCOVERY_LIVEKIT_URL", DiscoveryLiveKitUrl);
+
+        return issues;
+
+        void CheckNotLoopback(string envVar, string value)
+        {
+            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+            {
+                issues.Add($"{envVar} ('{value}') is not an absolute URL.");
+                return;
+            }
+
+            var isLoopback =
+                string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
+                || (IPAddress.TryParse(uri.Host, out var address) && IPAddress.IsLoopback(address));
+
+            if (isLoopback)
+            {
+                issues.Add(
+                    $"{envVar} ('{value}') points at this machine. Clients are handed this address " +
+                    "verbatim, so set it to the public host for this service.");
+            }
+        }
     }
 }

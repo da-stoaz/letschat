@@ -197,7 +197,7 @@ var app = builder.Build();
 // Fail fast: outside Development, refuse to boot on any secret left at its public
 // dev default. A silently-accepted dev secret is the worst failure mode — auth
 // and voice keep working, but anyone can forge tokens with the well-known key.
-EnsureSecretsAreProductionSafe(app);
+EnsureProductionConfigIsSafe(app);
 
 // Must precede every middleware that reads the client IP (notably the rate
 // limiter) so RemoteIpAddress is the real caller and not the reverse proxy.
@@ -301,23 +301,45 @@ app.Run();
 
 // Reads the resolved options from DI so we validate exactly what the app uses
 // (the integration-test host rebuilds ServiceOptions after Program.cs runs).
-static void EnsureSecretsAreProductionSafe(WebApplication app)
+static void EnsureProductionConfigIsSafe(WebApplication app)
 {
     if (app.Environment.IsDevelopment())
     {
         return;
     }
 
-    var insecureDefaults = app.Services.GetRequiredService<ServiceOptions>().FindInsecureDefaults();
-    if (insecureDefaults.Count == 0)
+    var options = app.Services.GetRequiredService<ServiceOptions>();
+
+    var insecureDefaults = options.FindInsecureDefaults();
+    if (insecureDefaults.Count > 0)
+    {
+        throw new InvalidOperationException(
+            $"Refusing to start in the '{app.Environment.EnvironmentName}' environment: " +
+            $"these secrets are still set to their public dev defaults: {string.Join(", ", insecureDefaults)}. " +
+            "Set strong random values (e.g. `openssl rand -base64 32`) before deploying.");
+    }
+
+    // Same reasoning one layer out: a client-facing endpoint left at its dev
+    // default does not fail here, it fails silently in every client.
+    //
+    // Production only, unlike the secret check above. A forgeable secret is
+    // exploitable in any non-dev environment, but "the address clients are given
+    // must be reachable by them" is a statement about a real deployment — the
+    // integration-test host is a loopback host by construction, and the shipped
+    // compose files set no ASPNETCORE_ENVIRONMENT, so they land on Production.
+    if (!app.Environment.IsProduction())
     {
         return;
     }
 
-    throw new InvalidOperationException(
-        $"Refusing to start in the '{app.Environment.EnvironmentName}' environment: " +
-        $"these secrets are still set to their public dev defaults: {string.Join(", ", insecureDefaults)}. " +
-        "Set strong random values (e.g. `openssl rand -base64 32`) before deploying.");
+    var unreachable = options.FindClientUnreachableEndpoints();
+    if (unreachable.Count > 0)
+    {
+        throw new InvalidOperationException(
+            $"Refusing to start in the '{app.Environment.EnvironmentName}' environment: " +
+            "these endpoints are handed to clients but are not reachable by them:" +
+            Environment.NewLine + "  - " + string.Join(Environment.NewLine + "  - ", unreachable));
+    }
 }
 
 static async Task WriteError(HttpContext context, HttpStatusCode status, string message)

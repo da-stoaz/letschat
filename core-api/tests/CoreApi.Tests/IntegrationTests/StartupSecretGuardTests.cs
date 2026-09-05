@@ -39,6 +39,40 @@ public sealed class StartupSecretGuardTests
         Assert.Contains("LIVEKIT_API_SECRET", chain);
     }
 
+    [Fact]
+    public void Refuses_To_Start_In_Production_With_A_Client_Unreachable_Endpoint()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                // Secrets all set, so only the endpoint guard can fire. MinIO's
+                // public endpoint is left unset — the production footgun: it
+                // silently becomes the Docker-internal address that every
+                // presigned upload and download URL is then signed against.
+                builder.UseEnvironment(Environments.Production);
+                // UseSetting, not ConfigureAppConfiguration: with minimal hosting
+                // the factory's configuration delegate does not reach the
+                // IConfiguration ServiceOptions is built from.
+                builder.UseSetting("AUTH_DATABASE_URL", "Host=test;Database=test;Username=t;Password=t");
+                builder.UseSetting("AUTH_JWT_SECRET", "a-strong-unique-jwt-secret-value-1234567890");
+                builder.UseSetting("LIVEKIT_API_SECRET", "a-strong-unique-livekit-secret-1234567890");
+                builder.UseSetting("MINIO_SECRET_KEY", "a-strong-unique-minio-secret-value");
+                builder.UseSetting("SPACETIME_OIDC_ISSUER", "https://auth.example.com");
+                builder.UseSetting("SPACETIME_OIDC_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----\nMII\n-----END PRIVATE KEY-----");
+                builder.UseSetting("MINIO_INTERNAL_ENDPOINT", "http://minio:44390");
+                builder.UseSetting("DISCOVERY_AUTH_URL", "https://auth.example.com");
+                builder.UseSetting("DISCOVERY_SPACETIMEDB_URI", "wss://chat.example.com");
+                builder.UseSetting("DISCOVERY_LIVEKIT_URL", "wss://lk.example.com");
+            });
+
+        var error = Record.Exception(() => factory.CreateClient());
+
+        Assert.NotNull(error);
+        var chain = AllMessages(error!);
+        Assert.True(chain.Contains("not reachable by them"), chain);
+        Assert.True(chain.Contains("MINIO_PUBLIC_ENDPOINT"), chain);
+    }
+
     /// <summary>Flattens an exception chain (incl. aggregates) into one searchable string.</summary>
     private static string AllMessages(Exception exception)
     {
