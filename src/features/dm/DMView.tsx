@@ -27,6 +27,7 @@ import { composeMessageWithAttachments } from '../chat/attachmentPayload'
 import { PresenceDot } from '@/components/user/PresenceDot'
 import type { DirectMessage, DmServerInvite, Identity } from '../../types/domain'
 import { warnOnce } from '../../lib/devWarnings'
+import { loadOlderDirectMessages } from '../../lib/spacetimedb/history'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -384,6 +385,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
       <ChatMessageFeed
         scopeKey={`dm:${partnerIdentity}`}
         messages={renderMessages}
+        onLoadOlder={() => void loadOlderDirectMessages(partnerIdentity)}
         selfIdentity={selfIdentity}
         canDeleteAny
         allowEditOwn
