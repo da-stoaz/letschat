@@ -58,7 +58,8 @@
 - Direct messages — send, delete (separate sender/recipient delete flags)
 - Message grouping by sender within 7-minute windows
 - Typing indicators (4.5 s TTL, scoped per channel or DM)
-- Virtual scroll with 50-message pagination for large histories
+- Clients sync only the newest 200 messages per channel and per DM conversation; scrolling past that pages older history back from the module (`load_older_channel_messages` / `load_older_direct_messages`)
+- Virtual scroll renders 50 messages at a time out of what is loaded
 - Auto-scroll to bottom; jump-to-latest button when scrolled up
 
 ### Social Graph

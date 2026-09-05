@@ -511,20 +511,54 @@ export async function call<TArgs extends Record<string, unknown>>(reducer: strin
     throw new Error(`Reducer not found: ${reducer}`)
   }
 
-  // Bound the call so a silently-dropped socket surfaces as an error the caller
-  // can retry, instead of an indefinitely pending promise.
+  await withCallTimeout(reducerFn(args ?? {}), `Reducer "${reducer}"`)
+}
+
+// Bound a call so a silently-dropped socket surfaces as an error the caller can
+// retry, instead of an indefinitely pending promise.
+async function withCallTimeout<T>(pending: Promise<T>, label: string): Promise<T> {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<never>((_, reject) => {
     timeoutHandle = setTimeout(
-      () => reject(new Error(`Reducer "${reducer}" timed out after ${REDUCER_CALL_TIMEOUT_MS}ms`)),
+      () => reject(new Error(`${label} timed out after ${REDUCER_CALL_TIMEOUT_MS}ms`)),
       REDUCER_CALL_TIMEOUT_MS,
     )
   })
   try {
-    await Promise.race([reducerFn(args ?? {}), timeout])
+    return await Promise.race([pending, timeout])
   } finally {
     clearTimeout(timeoutHandle)
   }
+}
+
+/**
+ * Call a module procedure and return its rows.
+ *
+ * Procedures are the read-side counterpart to `call`: they return a value to
+ * this caller and broadcast nothing, which is what makes them the way to page
+ * history the subscription views deliberately leave out (see `history.ts`).
+ */
+export async function callProcedure<TResult>(
+  procedure: string,
+  args: Record<string, unknown>,
+): Promise<TResult> {
+  if (!connection?.isActive) {
+    await connect()
+  }
+
+  const currentConnection = connection
+  if (!currentConnection?.isActive) {
+    throw new Error('SpacetimeDB connection is not available')
+  }
+
+  const proceduresByName = currentConnection.procedures as unknown as
+    Record<string, ((args: Record<string, unknown>) => Promise<unknown>) | undefined>
+  const procedureFn = proceduresByName?.[procedure]
+  if (typeof procedureFn !== 'function') {
+    throw new Error(`Procedure not found: ${procedure}`)
+  }
+
+  return (await withCallTimeout(procedureFn(args), `Procedure "${procedure}"`)) as TResult
 }
 
 // ─── Connection lifecycle callbacks ──────────────────────────────────────────

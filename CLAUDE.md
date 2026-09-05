@@ -82,6 +82,8 @@ cargo build --manifest-path server/Cargo.toml --target wasm32-unknown-unknown --
 ### SpacetimeDB Module (`/server`)
 - Schema defined in `server/src/schema.rs`; the table list lives there (User, Server, ServerMember, Channel, Message, Friend, Block, DirectMessage, voice/DM/presence/typing/read-state tables, …).
 - Logic lives in `server/src/reducers/` — each file handles a domain (messages, voice, dm, etc.)
+- Subscription views live in `server/src/views.rs` — the `my_*` accessors clients subscribe to. The two message views are **bounded** (newest 200 rows per channel / per conversation), so a client never loads all history on connect.
+- `server/src/procedures.rs` holds read-only procedures — they return rows to one caller instead of broadcasting, which is how the client pages history older than the view window. A view in SpacetimeDB 2.5 takes no parameters, so anything of the form "older than X" has to be a procedure.
 - Client TypeScript bindings are **auto-generated** into `src/generated/` — never edit these manually; regenerate with `bun run spacetime:generate`
 - Compiles to WASM (`wasm32-unknown-unknown`) and gets published to the running SpacetimeDB instance
 - **Schema migration safety:** `bun run spacetime:publish` is the safe command — it has NO `--yes` flag, so SpacetimeDB will prompt before destructive migrations instead of silently wiping data. If a publish stops on a "requires deleting data" prompt, the schema change is incompatible: fix it by making new fields `Option<T>` or adding `#[default(...)]`, do not bypass the prompt. `bun run spacetime:reset` is the explicit nuke (uses `--delete-data --yes`) for intentional clean slates only.
