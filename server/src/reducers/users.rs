@@ -1,6 +1,6 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, is_valid_username, normalize_username};
+use crate::helpers::{assert_or_err, is_valid_username, normalize_username, require_account};
 use crate::reducers::system::require_trusted_issuer;
 use crate::schema::*;
 
@@ -65,6 +65,13 @@ pub fn update_profile(
     display_name: Option<String>,
     avatar_url: Option<String>,
 ) -> Result<(), String> {
+    // The row lookup below already rejects an identity with no account, which is
+    // why this reducer was skipped when `require_account` went into the other
+    // 60 — but that lookup checks neither `suspended` nor the token-generation
+    // floor, so a disabled account, or a stolen token after a password reset,
+    // could still rename itself and swap its avatar.
+    require_account(ctx)?;
+
     let mut user_row = ctx
         .db
         .user()

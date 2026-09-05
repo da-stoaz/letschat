@@ -22,7 +22,9 @@ import {
   createServer,
   makeAdmin,
   makeUser,
+  none,
   ownerSql,
+  some,
   uniqueName,
   type TestUser,
 } from './harness'
@@ -70,6 +72,11 @@ describe('suspended — an admin disabling an account stops it acting', () => {
       /this account has been disabled/,
     )
     await expect(user.call('create_server', [uniqueName('srv')])).rejects.toThrow(
+      /this account has been disabled/,
+    )
+    // update_profile was the one client reducer without the gate: its own row
+    // lookup rejected strangers but let a disabled account keep editing itself.
+    await expect(user.call('update_profile', [some('still here'), none])).rejects.toThrow(
       /this account has been disabled/,
     )
 
