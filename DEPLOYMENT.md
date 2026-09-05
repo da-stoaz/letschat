@@ -459,8 +459,8 @@ unset those env vars on the next deploy.
 | Rate limiting | `RATE_LIMIT_PERMIT`, `RATE_LIMIT_WINDOW_SECONDS` | Per-IP fixed window on register/login/resend |
 | Client versions | `RECOMMENDED_CLIENT_VERSION`, `MIN_CLIENT_VERSION` | Optional; default to backend's compiled version |
 | LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `livekit/config.prod.yaml` | Keys must match exactly |
-| MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT` | Public endpoint is used in presigned URLs |
-| Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_DATABASE` | Served by core-api at `/.well-known/letschat.json` |
+| MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT` | Public endpoint is baked into every presigned upload/download URL — it must be the address **clients** use (`https://files.<domain>`), not the internal one. Left unset it silently falls back to `MINIO_INTERNAL_ENDPOINT`, so core-api refuses to start in Production rather than hand every client a URL it cannot reach |
+| Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_DATABASE` | Served by core-api at `/.well-known/letschat.json`. The three URLs are handed to clients verbatim; they default to `localhost`, so core-api refuses to start in Production if any is left on a loopback address |
 | Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
 | Service domains | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | Used by `deploy/caddy/Caddyfile` (Caddy track) **and by the `web` container on both tracks** — `deploy/web/Caddyfile` builds the browser client's Content-Security-Policy from them. Left unset on the tunnel track the CSP is emitted with empty hosts; it is report-only, so nothing breaks, but the policy protects nothing |
 
