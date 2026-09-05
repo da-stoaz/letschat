@@ -1,6 +1,6 @@
 [package]
 name = "letschat_tauri"
-version = "1.0.5"
+version = "1.0.8"
 edition = "2024"
 description = "LetsChat Tauri shell"
 authors = ["LetsChat Team"]
