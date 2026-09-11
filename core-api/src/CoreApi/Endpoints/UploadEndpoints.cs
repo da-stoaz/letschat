@@ -100,7 +100,7 @@ public static class UploadEndpoints
             ? $"uploads/{datePath}/{username}/{uploadId}"
             : $"uploads/{datePath}/{username}/{uploadId}.{extension}";
 
-        var uploadUrl = await storage.PresignPutAsync(storageKey, PresignUploadSeconds);
+        var uploadUrl = await storage.PresignPutAsync(storageKey, payload.FileSize, PresignUploadSeconds);
 
         db.PendingUploads.Add(new PendingUpload
         {
@@ -141,34 +141,58 @@ public static class UploadEndpoints
             throw ApiException.BadRequest("Upload session expired. Please start over.");
         }
 
-        if (!await storage.ObjectExistsAsync(pending.StorageKey))
-        {
-            throw ApiException.BadRequest(
+        var actualSize = await storage.GetObjectSizeAsync(pending.StorageKey)
+            ?? throw ApiException.BadRequest(
                 "File has not been uploaded yet — complete the PUT request first.");
-        }
 
+        // Everything below is enforced against the size MinIO reports, not the
+        // one the client declared (BUG_ANALYSIS A5). The presigned PUT now signs
+        // Content-Length, so a mismatch should never reach here — this is the
+        // second line for a storage backend that does not verify signed headers.
         var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var quota = await db.UploadQuotas
             .FirstOrDefaultAsync(q => q.Username == username && q.QuotaDate == today);
+        var usedToday = quota?.BytesUploaded ?? 0;
+
+        string? rejection = null;
+        if (actualSize > MaxFileSize)
+        {
+            rejection = $"File exceeds the maximum allowed size of {MaxFileSize / 1024 / 1024} MB.";
+        }
+        else if (usedToday + actualSize > DailyQuota)
+        {
+            rejection = $"Daily upload quota of {DailyQuota / 1024 / 1024 / 1024} GB exceeded.";
+        }
+
+        if (rejection is not null)
+        {
+            // A rejected object must not stay behind — that is exactly the
+            // storage-fill this check exists to prevent.
+            await storage.DeleteObjectAsync(pending.StorageKey);
+            db.PendingUploads.Remove(pending);
+            await db.SaveChangesAsync();
+            throw ApiException.BadRequest(rejection);
+        }
+
         if (quota is null)
         {
             db.UploadQuotas.Add(new UploadQuota
             {
                 Username = username,
                 QuotaDate = today,
-                BytesUploaded = pending.FileSize,
+                BytesUploaded = actualSize,
             });
         }
         else
         {
-            quota.BytesUploaded += pending.FileSize;
+            quota.BytesUploaded += actualSize;
         }
 
         db.PendingUploads.Remove(pending);
         await db.SaveChangesAsync();
 
         return new UploadConfirmResponse(
-            pending.StorageKey, pending.FileName, pending.FileSize, pending.MimeType);
+            pending.StorageKey, pending.FileName, actualSize, pending.MimeType);
     }
 
     private static async Task<DownloadUrlResponse> DownloadUrl(

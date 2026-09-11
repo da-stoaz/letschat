@@ -29,7 +29,7 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A2](#a2) | ~~Rate-Limiting partitioniert nach Proxy-IP statt Client-IP~~ · **✅ behoben (PR #70)** | ~~S1~~ | Auth |
 | [A3](#a3) | ~~`/auth/link` umgeht Registrierungssperre, E-Mail-Bestätigung und Rate-Limit~~ · **✅ behoben (PR #70)** | ~~S1~~ | Auth |
 | [A4](#a4) | ~~Keine Token-Revokation: Passwort-Reset und Account-Sperre wirken nicht~~ · **✅ behoben (PR #72)** | ~~S1~~ | Auth |
-| [A5](#a5) | Upload-Größenlimit und Tagesquote sind clientseitig deklariert, nicht durchgesetzt | S2 | Storage |
+| [A5](#a5) | ~~Upload-Größenlimit und Tagesquote sind clientseitig deklariert, nicht durchgesetzt~~ · **✅ behoben (PR #83)** | ~~S2~~ | Storage |
 | [A6](#a6) | Presigned Download-URLs ohne Zugriffsprüfung auf den Storage-Key | S2 | Storage |
 | [A7](#a7) | Kein Account-Lockout, keine Passwort-Längenobergrenze → Argon2-DoS | S2 | Auth |
 | [A8](#a8) | Erstregistrierung wird automatisch Instanz-Admin (Land-Grab) | S2 | Auth |
@@ -202,54 +202,34 @@ offen (siehe [E4](#e4): CSP nur im Report-Only-Modus).
 ---
 
 <a id="a5"></a>
-## A5 — Upload-Größenlimit und Tagesquote sind clientseitig deklariert, nicht durchgesetzt · **S2**
+## A5 — Upload-Größenlimit und Tagesquote waren nur clientseitig deklariert · ✅ **behoben**
 
-**Stellen:** `core-api/src/CoreApi/Endpoints/UploadEndpoints.cs:16-17`, `:60-92`,
-`:141-165`; `Services/StorageService.cs:45-52`
+**Behoben in PR #83** (`fix/upload-quota-and-attachment-auth`).
 
-Der Ablauf: Der Client meldet in `/uploads/request` eine `file_size`. Diese Zahl wird
-gegen `MaxFileSize` (500 MB) und die Tagesquote (2 GB) geprüft. Anschließend wird eine
-Presigned-PUT-URL erzeugt:
+Zwei Linien, die erste ist die entscheidende:
 
-```csharp
-public async Task<string> PresignPutAsync(string storageKey, int expiresInSeconds) =>
-    ForceScheme(await _presign.GetPreSignedURLAsync(new GetPreSignedUrlRequest
-    {
-        BucketName = _bucket,
-        Key = storageKey,
-        Verb = HttpVerb.PUT,
-        Expires = DateTime.UtcNow.AddSeconds(expiresInSeconds),
-    }));
-```
+1. **Die Presigned-PUT-URL signiert jetzt `Content-Length`**
+   (`StorageService.PresignPutAsync`). Die URL ist damit nur für exakt die bei
+   `/uploads/request` gemeldete Größe gültig — ein PUT mit anderer Länge
+   scheitert bei MinIO an der SigV4-Prüfung und legt gar kein Objekt an. Das
+   ist der Angriff aus dem Befund („`file_size: 1` melden, 5 GB hochladen") an der
+   Wurzel geschlossen: der Speicher wird nicht einmal berührt.
+2. **`ConfirmUpload` prüft und verbucht die echte Objektgröße** aus
+   `GetObjectMetadata` statt der Client-Angabe — Limit *und* Tagesquote. Ein
+   Objekt, das eine der beiden Grenzen reißt, wird gelöscht, nicht verbucht.
+   Zweite Linie für ein Storage-Backend, das signierte Header nicht prüft.
 
-Es wird **keine** `ContentLength`- bzw. `content-length-range`-Bedingung gesetzt. Die
-URL akzeptiert jede beliebige Objektgröße.
+Verifiziert gegen das laufende MinIO: ein ehrlicher Upload (16 B gemeldet, 16 B
+gesendet) landet und wird mit 16 B verbucht; `1` gemeldet und 64 B gesendet →
+PUT 403, kein Objekt; 64 gemeldet und 16 gesendet → PUT 403. Der Signed-Headers-
+Parameter der URL zeigt `content-length;host`.
 
-In `ConfirmUpload` wird dann erneut die *behauptete* Größe verbucht:
+**Nicht ausgeführt getestet:** der Ablehnungszweig in `ConfirmUpload` (Objekt größer als
+Limit/Quote → löschen), weil die signierte URL ein solches Objekt gar nicht mehr
+entstehen lässt.
 
-```csharp
-if (!await storage.ObjectExistsAsync(pending.StorageKey))   // prüft nur Existenz
-    throw ApiException.BadRequest(...);
-// ...
-quota.BytesUploaded += pending.FileSize;                    // die Client-Angabe
-```
-
-`ObjectExistsAsync` (`StorageService.cs:65-76`) ruft `GetObjectMetadataAsync` auf —
-die tatsächliche `ContentLength` liegt in der Antwort vor, wird aber verworfen.
-
-**Auswirkung:** `file_size: 1` melden und über die Presigned-URL ein 5-GB-Objekt
-hochladen. Sowohl das 500-MB-Limit als auch die 2-GB-Tagesquote sind damit umgangen.
-Ein authentifizierter Nutzer kann den MinIO-Speicher unbegrenzt füllen.
-
-**Richtung für einen Fix:** Die echte `ContentLength` aus der `GetObjectMetadata`-
-Antwort in `ConfirmUpload` verwenden (für Quote *und* Limit-Prüfung, mit Löschen des
-Objekts bei Überschreitung) und zusätzlich beim Presigning eine
-Content-Length-Bedingung setzen.
-
-**Nebenbefund (S4):** Die MIME-Sperrliste (`UploadEndpoints.cs:23-31`) prüft den vom
-Client gesendeten `mime_type`. Der Client bestimmt diesen Wert frei, und die
-Dateiendung wird ungeprüft in den Storage-Key übernommen (Z. 95-99). Die Liste hält
-niemanden auf, der `application/octet-stream` sendet.
+**Nebenbefund (S4) bleibt offen:** Die MIME-Sperrliste prüft weiterhin den vom
+Client gesendeten `mime_type`.
 
 ---
 
@@ -1360,12 +1340,13 @@ sind in PR #70 behoben, [A1](#a1) (Gate für anonyme Identities) in PR #71,
 [A4](#a4) (Token-Revokation) in PR #72, [C1](#c1)/[C2](#c2) (inkrementeller Sync)
 in PR #73, [C3](#c3) (begrenzte Views plus seitenweises Nachladen) in PR #77 und
 [B1](#b1)/[B2](#b2)/[B3](#b3) (Selbstbezug- und DM-Gates) in PR #82.
-**Kein S1 ist offen** — 10 von 43 Befunden erledigt, 33 verbleiben, davon 9 mit S2.
+**Kein S1 ist offen** — 11 von 43 Befunden erledigt, 32 verbleiben, davon 8 mit S2.
 
 **Zuerst — Sicherheit, kleiner Aufwand, große Wirkung:**
-[A5](#a5) (echte Objektgröße verwenden) und [A6](#a6) (Autorisierung für Anhänge) —
-beide in der core-api, beide mit direkter Wirkung auf einen produktiven Betrieb.
-[B1](#b1)/[B2](#b2)/[B3](#b3) aus dieser Gruppe sind in PR #82 erledigt.
+[A6](#a6) (Autorisierung für Anhänge) — braucht eine `attachment`-Tabelle im Modul,
+die die Nachrichten-Reducer füllen, plus eine Prozedur, die die core-api im Namen des
+Aufrufers befragt. [A5](#a5) und [B1](#b1)/[B2](#b2)/[B3](#b3) aus dieser Gruppe sind
+in PR #83 bzw. #82 erledigt.
 
 **Danach — Betriebsfähigkeit unter Last:**
 [C5](#c5)/[C6](#c6) (Full-Table-Scans in Typing- und Lösch-Reducern) und [C7](#c7)
