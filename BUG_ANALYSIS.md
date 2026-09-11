@@ -35,9 +35,9 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A8](#a8) | Erstregistrierung wird automatisch Instanz-Admin (Land-Grab) | S2 | Auth |
 | [A9](#a9) | Account-Enumeration über `/auth/register` | S3 | Auth |
 | [A10](#a10) | LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde | S3 | Voice |
-| [B1](#b1) | `transfer_ownership` auf sich selbst sperrt den Owner dauerhaft aus | S2 | Modul |
-| [B2](#b2) | Owner kann sich selbst kicken/bannen → verwaister Space | S2 | Modul |
-| [B3](#b3) | `edit_direct_message` prüft weder Block noch Freundschaft | S2 | Modul |
+| [B1](#b1) | ~~`transfer_ownership` auf sich selbst sperrt den Owner dauerhaft aus~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
+| [B2](#b2) | ~~Owner kann sich selbst kicken/bannen → verwaister Space~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
+| [B3](#b3) | ~~`edit_direct_message` prüft weder Block noch Freundschaft~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B4](#b4) | `edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status | S3 | Modul |
 | [B5](#b5) | `update_profile`: `display_name`/`avatar_url` völlig unvalidiert | S3 | Modul |
 | [B6](#b6) | Avatar-/Icon-URLs erlauben Tracking über beliebige Fremdhosts | S3 | Modul |
@@ -80,7 +80,7 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 
 Zwei Gates im Modul schließen die Lücke:
 
-- **`require_account`** in allen 60 client-aufrufbaren Reducern (`server/src/helpers.rs`):
+- **`require_account`** in allen client-aufrufbaren Reducern (`server/src/helpers.rs`):
   Der Aufrufer braucht eine `User`-Zeile. Ein Primärschlüssel-Lookup pro Aufruf — und
   weil eine `User`-Zeile nur über `register_user` entsteht, wirkt die Issuer-Prüfung
   darüber transitiv überall.
@@ -107,6 +107,12 @@ Verifiziert gegen eine echte SpacetimeDB-Instanz: 7 neue Fälle in
 fehlschlagen. Drei core-api-Tests fixieren zusätzlich die SATS-`Option<String>`-Kodierung
 des Reducer-Aufrufs — die Stelle, an der ein stiller Fehler die Prüfung ausgeschaltet
 ließe.
+
+**Nachtrag (2026-09-09):** Die ursprüngliche Formulierung „alle 60" stimmte nicht ganz.
+`update_profile` (`server/src/reducers/users.rs`) hatte das Gate nicht — der eigene
+Zeilen-Lookup weist zwar eine identitätslose Anfrage ab, prüft aber weder `suspended`
+noch die Token-Generation-Untergrenze aus [A4](#a4). Ein gesperrtes Konto konnte sich
+also weiterhin umbenennen und sein Avatar wechseln. Nachgezogen in Commit `26b30ac`.
 
 Offen bleibt [A8](#a8): Die erste Registrierung auf einer frischen Instanz wird weiterhin
 automatisch Instanz-Admin, und genau dieses eine Fenster ist auch beim Issuer-Pinning
@@ -160,7 +166,7 @@ gegen den unkorrigierten Endpunkt fallen 2 der 3 Tests.
 Jeder Account trägt jetzt eine monotone `TokenGeneration`, die core-api in **beide**
 Token als `gen`-Claim schreibt. Das Modul hält pro Account zwei Werte, die core-api
 pusht — `suspended` und `min_token_generation` — und `require_account` (aus [A1](#a1),
-in allen 60 client-aufrufbaren Reducern) erzwingt beide. Damit greifen alle drei
+in allen client-aufrufbaren Reducern) erzwingt beide. Damit greifen alle drei
 Teilprobleme:
 
 1. **Passwort-Reset/-Änderung** erhöht die Generation und pusht die neue Untergrenze.
@@ -409,107 +415,60 @@ ein serverseitiger `RemoveParticipant`-Aufruf an die LiveKit-API bei Kick/Ban/Le
 # B — SpacetimeDB-Modul: Logik und Berechtigungen
 
 <a id="b1"></a>
-## B1 — `transfer_ownership` auf sich selbst sperrt den Owner dauerhaft aus · **S2**
+## B1 — `transfer_ownership` auf sich selbst sperrte den Owner dauerhaft aus · ✅ **behoben**
 
-**Stelle:** `server/src/reducers/member_management.rs:181-216`
+**Behoben in PR #82** (`fix/module-permission-gaps`).
 
-```rust
-let mut target_row = ctx.db.server_member().member_key()
-    .find(member_key(server_id, target_identity)) ...;
-target_row.role = Role::Owner;
-ctx.db.server_member().member_key().update(target_row);        // (1)
-
-let mut caller_row = ctx.db.server_member().member_key()
-    .find(member_key(server_id, ctx.sender())) ...;
-caller_row.role = Role::Moderator;
-ctx.db.server_member().member_key().update(caller_row);        // (2)
-```
-
-Es fehlt eine Prüfung `target_identity != ctx.sender()`. Bei `target == sender` sind
-(1) und (2) **dieselbe Zeile**: Erst wird sie auf `Owner` gesetzt, dann wird sie neu
-gelesen und auf `Moderator` gesetzt. Der zweite Schreibvorgang gewinnt.
-
-**Endzustand:** `Server.owner_identity` zeigt auf den Aufrufer, seine
-`ServerMember.role` ist aber `Moderator`.
-
-**Auswirkung:** `require_owner` (`helpers.rs:99-105`) prüft ausschließlich die Rolle
-in `ServerMember`, nicht `Server.owner_identity`. Der Owner verliert damit dauerhaft
-den Zugriff auf `rename_server`, `set_server_invite_policy`, `set_server_discovery`,
-`set_server_tags`, `set_server_icon`, `delete_server`, `set_member_role` und
-`transfer_ownership` — es gibt **keinen Weg zurück**. Der Space hat danach keinen
-Owner mehr und kann nicht einmal gelöscht werden.
-
-Verschärfend: Da die Rolle nun `Moderator` ist, greift die Schranke in `leave_server`
-(`servers.rs:384-387`, `role != Role::Owner`) nicht mehr — der Ex-Owner kann den
-Space verlassen und lässt ihn endgültig verwaist zurück.
-
-**Auslöser:** `transfer_ownership(server_id, <eigene Identity>)`.
+`transfer_ownership` weist `target_identity == ctx.sender()` jetzt ab
+(`"you already own this space"`). Vorher waren die beiden Updates dieselbe Zeile:
+erst auf `Owner`, dann neu gelesen und auf `Moderator` — der zweite Schreibvorgang
+gewann. `Server.owner_identity` zeigte weiter auf den Aufrufer, `require_owner` liest
+aber nur `ServerMember.role`, also verlor er jeden owner-gegateten Reducer
+**einschließlich `transfer_ownership` selbst**: kein Weg zurück. Und weil die Rolle
+nun `Moderator` war, griff die Schranke in `leave_server` nicht mehr — der Ex-Owner
+konnte den Space endgültig verwaist zurücklassen.
 
 ---
 
 <a id="b2"></a>
-## B2 — Owner kann sich selbst kicken oder bannen → verwaister Space · **S2**
+## B2 — Owner konnte sich selbst kicken oder bannen · ✅ **behoben**
 
-**Stellen:** `server/src/reducers/member_management.rs:10-47` (`kick_member`),
-`:49-83` (`ban_member`)
+**Behoben in PR #82** (`fix/module-permission-gaps`).
 
-```rust
-let caller_role = require_mod_or_owner(ctx, server_id, ctx.sender())?;
-let target_role = require_member_role(ctx, server_id, target_identity)?;
+`kick_member` und `ban_member` hatten dieselben vier Prüfungen kopiert — und die
+fehlende fehlte folglich in beiden. Beide laufen jetzt über einen gemeinsamen Gate
+`require_can_remove_member` (`server/src/reducers/member_management.rs`), der
+Selbstbezug ausschließt.
 
-if matches!(target_role, Role::Moderator | Role::Owner) {
-    assert_or_err(caller_role == Role::Owner, "only owner can kick moderators/owner")?;
-}
-```
+Die Sperre gilt für **jede** Rolle, nicht nur für den Owner: ein Moderator, der sich
+selbst kickt, ist `leave_server` mit Umweg, also gibt es nichts zu erlauben und einen
+Fall weniger zu bedenken. `leave_server` bleibt der unterstützte Ausgang und weist
+einen Owner weiterhin ab.
 
-Bei `target_identity == ctx.sender()` und Rolle `Owner` sind beide Bedingungen
-erfüllt: Der Aufrufer *ist* Owner, darf also „Owner kicken". Die eigene
-`ServerMember`-Zeile wird gelöscht.
-
-**Auswirkung:** Der Space bleibt ohne Owner-Zeile zurück. Alle `require_owner`- und
-`require_mod_or_owner`-Aufrufe schlagen für den vormaligen Owner mit
-`"not a server member"` fehl. Bei `ban_member` kommt hinzu, dass er zusätzlich in der
-`Ban`-Tabelle landet und den Space nicht einmal per Invite wieder betreten kann —
-`use_invite` prüft `is_banned` (`invites.rs:129-132`).
-
-Beachtenswert: `leave_server` hat exakt diese Schranke (`servers.rs:384-387`,
-*"owner must transfer ownership before leaving"*). Sie fehlt in `kick_member` und
-`ban_member`.
-
-**Auslöser:** `kick_member(server_id, <eigene Identity>)` oder
-`ban_member(server_id, <eigene Identity>, None)` als Owner.
+Bemerkenswert: Das UI war nie das Problem — `MembersTab.tsx` blendet das
+Aktionsmenü für die eigene Zeile aus (`canActOnTarget = … && !isSelf`). Die Lücke war
+ausschließlich über den direkten Reducer-Aufruf erreichbar, also genau über den Weg,
+gegen den das Modul absichern muss.
 
 ---
 
 <a id="b3"></a>
-## B3 — `edit_direct_message` prüft weder Block noch Freundschaft · **S2**
+## B3 — `edit_direct_message` prüfte weder Block noch Freundschaft · ✅ **behoben**
 
-**Stelle:** `server/src/reducers/direct_messages.rs:43-70`
+**Behoben in PR #82** (`fix/module-permission-gaps`).
 
-```rust
-pub fn edit_direct_message(ctx, message_id, new_content) -> Result<(), String> {
-    assert_or_err((1..=4000).contains(&new_content.len()), ...)?;
-    let mut dm_row = ctx.db.direct_message().id().find(message_id)...;
-    assert_or_err(dm_row.sender_identity == ctx.sender(), "only sender can edit message")?;
-    dm_row.content = new_content;      // keine weitere Prüfung
-    ...
-}
-```
+`edit_direct_message` wendet jetzt dieselben zwei Prüfungen an wie
+`send_direct_message`: `has_block_either_direction` und `FriendStatus::Accepted`.
 
-`send_direct_message` (`:7-40`) prüft sorgfältig `has_block_either_direction` und
-`FriendStatus::Accepted`. `edit_direct_message` prüft nur die Urheberschaft.
+Vorher war Urheberschaft die einzige Bedingung. Blockieren war damit wirkungslos,
+sobald der Blockierte irgendwann eine DM geschickt hatte: er behielt einen dauerhaften
+Schreibkanal in die DM-Ansicht des Opfers, weil `my_direct_messages` nach
+Sender/Empfänger filtert und nicht nach Block-Status.
 
-**Auswirkung:** Ein blockierter oder entfreundeter Nutzer kann den Inhalt jeder von
-ihm zuvor gesendeten DM beliebig neu setzen. Die Zeilen bleiben in
-`my_direct_messages` sichtbar — die View filtert nach Sender/Empfänger, nicht nach
-Block-Status (`views.rs:272-279`). Das Opfer sieht den neuen Text in seiner
-DM-Ansicht.
-
-Damit ist Blockieren als Schutz gegen Belästigung wirkungslos, solange der Blockierte
-irgendwann einmal eine DM geschickt hat — er behält einen dauerhaften Schreibkanal.
-
-**Richtung für einen Fix:** Dieselben beiden Prüfungen wie in `send_direct_message`
-auch in `edit_direct_message`.
+**Bewusste Härte:** Auch das Entfreunden sperrt das Bearbeiten, nicht nur das
+Blockieren. Damit ist Bearbeiten exakt so restriktiv wie Senden — die Parität ist die
+Regel, die man sich merken kann. Der Preis ist, dass eine Tippfehlerkorrektur nach dem
+Entfreunden nicht mehr möglich ist; Löschen bleibt unberührt.
 
 ---
 
@@ -1399,12 +1358,14 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 **Erledigt:** [A2](#a2) (Forwarded Headers) und [A3](#a3) (`/auth/link` absichern)
 sind in PR #70 behoben, [A1](#a1) (Gate für anonyme Identities) in PR #71,
 [A4](#a4) (Token-Revokation) in PR #72, [C1](#c1)/[C2](#c2) (inkrementeller Sync)
-in PR #73 und [C3](#c3) (begrenzte Views plus seitenweises Nachladen) in PR #77.
-**Damit ist kein S1 mehr offen** — 6 von 43 Befunden erledigt, 37 verbleiben.
+in PR #73, [C3](#c3) (begrenzte Views plus seitenweises Nachladen) in PR #77 und
+[B1](#b1)/[B2](#b2)/[B3](#b3) (Selbstbezug- und DM-Gates) in PR #82.
+**Kein S1 ist offen** — 10 von 43 Befunden erledigt, 33 verbleiben, davon 9 mit S2.
 
 **Zuerst — Sicherheit, kleiner Aufwand, große Wirkung:**
-[B1](#b1)/[B2](#b2) (Selbstbezug-Prüfungen, je eine Zeile), [B3](#b3) (Block-Prüfung
-in `edit_direct_message`), [A5](#a5) (echte Objektgröße verwenden).
+[A5](#a5) (echte Objektgröße verwenden) und [A6](#a6) (Autorisierung für Anhänge) —
+beide in der core-api, beide mit direkter Wirkung auf einen produktiven Betrieb.
+[B1](#b1)/[B2](#b2)/[B3](#b3) aus dieser Gruppe sind in PR #82 erledigt.
 
 **Danach — Betriebsfähigkeit unter Last:**
 [C5](#c5)/[C6](#c6) (Full-Table-Scans in Typing- und Lösch-Reducern) und [C7](#c7)
