@@ -6,6 +6,43 @@ use crate::helpers::{
 };
 use crate::schema::*;
 
+/// Shared gate for the two reducers that remove someone else from a space.
+///
+/// Both had the same four checks copied out, and the one that was missing was
+/// missing from both (BUG_ANALYSIS B2): nothing stopped the caller naming
+/// themselves. An owner doing that deletes their own `ServerMember` row, so
+/// every later `require_owner` / `require_mod_or_owner` fails with "not a
+/// server member" — the space can never be administered or deleted again, and
+/// after `ban_member` the owner cannot even re-enter by invite. `leave_server`
+/// is the supported way out and already refuses an owner outright.
+///
+/// Nobody may target themselves here, not just the owner: a moderator
+/// self-kicking is `leave_server` with extra steps, so there is nothing to
+/// allow and one less case to reason about.
+fn require_can_remove_member(
+    ctx: &ReducerContext,
+    server_id: u64,
+    target_identity: Identity,
+    action: &str,
+) -> Result<(), String> {
+    let caller_role = require_mod_or_owner(ctx, server_id, ctx.sender())?;
+    let target_role = require_member_role(ctx, server_id, target_identity)?;
+
+    assert_or_err(
+        target_identity != ctx.sender(),
+        &format!("cannot {action} yourself; leave the space instead"),
+    )?;
+
+    if matches!(target_role, Role::Moderator | Role::Owner) {
+        assert_or_err(
+            caller_role == Role::Owner,
+            &format!("only owner can {action} moderators/owner"),
+        )?;
+    }
+
+    Ok(())
+}
+
 #[spacetimedb::reducer]
 pub fn kick_member(
     ctx: &ReducerContext,
@@ -13,15 +50,7 @@ pub fn kick_member(
     target_identity: Identity,
 ) -> Result<(), String> {
     require_account(ctx)?;
-    let caller_role = require_mod_or_owner(ctx, server_id, ctx.sender())?;
-    let target_role = require_member_role(ctx, server_id, target_identity)?;
-
-    if matches!(target_role, Role::Moderator | Role::Owner) {
-        assert_or_err(
-            caller_role == Role::Owner,
-            "only owner can kick moderators/owner",
-        )?;
-    }
+    require_can_remove_member(ctx, server_id, target_identity, "kick")?;
 
     ctx.db
         .server_member()
@@ -54,15 +83,7 @@ pub fn ban_member(
     reason: Option<String>,
 ) -> Result<(), String> {
     require_account(ctx)?;
-    let caller_role = require_mod_or_owner(ctx, server_id, ctx.sender())?;
-    let target_role = require_member_role(ctx, server_id, target_identity)?;
-
-    if matches!(target_role, Role::Moderator | Role::Owner) {
-        assert_or_err(
-            caller_role == Role::Owner,
-            "only owner can ban moderators/owner",
-        )?;
-    }
+    require_can_remove_member(ctx, server_id, target_identity, "ban")?;
 
     let key = ban_key(server_id, target_identity);
     if ctx.db.ban().ban_key().find(&key).is_none() {
@@ -191,6 +212,18 @@ pub fn transfer_ownership(
 ) -> Result<(), String> {
     require_account(ctx)?;
     require_owner(ctx, server_id, ctx.sender())?;
+
+    // Transferring to yourself locks you out permanently (BUG_ANALYSIS B1). The
+    // two updates below are then the same row: it is set to Owner, re-read, and
+    // set to Moderator — the second write wins. `Server.owner_identity` still
+    // names the caller, but `require_owner` only reads `ServerMember.role`, so
+    // every owner-gated reducer (including this one) refuses them from then on.
+    // Worse, being a Moderator now passes the `leave_server` owner check, so the
+    // ex-owner can walk out and orphan the space for good.
+    assert_or_err(
+        target_identity != ctx.sender(),
+        "you already own this space",
+    )?;
 
     let mut target_row = ctx
         .db

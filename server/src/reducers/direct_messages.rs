@@ -66,6 +66,24 @@ pub fn edit_direct_message(
         "only sender can edit message",
     )?;
 
+    // The same two gates `send_direct_message` applies, for the same reason
+    // (BUG_ANALYSIS B3). Authorship alone was the only check here, so blocking
+    // someone did nothing as long as they had ever sent you one message: they
+    // kept a permanent write channel into your DM view, because
+    // `my_direct_messages` filters by sender/recipient and not by block status.
+    // Editing therefore has to be as restricted as sending, not less.
+    assert_or_err(
+        !has_block_either_direction(ctx, ctx.sender(), dm_row.recipient_identity),
+        "blocked relationship exists",
+    )?;
+
+    let friend_row = find_friend_row(ctx, ctx.sender(), dm_row.recipient_identity)
+        .ok_or_else(|| "friend relationship not found".to_string())?;
+    assert_or_err(
+        friend_row.status == FriendStatus::Accepted,
+        "friendship not accepted",
+    )?;
+
     dm_row.content = new_content;
     dm_row.edited_at = Some(ctx.timestamp);
     ctx.db.direct_message().id().update(dm_row);
