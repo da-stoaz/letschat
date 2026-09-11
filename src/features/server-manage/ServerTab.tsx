@@ -34,7 +34,6 @@ const TAG_MAX_LEN = 24
 type ServerTabProps = {
   server: Server
   isOwner: boolean
-  leaving: boolean
   invitePolicySaving: boolean
   discoverySaving: boolean
   onOpenEditServer: () => void
@@ -48,7 +47,6 @@ type ServerTabProps = {
 export function ServerTab({
   server,
   isOwner,
-  leaving,
   invitePolicySaving,
   discoverySaving,
   onOpenEditServer,
@@ -161,11 +159,11 @@ export function ServerTab({
                 type="button"
                 variant="outline"
                 className="w-full justify-start text-destructive hover:text-destructive"
-                disabled={isOwner || leaving}
+                disabled={isOwner}
                 onClick={onLeaveServer}
               >
                 <LogOutIcon className="size-4" />
-                {leaving ? 'Leaving…' : 'Leave space'}
+                Leave space
               </Button>
               <p className="text-xs text-muted-foreground">
                 {isOwner
