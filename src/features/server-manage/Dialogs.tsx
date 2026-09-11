@@ -3,6 +3,7 @@ import { CreateChannelModal } from '../../modals/CreateChannelModal'
 import { DeleteServerModal } from '../../modals/DeleteServerModal'
 import { EditChannelModal } from '../../modals/EditChannelModal'
 import { EditServerModal } from '../../modals/EditServerModal'
+import { LeaveServerModal } from '../../modals/LeaveServerModal'
 import type { Channel, Server } from '../../types/domain'
 import { sectionLabel } from './helpers'
 import type { MemberActionModal, PendingDeleteAction } from './types'
@@ -29,6 +30,9 @@ type ServerManageDialogsProps = {
   deleteSubmitting: boolean
   onConfirmDeleteAction: () => void
   onServerDeleted: () => void
+  showLeaveServer: boolean
+  setShowLeaveServer: (open: boolean) => void
+  onServerLeft: () => void
 }
 
 export function ServerManageDialogs({
@@ -51,9 +55,23 @@ export function ServerManageDialogs({
   deleteSubmitting,
   onConfirmDeleteAction,
   onServerDeleted,
+  showLeaveServer,
+  setShowLeaveServer,
+  onServerLeft,
 }: ServerManageDialogsProps) {
   return (
     <>
+      <Dialog open={showLeaveServer} onOpenChange={setShowLeaveServer}>
+        <DialogContent className="max-w-md">
+          <LeaveServerModal
+            serverId={server.id}
+            serverName={server.name}
+            onClose={() => setShowLeaveServer(false)}
+            onLeft={onServerLeft}
+          />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showEditServer} onOpenChange={setShowEditServer}>
         <DialogContent className="max-w-md">
           <EditServerModal

@@ -42,6 +42,24 @@ export function isBlockedMimeType(mimeType: string): boolean {
   return BLOCKED_MIME_PREFIXES.some((prefix) => normalized.startsWith(prefix))
 }
 
+function storageHost(uploadUrl: string): string {
+  try {
+    return new URL(uploadUrl).host
+  } catch {
+    return 'the storage host'
+  }
+}
+
+/**
+ * MinIO reports failures as an XML body (`<Error><Code>…`). Surfacing that code
+ * turns an opaque "failed (403)" into something actionable — SignatureDoesNotMatch
+ * and AccessDenied have very different fixes.
+ */
+function storageErrorCode(responseText: string | null): string | null {
+  const match = /<Code>([^<]+)<\/Code>/.exec(responseText ?? '')
+  return match ? match[1] : null
+}
+
 async function uploadFileToStorage(
   file: File,
   uploadUrl: string,
@@ -65,7 +83,16 @@ async function uploadFileToStorage(
     }
 
     request.onerror = () => {
-      reject(new Error('Storage upload failed (network error).'))
+      // A blocked CORS preflight and a dead socket are indistinguishable here —
+      // XHR reports both as status 0 with no body. Name both causes rather than
+      // failing with nothing anyone can act on: pinning MINIO_CORS_ALLOW_ORIGIN
+      // to the web origin blocks the desktop app, whose origin is
+      // tauri://localhost, and the upload then dies at the preflight.
+      reject(
+        new Error(
+          `Storage upload failed — could not reach ${storageHost(uploadUrl)} (network error, or the storage host rejected the CORS preflight; check MINIO_CORS_ALLOW_ORIGIN).`,
+        ),
+      )
     }
     request.onabort = () => {
       reject(new Error('Storage upload was cancelled.'))
@@ -80,7 +107,14 @@ async function uploadFileToStorage(
         resolve()
         return
       }
-      reject(new Error(`Storage upload failed (${request.status})`))
+      const code = storageErrorCode(request.responseText)
+      reject(
+        new Error(
+          code
+            ? `Storage upload failed (${request.status} ${code}) at ${storageHost(uploadUrl)}.`
+            : `Storage upload failed (${request.status}) at ${storageHost(uploadUrl)}.`,
+        ),
+      )
     }
 
     request.send(file)

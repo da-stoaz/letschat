@@ -49,7 +49,7 @@ export function ServerManagePage() {
   const [memberAction, setMemberAction] = useState<MemberActionModal | null>(null)
   const [pendingDeleteAction, setPendingDeleteAction] = useState<PendingDeleteAction | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
-  const [leaving, setLeaving] = useState(false)
+  const [showLeaveServer, setShowLeaveServer] = useState(false)
   const [invitePolicySaving, setInvitePolicySaving] = useState(false)
   const [discoverySaving, setDiscoverySaving] = useState(false)
 
@@ -220,22 +220,6 @@ export function ServerManagePage() {
     }
   }
 
-  const leaveServer = async () => {
-    if (!Number.isFinite(numericServerId) || isOwner) return
-    setLeaving(true)
-    try {
-      await reducers.leaveServer(numericServerId)
-      toast.success('Left space')
-      setActiveServerId(null)
-      navigate('/app')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not leave space.'
-      toast.error('Failed to leave space', { description: message })
-    } finally {
-      setLeaving(false)
-    }
-  }
-
   if (!Number.isFinite(numericServerId) || !server) {
     return (
       <Card className="h-full border-border/70 bg-card/70">
@@ -336,14 +320,11 @@ export function ServerManagePage() {
               <ServerTab
                 server={server}
                 isOwner={isOwner}
-                leaving={leaving}
                 invitePolicySaving={invitePolicySaving}
                 discoverySaving={discoverySaving}
                 onOpenEditServer={() => setShowEditServer(true)}
                 onOpenDeleteServer={() => setShowDeleteServer(true)}
-                onLeaveServer={() => {
-                  void leaveServer()
-                }}
+                onLeaveServer={() => setShowLeaveServer(true)}
                 onUpdateInvitePolicy={(value) => {
                   void updateInvitePolicy(value)
                 }}
@@ -382,6 +363,12 @@ export function ServerManagePage() {
         }}
         onServerDeleted={() => {
           setActiveServerId(null)
+          navigate('/app')
+        }}
+        showLeaveServer={showLeaveServer}
+        setShowLeaveServer={setShowLeaveServer}
+        onServerLeft={() => {
+          toast.success('Left space')
           navigate('/app')
         }}
       />

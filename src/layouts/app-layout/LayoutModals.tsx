@@ -2,6 +2,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { CreateServerModal } from '../../modals/CreateServerModal'
 import { CreateChannelModal } from '../../modals/CreateChannelModal'
 import { InviteModal } from '../../modals/InviteModal'
+import { LeaveServerModal } from '../../modals/LeaveServerModal'
 import {
   KickMemberModal,
   BanMemberModal,
@@ -11,6 +12,7 @@ import {
   BanListModal,
 } from '../../modals/member-actions'
 import type { ServerMemberWithUser } from '../../stores/membersStore'
+import type { Server } from '../../types/domain'
 
 export type MemberActionModal =
   | { kind: 'kick'; member: ServerMemberWithUser }
@@ -24,29 +26,50 @@ interface LayoutModalsProps {
   showCreateServer: boolean
   showCreateChannel: boolean
   showInvite: boolean
+  showLeaveServer: boolean
   memberAction: MemberActionModal | null
   activeServerId: number | null
+  activeServer: Server | null
   setShowCreateServer: (open: boolean) => void
   setShowCreateChannel: (open: boolean) => void
   setShowInvite: (open: boolean) => void
+  setShowLeaveServer: (open: boolean) => void
   setMemberAction: (action: MemberActionModal | null) => void
+  onServerLeft: () => void
 }
 
 export function LayoutModals({
   showCreateServer,
   showCreateChannel,
   showInvite,
+  showLeaveServer,
   memberAction,
   activeServerId,
+  activeServer,
   setShowCreateServer,
   setShowCreateChannel,
   setShowInvite,
+  setShowLeaveServer,
   setMemberAction,
+  onServerLeft,
 }: LayoutModalsProps) {
   const closeMemberAction = () => setMemberAction(null)
 
   return (
     <>
+      <Dialog open={showLeaveServer && !!activeServer} onOpenChange={setShowLeaveServer}>
+        <DialogContent className="max-w-md">
+          {activeServer ? (
+            <LeaveServerModal
+              serverId={activeServer.id}
+              serverName={activeServer.name}
+              onClose={() => setShowLeaveServer(false)}
+              onLeft={onServerLeft}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showCreateServer} onOpenChange={setShowCreateServer}>
         <DialogContent className="max-w-md">
           <CreateServerModal onClose={() => setShowCreateServer(false)} />

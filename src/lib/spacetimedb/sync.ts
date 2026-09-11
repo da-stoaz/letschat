@@ -486,6 +486,7 @@ export function resetClientState(): void {
   dmVoiceSession.reset()
 
   useConnectionStore.getState().setIdentity(null)
+  useConnectionStore.getState().setSynced(false)
   useSelfStore.getState().setUser(null)
   useUsersStore.setState({ users: [], byIdentity: {} })
 
