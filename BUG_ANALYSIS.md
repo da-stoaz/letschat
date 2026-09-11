@@ -35,9 +35,9 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A8](#a8) | Erstregistrierung wird automatisch Instanz-Admin (Land-Grab) | S2 | Auth |
 | [A9](#a9) | Account-Enumeration über `/auth/register` | S3 | Auth |
 | [A10](#a10) | LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde | S3 | Voice |
-| [B1](#b1) | ~~`transfer_ownership` auf sich selbst sperrt den Owner dauerhaft aus~~ · **✅ behoben (PR #79)** | ~~S2~~ | Modul |
-| [B2](#b2) | ~~Owner kann sich selbst kicken/bannen → verwaister Space~~ · **✅ behoben (PR #79)** | ~~S2~~ | Modul |
-| [B3](#b3) | ~~`edit_direct_message` prüft weder Block noch Freundschaft~~ · **✅ behoben (PR #79)** | ~~S2~~ | Modul |
+| [B1](#b1) | ~~`transfer_ownership` auf sich selbst sperrt den Owner dauerhaft aus~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
+| [B2](#b2) | ~~Owner kann sich selbst kicken/bannen → verwaister Space~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
+| [B3](#b3) | ~~`edit_direct_message` prüft weder Block noch Freundschaft~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B4](#b4) | `edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status | S3 | Modul |
 | [B5](#b5) | `update_profile`: `display_name`/`avatar_url` völlig unvalidiert | S3 | Modul |
 | [B6](#b6) | Avatar-/Icon-URLs erlauben Tracking über beliebige Fremdhosts | S3 | Modul |
@@ -417,7 +417,7 @@ ein serverseitiger `RemoveParticipant`-Aufruf an die LiveKit-API bei Kick/Ban/Le
 <a id="b1"></a>
 ## B1 — `transfer_ownership` auf sich selbst sperrte den Owner dauerhaft aus · ✅ **behoben**
 
-**Behoben in PR #79** (`fix/module-permission-gaps`).
+**Behoben in PR #82** (`fix/module-permission-gaps`).
 
 `transfer_ownership` weist `target_identity == ctx.sender()` jetzt ab
 (`"you already own this space"`). Vorher waren die beiden Updates dieselbe Zeile:
@@ -433,7 +433,7 @@ konnte den Space endgültig verwaist zurücklassen.
 <a id="b2"></a>
 ## B2 — Owner konnte sich selbst kicken oder bannen · ✅ **behoben**
 
-**Behoben in PR #79** (`fix/module-permission-gaps`).
+**Behoben in PR #82** (`fix/module-permission-gaps`).
 
 `kick_member` und `ban_member` hatten dieselben vier Prüfungen kopiert — und die
 fehlende fehlte folglich in beiden. Beide laufen jetzt über einen gemeinsamen Gate
@@ -455,7 +455,7 @@ gegen den das Modul absichern muss.
 <a id="b3"></a>
 ## B3 — `edit_direct_message` prüfte weder Block noch Freundschaft · ✅ **behoben**
 
-**Behoben in PR #79** (`fix/module-permission-gaps`).
+**Behoben in PR #82** (`fix/module-permission-gaps`).
 
 `edit_direct_message` wendet jetzt dieselben zwei Prüfungen an wie
 `send_direct_message`: `has_block_either_direction` und `FriendStatus::Accepted`.
@@ -1359,13 +1359,13 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 sind in PR #70 behoben, [A1](#a1) (Gate für anonyme Identities) in PR #71,
 [A4](#a4) (Token-Revokation) in PR #72, [C1](#c1)/[C2](#c2) (inkrementeller Sync)
 in PR #73, [C3](#c3) (begrenzte Views plus seitenweises Nachladen) in PR #77 und
-[B1](#b1)/[B2](#b2)/[B3](#b3) (Selbstbezug- und DM-Gates) in PR #79.
+[B1](#b1)/[B2](#b2)/[B3](#b3) (Selbstbezug- und DM-Gates) in PR #82.
 **Kein S1 ist offen** — 10 von 43 Befunden erledigt, 33 verbleiben, davon 9 mit S2.
 
 **Zuerst — Sicherheit, kleiner Aufwand, große Wirkung:**
 [A5](#a5) (echte Objektgröße verwenden) und [A6](#a6) (Autorisierung für Anhänge) —
 beide in der core-api, beide mit direkter Wirkung auf einen produktiven Betrieb.
-[B1](#b1)/[B2](#b2)/[B3](#b3) aus dieser Gruppe sind in PR #79 erledigt.
+[B1](#b1)/[B2](#b2)/[B3](#b3) aus dieser Gruppe sind in PR #82 erledigt.
 
 **Danach — Betriebsfähigkeit unter Last:**
 [C5](#c5)/[C6](#c6) (Full-Table-Scans in Typing- und Lösch-Reducern) und [C7](#c7)
