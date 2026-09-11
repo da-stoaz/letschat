@@ -131,6 +131,7 @@ export function AppLayout() {
   const [showCreateServer, setShowCreateServer] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
+  const [showLeaveServer, setShowLeaveServer] = useState(false)
   const [showComposeDm, setShowComposeDm] = useState(false)
   const [memberAction, setMemberAction] = useState<MemberActionModal | null>(null)
   const [channelBarWidth, setChannelBarWidth] = useState<number>(() => {
@@ -169,6 +170,7 @@ export function AppLayout() {
   const voiceRoom = useVoiceSessionStore((s) => s.room)
   const voiceJoining = useVoiceSessionStore((s) => s.joining)
   const connectionStatus = useConnectionStore((s) => s.status)
+  const synced = useConnectionStore((s) => s.synced)
   const selfIdentity = useConnectionStore((s) => s.identity)
   const activeServerId = Number(params.serverId ?? 0) || null
   const activeChannelId = Number(params.channelId ?? 0) || null
@@ -227,6 +229,17 @@ export function AppLayout() {
     [activeChannels],
   )
   const activeServer = servers.find((server) => server.id === activeServerId) ?? null
+
+  // The URL names a space we're no longer in (left it, got kicked, it was
+  // deleted, or a stale deep link). Without this the layout renders a ghost
+  // "Space" with no channels and no members. Only once the initial sync has
+  // landed — before that an absent server just means "not loaded yet".
+  useEffect(() => {
+    if (!synced || activeServerId === null || activeServer) return
+    setActiveServerId(null)
+    navigate('/app', { replace: true })
+  }, [activeServer, activeServerId, navigate, setActiveServerId, synced])
+
   const activeServerMembers = useMemo(
     () => (activeServerId ? membersByServer[activeServerId] ?? [] : []),
     [activeServerId, membersByServer],
@@ -457,18 +470,10 @@ export function AppLayout() {
     navigate(`/app/${activeServerId}/manage`)
   }, [activeServerId, navigate])
 
-  const leaveActiveServer = useCallback(async () => {
-    if (!activeServerId) return
-    try {
-      await reducers.leaveServer(activeServerId)
-      toast.success('Left space')
-      setActiveServerId(null)
-      navigate('/app')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not leave space.'
-      toast.error('Failed to leave space', { description: message })
-    }
-  }, [activeServerId, navigate, setActiveServerId])
+  const onServerLeft = useCallback(() => {
+    toast.success('Left space')
+    navigate('/app')
+  }, [navigate])
 
   const hasActiveCallDock =
     joinedVoiceChannelId !== null ||
@@ -677,7 +682,7 @@ export function AppLayout() {
                   onOpenInvite={() => setShowInvite(true)}
                   onOpenCreateChannel={() => setShowCreateChannel(true)}
                   onOpenServerPanel={openServerPanel}
-                  onLeaveServer={() => void leaveActiveServer()}
+                  onLeaveServer={() => setShowLeaveServer(true)}
                   isChannelMuted={(channelId) => Boolean(mutedChannels[channelId])}
                   onToggleChannelMute={(channelId) => toggleMutedChannel(channelId)}
                   onSelectChannel={(channelId) => {
@@ -722,12 +727,16 @@ export function AppLayout() {
         showCreateServer={showCreateServer}
         showCreateChannel={showCreateChannel}
         showInvite={showInvite}
+        showLeaveServer={showLeaveServer}
         memberAction={memberAction}
         activeServerId={activeServerId}
+        activeServer={activeServer}
         setShowCreateServer={setShowCreateServer}
         setShowCreateChannel={setShowCreateChannel}
         setShowInvite={setShowInvite}
+        setShowLeaveServer={setShowLeaveServer}
         setMemberAction={setMemberAction}
+        onServerLeft={onServerLeft}
       />
 
       <ComposeDmDialog
