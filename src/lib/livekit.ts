@@ -309,14 +309,51 @@ export async function switchRoomDevice(
   kind: LivekitDeviceKind,
   deviceId: string,
 ): Promise<string> {
-  await room.switchActiveDevice(kind, deviceId, false)
   if (kind !== 'audiooutput') {
+    await room.switchActiveDevice(kind, deviceId, false)
     // For input devices, some runtimes keep reporting "default" even after a
     // successful switch. Return the explicit selection so UI state stays in sync.
     return deviceId
   }
 
-  const sinkId = room.getActiveDevice('audiooutput') ?? deviceId
+  // LiveKit refuses `audiooutput` on Safari-based engines by USER AGENT, not by
+  // capability: its `supportsSetSinkId()` returns false for `isSafariBased()`
+  // before it ever looks at an element. WKWebView does implement
+  // `HTMLMediaElement.setSinkId`, and this app attaches its own `<audio>` sinks
+  // (`CallAudioRenderer`), so that refusal is advice we can decline — the sinks
+  // are moved below by hand.
+  //
+  // Letting the throw escape was the whole bug: the selection was reverted and
+  // an error shown while the mechanism that actually works never got to run.
+  // Anything that is not that specific refusal is still a real failure.
+  let livekitAccepted = false
+  try {
+    await room.switchActiveDevice(kind, deviceId, false)
+    livekitAccepted = true
+  } catch (error) {
+    const message = errorMessage(error)
+    if (!/cannot switch audio output/i.test(message)) {
+      throw error
+    }
+  }
+
+  const sinkId = (livekitAccepted ? room.getActiveDevice('audiooutput') : null) ?? deviceId
+
+  // Counted, so the caller can tell "moved it" from "could not move it" instead
+  // of every failure being swallowed and reported as success.
+  let attempted = 0
+  let applied = 0
+
+  const applySink = async (target: { setSinkId?: (id: string) => Promise<void> } | null) => {
+    if (typeof target?.setSinkId !== 'function') return
+    attempted += 1
+    try {
+      await target.setSinkId(sinkId)
+      applied += 1
+    } catch {
+      // Counted as attempted-but-failed; reported once at the end.
+    }
+  }
 
   // Reinforce sink changes for already-attached remote tracks/elements.
   await Promise.all(
@@ -324,18 +361,15 @@ export async function switchRoomDevice(
       try {
         await participant.setAudioOutput({ deviceId: sinkId })
       } catch {
-        // Best-effort fallback below.
+        // Best-effort: LiveKit gates this the same way, so the manual path below
+        // is what actually carries the change on WebKit.
       }
 
-      for (const publication of participant.audioTrackPublications.values()) {
-        const track = publication.audioTrack as { setSinkId?: (id: string) => Promise<void> } | null
-        if (typeof track?.setSinkId !== 'function') continue
-        try {
-          await track.setSinkId(sinkId)
-        } catch {
-          // Keep trying other attached tracks/elements.
-        }
-      }
+      await Promise.all(
+        Array.from(participant.audioTrackPublications.values()).map((publication) =>
+          applySink(publication.audioTrack as { setSinkId?: (id: string) => Promise<void> } | null),
+        ),
+      )
     }),
   )
 
@@ -343,17 +377,15 @@ export async function switchRoomDevice(
     const audioElements = Array.from(
       document.querySelectorAll<HTMLAudioElement>('audio[data-letschat-audio="remote"]'),
     )
-    await Promise.all(
-      audioElements.map(async (element) => {
-        const sinkElement = element as SinkCapableElement
-        if (typeof sinkElement.setSinkId !== 'function') return
-        try {
-          await sinkElement.setSinkId(sinkId)
-        } catch {
-          // Ignore individual element failures.
-        }
-      }),
-    )
+    await Promise.all(audioElements.map((element) => applySink(element as SinkCapableElement)))
+  }
+
+  // Nothing attached yet (alone in the call, or nobody unmuted) is not a
+  // failure: `CallAudioRenderer` applies the stored device to every sink it
+  // mounts, so the choice takes effect as soon as there is audio to move.
+  // Every attempt failing is a failure, and used to be reported as success.
+  if (attempted > 0 && applied === 0) {
+    throw new Error('That output device would not accept the call audio.')
   }
 
   return sinkId
