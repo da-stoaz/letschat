@@ -271,9 +271,17 @@ services:
     environment:
       MINIO_ROOT_USER: "${MINIO_ACCESS_KEY}"
       MINIO_ROOT_PASSWORD: "${MINIO_SECRET_KEY}"
-      # Browser clients on app.<domain> fetch() presigned URLs from files.<domain>;
-      # that cross-origin read needs CORS. Default "*" works; pin it to the web
-      # origin (e.g. https://app.example.com) to lock it down. Desktop is unaffected.
+      # Every client reaches MinIO cross-origin with presigned URLs, so CORS gates
+      # uploads as well as downloads — and the DESKTOP APP IS NOT EXEMPT. The Tauri
+      # webview enforces CORS like any browser, and its page origin is
+      # `tauri://localhost` (macOS/Linux) or `http://tauri.localhost` (Windows) —
+      # never https://app.<domain>. Pinning this to the web origin alone blocks the
+      # desktop PUT (profile picture, chat attachment) at the CORS preflight.
+      #
+      # "*" is the right default: the presigned URL's SigV4 signature is what
+      # authorises the request, not the Origin header, and a narrower list buys
+      # nothing a non-browser client cannot bypass anyway. Pin it only together
+      # with the desktop origins — see .env.production.*.example for the list.
       MINIO_API_CORS_ALLOW_ORIGIN: "${MINIO_CORS_ALLOW_ORIGIN:-*}"
     volumes:
       - minio_data:/data
