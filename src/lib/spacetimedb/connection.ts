@@ -272,6 +272,7 @@ async function connectWithUri(uri: string, database: string, reportErrors: boole
       .subscriptionBuilder()
       .onApplied(() => {
         syncAll(nextConnection)
+        useConnectionStore.getState().setSynced(true)
         liveEventsEnabled = true
         establishedThisConnection = true
         if (appliedOnce) return
