@@ -365,9 +365,11 @@ export async function switchRoomDevice(
         // is what actually carries the change on WebKit.
       }
 
-      for (const publication of participant.audioTrackPublications.values()) {
-        await applySink(publication.audioTrack as { setSinkId?: (id: string) => Promise<void> } | null)
-      }
+      await Promise.all(
+        Array.from(participant.audioTrackPublications.values()).map((publication) =>
+          applySink(publication.audioTrack as { setSinkId?: (id: string) => Promise<void> } | null),
+        ),
+      )
     }),
   )
 
