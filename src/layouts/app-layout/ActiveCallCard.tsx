@@ -512,13 +512,13 @@ export function ActiveCallCard({
       // a dead "System" label and no later selection did anything — the control
       // worked exactly once. A failure belongs to the attempt, not to the
       // runtime: say so, put the old device back, and leave the picker usable.
+      //
+      // `switchRoomDevice` no longer surfaces LiveKit's user-agent refusal as a
+      // failure, so anything arriving here is a device that genuinely would not
+      // take the audio, and its message already reads as a sentence.
       const message = error instanceof Error ? error.message : 'Could not switch media device.'
       setSelectedDeviceId(kind, previousDeviceId)
-      setCurrentError(
-        kind === 'audiooutput' && /cannot switch audio output/i.test(message)
-          ? 'Could not move call audio to that device. It is still playing through the previous one.'
-          : message,
-      )
+      setCurrentError(message)
     }
   }
 
