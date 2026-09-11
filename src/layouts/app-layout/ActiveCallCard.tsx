@@ -39,6 +39,7 @@ import { NoiseFilterToggle } from '../../features/voice/components/NoiseFilterTo
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from 'sonner'
 import { cn } from '../../lib/utils'
 import {
@@ -96,26 +97,105 @@ function shortLabel(label: string, max = 12): string {
   return label.length > max ? `${label.slice(0, max - 1)}…` : label
 }
 
+/**
+ * Whether this runtime can route call audio to a chosen output device.
+ *
+ * Only `HTMLMediaElement.prototype.setSinkId` counts, because that is the one
+ * API the switch actually goes through: `switchRoomDevice` moves the sink via
+ * `room.switchActiveDevice('audiooutput')`, `participant.setAudioOutput`, and
+ * `setSinkId` on the attached `<audio>` elements — every one of them an
+ * HTMLMediaElement call.
+ *
+ * This used to also accept `AudioContext.prototype.setSinkId` as evidence,
+ * which is a different API that nothing here touches. WebKit ships that one but
+ * not the media-element version, so the probe said "supported" in the desktop
+ * app, the first switch threw, and the control retired itself mid-call.
+ */
 function supportsAudioOutputSwitching(): boolean {
   if (typeof window === 'undefined') return false
 
   const htmlMediaElementProto = window.HTMLMediaElement?.prototype as
     | { setSinkId?: unknown }
     | undefined
-  if (typeof htmlMediaElementProto?.setSinkId === 'function') {
-    return true
+
+  return typeof htmlMediaElementProto?.setSinkId === 'function'
+}
+
+/**
+ * The output-device control for both card variants.
+ *
+ * One component rather than the two near-copies this replaced — they had
+ * already drifted ("System" in the compact card, "System output" in the wide
+ * one), and the disabled branch is the one the desktop app actually reaches.
+ *
+ * That branch used to be a bare `<div>` reading "System", which looks like a
+ * selected value rather than an explanation. It now says why there is nothing
+ * to pick.
+ */
+function OutputDevicePicker({
+  compact,
+  canSwitch,
+  label,
+  devices,
+  selectedId,
+  onSelect,
+}: {
+  compact: boolean
+  canSwitch: boolean
+  label: string
+  devices: LivekitDeviceOption[]
+  selectedId: string | null
+  onSelect: (deviceId: string) => void
+}) {
+  const base = cn(
+    'inline-flex min-w-0 flex-1 items-center border-l border-border/70',
+    compact ? 'h-8 px-1.5 text-[11px]' : 'h-9 px-2 text-xs',
+  )
+
+  if (!canSwitch) {
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <div className={cn(base, 'cursor-default text-muted-foreground/80')}>
+              <span className="truncate">System output</span>
+            </div>
+          }
+        />
+        <TooltipContent className="max-w-60">
+          Call audio follows your system&rsquo;s output device. Choosing one per call
+          isn&rsquo;t supported here.
+        </TooltipContent>
+      </Tooltip>
+    )
   }
 
-  const maybeAudioContext = (window as unknown as {
-    AudioContext?: { prototype?: { setSinkId?: unknown } }
-    webkitAudioContext?: { prototype?: { setSinkId?: unknown } }
-  }).AudioContext
-    ?? (window as unknown as {
-      AudioContext?: { prototype?: { setSinkId?: unknown } }
-      webkitAudioContext?: { prototype?: { setSinkId?: unknown } }
-    }).webkitAudioContext
-
-  return typeof maybeAudioContext?.prototype?.setSinkId === 'function'
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className={cn(
+          base,
+          'justify-between text-muted-foreground hover:bg-muted/60',
+          !compact && 'gap-1',
+        )}
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDownIcon className="size-3.5" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Output Device</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={selectedId ?? ''} onValueChange={onSelect}>
+            {devices.map((device) => (
+              <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
+                {device.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 function isUserAgentPermissionContextError(message: string): boolean {
@@ -241,9 +321,9 @@ export function ActiveCallCard({
   const [videoInputs, setVideoInputs] = useState<LivekitDeviceOption[]>([])
   const [localError, setLocalError] = useState<string | null>(null)
   const [entered, setEntered] = useState(false)
-  const [audioOutputSwitchSupported, setAudioOutputSwitchSupported] = useState(
-    supportsAudioOutputSwitching(),
-  )
+  // A window-level capability, not call state: nothing at runtime can change the
+  // answer, so there is nothing to re-probe and nothing to flip off.
+  const audioOutputSwitchSupported = useMemo(() => supportsAudioOutputSwitching(), [])
 
   const connected = connectionState === ConnectionState.Connected
   const connecting = (mode === 'server' ? voiceJoining : dmJoining) || connectionState === ConnectionState.Connecting
@@ -270,9 +350,6 @@ export function ActiveCallCard({
         listLivekitDevices('videoinput', true),
       ])
       if (cancelled) return
-      // Re-detect output-switching support for each new room (a prior call may
-      // have flipped it off after a failed switch attempt).
-      setAudioOutputSwitchSupported(supportsAudioOutputSwitching())
       setAudioInputs(nextAudioInputs)
       setAudioOutputs(nextAudioOutputs)
       setVideoInputs(nextVideoInputs)
@@ -402,12 +479,15 @@ export function ActiveCallCard({
         ? audioOutputId
         : videoInputId
 
-    // Keep UI responsive and reflect the chosen device immediately.
-    setSelectedDeviceId(kind, deviceId)
-
+    // Checked before the label moves: a control that cannot act should not look
+    // like it did.
     if (kind === 'audiooutput' && !audioOutputSwitchSupported) {
       return
     }
+
+    // Keep UI responsive and reflect the chosen device immediately. Reverted in
+    // the catch below if the switch does not take.
+    setSelectedDeviceId(kind, deviceId)
 
     if (!activeRoom) {
       return
@@ -427,12 +507,16 @@ export function ActiveCallCard({
 
       setCurrentError(null)
     } catch (error) {
+      // One failed switch used to flip `audioOutputSwitchSupported` off for the
+      // rest of the call and swallow the error, so the dropdown silently became
+      // a dead "System" label and no later selection did anything — the control
+      // worked exactly once. A failure belongs to the attempt, not to the
+      // runtime: say so, put the old device back, and leave the picker usable.
+      //
+      // `switchRoomDevice` no longer surfaces LiveKit's user-agent refusal as a
+      // failure, so anything arriving here is a device that genuinely would not
+      // take the audio, and its message already reads as a sentence.
       const message = error instanceof Error ? error.message : 'Could not switch media device.'
-      if (kind === 'audiooutput' && /cannot switch audio output/i.test(message)) {
-        setAudioOutputSwitchSupported(false)
-        setCurrentError(null)
-        return
-      }
       setSelectedDeviceId(kind, previousDeviceId)
       setCurrentError(message)
     }
@@ -560,33 +644,14 @@ export function ActiveCallCard({
               <Button size="icon-xs" variant={deafened ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={onToggleDeafen}>
                 {deafened ? <VolumeXIcon className="size-4" /> : <Volume2Icon className="size-4" />}
               </Button>
-              {canSwitchAudioOutput ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="inline-flex h-8 min-w-0 flex-1 items-center justify-between border-l border-border/70 px-1.5 text-[11px] text-muted-foreground hover:bg-muted/60">
-                    <span className="truncate">{outputLabel}</span>
-                    <ChevronDownIcon className="size-3.5" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-56">
-                    <DropdownMenuGroup>
-                      <DropdownMenuLabel>Output Device</DropdownMenuLabel>
-                      <DropdownMenuRadioGroup
-                        value={audioOutputId ?? ''}
-                        onValueChange={(value) => void applyDeviceSelection('audiooutput', value)}
-                      >
-                        {audioOutputs.map((device) => (
-                          <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
-                            {device.label}
-                          </DropdownMenuRadioItem>
-                        ))}
-                      </DropdownMenuRadioGroup>
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <div className="inline-flex h-8 min-w-0 flex-1 items-center border-l border-border/70 px-1.5 text-[11px] text-muted-foreground/80">
-                  <span className="truncate">System</span>
-                </div>
-              )}
+              <OutputDevicePicker
+                compact
+                canSwitch={canSwitchAudioOutput}
+                label={outputLabel}
+                devices={audioOutputs}
+                selectedId={audioOutputId}
+                onSelect={(value) => void applyDeviceSelection('audiooutput', value)}
+              />
             </div>
           </div>
 
@@ -707,33 +772,14 @@ export function ActiveCallCard({
             >
               {deafened ? <VolumeXIcon className="size-5" /> : <Volume2Icon className="size-5" />}
             </Button>
-            {canSwitchAudioOutput ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex h-9 min-w-0 flex-1 items-center justify-between gap-1 border-l border-border/70 px-2 text-xs text-muted-foreground hover:bg-muted/60">
-                  <span className="truncate">{outputLabel}</span>
-                  <ChevronDownIcon className="size-3.5" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>Output Device</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={audioOutputId ?? ''}
-                      onValueChange={(value) => void applyDeviceSelection('audiooutput', value)}
-                    >
-                      {audioOutputs.map((device) => (
-                        <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
-                          {device.label}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <div className="inline-flex h-9 min-w-0 flex-1 items-center border-l border-border/70 px-2 text-xs text-muted-foreground/80">
-                <span className="truncate">System output</span>
-              </div>
-            )}
+            <OutputDevicePicker
+              compact={false}
+              canSwitch={canSwitchAudioOutput}
+              label={outputLabel}
+              devices={audioOutputs}
+              selectedId={audioOutputId}
+              onSelect={(value) => void applyDeviceSelection('audiooutput', value)}
+            />
           </div>
 
           <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-lg border border-border/70 bg-background/40">
