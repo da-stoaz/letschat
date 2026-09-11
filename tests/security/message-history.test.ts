@@ -18,6 +18,16 @@ const EXTRA = 5
 const TOTAL = WINDOW + EXTRA
 const PAGE = 100
 
+/**
+ * "Everything so far" as a paging cursor. Not `Timestamp.now()`: `sent_at` is
+ * stamped by the SpacetimeDB container's clock, and Docker Desktop's VM drifts
+ * a few ms against the host, so a row written a moment ago can sit "after" the
+ * host's now and be filtered out by `sent_at < before`. A cursor a minute out
+ * asks the same question without depending on the two clocks agreeing. The
+ * client never has this problem — it pages from the server's own `sentAt`.
+ */
+const newestPageCursor = () => Timestamp.fromDate(new Date(Date.now() + 60_000))
+
 const WS_URI = BASE.replace(/^http/, 'ws')
 
 function connect(token: string): Promise<DbConnection> {
@@ -73,7 +83,7 @@ describe('bounded message history', () => {
   it('pages the rest back through the procedure', async () => {
     const first = await ownerConn.procedures.loadOlderChannelMessages({
       channelId: BigInt(channelId),
-      before: Timestamp.now(),
+      before: newestPageCursor(),
       limit: PAGE,
     })
     expect(first.length).toBe(PAGE)
@@ -107,7 +117,7 @@ describe('bounded message history', () => {
   it('gives a non-member nothing', async () => {
     const page = await outsiderConn.procedures.loadOlderChannelMessages({
       channelId: BigInt(channelId),
-      before: Timestamp.now(),
+      before: newestPageCursor(),
       limit: PAGE,
     })
     expect(page).toEqual([])
@@ -121,7 +131,7 @@ describe('bounded message history', () => {
 
     const mine = await ownerConn.procedures.loadOlderDirectMessages({
       partner: new Identity(`0x${partner.identity}`),
-      before: Timestamp.now(),
+      before: newestPageCursor(),
       limit: PAGE,
     })
     expect(mine.map((row) => row.content)).toEqual(['private one', 'private two'])
@@ -130,7 +140,7 @@ describe('bounded message history', () => {
     // never the one between owner and partner.
     const theirs = await outsiderConn.procedures.loadOlderDirectMessages({
       partner: new Identity(`0x${partner.identity}`),
-      before: Timestamp.now(),
+      before: newestPageCursor(),
       limit: PAGE,
     })
     expect(theirs).toEqual([])
