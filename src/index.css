@@ -137,6 +137,16 @@
 }
 
 @layer components {
+  /* Base UI hides its native scrollbars with a runtime-injected rule. Keep
+     the same rule in the app stylesheet so production WebViews behave like dev. */
+  .base-ui-disable-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .base-ui-disable-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   :root {
     --app-scrollbar-size: 8px;
     --app-scrollbar-track: hsl(var(--background) / 0.18);
