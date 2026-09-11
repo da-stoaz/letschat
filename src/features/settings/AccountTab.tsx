@@ -95,7 +95,10 @@ export function AccountTab() {
         .then((uploaded) => {
           setAvatarUrl(uploaded.storageKey)
           setAvatarPreviewFromFile(file)
-          toast.success('Profile picture uploaded')
+          // The picture is in storage but not yet on the profile — that only
+          // happens on submit. Saying "uploaded" here reads as done and leaves
+          // people closing Settings on an unsaved change.
+          toast.success('Profile picture ready — click Save Profile to apply it.')
         })
         .catch((error) => {
           const message = error instanceof Error ? error.message : 'Could not upload profile picture.'

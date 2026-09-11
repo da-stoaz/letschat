@@ -74,8 +74,9 @@ Required env (see the `.env.production.*.example` files):
 - `VITE_WEB_WS_COMPRESSION=gzip` — DB WebSocket compression in browsers
   (`gzip` default, or `none`). The client auto-downgrades to `none` if a gzip
   socket fails to establish, so this never strands a user.
-- `MINIO_CORS_ALLOW_ORIGIN=https://app.example.com` — lets the browser
-  `fetch()` presigned download URLs (`*` also works).
+- `MINIO_CORS_ALLOW_ORIGIN=*` — CORS for the presigned URLs. Do **not** narrow
+  this to the web origin alone; it also gates desktop uploads (see
+  [Troubleshooting: file and profile-picture uploads fail silently](#troubleshooting-file-and-profile-picture-uploads-fail-silently)).
 
 Routing:
 
@@ -460,9 +461,42 @@ unset those env vars on the next deploy.
 | Client versions | `RECOMMENDED_CLIENT_VERSION`, `MIN_CLIENT_VERSION` | Optional; default to backend's compiled version |
 | LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `livekit/config.prod.yaml` | Keys must match exactly |
 | MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT` | Public endpoint is baked into every presigned upload/download URL — it must be the address **clients** use (`https://files.<domain>`), not the internal one. Left unset it silently falls back to `MINIO_INTERNAL_ENDPOINT`, so core-api refuses to start in Production rather than hand every client a URL it cannot reach |
+| MinIO CORS | `MINIO_CORS_ALLOW_ORIGIN` | Keep `*`. Gates the presigned **upload** PUT as well as downloads, and the desktop app's origin is `tauri://localhost` / `http://tauri.localhost` — pinning to `https://app.<domain>` alone silently blocks every desktop upload at the CORS preflight |
 | Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_DATABASE` | Served by core-api at `/.well-known/letschat.json`. The three URLs are handed to clients verbatim; they default to `localhost`, so core-api refuses to start in Production if any is left on a loopback address |
 | Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
 | Service domains | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | Used by `deploy/caddy/Caddyfile` (Caddy track) **and by the `web` container on both tracks** — `deploy/web/Caddyfile` builds the browser client's Content-Security-Policy from them. Left unset on the tunnel track the CSP is emitted with empty hosts; it is report-only, so nothing breaks, but the policy protects nothing |
+
+## Troubleshooting: file and profile-picture uploads fail silently
+
+**Symptom:** in production a profile picture or chat attachment never uploads.
+The picker opens, the spinner runs, and either nothing changes or you get a bare
+"network error" — while the same build works fine against local dev services.
+
+**Cause:** `MINIO_CORS_ALLOW_ORIGIN` pinned to the hosted web origin only
+(`https://app.<domain>`). Uploads are a browser-issued `PUT` straight to
+`files.<domain>` with a presigned URL, and `Content-Type: image/png` is not a
+CORS-safelisted value — so every upload is preceded by a preflight `OPTIONS`.
+MinIO answers that preflight with `Access-Control-Allow-Origin` only for the
+origins on this list, and **the desktop app is not on it**: the Tauri webview
+enforces CORS like any browser and its page origin is `tauri://localhost`
+(macOS/Linux) or `http://tauri.localhost` (Windows). Dev never shows this
+because the dev MinIO runs with MinIO's default of `*`.
+
+**Fix:** set `MINIO_CORS_ALLOW_ORIGIN=*` and `docker compose ... up -d minio`.
+The presigned URL's SigV4 signature — not the `Origin` header — is what
+authorises the request, so `*` gives up no access control. If you must pin it,
+list every client origin:
+
+```
+MINIO_CORS_ALLOW_ORIGIN=https://app.example.com,tauri://localhost,http://tauri.localhost
+```
+
+**Confirm:** the preflight should echo your origin back.
+
+```bash
+curl -i -X OPTIONS https://files.example.com/letschat-files/probe   -H "Origin: tauri://localhost"   -H "Access-Control-Request-Method: PUT"   -H "Access-Control-Request-Headers: content-type"
+# expect: 200 + access-control-allow-origin. No such header = uploads are blocked.
+```
 
 ## Troubleshooting: voice fails with "You are not a participant"
 
