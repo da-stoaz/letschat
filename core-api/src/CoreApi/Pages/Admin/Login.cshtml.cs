@@ -34,7 +34,24 @@ public sealed class LoginModel(
         var username = (Username ?? string.Empty).Trim().ToLowerInvariant();
         var user = await userManager.FindByNameAsync(username);
 
-        if (user is null || !await userManager.CheckPasswordAsync(user, Password ?? string.Empty))
+        if (user is null)
+        {
+            Error = "Invalid username or password.";
+            return Page();
+        }
+
+        // Counts failures and applies the lockout from Program.cs, same as the
+        // API sign-in (BUG_ANALYSIS A7). This page sits outside the rate limiter
+        // (Razor Pages are not covered by RequireRateLimiting), so the lockout is
+        // the only brake on guessing here besides ADMIN_BIND being non-public.
+        var check = await signInManager.CheckPasswordSignInAsync(
+            user, Password ?? string.Empty, lockoutOnFailure: true);
+        if (check.IsLockedOut)
+        {
+            Error = Endpoints.AuthEndpoints.LockedOutMessage;
+            return Page();
+        }
+        if (!check.Succeeded)
         {
             Error = "Invalid username or password.";
             return Page();

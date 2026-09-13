@@ -23,6 +23,12 @@ builder.Services.AddSingleton(options);
 builder.WebHost.UseUrls($"http://{options.Bind}", $"http://{options.AdminBind}");
 var adminPort = int.Parse(options.AdminBind.Split(':')[^1]);
 
+// Nothing here takes a large body: the API is small JSON (the biggest is a
+// 128-key download-URL batch, a few KB) and the admin panel is forms. Files go
+// straight to MinIO on presigned URLs. Kestrel's 30 MB default only ever served
+// as a multiplier for the password-hashing DoS (BUG_ANALYSIS A7).
+builder.WebHost.ConfigureKestrel(kestrel => kestrel.Limits.MaxRequestBodySize = 256 * 1024);
+
 // ── Persistence + Identity ───────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(db => db.UseNpgsql(options.ConnectionString));
 
@@ -53,6 +59,16 @@ builder.Services
         identity.Password.RequireUppercase = false;
         identity.Password.RequireNonAlphanumeric = false;
         identity.Password.RequiredUniqueChars = 1;
+
+        // Lockout after repeated wrong passwords (BUG_ANALYSIS A7). Both sign-in
+        // paths go through SignInManager.CheckPasswordSignInAsync with
+        // lockoutOnFailure, which is what actually applies these. Five minutes
+        // is long enough to make guessing a single account hopeless and short
+        // enough that locking someone else out on purpose is a nuisance, not a
+        // weapon.
+        identity.Lockout.AllowedForNewUsers = true;
+        identity.Lockout.MaxFailedAccessAttempts = 5;
+        identity.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
     })
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();

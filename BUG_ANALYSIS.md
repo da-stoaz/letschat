@@ -31,7 +31,7 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A4](#a4) | ~~Keine Token-Revokation: Passwort-Reset und Account-Sperre wirken nicht~~ · **✅ behoben (PR #72)** | ~~S1~~ | Auth |
 | [A5](#a5) | ~~Upload-Größenlimit und Tagesquote sind clientseitig deklariert, nicht durchgesetzt~~ · **✅ behoben (PR #83)** | ~~S2~~ | Storage |
 | [A6](#a6) | ~~Presigned Download-URLs ohne Zugriffsprüfung auf den Storage-Key~~ · **✅ behoben (PR #83)** | ~~S2~~ | Storage |
-| [A7](#a7) | Kein Account-Lockout, keine Passwort-Längenobergrenze → Argon2-DoS | S2 | Auth |
+| [A7](#a7) | ~~Kein Account-Lockout, keine Passwort-Längenobergrenze → Argon2-DoS~~ · **✅ behoben (PR #84)** | ~~S2~~ | Auth |
 | [A8](#a8) | Erstregistrierung wird automatisch Instanz-Admin (Land-Grab) | S2 | Auth |
 | [A9](#a9) | Account-Enumeration über `/auth/register` | S3 | Auth |
 | [A10](#a10) | LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde | S3 | Voice |
@@ -279,42 +279,43 @@ hochladen behebt es.
 ---
 
 <a id="a7"></a>
-## A7 — Kein Account-Lockout, keine Passwort-Längenobergrenze → Argon2-DoS · **S2**
+## A7 — Kein Account-Lockout, keine Passwort-Längenobergrenze → Argon2-DoS · ✅ **behoben**
 
-**Stellen:** `core-api/src/CoreApi/Endpoints/AuthEndpoints.cs:218-246` (`Login`),
-`Pages/Admin/Login.cshtml.cs:32-57`, `Validation.cs:28-34`
+**Behoben in PR #84** (`fix/login-lockout-and-password-cap`).
 
-**Kein Lockout.** Beide Login-Pfade verwenden `UserManager.CheckPasswordAsync`. Diese
-Methode wendet die Lockout-Mechanik von ASP.NET Identity nicht an — das täte
-`SignInManager.PasswordSignInAsync(..., lockoutOnFailure: true)`. Es gibt also keine
-Sperre nach fehlgeschlagenen Versuchen. Zusammen mit [A2](#a2) (Rate-Limit greift
-faktisch nicht pro Angreifer) bleibt für gezieltes Passwort-Raten gegen einen
-einzelnen Account kein wirksamer Schutz. Das Admin-Login unter `/admin/login` ist
-zusätzlich gar nicht vom Rate-Limiter erfasst (Razor Pages werden von
-`RequireRateLimiting` nicht abgedeckt) — hier hilft nur, dass `ADMIN_BIND` nicht
-öffentlich exponiert ist.
+- **Lockout.** Beide Login-Pfade (`/auth/login`, `/admin/login`) verwenden jetzt
+  `SignInManager.CheckPasswordSignInAsync(…, lockoutOnFailure: true)` statt
+  `UserManager.CheckPasswordAsync` — das ist die Methode, die die Identity-Lockout-Mechanik
+  tatsächlich anwendet, ohne ein Cookie zu setzen. Fünf Fehlversuche sperren den Account
+  für fünf Minuten (`Program.cs`, explizit gesetzt); ein erfolgreicher Login setzt den
+  Zähler zurück; ein gesperrter Account wird abgewiesen, *bevor* der Hash angefasst wird.
+  Die Antwort bei Sperre sagt das auch („Too many failed sign-in attempts…") — sie
+  bestätigt zwar die Existenz des Accounts, aber erst nach fünf Fehlversuchen, und
+  `/auth/register` beantwortet die Frage ohnehin ([A9](#a9)).
+- **Passwort-Obergrenze.** `Validation.MaxPasswordLength = 128`, geprüft in
+  `Validation.ValidatePassword` (Register, Link, Login, Change, Reset), im
+  Admin-Formular *und* im `Argon2PasswordHasher` selbst: `VerifyHashedPassword` gibt für
+  Überlängen `Failed` zurück ohne zu hashen, `HashPassword` wirft. Der Hasher ist der
+  eine Punkt, durch den jeder Hash und jede Prüfung geht — die Grenze hält dort, egal
+  welcher Aufrufer sie vergisst.
+- **Request-Body.** Kestrel auf 256 KB begrenzt (`MaxRequestBodySize`); die API ist
+  kleines JSON, Dateien gehen per Presigned-URL direkt an MinIO. Das 30-MB-Default war nur
+  ein Multiplikator.
+- **Nebenbefund** erledigt: `Validation.Required` kappt bei 256 Zeichen (Display-Name, Room, Identity).
 
-**Keine Längenobergrenze.**
+Verifiziert gegen den laufenden Stack: fünf falsche Passwörter → ab dem fünften
+„Too many failed…", danach auch das richtige 401, `LockoutEnd` in der DB gesetzt;
+129-Zeichen-Passwort → 400 vor jeder DB-Abfrage; 300-KB-Body → 413; Admin-Login auf :8788
+sperrt ebenso (Antiforgery-Formular, fünfter Versuch → Sperrmeldung, richtiges Passwort
+danach abgewiesen).
 
-```csharp
-public static void ValidatePassword(string password)
-{
-    if (password.Length < 8)
-        throw ApiException.BadRequest("Password must be at least 8 characters.");
-}
-```
-
-Nur eine Untergrenze. Der Passwort-Hasher ist Argon2id
-(`Identity/Argon2PasswordHasher.cs`), bewusst rechen- und speicherintensiv. Ein
-Passwort von mehreren MB wird vollständig gehasht. Kestrels Standard-Request-Limit
-liegt bei 30 MB und wird nirgends gesenkt.
-
-**Auswirkung:** Wenige parallele Anfragen mit sehr langen Passwörtern binden CPU und
-Speicher des Prozesses. Der wirksamste Weg dorthin ist `/auth/link` ([A3](#a3)), weil
-dieser Endpunkt gar nicht rate-limitiert ist.
-
-**Nebenbefund:** `Validation.Required` (`Validation.cs:49-58`) hat ebenfalls keine
-Obergrenze. `DisplayName` geht damit unbegrenzt in die Datenbank.
+**Beobachtung dabei:** Identity persistiert den Fehlversuch über `UpdateUserAsync`, also
+*mit* `UserValidator`. Eine Zeile, die die Validierung nicht besteht — konkret ein
+Bootstrap-Admin ohne E-Mail, wie ihn Versionen vor 2026-05-28 anlegten — zählt still
+keine Fehlversuche und sperrt nie; `SignInManager` verschluckt das fehlgeschlagene
+`IdentityResult`. Prod-Zeilen haben alle eine E-Mail (Bootstrap seit 05-28, Migrator
+setzt Platzhalter); auf einer alten Dev-Datenbank hilft
+`UPDATE "AspNetUsers" SET "Email" = …, "NormalizedEmail" = … WHERE "Email" IS NULL`.
 
 ---
 

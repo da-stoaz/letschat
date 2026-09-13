@@ -250,6 +250,7 @@ public static class AuthEndpoints
     private static async Task<AuthResponse> Login(
         LoginRequest request,
         UserManager<ApplicationUser> users,
+        SignInManager<ApplicationUser> signIn,
         TokenService tokens,
         SpacetimeTokenService spacetime,
         SpacetimeClient spacetimeClient,
@@ -262,7 +263,16 @@ public static class AuthEndpoints
         var user = await users.FindByNameAsync(username)
             ?? throw ApiException.Unauthorized("Invalid username or password.");
 
-        if (!await users.CheckPasswordAsync(user, request.Password))
+        // Not CheckPasswordAsync: that verifies the hash and nothing else.
+        // This one counts the failure, refuses a locked-out account before
+        // touching the hash, and resets the count on success — the Identity
+        // lockout configured in Program.cs (BUG_ANALYSIS A7). No cookie is set.
+        var check = await signIn.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
+        if (check.IsLockedOut)
+        {
+            throw ApiException.Unauthorized(LockedOutMessage);
+        }
+        if (!check.Succeeded)
         {
             throw ApiException.Unauthorized("Invalid username or password.");
         }
@@ -275,6 +285,16 @@ public static class AuthEndpoints
 
         return BuildAuthResponse(user, await users.GetRolesAsync(user), tokens, spacetime);
     }
+
+    /// <summary>
+    /// Said instead of "invalid username or password" once the lockout trips.
+    /// It does confirm the account exists, but only after five wrong guesses at
+    /// it, and <c>/auth/register</c> already answers that question (A9). The
+    /// person locked out is far more often the owner mistyping than an attacker,
+    /// and they need to know to wait rather than keep trying.
+    /// </summary>
+    public const string LockedOutMessage =
+        "Too many failed sign-in attempts. Please wait a few minutes and try again.";
 
     /// <summary>
     /// Pushes <c>is_admin = true</c> to SpacetimeDB for an account that holds the

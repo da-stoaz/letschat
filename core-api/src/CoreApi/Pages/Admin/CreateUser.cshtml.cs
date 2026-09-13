@@ -64,6 +64,11 @@ public sealed class CreateUserModel(
             Error = "Password must be at least 8 characters.";
             return Page();
         }
+        if (password.Length > Validation.MaxPasswordLength)
+        {
+            Error = $"Password must be at most {Validation.MaxPasswordLength} characters.";
+            return Page();
+        }
 
         if (await users.FindByNameAsync(username) is not null)
         {
