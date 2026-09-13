@@ -92,11 +92,23 @@ type LivekitTokenPayload = {
   sessionToken: AuthFrameworkToken
 }
 
+/**
+ * Where the upload is going. core-api bakes it into the storage key, and that
+ * key is what decides who may later fetch the object — channel members, the two
+ * DM parties, anyone (avatar), whoever can see the space (icon).
+ */
+export type UploadScope =
+  | { kind: 'channel'; channelId: number }
+  | { kind: 'dm'; partner: string }
+  | { kind: 'avatar' }
+  | { kind: 'icon'; serverId: number }
+
 type UploadRequestPayload = {
   sessionToken: AuthFrameworkToken
   fileName: string
   fileSize: number
   mimeType: string
+  scope: UploadScope
 }
 
 type UploadConfirmPayload = {

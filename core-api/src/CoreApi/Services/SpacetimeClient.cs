@@ -314,6 +314,40 @@ public sealed class SpacetimeClient(
             ? $"SELECT user_identity FROM my_dm_voice_participants WHERE room_key = '{room.RoomKey}'"
             : $"SELECT user_identity FROM my_voice_participants WHERE channel_id = {room.ChannelId}";
 
+        var rows = await QueryAsUserAsync(accountId, sql, $"voice presence room={RoomDescription(room)}", ct);
+        if (rows is null)
+        {
+            return VoicePresence.Unavailable;
+        }
+
+        var me = NormalizeIdentityHex(userIdentity);
+        foreach (var row in rows)
+        {
+            if (row.Count > 0 && NormalizeIdentityHex(IdentityText(row[0])) == me)
+            {
+                return VoicePresence.Admitted;
+            }
+        }
+
+        return VoicePresence.Denied;
+    }
+
+    /// <summary>
+    /// Runs one <c>/sql</c> statement <em>as the account</em>, so the rows are
+    /// exactly what that user's <c>my_*</c> views show them — the same gate the
+    /// client lives behind. The bearer is minted here from
+    /// <paramref name="accountId"/> for the reasons <see cref="HasVoicePresenceAsync"/>
+    /// gives.
+    /// </summary>
+    /// <returns>
+    /// The rows, or <c>null</c> when SpacetimeDB never answered (transport
+    /// error, non-2xx, unparseable body). Callers must treat <c>null</c> as
+    /// "unknown" and fail closed on it, never as "no rows".
+    /// </returns>
+    /// <param name="what">Log-safe description of the query for the failure lines.</param>
+    public async Task<List<List<JsonElement>>?> QueryAsUserAsync(
+        string accountId, string sql, string what, CancellationToken ct = default)
+    {
         var http = httpFactory.CreateClient(ClientName);
         var url = $"{options.SpacetimeHttpUrl.TrimEnd('/')}/v1/database/{options.SpacetimeModuleName}/sql";
         using var request = new HttpRequestMessage(HttpMethod.Post, url)
@@ -332,36 +366,18 @@ public sealed class SpacetimeClient(
             // The URL is in the message on purpose: the one production outage this
             // ever caused was a compose file that never passed SPACETIMEDB_HTTP_URL,
             // leaving it on its dev default of localhost inside the container.
-            logger.LogWarning(
-                ex, "Voice presence query transport error for room={Room} (url={Url})",
-                RoomDescription(room), url);
-            return VoicePresence.Unavailable;
+            logger.LogWarning(ex, "SpacetimeDB query transport error for {What} (url={Url})", what, url);
+            return null;
         }
 
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning(
-                "Voice presence query got {Status} from SpacetimeDB for room={Room}",
-                (int)response.StatusCode, RoomDescription(room));
-            return VoicePresence.Unavailable;
+                "SpacetimeDB query got {Status} for {What}", (int)response.StatusCode, what);
+            return null;
         }
 
-        var rows = await ReadSqlRowsAsync(response, ct);
-        if (rows is null)
-        {
-            return VoicePresence.Unavailable;
-        }
-
-        var me = NormalizeIdentityHex(userIdentity);
-        foreach (var row in rows)
-        {
-            if (row.Count > 0 && NormalizeIdentityHex(IdentityText(row[0])) == me)
-            {
-                return VoicePresence.Admitted;
-            }
-        }
-
-        return VoicePresence.Denied;
+        return await ReadSqlRowsAsync(response, ct);
     }
 
     /// <summary>One statement's result from the SpacetimeDB <c>/sql</c> endpoint.</summary>
@@ -422,8 +438,12 @@ public sealed class SpacetimeClient(
         }
     }
 
-    /// <summary>Lower-cases, trims and drops a leading <c>0x</c> so identities compare regardless of form.</summary>
-    private static string NormalizeIdentityHex(string raw)
+    /// <summary>
+    /// Lower-cases, trims and drops a leading <c>0x</c> so identities compare
+    /// regardless of form — the module's SQL output carries the prefix, the
+    /// Identity store does not.
+    /// </summary>
+    internal static string NormalizeIdentityHex(string raw)
     {
         var value = raw.Trim().ToLowerInvariant();
         return value.StartsWith("0x", StringComparison.Ordinal) ? value[2..] : value;

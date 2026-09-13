@@ -168,6 +168,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         onChange={setDraft}
         disabled={readOnlyForMember}
         placeholder={readOnlyForMember ? 'This channel is read-only for members' : `Message #${channel?.name ?? 'channel'}`}
+        uploadScope={{ kind: 'channel', channelId }}
         typingScopeKey={typingScopeKey}
         typingIdentity={selfIdentity}
         error={error}

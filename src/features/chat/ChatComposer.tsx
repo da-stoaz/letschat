@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2Icon, PaperclipIcon, SendHorizonalIcon, XIcon } from 'lucide-react'
 import { reducers } from '../../lib/spacetimedb'
-import { MAX_UPLOAD_FILE_SIZE_BYTES, isBlockedMimeType, uploadFiles } from '../../lib/uploads'
+import { MAX_UPLOAD_FILE_SIZE_BYTES, isBlockedMimeType, uploadFiles, type UploadScope } from '../../lib/uploads'
 import type { Identity } from '../../types/domain'
 import type { ChatMessageAttachment } from '../../types/attachments'
 import { TypingIndicator } from './TypingIndicator'
@@ -25,6 +25,8 @@ type ChatComposerProps = {
   value: string
   onChange: (value: string) => void
   onSubmit: (payload: ChatComposerSubmitPayload) => Promise<void> | void
+  /** Who may read the files attached here — see `UploadScope`. */
+  uploadScope: UploadScope
   placeholder: string
   disabled?: boolean
   helperText?: string
@@ -72,6 +74,7 @@ export function ChatComposer({
   value,
   onChange,
   onSubmit,
+  uploadScope,
   placeholder,
   disabled = false,
   helperText = '',
@@ -199,7 +202,7 @@ export function ChatComposer({
           const uploads = queuedFiles.map((entry) => entry.file)
           const attachments =
             uploads.length > 0
-              ? await uploadFiles(uploads, (file, stage) => {
+              ? await uploadFiles(uploads, uploadScope, (file, stage) => {
                   const id = fileIdentity(file)
                   setUploadStageByFileId((current) => ({ ...current, [id]: stage }))
                 }, (file, progress) => {

@@ -30,7 +30,7 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A3](#a3) | ~~`/auth/link` umgeht Registrierungssperre, E-Mail-Bestätigung und Rate-Limit~~ · **✅ behoben (PR #70)** | ~~S1~~ | Auth |
 | [A4](#a4) | ~~Keine Token-Revokation: Passwort-Reset und Account-Sperre wirken nicht~~ · **✅ behoben (PR #72)** | ~~S1~~ | Auth |
 | [A5](#a5) | ~~Upload-Größenlimit und Tagesquote sind clientseitig deklariert, nicht durchgesetzt~~ · **✅ behoben (PR #83)** | ~~S2~~ | Storage |
-| [A6](#a6) | Presigned Download-URLs ohne Zugriffsprüfung auf den Storage-Key | S2 | Storage |
+| [A6](#a6) | ~~Presigned Download-URLs ohne Zugriffsprüfung auf den Storage-Key~~ · **✅ behoben (PR #83)** | ~~S2~~ | Storage |
 | [A7](#a7) | Kein Account-Lockout, keine Passwort-Längenobergrenze → Argon2-DoS | S2 | Auth |
 | [A8](#a8) | Erstregistrierung wird automatisch Instanz-Admin (Land-Grab) | S2 | Auth |
 | [A9](#a9) | Account-Enumeration über `/auth/register` | S3 | Auth |
@@ -234,38 +234,47 @@ Client gesendeten `mime_type`.
 ---
 
 <a id="a6"></a>
-## A6 — Presigned Download-URLs ohne Zugriffsprüfung auf den Storage-Key · **S2**
+## A6 — Presigned Download-URLs ohne Zugriffsprüfung auf den Storage-Key · ✅ **behoben**
 
-**Stellen:** `core-api/src/CoreApi/Endpoints/UploadEndpoints.cs:171-223`
+**Behoben in PR #83** (`fix/upload-quota-and-attachment-auth`).
 
-```csharp
-private static async Task<DownloadUrlResponse> DownloadUrl(...)
-{
-    await RequireSession(payload.SessionToken, tokens);          // nur: irgendeine Sitzung
+Der Storage-Key trägt jetzt selbst, wer ihn lesen darf — festgelegt bei
+`/uploads/request` über ein `scope`-Feld, geprüft bei `/uploads/download-url(s)`
+gegen die Sichtbarkeit, die das Modul dem Aufrufer *selbst* einräumt
+(`core-api/src/CoreApi/Services/StorageKey.cs`, `UploadEndpoints.MayReadAsync`):
 
-    if (!payload.StorageKey.StartsWith("uploads/", StringComparison.Ordinal))
-        throw ApiException.BadRequest("Invalid storage key.");
+| Key | Lesen darf |
+|---|---|
+| `uploads/ch/{channelId}/{uploader}/…` | wer den Channel in `my_channels` sieht — also aktuelle Mitglieder |
+| `uploads/dm/{uploader}/{partner}/…` | die beiden Parteien (ohne Modul-Abfrage) |
+| `uploads/avatar/{uploader}/…` | jeder Account |
+| `uploads/icon/{serverId}/{uploader}/…` | wer den Space in `my_servers` sieht — Mitglieder und, solange er gelistet ist, Discover |
+| `uploads/{yyyy}/{MM}/{dd}/{uploader}/…` (alle Objekte von vor dieser Änderung) | der Uploader selbst, und wer ihn in `my_visible_users` sieht (Co-Mitglied, Freund); zusätzlich wer einen Space sieht, dessen `icon_url` der Key ist *und* dessen Owner der Uploader ist |
 
-    var url = await storage.PresignGetAsync(payload.StorageKey, PresignDownloadSeconds);
-    ...
-}
-```
+Die Modul-Abfragen laufen als der Aufrufer (`SpacetimeClient.QueryAsUserAsync`, dieselbe
+Mechanik wie das Voice-Gate), also mit exakt seiner Zeilensicht: Kick, Ban oder
+Verlassen wirken auf die nächste URL-Anfrage, weil das Modul den Channel bzw. Space
+nicht mehr liefert. Kein Modul-Wissen über Keys, keine neue Tabelle. Ein Scope kann
+nur *einschränken*, wer liest — ein Uploader, der einen fremden Channel angibt,
+verschenkt seine Datei an Leute, denen er sie ohnehin schicken könnte. Ein
+nicht erreichbares Modul ist ein 503, kein 403. Alte Clients ohne `scope` bekommen
+weiter den Legacy-Key und laden weiter.
 
-Die einzige Prüfung ist, dass der Key mit `uploads/` beginnt. Es wird nicht geprüft,
-ob der Aufrufer Mitglied des Channels oder Teilnehmer der DM ist, in der der Anhang
-gepostet wurde — und auch nicht, ob er es je war.
+Verifiziert gegen den laufenden Stack (echte Accounts, echte Reducer, echtes MinIO):
+Channel-Key → Uploader 200, Mitglied 200, Außenstehender 403, Mitglied nach Kick 403;
+DM-Key → Partner 200, Dritte 403; Avatar → Fremder 200; Icon → Discover-Besucher 200,
+nach Un-Listing 403; Legacy → Uploader 200, Co-Mitglied 200, Fremder 403, und über
+die Icon-Regel 200. Der `Option`-/`Identity`-Zeilenformat des `/sql`-Endpunkts
+(`[0, wert]`, `["0x…"]`) ist gegen echte Zeilen gepinnt.
 
-**Auswirkung:**
-
-- Jeder angemeldete Nutzer erhält für jeden `uploads/…`-Key eine gültige URL. Der
-  Schutz besteht allein darin, dass der Key eine GUID enthält — Sicherheit durch
-  Unkenntnis, nicht durch Autorisierung.
-- Konkret und ohne Raten: **ein gekickter oder gebannter Nutzer behält dauerhaften
-  Zugriff auf jeden Anhang, dessen Key er je gesehen hat.** Die Keys stehen im
-  Nachrichtentext, den er während seiner Mitgliedschaft synchronisiert hat. Nach dem
-  Ban kann er weiterhin für jeden davon eine frische Presigned-URL anfordern, solange
-  seine Sitzung gültig ist (und dank [A4](#a4) auch danach noch).
-- Gleiches gilt für `/uploads/download-urls` (Batch, bis zu 128 Keys pro Anfrage).
+**Bewusst offen (nur Legacy-Keys):** Die Uploader-Sichtbarkeit ist eine Näherung an
+„Nachricht lesbar“. Zwei Kanten: eine alte Datei eines Users, der inzwischen jeden
+gemeinsamen Space verlassen hat, lädt nicht mehr; und wer aus Space A gebannt wurde,
+aber mit dem Uploader noch Space B teilt, kann dessen alte Dateien aus A weiterhin
+abrufen. Beides endet mit dem Bestand an Legacy-Keys — jeder Upload seit dieser
+Änderung ist exakt gescopt. Ein alter Space-Icon, das ein Moderator (nicht der
+Owner) hochgeladen hat, zeigt Nicht-Mitgliedern auf Discover die Initialen; neu
+hochladen behebt es.
 
 ---
 
@@ -1340,13 +1349,13 @@ sind in PR #70 behoben, [A1](#a1) (Gate für anonyme Identities) in PR #71,
 [A4](#a4) (Token-Revokation) in PR #72, [C1](#c1)/[C2](#c2) (inkrementeller Sync)
 in PR #73, [C3](#c3) (begrenzte Views plus seitenweises Nachladen) in PR #77 und
 [B1](#b1)/[B2](#b2)/[B3](#b3) (Selbstbezug- und DM-Gates) in PR #82.
-**Kein S1 ist offen** — 11 von 43 Befunden erledigt, 32 verbleiben, davon 8 mit S2.
+**Kein S1 ist offen** — 12 von 43 Befunden erledigt, 31 verbleiben, davon 7 mit S2.
 
 **Zuerst — Sicherheit, kleiner Aufwand, große Wirkung:**
-[A6](#a6) (Autorisierung für Anhänge) — braucht eine `attachment`-Tabelle im Modul,
-die die Nachrichten-Reducer füllen, plus eine Prozedur, die die core-api im Namen des
-Aufrufers befragt. [A5](#a5) und [B1](#b1)/[B2](#b2)/[B3](#b3) aus dieser Gruppe sind
-in PR #83 bzw. #82 erledigt.
+[A7](#a7) (Account-Lockout, Passwort-Obergrenze) und [A8](#a8) (Erstregistrierung
+wird Admin). [A5](#a5)/[A6](#a6) und [B1](#b1)/[B2](#b2)/[B3](#b3) aus dieser Gruppe
+sind in PR #83 bzw. #82 erledigt — A6 ohne Modul-Änderung, der Storage-Key trägt den
+Scope selbst.
 
 **Danach — Betriebsfähigkeit unter Last:**
 [C5](#c5)/[C6](#c6) (Full-Table-Scans in Typing- und Lösch-Reducern) und [C7](#c7)
@@ -1354,4 +1363,4 @@ in PR #83 bzw. #82 erledigt.
 das S1-Cluster [C1](#c1)/[C2](#c2)/[C3](#c3), ist erledigt.
 
 **Strukturell — braucht eine Entwurfsentscheidung:**
-[A6](#a6) (Autorisierung für Anhänge), [C4](#c4) (Discover-Mitgliederzahl aggregieren).
+[C4](#c4) (Discover-Mitgliederzahl aggregieren).

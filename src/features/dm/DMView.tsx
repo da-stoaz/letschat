@@ -425,6 +425,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         value={draft}
         onChange={setDraft}
         placeholder={`Message @${partner.username}`}
+        uploadScope={{ kind: 'dm', partner: partner.username }}
         typingScopeKey={typingScopeKey}
         typingIdentity={selfIdentity}
         error={error}

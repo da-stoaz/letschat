@@ -76,13 +76,18 @@ async function requestDownloadUrlBatch(storageKeys: string[]): Promise<Map<strin
   }
 
   if (entriesByKey.size < uniqueKeys.length) {
+    // The batch leaves out keys the caller may not read; the single endpoint
+    // says so with a 403. Settle rather than all-or-nothing so one such key
+    // fails only its own attachment, not every other one in the batch.
     const missingKeys = uniqueKeys.filter((storageKey) => !entriesByKey.has(storageKey))
-    const fallbackEntries = await Promise.all(
+    const fallbackEntries = await Promise.allSettled(
       missingKeys.map(async (storageKey) => [storageKey, await requestDownloadUrlSingle(storageKey)] as const),
     )
 
-    for (const [storageKey, entry] of fallbackEntries) {
-      entriesByKey.set(storageKey, entry)
+    for (const result of fallbackEntries) {
+      if (result.status === 'fulfilled') {
+        entriesByKey.set(result.value[0], result.value[1])
+      }
     }
   }
 
