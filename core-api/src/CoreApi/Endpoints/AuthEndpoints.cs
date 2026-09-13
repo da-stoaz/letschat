@@ -752,10 +752,13 @@ public static class AuthEndpoints
                  <input type="hidden" name="token" value="{encodedToken}">
                  <label style="display:block;font-size:13px;color:#374151;margin:0 0 6px">New password</label>
                  <input type="password" name="password" required autofocus
-                        style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:15px;margin:0 0 16px;
+                        minlength="8" maxlength="{Validation.MaxPasswordLength}"
+                        style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:15px;margin:0 0 6px;
                                border:1px solid #d1d5db;border-radius:8px">
+                 <p style="color:#6b7280;font-size:12px;margin:0 0 16px">8–{Validation.MaxPasswordLength} characters.</p>
                  <label style="display:block;font-size:13px;color:#374151;margin:0 0 6px">Confirm password</label>
                  <input type="password" name="confirmPassword" required
+                        minlength="8" maxlength="{Validation.MaxPasswordLength}"
                         style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:15px;margin:0 0 20px;
                                border:1px solid #d1d5db;border-radius:8px">
                  <button type="submit"

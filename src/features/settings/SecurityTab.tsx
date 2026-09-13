@@ -2,13 +2,12 @@ import { useState } from 'react'
 import { LogOutIcon } from 'lucide-react'
 import { signOut } from '../../lib/spacetimedb'
 import { changePassword } from '../../lib/spacetimedb/auth'
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordLengthError } from '../../lib/authService'
 import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-
-const MIN_PASSWORD_LENGTH = 8
 
 export function SecurityTab() {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -19,10 +18,10 @@ export function SecurityTab() {
   const [isSigningOut, setIsSigningOut] = useState(false)
 
   // Only complain once the user has actually typed something in the field.
-  const tooShort = newPassword.length > 0 && newPassword.length < MIN_PASSWORD_LENGTH
+  const lengthHint = newPassword.length > 0 ? passwordLengthError(newPassword) : null
   const mismatch = confirmPassword.length > 0 && newPassword !== confirmPassword
   const canSubmit =
-    currentPassword.length > 0 && newPassword.length >= MIN_PASSWORD_LENGTH && newPassword === confirmPassword
+    currentPassword.length > 0 && passwordLengthError(newPassword) === null && newPassword === confirmPassword
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -70,16 +69,16 @@ export function SecurityTab() {
                 id="new-password"
                 type="password"
                 autoComplete="new-password"
-                aria-invalid={tooShort}
+                aria-invalid={lengthHint !== null}
                 aria-describedby="new-password-hint"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
               />
               <p
                 id="new-password-hint"
-                className={`text-xs ${tooShort ? 'text-destructive' : 'text-muted-foreground'}`}
+                className={`text-xs ${lengthHint ? 'text-destructive' : 'text-muted-foreground'}`}
               >
-                At least {MIN_PASSWORD_LENGTH} characters.
+                {lengthHint ?? `${PASSWORD_MIN_LENGTH}–${PASSWORD_MAX_LENGTH} characters.`}
               </p>
             </div>
 

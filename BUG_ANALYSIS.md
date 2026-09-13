@@ -302,6 +302,10 @@ hochladen behebt es.
   kleines JSON, Dateien gehen per Presigned-URL direkt an MinIO. Das 30-MB-Default war nur
   ein Multiplikator.
 - **Nebenbefund** erledigt: `Validation.Required` kappt bei 256 Zeichen (Display-Name, Room, Identity).
+- **Client** spiegelt die Regel (`passwordLengthError` in `src/lib/authService.ts`):
+  Registrierung und Passwort-Ändern zeigen „8–128 characters." live unter dem Feld und
+  färben es bei Verstoß rot, bevor man das Passwort ein zweites Mal tippt; Login prüft
+  vor dem Request; die Browser-Reset-Seite hat `minlength`/`maxlength` plus denselben Hinweis.
 
 Verifiziert gegen den laufenden Stack: fünf falsche Passwörter → ab dem fünften
 „Too many failed…", danach auch das richtige 401, `LockoutEnd` in der DB gesetzt;

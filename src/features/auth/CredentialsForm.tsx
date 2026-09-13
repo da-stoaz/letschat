@@ -1,7 +1,13 @@
 import { useState } from 'react'
 import { LogInIcon, UserRoundPlusIcon } from 'lucide-react'
 import { loginWithPassword } from '../../lib/spacetimedb'
-import { authServiceRegister, type RegisterResult } from '../../lib/authService'
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  authServiceRegister,
+  passwordLengthError,
+  type RegisterResult,
+} from '../../lib/authService'
 import { useSelfStore } from '../../stores/selfStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +47,8 @@ export function CredentialsForm({
   const [confirmPassword, setConfirmPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Only complain once the user has actually typed something in the field.
+  const passwordLengthHint = password.length > 0 ? passwordLengthError(password) : null
 
   return (
     <>
@@ -66,8 +74,9 @@ export function CredentialsForm({
           setSubmitting(true)
           try {
             const normalizedUsername = username.trim().toLowerCase()
-            if (password.length < 8) {
-              throw new Error('Password must be at least 8 characters.')
+            const lengthError = passwordLengthError(password)
+            if (lengthError) {
+              throw new Error(lengthError)
             }
 
             if (mode === 'register') {
@@ -209,11 +218,23 @@ export function CredentialsForm({
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            minLength={8}
+            minLength={PASSWORD_MIN_LENGTH}
             required
             placeholder="Password"
             autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+            aria-invalid={mode === 'register' && passwordLengthHint !== null}
+            aria-describedby={mode === 'register' ? 'auth-password-hint' : undefined}
           />
+          {mode === 'register' ? (
+            // Say so while they type, not after they have typed it twice and
+            // submitted. Silent until the field has something in it.
+            <p
+              id="auth-password-hint"
+              className={`text-xs ${passwordLengthHint ? 'text-destructive' : 'text-muted-foreground'}`}
+            >
+              {passwordLengthHint ?? `${PASSWORD_MIN_LENGTH}–${PASSWORD_MAX_LENGTH} characters.`}
+            </p>
+          ) : null}
         </div>
         {mode === 'register' ? (
           <div className="space-y-2">
@@ -223,7 +244,7 @@ export function CredentialsForm({
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              minLength={8}
+              minLength={PASSWORD_MIN_LENGTH}
               required
               placeholder="Confirm password"
               autoComplete="new-password"
