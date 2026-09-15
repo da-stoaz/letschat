@@ -7,8 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace CoreApi;
 
 /// <summary>
-/// Startup database work: apply EF migrations, sweep stale pending uploads,
-/// seed the system <c>Admin</c> role, and (optionally) create the bootstrap
+/// Startup database work: apply EF migrations, seed the system <c>Admin</c>
+/// role, and (optionally) create the bootstrap
 /// administrator from configuration.
 /// </summary>
 public static class DbInitializer
@@ -76,18 +76,6 @@ public static class DbInitializer
         // Load (seeding on first run) the runtime-editable system configuration.
         await services.GetRequiredService<Services.SystemConfigService>().InitializeAsync();
         logger.LogInformation("System configuration loaded.");
-
-        // ExecuteDeleteAsync is a relational-only EF method; the InMemory
-        // provider in tests has no pending uploads to sweep anyway.
-        if (db.Database.IsRelational())
-        {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var swept = await db.PendingUploads.Where(p => p.ExpiresAt < now).ExecuteDeleteAsync();
-            if (swept > 0)
-            {
-                logger.LogInformation("Swept {Count} expired pending upload(s).", swept);
-            }
-        }
 
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
         if (!await roleManager.RoleExistsAsync(AdminRole))

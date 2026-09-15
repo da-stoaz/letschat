@@ -14,6 +14,9 @@ public sealed class PendingUpload
     public long FileSize { get; set; }
     public string MimeType { get; set; } = string.Empty;
 
+    /// <summary>UTC day whose quota this upload reserves until confirmation or cleanup.</summary>
+    public string QuotaDate { get; set; } = string.Empty;
+
     /// <summary>Unix epoch seconds after which the pending record is invalid.</summary>
     public long ExpiresAt { get; set; }
 }

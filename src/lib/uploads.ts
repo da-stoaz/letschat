@@ -1,8 +1,9 @@
-import { authServiceUploadConfirm, authServiceUploadRequest } from './authService'
+import { authServiceUploadConfirm, authServiceUploadRequest, type UploadScope } from './authService'
 import { withSessionTokenRetry } from './uploadSession'
 import type { ChatMessageAttachment } from '../types/attachments'
 
 export { clearSignedDownloadUrlCache, getSignedDownloadUrl, getSignedDownloadUrls } from './downloadUrls'
+export type { UploadScope } from './authService'
 
 export const MAX_UPLOAD_FILE_SIZE_BYTES = 500 * 1024 * 1024 // 500 MB
 const DEFAULT_MIME_TYPE = 'application/octet-stream'
@@ -123,6 +124,7 @@ async function uploadFileToStorage(
 
 export async function uploadSingleFile(
   file: File,
+  scope: UploadScope,
   onStage?: UploadStageCallback,
   onProgress?: UploadProgressCallback,
 ): Promise<ChatMessageAttachment> {
@@ -147,6 +149,7 @@ export async function uploadSingleFile(
       fileName: file.name,
       fileSize: file.size,
       mimeType,
+      scope,
     }),
   )
 
@@ -177,6 +180,7 @@ export async function uploadSingleFile(
 
 export async function uploadFiles(
   files: File[],
+  scope: UploadScope,
   onStage?: UploadStageCallback,
   onProgress?: UploadProgressCallback,
 ): Promise<ChatMessageAttachment[]> {
@@ -184,7 +188,7 @@ export async function uploadFiles(
 
   for (const file of files) {
     try {
-      const next = await uploadSingleFile(file, onStage, onProgress)
+      const next = await uploadSingleFile(file, scope, onStage, onProgress)
       uploaded.push(next)
     } catch (error) {
       throw new Error(buildUploadErrorMessage(file.name, error))

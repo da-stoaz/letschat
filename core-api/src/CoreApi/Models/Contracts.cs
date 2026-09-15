@@ -118,7 +118,21 @@ public sealed record UploadRequestPayload(
     SessionToken SessionToken,
     string FileName,
     long FileSize,
-    string MimeType);
+    string MimeType,
+    UploadScope? Scope = null);
+
+/// <summary>
+/// Where an upload is going, so the storage key can carry who may read it
+/// (<see cref="Services.StorageKey"/>). <c>kind</c> is one of
+/// <c>channel</c> (+<c>channelId</c>), <c>dm</c> (+<c>partner</c> username),
+/// <c>avatar</c>, <c>icon</c> (+<c>serverId</c>). Absent on requests from
+/// clients older than this field; those get a legacy-format key.
+/// </summary>
+public sealed record UploadScope(
+    string Kind,
+    ulong? ChannelId = null,
+    string? Partner = null,
+    ulong? ServerId = null);
 
 public sealed record UploadRequestResponse(string UploadId, string UploadUrl, int ExpiresIn);
 

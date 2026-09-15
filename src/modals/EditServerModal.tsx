@@ -58,7 +58,7 @@ export function EditServerModal({
     }
 
     setIsUploadingIcon(true)
-    void uploadSingleFile(file)
+    void uploadSingleFile(file, { kind: 'icon', serverId })
       .then((uploaded) => {
         setIconUrl(uploaded.storageKey)
         // Previous blob URL is revoked by the effect watching iconPreviewUrl;
@@ -73,7 +73,7 @@ export function EditServerModal({
       .finally(() => {
         setIsUploadingIcon(false)
       })
-  }, [])
+  }, [serverId])
 
   const effectiveIconUrl = iconPreviewUrl ?? (iconUrl.trim() || null)
 

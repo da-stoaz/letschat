@@ -12,12 +12,18 @@ public static class Validation
     public static string NormalizeIdentity(string identity) =>
         identity.Trim().ToLowerInvariant();
 
+    /// <summary>
+    /// The username grammar, as a predicate. Also what makes a username safe to
+    /// splice into a storage key path segment or a SpacetimeDB SQL literal.
+    /// </summary>
+    public static bool IsUsername(string username) =>
+        username.Length is >= 2 and <= 32
+        && username.All(c => char.IsAsciiLetterOrDigit(c) || c == '_');
+
     /// <summary>Throws <see cref="ApiException"/> (400) if the username is invalid.</summary>
     public static void ValidateUsername(string username)
     {
-        var validLength = username.Length is >= 2 and <= 32;
-        var validChars = username.All(c => char.IsAsciiLetterOrDigit(c) || c == '_');
-        if (!validLength || !validChars)
+        if (!IsUsername(username))
         {
             throw ApiException.BadRequest(
                 "Username must be 2-32 characters using [a-z0-9_] only.");

@@ -91,7 +91,7 @@ export function AccountTab() {
       }
 
       setIsUploadingAvatar(true)
-      void uploadSingleFile(file)
+      void uploadSingleFile(file, { kind: 'avatar' })
         .then((uploaded) => {
           setAvatarUrl(uploaded.storageKey)
           setAvatarPreviewFromFile(file)

@@ -41,15 +41,27 @@ public sealed class StorageService : IDisposable
             UseHttp = endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase),
         });
 
-    /// <summary>Presigned PUT URL the client uploads raw bytes to directly.</summary>
-    public async Task<string> PresignPutAsync(string storageKey, int expiresInSeconds) =>
-        ForceScheme(await _presign.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+    /// <summary>
+    /// Presigned PUT URL the client uploads raw bytes to directly.
+    ///
+    /// <c>Content-Length</c> is part of the signature, so the object can only be
+    /// exactly <paramref name="contentLength"/> bytes: a PUT of any other size
+    /// fails SigV4 verification at MinIO and never lands. Without this, the size
+    /// checked at <c>/uploads/request</c> was the client's claim and the URL
+    /// accepted anything (BUG_ANALYSIS A5) — declare 1 byte, upload 5 GB.
+    /// </summary>
+    public async Task<string> PresignPutAsync(string storageKey, long contentLength, int expiresInSeconds)
+    {
+        var request = new GetPreSignedUrlRequest
         {
             BucketName = _bucket,
             Key = storageKey,
             Verb = HttpVerb.PUT,
             Expires = DateTime.UtcNow.AddSeconds(expiresInSeconds),
-        }));
+        };
+        request.Headers["Content-Length"] = contentLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return ForceScheme(await _presign.GetPreSignedURLAsync(request));
+    }
 
     /// <summary>Short-lived presigned GET URL for displaying/downloading a file.</summary>
     public async Task<string> PresignGetAsync(string storageKey, int expiresInSeconds) =>
@@ -61,19 +73,28 @@ public sealed class StorageService : IDisposable
             Expires = DateTime.UtcNow.AddSeconds(expiresInSeconds),
         }));
 
-    /// <summary>HEAD-checks an object via the internal endpoint.</summary>
-    public async Task<bool> ObjectExistsAsync(string storageKey)
+    /// <summary>
+    /// HEAD-checks an object via the internal endpoint and returns its real size,
+    /// or <c>null</c> when it does not exist. The size is what the quota and the
+    /// per-file limit are enforced against — the number the client declared at
+    /// <c>/uploads/request</c> is only a hint.
+    /// </summary>
+    public async Task<long?> GetObjectSizeAsync(string storageKey)
     {
         try
         {
-            await _internal.GetObjectMetadataAsync(_bucket, storageKey);
-            return true;
+            var metadata = await _internal.GetObjectMetadataAsync(_bucket, storageKey);
+            return metadata.ContentLength;
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            return false;
+            return null;
         }
     }
+
+    /// <summary>Removes an object that failed confirmation, so a rejected upload does not linger.</summary>
+    public Task DeleteObjectAsync(string storageKey) =>
+        _internal.DeleteObjectAsync(_bucket, storageKey);
 
     /// <summary>
     /// Rewrites the presigned URL's scheme to match the configured public

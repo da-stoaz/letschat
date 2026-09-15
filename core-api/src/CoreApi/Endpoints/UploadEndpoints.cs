@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using CoreApi.Data;
 using CoreApi.Models;
 using CoreApi.Services;
@@ -81,26 +82,28 @@ public static class UploadEndpoints
             throw ApiException.BadRequest("This file type is not allowed.");
         }
 
-        var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var usedToday = await db.UploadQuotas
-            .Where(q => q.Username == username && q.QuotaDate == today)
-            .Select(q => (long?)q.BytesUploaded)
-            .FirstOrDefaultAsync() ?? 0;
+        var uploadId = Guid.NewGuid().ToString();
+        var extension = Path.GetExtension(fileName).TrimStart('.');
+        // The key is the access rule (StorageKey): whoever may read this object
+        // later is decided from the scope baked in here.
+        var storageKey = StorageKey.Build(
+            payload.Scope, username, extension.Length == 0 ? uploadId : $"{uploadId}.{extension}");
 
-        if (usedToday + payload.FileSize > DailyQuota)
+        var uploadUrl = await storage.PresignPutAsync(storageKey, payload.FileSize, PresignUploadSeconds);
+
+        var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync()
+            : null;
+        var quota = await LockQuotaAsync(db, username, today);
+        var reserved = await db.PendingUploads
+            .Where(p => p.Username == username && (p.QuotaDate == today || p.QuotaDate == ""))
+            .SumAsync(p => (long?)p.FileSize) ?? 0;
+        if (quota.BytesUploaded + reserved + payload.FileSize > DailyQuota)
         {
             throw ApiException.BadRequest(
                 $"Daily upload quota of {DailyQuota / 1024 / 1024 / 1024} GB exceeded.");
         }
-
-        var uploadId = Guid.NewGuid().ToString();
-        var extension = Path.GetExtension(fileName).TrimStart('.');
-        var datePath = DateTime.UtcNow.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
-        var storageKey = extension.Length == 0
-            ? $"uploads/{datePath}/{username}/{uploadId}"
-            : $"uploads/{datePath}/{username}/{uploadId}.{extension}";
-
-        var uploadUrl = await storage.PresignPutAsync(storageKey, PresignUploadSeconds);
 
         db.PendingUploads.Add(new PendingUpload
         {
@@ -110,9 +113,14 @@ public static class UploadEndpoints
             FileName = fileName,
             FileSize = payload.FileSize,
             MimeType = mimeType,
+            QuotaDate = today,
             ExpiresAt = UnixNow() + PendingUploadTtlSeconds,
         });
         await db.SaveChangesAsync();
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync();
+        }
 
         return new UploadRequestResponse(uploadId, uploadUrl, PresignUploadSeconds);
     }
@@ -126,7 +134,8 @@ public static class UploadEndpoints
     {
         var username = await RequireSession(payload.SessionToken, tokens, users);
 
-        var pending = await db.PendingUploads.FirstOrDefaultAsync(p => p.Id == payload.UploadId)
+        var pending = await db.PendingUploads.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == payload.UploadId)
             ?? throw ApiException.BadRequest("Upload ID not found or already confirmed.");
 
         if (!string.Equals(pending.Username, username, StringComparison.Ordinal))
@@ -136,65 +145,117 @@ public static class UploadEndpoints
 
         if (pending.ExpiresAt < UnixNow())
         {
+            await storage.DeleteObjectAsync(pending.StorageKey);
             db.PendingUploads.Remove(pending);
             await db.SaveChangesAsync();
             throw ApiException.BadRequest("Upload session expired. Please start over.");
         }
 
-        if (!await storage.ObjectExistsAsync(pending.StorageKey))
-        {
-            throw ApiException.BadRequest(
+        var actualSize = await storage.GetObjectSizeAsync(pending.StorageKey)
+            ?? throw ApiException.BadRequest(
                 "File has not been uploaded yet — complete the PUT request first.");
+
+        // Content-Length is signed, and the real object size is checked again:
+        // a backend that ignored the signed header cannot turn one reservation
+        // into a larger object.
+        var rejection = actualSize != pending.FileSize
+            ? "Uploaded file size does not match the reserved size."
+            : null;
+
+        if (rejection is not null)
+        {
+            // A rejected object must not stay behind — that is exactly the
+            // storage-fill this check exists to prevent.
+            await storage.DeleteObjectAsync(pending.StorageKey);
+            db.PendingUploads.Remove(pending);
+            await db.SaveChangesAsync();
+            throw ApiException.BadRequest(rejection);
         }
 
-        var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var quota = await db.UploadQuotas
-            .FirstOrDefaultAsync(q => q.Username == username && q.QuotaDate == today);
-        if (quota is null)
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync()
+            : null;
+        if (transaction is not null)
         {
-            db.UploadQuotas.Add(new UploadQuota
-            {
-                Username = username,
-                QuotaDate = today,
-                BytesUploaded = pending.FileSize,
-            });
+            pending = await db.PendingUploads
+                .FromSqlInterpolated($"""
+                    SELECT * FROM "PendingUploads" WHERE "Id" = {payload.UploadId} FOR UPDATE
+                    """)
+                .SingleOrDefaultAsync()
+                ?? throw ApiException.BadRequest("Upload ID not found or already confirmed.");
         }
         else
         {
-            quota.BytesUploaded += pending.FileSize;
+            db.PendingUploads.Attach(pending);
+        }
+        var quotaDate = pending.QuotaDate.Length == 0
+            ? DateTimeOffset.FromUnixTimeSeconds(pending.ExpiresAt - PendingUploadTtlSeconds)
+                .UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            : pending.QuotaDate;
+        var quota = await LockQuotaAsync(db, username, quotaDate);
+
+        // Rows created by an older deployment were not reserved at request time.
+        if (pending.QuotaDate.Length == 0 && quota.BytesUploaded + actualSize > DailyQuota)
+        {
+            await storage.DeleteObjectAsync(pending.StorageKey);
+            db.PendingUploads.Remove(pending);
+            await db.SaveChangesAsync();
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync();
+            }
+            throw ApiException.BadRequest(
+                $"Daily upload quota of {DailyQuota / 1024 / 1024 / 1024} GB exceeded.");
         }
 
+        quota.BytesUploaded += actualSize;
         db.PendingUploads.Remove(pending);
         await db.SaveChangesAsync();
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync();
+        }
 
         return new UploadConfirmResponse(
-            pending.StorageKey, pending.FileName, pending.FileSize, pending.MimeType);
+            pending.StorageKey, pending.FileName, actualSize, pending.MimeType);
     }
 
     private static async Task<DownloadUrlResponse> DownloadUrl(
         DownloadUrlPayload payload,
         TokenService tokens,
         UserManager<ApplicationUser> users,
-        StorageService storage)
+        StorageService storage,
+        SpacetimeClient spacetime,
+        CancellationToken ct)
     {
-        await RequireSession(payload.SessionToken, tokens, users);
+        var caller = await RequireAccount(payload.SessionToken, tokens, users);
 
-        if (!payload.StorageKey.StartsWith("uploads/", StringComparison.Ordinal))
+        var key = StorageKey.TryParse(payload.StorageKey)
+            ?? throw ApiException.BadRequest("Invalid storage key.");
+        if (!await MayReadAsync(caller, payload.StorageKey, key, spacetime, users, new(), ct))
         {
-            throw ApiException.BadRequest("Invalid storage key.");
+            throw ApiException.Forbidden("You do not have access to this file.");
         }
 
         var url = await storage.PresignGetAsync(payload.StorageKey, PresignDownloadSeconds);
         return new DownloadUrlResponse(url, PresignDownloadSeconds);
     }
 
+    /// <summary>
+    /// Batch form. Keys the caller may not read are left out of the response
+    /// rather than failing the whole batch — the client falls back to the
+    /// single endpoint for anything missing and gets the 403 there, so one bad
+    /// key does not blank every attachment on screen.
+    /// </summary>
     private static async Task<DownloadUrlsResponse> DownloadUrls(
         DownloadUrlsPayload payload,
         TokenService tokens,
         UserManager<ApplicationUser> users,
-        StorageService storage)
+        StorageService storage,
+        SpacetimeClient spacetime,
+        CancellationToken ct)
     {
-        await RequireSession(payload.SessionToken, tokens, users);
+        var caller = await RequireAccount(payload.SessionToken, tokens, users);
 
         if (payload.StorageKeys is null || payload.StorageKeys.Count == 0)
         {
@@ -207,25 +268,192 @@ public static class UploadEndpoints
         }
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        var memo = new Dictionary<string, bool>(StringComparer.Ordinal);
         var items = new List<DownloadUrlItem>(payload.StorageKeys.Count);
-        foreach (var key in payload.StorageKeys)
+        foreach (var rawKey in payload.StorageKeys)
         {
-            if (!key.StartsWith("uploads/", StringComparison.Ordinal))
-            {
-                throw ApiException.BadRequest("Invalid storage key.");
-            }
+            var key = StorageKey.TryParse(rawKey)
+                ?? throw ApiException.BadRequest("Invalid storage key.");
 
-            if (!seen.Add(key))
+            if (!seen.Add(rawKey))
             {
                 continue;
             }
 
-            var url = await storage.PresignGetAsync(key, PresignDownloadSeconds);
-            items.Add(new DownloadUrlItem(key, url, PresignDownloadSeconds));
+            if (!await MayReadAsync(caller, rawKey, key, spacetime, users, memo, ct))
+            {
+                continue;
+            }
+
+            var url = await storage.PresignGetAsync(rawKey, PresignDownloadSeconds);
+            items.Add(new DownloadUrlItem(rawKey, url, PresignDownloadSeconds));
         }
 
         return new DownloadUrlsResponse(items);
     }
+
+    /// <summary>
+    /// Whether <paramref name="caller"/> may read the object behind
+    /// <paramref name="key"/> (BUG_ANALYSIS A6). Every rule is answered from the
+    /// key's scope plus what the caller's own <c>my_*</c> views show them, so a
+    /// kick, ban or leave takes effect on the next request: the module stops
+    /// returning the channel or space, and with it the files posted there.
+    /// </summary>
+    /// <param name="memo">
+    /// Per-request cache keyed by scope (<c>ch:5</c>, <c>srv:3</c>, …) so a
+    /// batch of twenty images from one channel is one query, not twenty.
+    /// </param>
+    private static async Task<bool> MayReadAsync(
+        ApplicationUser caller,
+        string rawKey,
+        StorageKey key,
+        SpacetimeClient spacetime,
+        UserManager<ApplicationUser> users,
+        Dictionary<string, bool> memo,
+        CancellationToken ct)
+    {
+        var me = caller.UserName!;
+        switch (key.Scope)
+        {
+            case StorageScope.Avatar:
+                // Profile pictures are shown to everyone the uploader shares a
+                // space, a friendship or a request with — any account will do.
+                return true;
+
+            case StorageScope.DirectMessage:
+                return me == key.Uploader || me == key.Partner;
+
+            case StorageScope.Channel:
+                return await Memo(memo, $"ch:{key.Id}", () => AnyRowAsync(
+                    $"SELECT id FROM my_channels WHERE id = {key.Id}", $"channel {key.Id}"));
+
+            case StorageScope.ServerIcon:
+                return await Memo(memo, $"srv:{key.Id}", () => AnyRowAsync(
+                    $"SELECT id FROM my_servers WHERE id = {key.Id}", $"space {key.Id}"));
+
+            case StorageScope.Legacy:
+                // Pre-scope keys record only who uploaded them. Approximation:
+                // readable while the uploader is someone the caller can see —
+                // a co-member, a friend, themselves. That is what a kicked user
+                // loses, and what a member keeps. Not covered: a file whose
+                // uploader has since left every space you share (it stops
+                // loading), and a space icon uploaded by someone other than
+                // the space's owner when you are not a member (see below).
+                if (me == key.Uploader
+                    || await Memo(memo, $"user:{key.Uploader}", () => AnyRowAsync(
+                        $"SELECT username FROM my_visible_users WHERE username = '{key.Uploader}'",
+                        $"uploader {key.Uploader}")))
+                {
+                    return true;
+                }
+                return await IsLegacyIconOfVisibleSpaceAsync();
+
+            default:
+                return false;
+        }
+
+        // Discover shows icons of spaces the caller has not joined; a legacy
+        // icon's uploader is invisible from there, so match the key against the
+        // icon of a visible space instead — but only when the space's owner is
+        // the uploader, or an owner could point their own space's icon at any
+        // key they remember and read it back.
+        async Task<bool> IsLegacyIconOfVisibleSpaceAsync()
+        {
+            var rows = await spacetime.QueryAsUserAsync(
+                caller.Id, "SELECT icon_url, owner_identity FROM my_servers", "visible space icons", ct)
+                ?? throw Unavailable();
+            var owner = rows
+                .FirstOrDefault(row => row.Count == 2 && SqlText(row[0]) == rawKey)
+                is { } hit ? SqlText(hit[1]) : null;
+            if (owner is null)
+            {
+                return false;
+            }
+            var uploader = await users.FindByNameAsync(key.Uploader);
+            return uploader is not null
+                && SpacetimeClient.NormalizeIdentityHex(uploader.SpacetimeIdentity)
+                    == SpacetimeClient.NormalizeIdentityHex(owner);
+        }
+
+        async Task<bool> AnyRowAsync(string sql, string what)
+        {
+            var rows = await spacetime.QueryAsUserAsync(caller.Id, sql, $"download access {what}", ct)
+                ?? throw Unavailable();
+            return rows.Count > 0;
+        }
+    }
+
+    private static async Task<bool> Memo(Dictionary<string, bool> memo, string scope, Func<Task<bool>> check)
+    {
+        if (!memo.TryGetValue(scope, out var allowed))
+        {
+            allowed = await check();
+            memo[scope] = allowed;
+        }
+        return allowed;
+    }
+
+    /// <summary>
+    /// Returns the user's quota row while holding its PostgreSQL row lock. Every
+    /// request and confirmation for that user/day passes here, so concurrent
+    /// calls cannot all observe the same remaining allowance.
+    /// </summary>
+    private static async Task<UploadQuota> LockQuotaAsync(
+        AppDbContext db, string username, string quotaDate)
+    {
+        if (!db.Database.IsRelational())
+        {
+            var existing = await db.UploadQuotas.FindAsync(username, quotaDate);
+            if (existing is not null)
+            {
+                return existing;
+            }
+
+            var created = new UploadQuota { Username = username, QuotaDate = quotaDate };
+            db.UploadQuotas.Add(created);
+            return created;
+        }
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "UploadQuotas" ("Username", "QuotaDate", "BytesUploaded")
+            VALUES ({username}, {quotaDate}, 0)
+            ON CONFLICT ("Username", "QuotaDate") DO NOTHING
+            """);
+        return await db.UploadQuotas
+            .FromSqlInterpolated($"""
+                SELECT * FROM "UploadQuotas"
+                WHERE "Username" = {username} AND "QuotaDate" = {quotaDate}
+                FOR UPDATE
+                """)
+            .SingleAsync();
+    }
+
+    /// <summary>
+    /// Fails closed, but as the outage it is — no URL is minted, and the client
+    /// is told to retry rather than that it lacks permission.
+    /// </summary>
+    private static ApiException Unavailable() => ApiException.ServiceUnavailable(
+        "Could not reach the chat database to confirm your access to this file. Please try again in a moment.");
+
+    /// <summary>
+    /// A SpacetimeDB SQL scalar as text: a plain string, an <c>Identity</c>
+    /// (<c>["0x…"]</c>), a positional sum such as <c>Option</c>
+    /// (<c>[0, "value"]</c>, <c>[1, []]</c> for none) or the named form
+    /// (<c>{"some": "value"}</c>); <c>null</c> for none / anything else.
+    /// </summary>
+    private static string? SqlText(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.String => element.GetString(),
+        JsonValueKind.Array when element.GetArrayLength() == 1 => SqlText(element[0]),
+        JsonValueKind.Array when element.GetArrayLength() == 2 && element[0].ValueKind == JsonValueKind.Number
+            => SqlText(element[1]),
+        JsonValueKind.Object when element.EnumerateObject().Any() => SqlText(element.EnumerateObject().First().Value),
+        _ => null,
+    };
+
+    private static async Task<ApplicationUser> RequireAccount(
+        SessionToken token, TokenService tokens, UserManager<ApplicationUser> users) =>
+        await tokens.RequireAccountAsync(token, users, "Invalid or expired session token.");
 
     /// <summary>
     /// The account behind a session token, or a 401. Goes through
@@ -235,8 +463,7 @@ public static class UploadEndpoints
     /// </summary>
     private static async Task<string> RequireSession(
         SessionToken token, TokenService tokens, UserManager<ApplicationUser> users) =>
-        (await tokens.RequireAccountAsync(
-            token, users, "Invalid or expired session token.")).UserName!;
+        (await RequireAccount(token, tokens, users)).UserName!;
 
     private static long UnixNow() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 }
