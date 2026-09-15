@@ -4,7 +4,7 @@ import { syncUsers } from './sync'
 import { sameIdentity, normalizeUsername, toIdentityString } from './mappers'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useSelfStore } from '../../stores/selfStore'
-import { authServiceChangePassword, authServiceLogin, clearStoredAuthSessionToken } from '../authService'
+import { authServiceChangePassword, authServiceLogin, clearStoredAuthSessionToken, passwordLengthError } from '../authService'
 import { clearSignedDownloadUrlCache } from '../uploads'
 import { clearBadgeCount } from '../notifications'
 import type { DbConnection } from '../../generated'
@@ -105,7 +105,8 @@ export async function changePassword(
 export async function loginWithPassword(username: string, password: string): Promise<void> {
   const normalized = normalizeUsername(username)
   if (!normalized) throw new Error('Username is required.')
-  if (password.length < 8) throw new Error('Password must be at least 8 characters.')
+  const lengthError = passwordLengthError(password)
+  if (lengthError) throw new Error(lengthError)
 
   // core-api mints the SpacetimeDB token (signed by the issuer it controls);
   // SpacetimeDB derives the identity from it. Connect with that token — no

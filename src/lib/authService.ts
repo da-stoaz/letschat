@@ -93,6 +93,19 @@ type LivekitTokenPayload = {
 }
 
 /**
+ * core-api's password rule (Validation.ValidatePassword), mirrored so a form
+ * can say so before the round trip. The server still enforces it.
+ */
+export const PASSWORD_MIN_LENGTH = 8
+export const PASSWORD_MAX_LENGTH = 128
+
+export function passwordLengthError(password: string): string | null {
+  if (password.length < PASSWORD_MIN_LENGTH) return `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`
+  if (password.length > PASSWORD_MAX_LENGTH) return `Password must be at most ${PASSWORD_MAX_LENGTH} characters.`
+  return null
+}
+
+/**
  * Where the upload is going. core-api bakes it into the storage key, and that
  * key is what decides who may later fetch the object — channel members, the two
  * DM parties, anyone (avatar), whoever can see the space (icon).
