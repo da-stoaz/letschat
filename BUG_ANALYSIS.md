@@ -1,14 +1,15 @@
 # Bug-Analyse — produktionsrelevante Fehler
 
-> Erstellt: 2026-08-24 · Branch `claude/codebase-bug-analysis-otaq55`
-> Methode: statische Code-Analyse (Lesen, keine Ausführung). Kein Code wurde verändert.
+> Erstellt: 2026-08-24 · Baseline zuletzt abgeglichen: 2026-09-15 (v1.0.14)
+> Ursprung: statische Code-Analyse auf Branch `claude/codebase-bug-analysis-otaq55`.
 > Umfang: `server/` (SpacetimeDB-Modul), `core-api/` (.NET), `src/` (React-Client),
 > `deploy/`, `docker-compose.prod.*`, `spacetimedb/`.
 
-**Wichtiger Hinweis zur Verifikation:** Alle Befunde stammen aus dem Lesen des Codes.
-Sie wurden *nicht* zur Laufzeit reproduziert. Jeder Eintrag nennt die konkrete Stelle
-und den Auslöser, damit er gezielt nachgestellt werden kann. Die Einstufung der
-Schwere ist eine Einschätzung, keine gemessene Größe.
+**Wichtiger Hinweis zur Verifikation:** Die ursprünglichen Befunde stammen aus dem
+Lesen des Codes und sind nicht automatisch reproduziert. Bei behobenen Einträgen ist
+die tatsächlich ausgeführte Verifikation im jeweiligen Abschnitt festgehalten. Ein
+offener Eintrag bleibt eine begründete Analyse, bis ein Regressionstest ihn bestätigt.
+Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 
 ---
 
@@ -55,10 +56,10 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 | [D1](#d1) | `TypingState` wird bei Verbindungsabbruch nie aufgeräumt | S3 | Modul |
 | [D2](#d2) | Präsenz bleibt nach Absturz dauerhaft „online" | S3 | Modul |
 | [D3](#d3) | `delete_server` lässt Pins, Read-States und DM-Invites verwaist zurück | S3 | Modul |
-| [D4](#d4) | Verwaiste MinIO-Objekte werden nie gelöscht | S3 | Storage |
+| [D4](#d4) | Bestätigte Anhänge werden beim Löschen ihrer Nachricht/Channels nicht entfernt | S3 | Storage |
 | [D5](#d5) | `rekey_identities` korrumpiert Daten bei verketteten Remaps | S3 | Modul |
 | [D6](#d6) | Stale Messages im Client-Store nach Hard-Delete | S4 | Client |
-| [E1](#e1) | Stiller Fallback auf anonyme Identity bei Token-Ablehnung | S2 | Client |
+| [E1](#e1) | Stiller Fallback auf anonyme Identity bei Token-Ablehnung | S3 | Client |
 | [E2](#e2) | Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben | S3 | Client |
 | [E3](#e3) | Discovery fällt bei nacktem Hostnamen auf `http://` zurück | S3 | Client |
 | [E4](#e4) | CSP wird nur im Report-Only-Modus ausgeliefert | S3 | Deploy |
@@ -67,7 +68,7 @@ Schwere ist eine Einschätzung, keine gemessene Größe.
 | [F2](#f2) | `SystemConfigService`-Cache ist prozesslokal | S4 | Config |
 | [F3](#f3) | `MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User | S4 | Config |
 | [F4](#f4) | GitHub-Timeout in `/downloads/{os}` wird zu einem 500 | S4 | API |
-| [G1](#g1) | `CODEBASE.md` beschreibt einen überholten Stand | S4 | Doku |
+| [G1](#g1) | ~~`CODEBASE.md` beschreibt einen überholten Stand~~ · **✅ behoben (Baseline 2026-09-15)** | ~~S4~~ | Doku |
 
 ---
 
@@ -206,27 +207,31 @@ offen (siehe [E4](#e4): CSP nur im Report-Only-Modus).
 
 **Behoben in PR #83** (`fix/upload-quota-and-attachment-auth`).
 
-Zwei Linien, die erste ist die entscheidende:
+Die Quote wird jetzt erteilt, nicht erst nachträglich geprüft:
 
-1. **Die Presigned-PUT-URL signiert jetzt `Content-Length`**
-   (`StorageService.PresignPutAsync`). Die URL ist damit nur für exakt die bei
-   `/uploads/request` gemeldete Größe gültig — ein PUT mit anderer Länge
-   scheitert bei MinIO an der SigV4-Prüfung und legt gar kein Objekt an. Das
-   ist der Angriff aus dem Befund („`file_size: 1` melden, 5 GB hochladen") an der
-   Wurzel geschlossen: der Speicher wird nicht einmal berührt.
-2. **`ConfirmUpload` prüft und verbucht die echte Objektgröße** aus
-   `GetObjectMetadata` statt der Client-Angabe — Limit *und* Tagesquote. Ein
-   Objekt, das eine der beiden Grenzen reißt, wird gelöscht, nicht verbucht.
-   Zweite Linie für ein Storage-Backend, das signierte Header nicht prüft.
+1. `/uploads/request` sperrt die Tagesquoten-Zeile in PostgreSQL und zählt
+   bestätigte Bytes **plus alle noch offenen Reservierungen**. Erst wenn die Summe
+   unter 2 GiB bleibt, wird eine `PendingUpload`-Zeile mit Quota-Datum angelegt.
+   Mehrere parallele Requests können die Quote deshalb nicht überbuchen; auch viele
+   nie bestätigte Uploads verbrauchen sie bis zum Ablauf.
+2. Die Presigned-PUT-URL signiert den exakten `Content-Length`. Ein PUT mit einer
+   anderen als der reservierten Länge scheitert bei MinIO an SigV4.
+3. `/uploads/confirm` sperrt Reservierung und Quote erneut, liest die echte
+   Objektgröße und verlangt exakte Übereinstimmung. Reservierung entfernen und
+   bestätigte Bytes erhöhen geschehen in derselben Transaktion.
+4. `PendingUploadSweeper` läuft periodisch. Er löscht das abgelaufene Objekt aus
+   MinIO **vor** der Datenbankzeile; schlägt Storage fehl, bleibt die Quote reserviert
+   und der nächste Lauf versucht es erneut.
 
 Verifiziert gegen das laufende MinIO: ein ehrlicher Upload (16 B gemeldet, 16 B
 gesendet) landet und wird mit 16 B verbucht; `1` gemeldet und 64 B gesendet →
 PUT 403, kein Objekt; 64 gemeldet und 16 gesendet → PUT 403. Der Signed-Headers-
 Parameter der URL zeigt `content-length;host`.
 
-**Nicht ausgeführt getestet:** der Ablehnungszweig in `ConfirmUpload` (Objekt größer als
-Limit/Quote → löschen), weil die signierte URL ein solches Objekt gar nicht mehr
-entstehen lässt.
+Der Regressionstest
+`Pending_Uploads_Reserve_The_Daily_Quota_Without_Confirm` deckt den ursprünglichen
+Bypass durch viele unbestätigte Grants ab. Die vorhandenen Upload-Integrationstests
+decken Scope und Zugriff mit echten Accounts und Modulabfragen ab.
 
 **Nebenbefund (S4) bleibt offen:** Die MIME-Sperrliste prüft weiterhin den vom
 Client gesendeten `mime_type`.
@@ -337,9 +342,11 @@ Der Kommentar darüber begründet das Verhalten ausführlich und schließt mit:
 eine Betriebsanweisung, keine technische Schranke.
 
 **Auswirkung:** Auf einer frisch veröffentlichten Instanz wird derjenige
-Instanz-Admin, der zuerst `register_user` aufruft. Zusammen mit [A1](#a1) genügt dafür
-eine anonyme WebSocket-Verbindung — ein Account bei der core-api ist nicht nötig. Der
-so erlangte Admin kann `set_space_create_policy`, `set_user_admin` und
+Instanz-Admin, der zuerst `register_user` aufruft. Seit [A1](#a1) braucht der Angreifer
+dafür ein vom vertrauenswürdigen Issuer signiertes Token, also einen nutzbaren
+`core-api`-Account; eine anonyme WebSocket-Verbindung genügt nicht mehr. Solange die
+öffentliche Registrierung aber vor dem ersten Betreiber-Login erreichbar ist, bleibt
+das Rennen bestehen. Der so erlangte Admin kann `set_space_create_policy`, `set_user_admin` und
 `set_archive_service_identity` aufrufen, und die Last-Admin-Schranke in
 `set_user_admin` (`system.rs:95-101`) hält ihn danach dort.
 
@@ -563,8 +570,9 @@ let token: String = ctx.rng().sample_iter(&Alphanumeric).take(8).map(char::from)
 Drei Punkte:
 
 1. **Entropie.** 62⁸ ≈ 2,2 × 10¹⁴. Für ein Bearer-Credential wenig, und `use_invite`
-   ist weder rate-limitiert noch protokolliert. Zusammen mit [A1](#a1) (anonyme
-   Verbindungen erlaubt) ist Token-Raten ein realistischer Weg in einen fremden Space.
+   ist weder rate-limitiert noch protokolliert. [A1](#a1) verhindert inzwischen
+   anonymes Raten; ein registrierter Angreifer kann Versuche aber weiterhin direkt
+   über den Reducer verteilen.
 2. **Kollision.** `token` ist der Primärschlüssel. `ctx.db.invite().insert(...)` bei
    einem bereits vorhandenen Token verletzt die Unique-Constraint und lässt den
    Reducer panicken. Es gibt keine Retry-Schleife.
@@ -932,30 +940,25 @@ existierende Channels), belegen aber dauerhaft Platz und landen im Archiv.
 ---
 
 <a id="d4"></a>
-## D4 — Verwaiste MinIO-Objekte werden nie gelöscht · **S3**
+## D4 — Bestätigte Anhänge überleben das Löschen ihrer Nachricht/Channels · **S3**
 
-**Stellen:** `core-api/src/CoreApi/DbInitializer.cs:82-90`,
-`Endpoints/UploadEndpoints.cs:118-169`
+**Stellen:** Message-/Channel-Lösch-Reducer unter `server/src/reducers/`,
+Upload-Metadaten unter `core-api/src/CoreApi/Data/`
 
-Es gibt drei Wege zu verwaisten Objekten, und keinen zurück:
+PR #83 hat zwei der drei ursprünglichen Ursachen geschlossen: Ein periodischer
+`PendingUploadSweeper` löscht abgelaufene, nie bestätigte Uploads aus MinIO, bevor er
+ihre DB-Reservierung entfernt. Scheitert die Storage-Löschung, bleiben Zeile und Quote
+für einen erneuten Versuch bestehen.
 
-1. **Upload ohne Confirm.** Der Client holt eine Presigned-URL, lädt hoch, ruft aber
-   `/uploads/confirm` nie auf. Die `PendingUpload`-Zeile wird — nur beim
-   Anwendungsstart — gelöscht:
-   ```csharp
-   var swept = await db.PendingUploads.Where(p => p.ExpiresAt < now).ExecuteDeleteAsync();
-   ```
-   Das **Objekt in MinIO bleibt**. Es gibt keinen Aufruf, der es entfernt.
-2. **Kein periodischer Sweep.** Die Bereinigung läuft ausschließlich in
-   `DbInitializer.InitializeAsync`. Ein Prozess, der wochenlang läuft, räumt in dieser
-   Zeit gar nichts auf.
-3. **Gelöschte Nachrichten und Channels.** Wird eine Nachricht mit Anhang gelöscht
-   oder ein ganzer Channel/Space entfernt, wird das zugehörige Objekt nirgends
-   angefasst.
+Offen bleibt der Lebenszyklus **bestätigter** Anhänge. Wird eine Nachricht, ein Channel
+oder ein Space gelöscht, entfernen die SpacetimeDB-Reducer nur Chat-Zeilen. Sie kennen
+weder MinIO noch eine normalisierte Liste der in Nachrichten referenzierten
+Storage-Keys; `core-api` erhält deshalb kein Löschereignis und das Objekt bleibt.
 
-**Auswirkung:** Der MinIO-Speicher wächst monoton und wird nie kleiner. Zusammen mit
-[A5](#a5) (Größenlimit nicht durchgesetzt) gibt es keine wirksame Obergrenze für den
-Speicherverbrauch der Instanz.
+**Auswirkung:** Normale Uploads sind durch Größen- und Tagesquote begrenzt, aber einmal
+bestätigte und später aus dem Chat gelöschte Objekte belegen dauerhaft Speicher. Die
+Behebung braucht eine explizite Attachment-Referenz oder einen verlässlichen
+Garbage-Collection-Abgleich zwischen SpacetimeDB und MinIO.
 
 ---
 
@@ -1036,7 +1039,7 @@ beidseitig gelöscht wurden (`direct_messages.rs:89-90` löscht dann hart).
 # E — Client und Deployment
 
 <a id="e1"></a>
-## E1 — Stiller Fallback auf anonyme Identity bei Token-Ablehnung · **S2**
+## E1 — Stiller Fallback auf anonyme Identity bei Token-Ablehnung · **S3**
 
 **Stellen:** `src/lib/spacetimedb/connection.ts:426-440` (insb. `:433`), `:219-227`
 
@@ -1071,8 +1074,11 @@ und wirft eine gute Fehlermeldung — dieser Pfad wird aber nur beim expliziten 
 durchlaufen. `connect()` wird ebenso von `scheduleReconnect()` (`:344-356`, Aufruf `:352`) und von
 `call()` (`:487-489`) aufgerufen; dort greift keine Prüfung.
 
-Zusammen mit [A1](#a1) ist die entstandene anonyme Identity zudem voll
-handlungsfähig — sie kann Spaces anlegen und Invites einlösen.
+Seit der Behebung von [A1](#a1) ist die entstandene anonyme Identity serverseitig
+nicht mehr handlungsfähig. Der Sicherheitsanteil des ursprünglichen Befunds ist damit
+geschlossen; offen bleibt der stille Identitätswechsel mit scheinbar verschwundenen
+Daten und dauerhaft überschriebenem SpacetimeDB-Token. Der Restbefund ist deshalb von
+S2 auf S3 herabgestuft.
 
 **Richtung für einen Fix:** Nach dem Reconnect prüfen, ob die verbundene Identity noch
 der zuletzt authentifizierten entspricht, und andernfalls in einen expliziten
@@ -1292,27 +1298,19 @@ liefert dem Besucher der Landing Page einen 500 mit `"Internal server error."`.
 # G — Dokumentation
 
 <a id="g1"></a>
-## G1 — `CODEBASE.md` beschreibt einen überholten Stand · **S4**
+## G1 — `CODEBASE.md` beschrieb einen überholten Stand · ✅ **behoben**
 
-**Stelle:** `CODEBASE.md`
+**Behoben mit der Architektur-Baseline vom 2026-09-15.**
 
-Die Datei trägt selbst den Hinweis, dass Teile veraltet sein können. Der Abstand ist
-allerdings groß genug, dass sie aktiv in die Irre führt:
+`CODEBASE.md` ist jetzt eine datierte Karte des laufenden Systems statt einer
+prozentualen Feature-Einschätzung. Sie beschreibt `core-api` als einziges Backend,
+SpacetimeDB 2.5, die vollständigen Service- und Daten-Grenzen, zentrale Request-Flows,
+Deployment-Topologie und die passende Testmatrix. Erledigte Feature-Lücken wurden
+entfernt.
 
-| Aussage in `CODEBASE.md` | Tatsächlicher Stand |
-|---|---|
-| „Auth service: Rust + Axum + SQLite (`auth-service/`, **current prod**)" | `auth-service/` existiert nicht mehr; core-api ist alleiniges Backend (siehe `CLAUDE.md`) |
-| „SpacetimeDB 2.2" | 2.5 laut `CLAUDE.md` |
-| „Tauri 2.8" | siehe `package.json` |
-| **Urgent #1:** „Server voice controls are completely stubbed out … lines 240-254" | behoben — `src/features/voice/VoiceChannelView.tsx:149`, `:371-385` rufen echte Handler aus `useVoiceControlActions` |
-| **Urgent #2:** „DM message editing is disabled, `allowEditOwn={false}`" | behoben — `src/features/dm/DMView.tsx:389` setzt `allowEditOwn` (true) |
-| „Pinned messages … no schema support" | implementiert — `PinnedMessage` in `schema.rs`, `reducers/pins.rs`, `my_pinned_messages` |
-| Schema-Tabelle | unvollständig: `SystemSettings`, `ArchiveService`, `IdCounter`, `JoinRequest`, `DmServerInvite`, `PinnedMessage`, `ReadState` fehlen |
-| „Overall Assessment: ~65% complete MVP … most critical gap is server voice controls" | trifft nicht mehr zu |
-
-**Auswirkung:** Die als „Urgent / Broken" markierten Punkte sind erledigt, die
-tatsächlich offenen Probleme (dieses Dokument) stehen nirgends. Wer sich auf die Datei
-verlässt, arbeitet an den falschen Stellen.
+Zusätzlich trennen `README.md`, `SECURITY.md` und dieses Register ihre Rollen klar:
+Architektur beschreibt den Ist-Zustand, `SECURITY.md` die einzuhaltenden
+Vertrauensgrenzen und diese Datei die offenen bzw. verifizierten Befunde.
 
 ---
 
@@ -1349,23 +1347,20 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
-**Erledigt:** [A2](#a2) (Forwarded Headers) und [A3](#a3) (`/auth/link` absichern)
-sind in PR #70 behoben, [A1](#a1) (Gate für anonyme Identities) in PR #71,
-[A4](#a4) (Token-Revokation) in PR #72, [C1](#c1)/[C2](#c2) (inkrementeller Sync)
-in PR #73, [C3](#c3) (begrenzte Views plus seitenweises Nachladen) in PR #77 und
-[B1](#b1)/[B2](#b2)/[B3](#b3) (Selbstbezug- und DM-Gates) in PR #82.
-**Kein S1 ist offen** — 12 von 43 Befunden erledigt, 31 verbleiben, davon 7 mit S2.
+**Stand:** 14 von 43 Befunden sind erledigt; 29 bleiben offen. Darunter ist kein S1
+und es bleiben fünf S2. Behoben sind A1–A7, B1–B3, C1–C3 und G1. D4 bleibt als
+kleinerer Restbefund für bestätigte Anhänge offen.
 
-**Zuerst — Sicherheit, kleiner Aufwand, große Wirkung:**
-[A7](#a7) (Account-Lockout, Passwort-Obergrenze) und [A8](#a8) (Erstregistrierung
-wird Admin). [A5](#a5)/[A6](#a6) und [B1](#b1)/[B2](#b2)/[B3](#b3) aus dieser Gruppe
-sind in PR #83 bzw. #82 erledigt — A6 ohne Modul-Änderung, der Storage-Key trägt den
-Scope selbst.
+**Zuerst — Zugangs- und Datengrenzen:** [A8](#a8) (Admin-Land-Grab) technisch
+schließen und [C4](#c4) (Discover-Mitgliederdaten) auf eine Aggregation statt fremder
+Zeilen umstellen. [E1](#e1) sollte anschließend clientseitig fail-closed werden.
 
 **Danach — Betriebsfähigkeit unter Last:**
 [C5](#c5)/[C6](#c6) (Full-Table-Scans in Typing- und Lösch-Reducern) und [C7](#c7)
 (instanzweiter Re-Sync bei Mitglieder-Events). Das schwerste Stück dieser Gruppe,
 das S1-Cluster [C1](#c1)/[C2](#c2)/[C3](#c3), ist erledigt.
 
-**Strukturell — braucht eine Entwurfsentscheidung:**
-[C4](#c4) (Discover-Mitgliederzahl aggregieren).
+**Danach — Lebenszyklus und Härtung:** [D4](#d4) (bestätigte Attachments),
+[A10](#a10) (LiveKit-Revokation), [E4](#e4) (CSP Enforcement) und die verbleibenden
+S3/S4-Punkte. Die aktuelle Abhängigkeitslage steht datiert in `SECURITY.md`; für den
+Live-Stand gilt GitHub Dependabot.
