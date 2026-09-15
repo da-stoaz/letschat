@@ -38,6 +38,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         {
             upload.HasKey(u => u.Id);
             upload.Property(u => u.Id).HasMaxLength(64);
+            upload.Property(u => u.QuotaDate).HasMaxLength(10);
             upload.HasIndex(u => u.ExpiresAt);
         });
 

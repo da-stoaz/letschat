@@ -290,6 +290,38 @@ public sealed class UploadAccessTests
         Assert.Equal(StorageScope.Legacy, StorageKey.TryParse(path[(path.IndexOf("uploads/", StringComparison.Ordinal))..])!.Scope);
     }
 
+    [Fact]
+    public async Task Pending_Uploads_Reserve_The_Daily_Quota_Without_Confirm()
+    {
+        using var factory = new LetsChatWebApplicationFactory();
+        var client = factory.CreateClient();
+        var (alice, _) = await RegisterAsync(client, "quotauser");
+
+        for (var requestNumber = 0; requestNumber < 4; requestNumber++)
+        {
+            var accepted = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+            {
+                sessionToken = alice,
+                fileName = $"large-{requestNumber}.bin",
+                fileSize = 500L * 1024 * 1024,
+                mimeType = "application/octet-stream",
+                scope = new { kind = "avatar" },
+            });
+            Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        }
+
+        var rejected = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+        {
+            sessionToken = alice,
+            fileName = "one-too-many.bin",
+            fileSize = 500L * 1024 * 1024,
+            mimeType = "application/octet-stream",
+            scope = new { kind = "avatar" },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+    }
+
     [Theory]
     [InlineData("dm", "no partner")]
     [InlineData("channel", "no channel")]

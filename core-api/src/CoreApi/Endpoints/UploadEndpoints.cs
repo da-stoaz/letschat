@@ -82,18 +82,6 @@ public static class UploadEndpoints
             throw ApiException.BadRequest("This file type is not allowed.");
         }
 
-        var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var usedToday = await db.UploadQuotas
-            .Where(q => q.Username == username && q.QuotaDate == today)
-            .Select(q => (long?)q.BytesUploaded)
-            .FirstOrDefaultAsync() ?? 0;
-
-        if (usedToday + payload.FileSize > DailyQuota)
-        {
-            throw ApiException.BadRequest(
-                $"Daily upload quota of {DailyQuota / 1024 / 1024 / 1024} GB exceeded.");
-        }
-
         var uploadId = Guid.NewGuid().ToString();
         var extension = Path.GetExtension(fileName).TrimStart('.');
         // The key is the access rule (StorageKey): whoever may read this object
@@ -103,6 +91,20 @@ public static class UploadEndpoints
 
         var uploadUrl = await storage.PresignPutAsync(storageKey, payload.FileSize, PresignUploadSeconds);
 
+        var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync()
+            : null;
+        var quota = await LockQuotaAsync(db, username, today);
+        var reserved = await db.PendingUploads
+            .Where(p => p.Username == username && (p.QuotaDate == today || p.QuotaDate == ""))
+            .SumAsync(p => (long?)p.FileSize) ?? 0;
+        if (quota.BytesUploaded + reserved + payload.FileSize > DailyQuota)
+        {
+            throw ApiException.BadRequest(
+                $"Daily upload quota of {DailyQuota / 1024 / 1024 / 1024} GB exceeded.");
+        }
+
         db.PendingUploads.Add(new PendingUpload
         {
             Id = uploadId,
@@ -111,9 +113,14 @@ public static class UploadEndpoints
             FileName = fileName,
             FileSize = payload.FileSize,
             MimeType = mimeType,
+            QuotaDate = today,
             ExpiresAt = UnixNow() + PendingUploadTtlSeconds,
         });
         await db.SaveChangesAsync();
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync();
+        }
 
         return new UploadRequestResponse(uploadId, uploadUrl, PresignUploadSeconds);
     }
@@ -127,7 +134,8 @@ public static class UploadEndpoints
     {
         var username = await RequireSession(payload.SessionToken, tokens, users);
 
-        var pending = await db.PendingUploads.FirstOrDefaultAsync(p => p.Id == payload.UploadId)
+        var pending = await db.PendingUploads.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == payload.UploadId)
             ?? throw ApiException.BadRequest("Upload ID not found or already confirmed.");
 
         if (!string.Equals(pending.Username, username, StringComparison.Ordinal))
@@ -137,6 +145,7 @@ public static class UploadEndpoints
 
         if (pending.ExpiresAt < UnixNow())
         {
+            await storage.DeleteObjectAsync(pending.StorageKey);
             db.PendingUploads.Remove(pending);
             await db.SaveChangesAsync();
             throw ApiException.BadRequest("Upload session expired. Please start over.");
@@ -146,24 +155,12 @@ public static class UploadEndpoints
             ?? throw ApiException.BadRequest(
                 "File has not been uploaded yet — complete the PUT request first.");
 
-        // Everything below is enforced against the size MinIO reports, not the
-        // one the client declared (BUG_ANALYSIS A5). The presigned PUT now signs
-        // Content-Length, so a mismatch should never reach here — this is the
-        // second line for a storage backend that does not verify signed headers.
-        var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var quota = await db.UploadQuotas
-            .FirstOrDefaultAsync(q => q.Username == username && q.QuotaDate == today);
-        var usedToday = quota?.BytesUploaded ?? 0;
-
-        string? rejection = null;
-        if (actualSize > MaxFileSize)
-        {
-            rejection = $"File exceeds the maximum allowed size of {MaxFileSize / 1024 / 1024} MB.";
-        }
-        else if (usedToday + actualSize > DailyQuota)
-        {
-            rejection = $"Daily upload quota of {DailyQuota / 1024 / 1024 / 1024} GB exceeded.";
-        }
+        // Content-Length is signed, and the real object size is checked again:
+        // a backend that ignored the signed header cannot turn one reservation
+        // into a larger object.
+        var rejection = actualSize != pending.FileSize
+            ? "Uploaded file size does not match the reserved size."
+            : null;
 
         if (rejection is not null)
         {
@@ -175,22 +172,49 @@ public static class UploadEndpoints
             throw ApiException.BadRequest(rejection);
         }
 
-        if (quota is null)
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync()
+            : null;
+        if (transaction is not null)
         {
-            db.UploadQuotas.Add(new UploadQuota
-            {
-                Username = username,
-                QuotaDate = today,
-                BytesUploaded = actualSize,
-            });
+            pending = await db.PendingUploads
+                .FromSqlInterpolated($"""
+                    SELECT * FROM "PendingUploads" WHERE "Id" = {payload.UploadId} FOR UPDATE
+                    """)
+                .SingleOrDefaultAsync()
+                ?? throw ApiException.BadRequest("Upload ID not found or already confirmed.");
         }
         else
         {
-            quota.BytesUploaded += actualSize;
+            db.PendingUploads.Attach(pending);
+        }
+        var quotaDate = pending.QuotaDate.Length == 0
+            ? DateTimeOffset.FromUnixTimeSeconds(pending.ExpiresAt - PendingUploadTtlSeconds)
+                .UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            : pending.QuotaDate;
+        var quota = await LockQuotaAsync(db, username, quotaDate);
+
+        // Rows created by an older deployment were not reserved at request time.
+        if (pending.QuotaDate.Length == 0 && quota.BytesUploaded + actualSize > DailyQuota)
+        {
+            await storage.DeleteObjectAsync(pending.StorageKey);
+            db.PendingUploads.Remove(pending);
+            await db.SaveChangesAsync();
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync();
+            }
+            throw ApiException.BadRequest(
+                $"Daily upload quota of {DailyQuota / 1024 / 1024 / 1024} GB exceeded.");
         }
 
+        quota.BytesUploaded += actualSize;
         db.PendingUploads.Remove(pending);
         await db.SaveChangesAsync();
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync();
+        }
 
         return new UploadConfirmResponse(
             pending.StorageKey, pending.FileName, actualSize, pending.MimeType);
@@ -367,6 +391,41 @@ public static class UploadEndpoints
             memo[scope] = allowed;
         }
         return allowed;
+    }
+
+    /// <summary>
+    /// Returns the user's quota row while holding its PostgreSQL row lock. Every
+    /// request and confirmation for that user/day passes here, so concurrent
+    /// calls cannot all observe the same remaining allowance.
+    /// </summary>
+    private static async Task<UploadQuota> LockQuotaAsync(
+        AppDbContext db, string username, string quotaDate)
+    {
+        if (!db.Database.IsRelational())
+        {
+            var existing = await db.UploadQuotas.FindAsync(username, quotaDate);
+            if (existing is not null)
+            {
+                return existing;
+            }
+
+            var created = new UploadQuota { Username = username, QuotaDate = quotaDate };
+            db.UploadQuotas.Add(created);
+            return created;
+        }
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "UploadQuotas" ("Username", "QuotaDate", "BytesUploaded")
+            VALUES ({username}, {quotaDate}, 0)
+            ON CONFLICT ("Username", "QuotaDate") DO NOTHING
+            """);
+        return await db.UploadQuotas
+            .FromSqlInterpolated($"""
+                SELECT * FROM "UploadQuotas"
+                WHERE "Username" = {username} AND "QuotaDate" = {quotaDate}
+                FOR UPDATE
+                """)
+            .SingleAsync();
     }
 
     /// <summary>
