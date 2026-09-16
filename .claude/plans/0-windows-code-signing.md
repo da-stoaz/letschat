@@ -1,5 +1,11 @@
 # P0 Plan: Windows Code Signing (via SignPath Foundation)
 
+> **Status (reviewed 2026-09-16): not started; externally blocked.** The
+> SignPath application, CI integration, and signed Windows validation remain
+> unchecked. This is a proposal, not a description of the current release
+> pipeline. Current operational documentation lives in
+> [`DEPLOYMENT.md`](../../DEPLOYMENT.md).
+
 ## Context
 
 Unsigned Windows installers trigger SmartScreen "unknown publisher" warnings and
@@ -8,8 +14,9 @@ warning before the app even launches — the single highest-leverage adoption
 blocker. macOS already ships signed + notarized (see the macOS steps in
 `.github/workflows/release.yml`); Windows must reach parity.
 
-This is **P0 / "Now"** on the roadmap, sequenced *before* Plan 2 (storage
-tiering). It is a pure build/release change — no app or frontend code.
+This was originally sequenced before Plan 2, but storage-tiering Part A has
+since shipped while Windows signing remains open. It is still a pure
+build/release change — no app or frontend code.
 
 ### Current state (verified)
 

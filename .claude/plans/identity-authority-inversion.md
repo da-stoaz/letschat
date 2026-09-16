@@ -1,11 +1,18 @@
 # Plan: Invert Identity Authority — core-api becomes the OIDC issuer for SpacetimeDB
 
-## Context
+> **Status (reviewed 2026-09-16): implemented; historical design record.**
+> `core-api` now issues RS256 SpacetimeDB tokens, publishes OIDC discovery/JWKS,
+> derives stable identities from issuer and account subject, and production
+> persists the private key. The issuer string remains a permanent deployment
+> invariant; see [`SECURITY.md`](../../SECURITY.md) and
+> [`DEPLOYMENT.md`](../../DEPLOYMENT.md).
 
-**The disease:** SpacetimeDB is currently the authority over identity; core-api is a
-bystander that stores a *copy*.
+## Historical context
 
-Today's flow:
+**The former disease:** SpacetimeDB was the authority over identity; core-api was a
+bystander that stored a *copy*.
+
+Former flow:
 
 1. The client connects to SpacetimeDB **anonymously**. SpacetimeDB mints an identity +
    token, signed with SpacetimeDB's own key
@@ -203,5 +210,7 @@ In [`connection.ts`](../../src/lib/spacetimedb/connection.ts) /
 
 - **Identity source:** compute server-side in core-api (blake3 port). *(resolved)*
 - **Phase-out of SpacetimeDB:** explicitly out of scope here. *(resolved)*
-- **Token lifetime / refresh:** TBD in Phase 1 — pick `exp` + a session-authenticated
-  re-mint endpoint.
+- **Token lifetime / refresh:** implemented as a 30-day SpacetimeDB token.
+  `/auth/renew-session` cryptographically validates that token and the current
+  account generation before issuing a fresh one-hour/seven-day application
+  session. Expired SpacetimeDB tokens require sign-in again.

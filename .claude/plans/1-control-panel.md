@@ -1,10 +1,17 @@
 # Feature Plan: Admin Control Panel & Identity System — LetsChat
 
-## Context
+> **Status (reviewed 2026-09-16): implemented; historical design record.**
+> `core-api` is the sole production backend, and registration policy, email,
+> rate limiting, approval, and the Razor admin panel are live. Use
+> [`core-api/README.md`](../../core-api/README.md),
+> [`CODEBASE.md`](../../CODEBASE.md), and [`SECURITY.md`](../../SECURITY.md) for
+> current behavior; phase language below records the original plan.
 
-The backend services are being built in **.NET Core** (see `[[project-backend-language]]` in memory). This plan covers two coupled pieces of work:
+## Historical context
 
-1. **Rebuild the auth-service in .NET** (renamed **`core-api`**) on **ASP.NET Core Identity** + PostgreSQL. This is the foundation — `2-storage-tiering.md` depends on it for the `/archive/*` endpoints.
+This plan proposed two coupled pieces of work that are now implemented:
+
+1. **Rebuild the auth-service in .NET** (renamed **`core-api`**) on **ASP.NET Core Identity** + PostgreSQL.
 2. **Add a server-administrator control panel** and harden user registration: admin approval of users, admin-created users, system configuration, **email verification**, and **signup rate limiting**.
 
 ASP.NET Core Identity is a first-party membership framework (users, roles, claims, lockout, email-confirmation tokens, password management) — most of part (2) is configuration on top of it, not code from scratch. This plan is independent of the E2EE plan.
