@@ -2114,7 +2114,7 @@ dependencies = [
 
 [[package]]
 name = "letschat_tauri"
-version = "1.0.14"
+version = "1.0.15"
 dependencies = [
  "futures-util",
  "reqwest",
