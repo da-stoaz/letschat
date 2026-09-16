@@ -7,9 +7,11 @@ not UI rendering.
 
 ## Safety and current limitation
 
-This is a manual development benchmark, not part of Vitest or CI. It defaults
-to the real development database name `letschat`, does not publish/reset a
-module, and sends 10,000 messages. The script deletes its temporary server on a
+This is a manual development benchmark, not part of Vitest or CI. It inherits
+the security harness default `letschattest`, but the run command below points
+it at the real development database `letschat` on purpose (that is where the
+archive worker is registered). It does not publish/reset a module and sends
+10,000 messages. The script deletes its temporary server on a
 successful run, but the generated user remains; an interrupted run can leave
 the server and messages behind. Never point it at production.
 
@@ -56,9 +58,18 @@ Optional environment variables:
 | `CONCURRENCY` | `64` | Parallel send loops |
 | `LAG_TIMEOUT_MS` | `120000` | Maximum archive catch-up wait |
 | `STDB_URL` | `http://127.0.0.1:4300` | SpacetimeDB HTTP endpoint |
-| `STDB_TEST_DB` | `letschat` | Target module/database |
+| `STDB_TEST_DB` | `letschattest` | Target module/database (harness default; set to `letschat` for the dev stack) |
 | `PG_CONTAINER` | `letschat-dev-postgres` | PostgreSQL container queried for results |
 | `ARCHIVE_PG_DATABASE` | `archive` | PostgreSQL archive database |
+
+## Sibling scripts
+
+- `archive-perf.ts` — latency distribution, throughput-vs-concurrency sweep,
+  and replication freshness via a direct `ARCHIVE_PG_URL` connection. Same
+  prerequisites: `STDB_TEST_DB=letschat bun tests/load/archive-perf.ts`.
+- `rebuild-fixture.ts` — seeds every durable table for the whole-database
+  rebuild test; run against a throwaway module:
+  `STDB_TEST_DB=rebuildtest bun tests/load/rebuild-fixture.ts`.
 
 ## Historical baseline
 
