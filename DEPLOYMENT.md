@@ -7,6 +7,10 @@ Full tutorial (beginner step-by-step):
 
 Use this file as a compact operator reference.
 
+The deployment invariants and known residual risks are summarized in
+[`SECURITY.md`](SECURITY.md). The tracked code findings live in
+[`BUG_ANALYSIS.md`](BUG_ANALYSIS.md).
+
 > **Backend service:** production runs **`core-api`** (.NET / ASP.NET Core
 > Identity + PostgreSQL). The legacy Rust `auth-service` has been **removed**
 > from the repo, and so has the containerised migration path that imported its
@@ -445,6 +449,10 @@ The first time the stack starts, the bootstrap admin from
 is created automatically. Change the password as soon as you sign in and
 unset those env vars on the next deploy.
 
+Do not expose registration before this bootstrap has completed. Without a seeded
+administrator, the first registered SpacetimeDB user is promoted to instance admin;
+this known land-grab risk is tracked as A8 in `BUG_ANALYSIS.md`.
+
 ## Service / Env Reference
 
 | Area | Key env / file | Notes |
@@ -617,18 +625,13 @@ diff is computed against whatever is currently published, and the Tauri
 desktop binary is independent of both. Going from `vA` directly to `vC` runs
 the same end state as `vA → vB → vC`.
 
-Three exceptions where the order DOES matter:
+Two exceptions where the order DOES matter:
 
-1. **The legacy auth-service → core-api migrator** is the only path from a
-   SQLite `auth-service` deployment to the Postgres `core-api`. It will be
-   removed from CI one release after the cutover. Operators still on
-   `auth-service` past that point will need to step through a release that
-   still ships the migrator before jumping forward.
-2. **Destructive SpacetimeDB schema changes.** `spacetime publish` prompts
+1. **Destructive SpacetimeDB schema changes.** `spacetime publish` prompts
    before deleting data; the prompt is the safety net. Always run publishes
    without `--yes` for upgrades (see "SpacetimeDB Publish" above) so you
    don't silently drop tables.
-3. **Env var renames.** Always read the release notes for new/renamed
+2. **Env var renames.** Always read the release notes for new/renamed
    variables before pulling. core-api fails fast on missing required values,
    but a renamed-but-still-set old name silently falls back to defaults.
 

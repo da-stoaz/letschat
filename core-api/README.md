@@ -1,114 +1,135 @@
 # core-api
 
-The LetsChat **core-api** service — the .NET / ASP.NET Core rebuild of the
-former Rust `auth-service`, on **ASP.NET Core Identity** + **PostgreSQL**.
+`core-api` is LetsChat's production identity and control-plane service. It runs
+on .NET 10 with ASP.NET Core Identity and PostgreSQL; the former Rust
+`auth-service` has been removed from the runtime architecture.
 
-This is **Phase 1** of `.claude/plans/1-control-panel.md`: the service rebuild
-and data migration. Email verification, rate limiting, the approval workflow,
-and the admin control panel are later phases.
+## Responsibilities
 
-## What it does
-
-Re-implements every integration point of the legacy service, with the HTTP/JSON
-contract unchanged so the existing Tauri desktop client works without changes:
-
-| Area | Endpoints |
+| Area | Routes or interface |
 |---|---|
-| Auth | `POST /auth/register`, `/auth/link`, `/auth/login`, `/auth/verify`, `/auth/renew-session`, `/auth/refresh-spacetime-token` |
+| Accounts | register, link, login, verify, account, password change/reset, email confirmation, session renewal |
+| OIDC | discovery metadata and JWKS used by SpacetimeDB |
 | Voice | `POST /livekit/token` |
-| Files | `POST /uploads/request`, `/uploads/confirm`, `/uploads/download-url`, `/uploads/download-urls` |
-| Misc | `GET /health`, `GET /.well-known/letschat.json` |
+| Attachments | `POST /uploads/request`, `/confirm`, `/download-url`, `/download-urls` |
+| Administration | Razor UI under `/admin` on a separate listener |
+| Client discovery | `GET /.well-known/letschat.json` |
+| Releases and health | `GET /downloads/{os}`, `GET /health` |
 
-- **Identity** — accounts live in ASP.NET Core Identity (`AspNetUsers`, …),
-  extended with the chat binding: `DisplayName`, `SpacetimeIdentity`,
-  `SpacetimeIdentityNorm` (unique-indexed — one account ↔ one SpacetimeDB
-  identity), and an `AccountStatus`. Access tokens are minted on demand from
-  the account id and never stored.
-- **Passwords** — hashed with **Argon2id** in PHC format (`Argon2Phc`). This
-  matches the format the legacy Rust service produced, so migrated hashes
-  verify unchanged. See `Identity/Argon2Phc.cs`.
-- **Sessions** — `TokenService` issues the `SessionToken` the client
-  round-trips; the `access_token` is a self-contained HS256 JWT.
+Accounts extend Identity's `ApplicationUser` with display name, normalized
+SpacetimeDB identity, account status, and a token generation. Passwords use
+Argon2id PHC strings. Application sessions use signed one-hour access and
+seven-day refresh tokens; the separate asymmetric OIDC token is what
+SpacetimeDB validates.
+
+The service also synchronizes account access state and selected instance
+settings into the SpacetimeDB module. Chat messages, memberships, and reducer
+authorization remain owned by `server/`, not this service.
+
+See the repository [`SECURITY.md`](../SECURITY.md) for the required trust
+boundaries and [`CODEBASE.md`](../CODEBASE.md) for end-to-end flows.
 
 ## Project layout
 
-```
+```text
 core-api/
-  src/CoreApi/          the service
-  tests/CoreApi.Tests/  xUnit tests (Argon2 hasher, token service)
-  tools/CoreApi.Migrator/  one-time SQLite → PostgreSQL data migration
+  src/CoreApi/
+    Data/                  Identity, upload, configuration, audit, and archive persistence
+    Endpoints/             public HTTP endpoint groups
+    Identity/              Argon2id integration
+    Pages/Admin/           Razor administration UI
+    Services/              tokens, SpacetimeDB, storage, email, config, audit
+  tests/CoreApi.Tests/     unit and in-process integration tests
+  tools/CoreApi.Migrator/  legacy SQLite rescue/import CLI
 ```
 
 ## Local development
 
-PostgreSQL runs as part of the dev stack (`docker-compose.dev.yml`, host port
-**5433**). MinIO / LiveKit are the same containers the chat app uses.
+From the repository root:
 
 ```bash
-# from the repo root
-bun run services:up        # starts postgres, minio, livekit, spacetimedb
-bun run core-api:dev       # runs core-api on 127.0.0.1:8787
+bun run services:up
+bun run core-api:dev
 ```
 
-`core-api:dev` runs with `ASPNETCORE_ENVIRONMENT=Development`, which loads
-`src/CoreApi/appsettings.Development.json` (connection string, discovery URLs).
-EF Core migrations are applied automatically on startup.
+Development configuration comes from
+`src/CoreApi/appsettings.Development.json`. The public API listens on
+`127.0.0.1:8787` and the admin UI on `127.0.0.1:8788`. EF Core migrations for
+the configured databases run on startup.
 
-### Tests
+Run checks with:
 
 ```bash
-dotnet test core-api/CoreApi.slnx
+bun run core-api:test
+dotnet format core-api/CoreApi.slnx --verify-no-changes
+dotnet ef migrations has-pending-model-changes \
+  --project core-api/src/CoreApi/CoreApi.csproj
 ```
 
-### EF Core migrations
+Create and apply a migration with:
 
 ```bash
 export AUTH_DATABASE_URL="Host=localhost;Port=5433;Database=auth;Username=letschat;Password=letschat"
-dotnet ef migrations add <Name> --project core-api/src/CoreApi/CoreApi.csproj --output-dir Data/Migrations
+dotnet ef migrations add <Name> \
+  --project core-api/src/CoreApi/CoreApi.csproj \
+  --output-dir Data/Migrations
 dotnet ef database update --project core-api/src/CoreApi/CoreApi.csproj
-```
-
-## Data migration from the legacy service
-
-`CoreApi.Migrator` reads the legacy SQLite `accounts` table and writes Identity
-users into PostgreSQL. Argon2id hashes are copied verbatim — migrated users
-keep their passwords. The run is idempotent (existing username/identity skipped).
-
-The cutover is done, so this is a plain local CLI now: there is no migrator
-image and no compose service. It exists for one case — an `auth.db` file
-rescued off an old machine. Copy the file next to the repo and point at it.
-
-```bash
-dotnet run --project core-api/tools/CoreApi.Migrator -- \
-  --sqlite ./legacy-auth.db \
-  --postgres "Host=localhost;Port=5433;Database=auth;Username=letschat;Password=letschat"
-# add --dry-run to preview without writing
 ```
 
 ## Configuration
 
-Values are read from environment variables (same names the legacy service used)
-or, in Development, from `appsettings.Development.json`.
+Production values are supplied through environment variables. The most
+important groups are:
 
-| Variable | Purpose | Dev default |
-|---|---|---|
-| `AUTH_DATABASE_URL` | PostgreSQL connection string | `…Port=5432;Database=auth…` |
-| `AUTH_BIND` | listen address | `127.0.0.1:8787` |
-| `AUTH_JWT_SECRET` | HS256 signing secret for sessions | dev placeholder |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` / `MINIO_BUCKET` | object storage | `minioadmin` / `minioadmin` / `letschat-files` |
-| `MINIO_INTERNAL_ENDPOINT` / `MINIO_PUBLIC_ENDPOINT` | S3 endpoints (HEAD vs. presign) | `http://127.0.0.1:4390` |
-| `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | LiveKit token signing | `devkey` / dev secret |
-| `DISCOVERY_*` | values served at `/.well-known/letschat.json` | localhost URLs |
-| `ADMIN_BOOTSTRAP_USERNAME` / `ADMIN_BOOTSTRAP_PASSWORD` | optional: seed an `Admin`-role user on startup | unset |
+| Variables | Purpose |
+|---|---|
+| `AUTH_DATABASE_URL`, `ARCHIVE_DATABASE_URL` | PostgreSQL connections |
+| `AUTH_BIND`, `ADMIN_BIND` | public and private listener addresses |
+| `AUTH_JWT_SECRET` | application-session HS256 signing secret |
+| `SPACETIME_OIDC_ISSUER`, `SPACETIME_OIDC_PRIVATE_KEY` | issuer identity and persistent asymmetric signing key |
+| `SPACETIME_*` | module URL, database name, and service credentials |
+| `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET` | object storage credentials and bucket |
+| `MINIO_INTERNAL_ENDPOINT`, `MINIO_PUBLIC_ENDPOINT` | server-side and client-visible S3 endpoints |
+| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | media server and grant signing |
+| `DISCOVERY_*` | values returned to clients by discovery |
+| `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD`, `ADMIN_BOOTSTRAP_EMAIL` | optional first-run administrator |
+| `EMAIL_SENDER`, `SMTP_*` | verification and password-reset delivery |
 
-## Docker
+The canonical production list and generated-secret procedure are in
+[`DEPLOYMENT.md`](../DEPLOYMENT.md). Outside Development, the process refuses to
+start with known public development secrets or endpoints.
+
+## Attachment guarantees
+
+Clients upload bytes directly to MinIO. `core-api` reserves the declared size
+against the user's daily quota before returning a presigned PUT, signs the exact
+`Content-Length`, verifies the resulting object on confirmation, and checks chat
+scope again before minting a download URL. Expired unconfirmed objects are
+removed by `PendingUploadSweeper`; their quota stays reserved when storage
+deletion fails so a storage outage cannot reopen the quota.
+
+Limits are 500 MiB per object, 2 GiB per user per UTC day, 10 minutes for the
+PUT URL, 15 minutes to confirm, one hour for a download URL, and 128 keys per
+download batch.
+
+## Legacy account import
+
+`CoreApi.Migrator` exists only for an `auth.db` recovered from a deployment that
+predates the completed cutover. It copies compatible Argon2id hashes so users
+retain their passwords, skips existing accounts, and supports `--dry-run`.
+
+```bash
+dotnet run --project core-api/tools/CoreApi.Migrator -- \
+  --sqlite ./legacy-auth.db \
+  --postgres "Host=localhost;Port=5433;Database=auth;Username=letschat;Password=..." \
+  --dry-run
+```
+
+## Container image
 
 ```bash
 docker build -t letschat-core-api core-api
 ```
 
-## Production cutover — done
-
-core-api is the sole auth backend in dev and prod. The Rust `auth-service/` has
-been removed from the repo, along with the `core-api-migrator` compose service,
-its published image, and the `auth_data` volume.
+Production deployment combines `docker-compose.prod.base.yml` with one ingress
+overlay. The admin port must remain loopback-only.
