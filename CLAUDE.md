@@ -2,11 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+For current architecture and trust boundaries, use [`CODEBASE.md`](CODEBASE.md)
+and [`SECURITY.md`](SECURITY.md). Historical implementation plans under
+`.claude/plans/` are context, not the current source of truth.
+
 ## Project Overview
 
 LetsChat is a Tauri-based desktop chat application with a distributed backend. The stack:
 
-- **Frontend**: React 19 + TypeScript, Vite, Tailwind CSS 4, shadcn/ui (via @base-ui/react), Zustand 5 (18 stores), React Router 7, React Query 5
+- **Frontend**: React 19 + TypeScript, Vite, Tailwind CSS 4, shadcn/ui (via @base-ui/react), Zustand 5, React Router 7, React Query 5
 - **Desktop shell**: Tauri 2 (wraps the Vite frontend)
 - **Real-time database**: SpacetimeDB 2.5 — Rust WASM module defines schema and reducers; clients connect via WebSocket
 - **Backend service**: `core-api` — .NET 10 / ASP.NET Core Identity + PostgreSQL. Public API on `127.0.0.1:8787`; admin Razor pages on the separate `127.0.0.1:8788` listener.
@@ -62,8 +66,8 @@ bun run services:reset    # Stop containers and remove volumes (fresh state)
 | Build frontend | `bun run build` |
 | Build Tauri binary | `bun run tauri:build:local` |
 | Lint frontend | `bun run lint` |
-| Run security tests (SpacetimeDB table-visibility) | `bun run test:security` (needs services up) |
-| Run all Vitest tests | `bun run test` |
+| Run SpacetimeDB security integration tests | `bun run test:security` (needs services up) |
+| Run all Vitest projects | `bun run test` (needs SpacetimeDB) |
 | Publish SpacetimeDB module | `bun run spacetime:publish` |
 | Regenerate TS bindings | `bun run spacetime:generate` |
 | View service logs | `bun run services:logs` |
@@ -89,13 +93,13 @@ cargo build --manifest-path server/Cargo.toml --target wasm32-unknown-unknown --
 - **Schema migration safety:** `bun run spacetime:publish` is the safe command — it has NO `--yes` flag, so SpacetimeDB will prompt before destructive migrations instead of silently wiping data. If a publish stops on a "requires deleting data" prompt, the schema change is incompatible: fix it by making new fields `Option<T>` or adding `#[default(...)]`, do not bypass the prompt. `bun run spacetime:reset` is the explicit nuke (uses `--delete-data --yes`) for intentional clean slates only.
 
 ### Auth backend
-- **`core-api/`** (.NET 10) — the sole auth backend. ASP.NET Core Identity + PostgreSQL (the `auth` database, dev port `5433`). EF Core migrations are applied on startup. Public API endpoints (register/login/refresh/livekit/uploads/well-known/downloads) on `AUTH_BIND`; admin Razor pages on the separate `ADMIN_BIND` listener that the public reverse proxy is **not** configured to expose. Integration tests in `core-api/tests/CoreApi.Tests/IntegrationTests/`. See `core-api/README.md` for layout, config, and the migration tool.
+- **`core-api/`** (.NET 10) — the sole auth backend. ASP.NET Core Identity + PostgreSQL (the `auth` database, dev port `5433`). EF Core migrations are applied on startup. Public API endpoints (register/login/session renewal/livekit/uploads/well-known/downloads) run on `AUTH_BIND`; admin Razor pages use the separate `ADMIN_BIND` listener that the public reverse proxy is **not** configured to expose. Integration tests live in `core-api/tests/CoreApi.Tests/IntegrationTests/`. See `core-api/README.md` for layout, config, and the migration tool.
 - The legacy Rust `auth-service/` has been removed. `core-api/tools/CoreApi.Migrator` remains as the one-time importer for a legacy `auth.db` (SQLite → the Postgres `auth` database), should an old one ever need migrating.
 
 ### Frontend State (`/src/stores`)
-- 18 Zustand stores — each domain has its own store
+- Domain-specific Zustand stores; do not copy server data into a second global state system
 - SpacetimeDB client lives in `src/lib/spacetimedb/` (`connection.ts`, `auth.ts`, generated-table wiring) — subscribes to tables and feeds data into stores
-- Auth-service client in `src/lib/authService.ts`, LiveKit in `src/lib/livekit.ts`, Tauri bridge in `src/lib/tauri.ts`
+- `core-api` client in `src/lib/authService.ts`, LiveKit in `src/lib/livekit.ts`, Tauri bridge in `src/lib/tauri.ts`
 
 ### Production Deployment
 Two supported topologies, both using Docker Compose:
@@ -107,3 +111,7 @@ See `.env.production.caddy.example` and `.env.production.tunnel.example` for req
 ## Coding Rules
 
 - Backwards compatibility applies only to **data, API endpoints, and SpacetimeDB reducers** — not to component names, file names, or UI structure. Feel free to rename `.tsx` files and components without concern for backwards compatibility.
+- Never hand-edit `src/generated/`; change the SpacetimeDB module and regenerate.
+- Client-side visibility checks are UX only. Authorization belongs in `core-api`
+  endpoints or SpacetimeDB reducers as described in `SECURITY.md`.
+- The concise repository rules live in [`CODING_RULES.md`](CODING_RULES.md).

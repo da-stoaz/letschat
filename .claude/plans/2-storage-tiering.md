@@ -1,17 +1,27 @@
 # Infrastructure Plan: Durability & Storage Tiering — PostgreSQL Cold Archive
 
-## Context
+> **Status (reviewed 2026-09-16): Part A implemented in production; Part B
+> deferred.** All 14 durable tables replicate and rebuild, including pinned
+> messages, and rebuilds reseed module-managed id counters. The current operator
+> procedure is in [`DEPLOYMENT.md`](../../DEPLOYMENT.md); intermediate gap notes
+> below are retained only where they still apply.
 
-Two structural problems with the current SpacetimeDB setup:
+## Historical context and remaining Part B problem
 
-1. **Fragile durability / destructive migrations.** A destructive schema change (drop a column, change a type) makes `spacetime publish` halt on a "requires deleting data" prompt; the only way through is `--delete-data`, which **wipes message history**. There is no second copy to restore from. This is the real "messages must never be lost" risk.
-2. **Unbounded RAM.** SpacetimeDB keeps its working set in memory — docs: *"the practical limit is the available RAM on the host."* Chat grows forever, so RAM grows forever.
+Two structural problems motivated this plan:
+
+1. **Fragile durability / destructive migrations — closed by Part A.** A
+   destructive publish can wipe SpacetimeDB, but the PostgreSQL archive now
+   provides the tested rebuild source.
+2. **Unbounded RAM — still deferred.** SpacetimeDB keeps its working set in
+   memory. Chat history continues to grow because Part B eviction has not been
+   implemented.
 
 These have **different urgency**, so this plan is split into two parts that ship independently:
 
 | Part | Fixes | Status |
 |---|---|---|
-| **A — Durability (cold archive)** | Message loss + destructive-migration wipes | **A1 replication DONE & verified; A2 rebuild tooling = next** |
+| **A — Durability (cold archive)** | Message loss + destructive-migration wipes | **DONE & verified** — replication, full rebuild, pinned messages, and id counters |
 | **B — Eviction (hot/cold tiering)** | Unbounded RAM | **Deferred** — only when RAM pressure is real |
 
 **Why the split** (decided 2026-07-21): at friends-scale, messages are tiny text rows — millions of them are a few GB of RAM, years away from a problem. Durability is needed *today*; eviction is a scale optimisation with no current trigger. Deferring eviction is *safe precisely because Part A ships first*: once a full Postgres copy exists, even an unexpected RAM ceiling loses no data — you turn on eviction then.
@@ -35,23 +45,34 @@ The mechanism is a **live CDC replication worker**, not a snapshot poller:
 - **The worker (`archive-worker/`, .NET Worker Service, `SpacetimeDB.ClientSDK` 2.5.0).** Subscribes to the `archive_*` views; mirrors every insert/update/delete into Postgres through a **single-consumer write queue** (`ArchiveDatabase`) so DB I/O never blocks the client tick and writes apply in arrival order; **reconciles** the full archive against the live snapshot on each (re)subscribe; reconnects with backoff; persists its auto-issued token so its identity is stable across restarts. Handles the keyless-view delete/insert-ordering subtlety (only delete when the PK is truly gone from the SDK cache).
 - **The `archive` database + schema is owned by core-api** (`Data/Archive/ArchiveDbContext` + EF migration `ArchiveInitialSchema`), applied on startup like the `auth` context. **Optional and fail-safe:** unset `ARCHIVE_DATABASE_URL` → context not registered, archive disabled; configured-but-unreachable → logged, auth continues. The archive can never take down the essential auth service.
 
-**Scope:** durable domain tables only (user, server, channel, member, ban, join_request, invite, dm_server_invite, message, direct_message, friend, block, read_state). Ephemeral tables (presence, typing, voice) are deliberately **not** archived.
+**Scope:** all 14 durable domain tables: user, server, channel, member, ban,
+join request, invite, DM server invite, message, direct message, friend, block,
+read state, and pinned message. Ephemeral presence, typing, and voice tables are
+deliberately not archived.
 
-### A1 gaps to close (small)
-- **`PinnedMessage` is not archived.** It was added to main after the branch was cut, so no `archive_pinned_messages` view / entity exists yet. Add the view + EF entity for parity. (Non-blocking; pins are small and reconstructable.)
-- **Unregistered-worker behaviour:** before its identity is registered, the gated views are empty and the worker's reconcile will **empty** the archive to match. Correct-but-surprising; document the bootstrap ordering (register before relying on the archive).
-- **Prod compose:** the worker + archive DB are wired into `docker-compose.dev.yml` only (opt-in `archive` profile). Add to the prod compose when Part A ships to prod.
+### A1 follow-ups — ✅ closed
+
+- `PinnedMessage` is archived and restored with the rest of the durable set.
+- An unregistered worker refuses reconciliation instead of interpreting gated,
+  empty views as deletion of the live dataset.
+- Production compose includes the worker and archive database wiring.
 
 ## A2 — Migration rebuild tooling — ✅ FULL-FLEET DONE & VERIFIED (2026-07-22)
 
 The durability payoff: make a destructive SpacetimeDB migration non-lossy — a `--delete-data` wipe becomes *rebuild the whole database from the Postgres archive*.
 
-- **13 restore reducers** in `server/src/reducers/archive.rs`, one per durable table (`archive_restore_message`, `_direct_message`, `_user`, `_server`, `_channel`, `_server_member`, `_ban`, `_join_request`, `_invite`, `_dm_server_invite`, `_friend`, `_block`, `_read_state` — the bounded 11 via a small `byval`/`byref` macro). Worker-only (gated to the archive service identity), batch verbatim upsert — explicit primary keys preserved (an `#[auto_inc]` id only generates when `0`, so restored non-zero ids are kept), explicit timestamps kept, **no** validation/permission/business logic. Idempotent per PK (safe to re-run a partial rebuild).
+- **14 restore reducers** in `server/src/reducers/archive.rs`, one per durable
+  table, including `pinned_message`. They are worker-only, perform batched
+  verbatim upserts, preserve primary keys and timestamps, and raise the
+  module-managed id counters for auto-increment-shaped tables. Every reducer is
+  idempotent per primary key, so a partial rebuild can be rerun safely.
 - **Worker rebuild mode** (`archive-worker/Rebuild.cs`, `ARCHIVE_REBUILD=1`): connect as the service identity, read every `archive_*` table from Postgres (reverse of `Replication`'s column map — identities from hex, timestamps from µs BIGINT, unit enums via `Enum.Parse`, `Vec<String>` from `text[]`, options from nullable columns), call the restore reducers in 500-row batches, then exit.
 
-**Verified end-to-end** on a throwaway `rebuildtest` DB with a rich fixture spanning **all 13 tables** (30 rows: `Everyone`/`ModeratorsOnly` policies, `{games,chat}` tags, invites with `max_uses`/`allowed_usernames`, `Owner`/`Member` roles, friends, DM, block, ban, join-request, read-state): seed → worker snapshots → `spacetime publish --delete-data` (full wipe) → re-register worker identity → rebuild → **exact parity on every table** — counts match and the tricky fields (enums, `text[]` arrays, `Option`s, µs timestamps, explicit ids) all restored verbatim. Test seeder: `tests/load/rebuild-fixture.ts`.
-
-**Full durable coverage (2026-07-22):** `pinned_message` — the last gap — is now archived and restored end-to-end: `archive_pinned_messages` gated view (`views.rs`), `ArchivePinnedMessage` EF entity + migration (`20260722152924_ArchivePinnedMessage`), worker replicator + `archive_restore_pinned_message` reducer. Verified in the fixture cycle (pin replicates live, then rebuilds verbatim after `--delete-data`). **All 14 durable tables now replicate and rebuild losslessly** — nothing in the durable set is left out.
+**Verified end-to-end** on a throwaway `rebuildtest` database with fixtures
+spanning all 14 durable tables: seed → replicate → publish with `--delete-data`
+→ re-register the worker → rebuild → compare exact row parity. Enums, arrays,
+options, microsecond timestamps, explicit ids, pins, and post-rebuild inserts are
+covered by `tests/security/archive-rebuild.test.ts` and the rebuild fixture.
 
 ### Operator runbook (destructive migration)
 1. **Maintenance mode** — pause client writes (brief downtime).
@@ -67,7 +88,9 @@ The durability payoff: make a destructive SpacetimeDB migration non-lossy — a 
 1. **Mirror fidelity** — Postgres matches SpacetimeDB after inserts/edits/deletes. ✅ (backfill parity 74/20/10/38)
 2. **Worker resilience** — kill/restart mid-stream → reconciles, no loss/duplicates. ✅ (reconnect + reconcile path)
 3. **Bootstrap** — register the service identity → gated views deliver → backfill. ✅
-4. **Migration rebuild** (A2) — destructive test migration → rebuild → ids/timestamps/relationships intact. ⏭️ pending A2.
+4. **Migration rebuild** (A2) — destructive test migration → rebuild → ids/timestamps/relationships intact. ✅
+5. **Post-rebuild ids** — restored maxima raise module-managed `IdCounter`
+   rows; a fresh insert after rebuild does not collide. ✅
 
 ---
 

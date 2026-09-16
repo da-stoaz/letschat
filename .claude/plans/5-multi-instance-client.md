@@ -3,12 +3,15 @@
 ## Status
 
 **Deferred / idea-stage.** Captured from the 2026-05 product-positioning
-discussion. Not scheduled.
+discussion. Not scheduled. Reviewed 2026-09-16: the app can remember known hosts
+but still has one active instance/connection at a time; that does not constitute
+the concurrent multi-instance design proposed below.
 
 ## Premise
 
-Today the desktop app is firmly single-instance: one `serverConfigStore`
-entry, one SpacetimeDB connection, one auth-service session. Switching
+Today the desktop app is firmly single-instance: one active
+`serverConfigStore` configuration, one SpacetimeDB connection, and one
+`core-api` session. Switching
 "servers" means tearing the current connection down and reconnecting to a
 different deployment.
 

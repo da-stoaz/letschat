@@ -247,7 +247,7 @@ spacetime call letschat set_archive_service_identity '["0x<identity-from-logs>"]
 docker compose -f docker-compose.prod.base.yml logs archive-worker | tail -20
 #   expect: "Subscription applied; reconciling archive."
 docker compose -f docker-compose.prod.base.yml exec postgres \
-  psql -U letschat -d archive -c 'SELECT count(*) FROM message;'
+  psql -U letschat -d archive -c 'SELECT count(*) FROM archive_message;'
 ```
 
 If step 2 fails with **HTTP 530**, your `spacetime` CLI identity is not an
@@ -306,9 +306,11 @@ It reloads every durable table verbatim (explicit primary keys and timestamps)
 and exits. Take a Postgres backup first — this is the copy you are restoring
 from, and it is the only one.
 
-> **Known gap:** after a rebuild, SpacetimeDB's auto-increment sequences are not
-> advanced past the restored ids, so the next insert can fail with a duplicate
-> unique column error. Verify a test message send after any rebuild.
+Rebuild reducers raise the module-managed `IdCounter` values past every restored
+auto-increment id, so new rows cannot collide with restored rows. Instances
+rebuilt before those counters existed can repair them idempotently with
+`archive_reseed_id_counters`. Still verify a test message and DM after a rebuild
+before ending maintenance mode.
 
 ### Disabling it
 

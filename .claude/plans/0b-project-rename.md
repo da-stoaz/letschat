@@ -1,13 +1,17 @@
 # Plan: Project Rename (LetsChat → `<NEWNAME>`)
 
+> **Status (reviewed 2026-09-16): unscheduled and not started.** No replacement
+> name has been chosen and the repository, protocols, packages, and deployment
+> identifiers still use LetsChat. This document is migration planning only.
+
 ## Why now
 
 "LetsChat" collides with a well-known unmaintained OSS project ("Let's Chat",
-`sdelements/lets-chat`) and is generically un-searchable. The cheapest moment to
-rename is **pre-1.0, before establishing a signed Windows publisher identity** —
-SmartScreen/AV reputation accrues to a publisher+binary, so renaming *after*
-signing throws that reputation away. Therefore: **rename before the SignPath
-Foundation application** (see `0-windows-code-signing.md`).
+`sdelements/lets-chat`) and is generically un-searchable. The original plan
+assumed a pre-1.0 rename; the project is now past that point, so identifier,
+protocol, and installed-app migration are mandatory rather than optional. If a
+rename is revived, complete it before the SignPath Foundation application so
+publisher reputation is not split across product names.
 
 Placeholder in this doc: `<NEWNAME>` (e.g. `Stoara`), `<newname>` (lowercase
 slug), `net.stoaz.<newname>` (bundle id — keep the existing `net.stoaz.` org

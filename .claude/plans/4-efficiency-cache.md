@@ -1,12 +1,18 @@
 # Efficiency Plan: Client-Side Local Cache & Search — LetsChat
 
+> **Status (reviewed 2026-09-16): deferred and not implemented.** It remains
+> blocked on Part B of storage tiering. Current channel search operates on
+> loaded messages and does not use the proposed SQLite cache.
+
 ## Context
 
 > **Dependency correction (2026-07-21):** the hot/cold split this plan builds on is delivered by **Part B (eviction)** of `2-storage-tiering.md`, which is now **deferred until RAM pressure is real** — *not* by Part A (durability), which ships first. So this plan depends on Part B, not merely on storage-tiering existing. Until eviction lands, all history still lives in SpacetimeDB and there is no cold/archive range to cache, stitch, or reconcile against. Do not start this plan before Part B.
 
-`2-storage-tiering.md` Part B introduces a server-side hot/cold split: SpacetimeDB holds a bounded hot set (last N messages per conversation), a PostgreSQL archive holds full history, and clients load older history on scroll from the archive API. That solved server RAM, migration rigidity, and unbounded subscriptions.
+`2-storage-tiering.md` Part B would introduce a server-side hot/cold split:
+SpacetimeDB would hold a bounded hot set, PostgreSQL would hold full history,
+and clients would load older archive ranges on demand.
 
-What it did **not** address is the *client* experience:
+This proposed cache would then address the remaining *client* experience:
 - On every reconnect the client re-downloads the entire hot set from SpacetimeDB.
 - There is no offline history — close the app and the view is empty until reconnect.
 - Search only covers what is currently in memory.
