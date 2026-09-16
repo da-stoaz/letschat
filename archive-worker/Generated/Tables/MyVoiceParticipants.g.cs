@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class MyVoiceParticipantsHandle : RemoteTableHandle<EventContext, VoiceParticipant>
         {
-            protected override string RemoteTableName => "my_voice_participants";
+            public override string RemoteTableName => "my_voice_participants";
 
             internal MyVoiceParticipantsHandle(DbConnection conn) : base(conn)
             {
@@ -35,6 +35,7 @@ namespace SpacetimeDB.Types
         public global::SpacetimeDB.Col<VoiceParticipant, bool> Deafened { get; }
         public global::SpacetimeDB.Col<VoiceParticipant, bool> SharingScreen { get; }
         public global::SpacetimeDB.Col<VoiceParticipant, bool> SharingCamera { get; }
+        public global::SpacetimeDB.Col<VoiceParticipant, SpacetimeDB.ConnectionId> ConnectionId { get; }
 
         public MyVoiceParticipantsCols(string tableName)
         {
@@ -46,6 +47,7 @@ namespace SpacetimeDB.Types
             Deafened = new global::SpacetimeDB.Col<VoiceParticipant, bool>(tableName, "deafened");
             SharingScreen = new global::SpacetimeDB.Col<VoiceParticipant, bool>(tableName, "sharing_screen");
             SharingCamera = new global::SpacetimeDB.Col<VoiceParticipant, bool>(tableName, "sharing_camera");
+            ConnectionId = new global::SpacetimeDB.Col<VoiceParticipant, SpacetimeDB.ConnectionId>(tableName, "connection_id");
         }
     }
 

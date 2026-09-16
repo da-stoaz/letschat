@@ -25,6 +25,10 @@ namespace SpacetimeDB.Types
         public SpacetimeDB.Timestamp CreatedAt;
         [DataMember(Name = "is_admin")]
         public bool IsAdmin;
+        [DataMember(Name = "suspended")]
+        public bool Suspended;
+        [DataMember(Name = "min_token_generation")]
+        public ulong MinTokenGeneration;
 
         public User(
             SpacetimeDB.Identity Identity,
@@ -32,7 +36,9 @@ namespace SpacetimeDB.Types
             string DisplayName,
             string? AvatarUrl,
             SpacetimeDB.Timestamp CreatedAt,
-            bool IsAdmin
+            bool IsAdmin,
+            bool Suspended,
+            ulong MinTokenGeneration
         )
         {
             this.Identity = Identity;
@@ -41,6 +47,8 @@ namespace SpacetimeDB.Types
             this.AvatarUrl = AvatarUrl;
             this.CreatedAt = CreatedAt;
             this.IsAdmin = IsAdmin;
+            this.Suspended = Suspended;
+            this.MinTokenGeneration = MinTokenGeneration;
         }
 
         public User()

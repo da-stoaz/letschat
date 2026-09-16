@@ -17,14 +17,18 @@ namespace SpacetimeDB.Types
         public byte Id;
         [DataMember(Name = "space_create_policy")]
         public SpaceCreatePolicy SpaceCreatePolicy;
+        [DataMember(Name = "trusted_issuer")]
+        public string? TrustedIssuer;
 
         public SystemSettings(
             byte Id,
-            SpaceCreatePolicy SpaceCreatePolicy
+            SpaceCreatePolicy SpaceCreatePolicy,
+            string? TrustedIssuer
         )
         {
             this.Id = Id;
             this.SpaceCreatePolicy = SpaceCreatePolicy;
+            this.TrustedIssuer = TrustedIssuer;
         }
 
         public SystemSettings()

@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class ArchiveBansHandle : RemoteTableHandle<EventContext, Ban>
         {
-            protected override string RemoteTableName => "archive_bans";
+            public override string RemoteTableName => "archive_bans";
 
             internal ArchiveBansHandle(DbConnection conn) : base(conn)
             {

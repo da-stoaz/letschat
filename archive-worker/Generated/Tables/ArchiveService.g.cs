@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class ArchiveServiceHandle : RemoteTableHandle<EventContext, ArchiveService>
         {
-            protected override string RemoteTableName => "archive_service";
+            public override string RemoteTableName => "archive_service";
 
             public sealed class IdUniqueIndex : UniqueIndexBase<byte>
             {

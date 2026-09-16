@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class ArchiveDirectMessagesHandle : RemoteTableHandle<EventContext, DirectMessage>
         {
-            protected override string RemoteTableName => "archive_direct_messages";
+            public override string RemoteTableName => "archive_direct_messages";
 
             internal ArchiveDirectMessagesHandle(DbConnection conn) : base(conn)
             {

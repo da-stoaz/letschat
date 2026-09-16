@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class ArchiveJoinRequestsHandle : RemoteTableHandle<EventContext, JoinRequest>
         {
-            protected override string RemoteTableName => "archive_join_requests";
+            public override string RemoteTableName => "archive_join_requests";
 
             internal ArchiveJoinRequestsHandle(DbConnection conn) : base(conn)
             {

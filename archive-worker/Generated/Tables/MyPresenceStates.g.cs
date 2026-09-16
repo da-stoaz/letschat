@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class MyPresenceStatesHandle : RemoteTableHandle<EventContext, PresenceState>
         {
-            protected override string RemoteTableName => "my_presence_states";
+            public override string RemoteTableName => "my_presence_states";
 
             internal MyPresenceStatesHandle(DbConnection conn) : base(conn)
             {

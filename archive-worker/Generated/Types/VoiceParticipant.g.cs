@@ -29,6 +29,8 @@ namespace SpacetimeDB.Types
         public bool SharingScreen;
         [DataMember(Name = "sharing_camera")]
         public bool SharingCamera;
+        [DataMember(Name = "connection_id")]
+        public SpacetimeDB.ConnectionId? ConnectionId;
 
         public VoiceParticipant(
             string VoiceKey,
@@ -38,7 +40,8 @@ namespace SpacetimeDB.Types
             bool Muted,
             bool Deafened,
             bool SharingScreen,
-            bool SharingCamera
+            bool SharingCamera,
+            SpacetimeDB.ConnectionId? ConnectionId
         )
         {
             this.VoiceKey = VoiceKey;
@@ -49,6 +52,7 @@ namespace SpacetimeDB.Types
             this.Deafened = Deafened;
             this.SharingScreen = SharingScreen;
             this.SharingCamera = SharingCamera;
+            this.ConnectionId = ConnectionId;
         }
 
         public VoiceParticipant()

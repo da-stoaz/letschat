@@ -13,7 +13,7 @@
 | Client | React 19, TypeScript, Vite, Tailwind CSS 4, Zustand | Presentation and local cache only |
 | Desktop | Tauri 2 | Native shell and packaging |
 | Control plane | .NET 10, ASP.NET Core Identity, PostgreSQL | Accounts, sessions, OIDC, administration, upload grants, LiveKit grants |
-| Chat data plane | SpacetimeDB 2.5, Rust module | Chat records and authorization for every reducer call |
+| Chat data plane | SpacetimeDB 2.10, Rust module | Chat records and authorization for every reducer call |
 | Media plane | LiveKit | Ephemeral voice/video rooms |
 | Object storage | MinIO/S3 | Attachment bytes; access is brokered by `core-api` |
 | Archive | Rust worker | Exports configured historical data from SpacetimeDB |

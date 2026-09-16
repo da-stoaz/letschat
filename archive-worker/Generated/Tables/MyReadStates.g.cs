@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class MyReadStatesHandle : RemoteTableHandle<EventContext, ReadState>
         {
-            protected override string RemoteTableName => "my_read_states";
+            public override string RemoteTableName => "my_read_states";
 
             internal MyReadStatesHandle(DbConnection conn) : base(conn)
             {

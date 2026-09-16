@@ -196,11 +196,13 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error(
         `core-api request timed out after ${AUTH_REQUEST_TIMEOUT_MS / 1000}s. Ensure core-api is running at ${AUTH_SERVICE_URL}.`,
+        { cause: error },
       )
     }
     const details = getNetworkErrorDetails(error)
     throw new Error(
       `Could not reach core-api at ${AUTH_SERVICE_URL} (${details}). Check core-api status.`,
+      { cause: error },
     )
   } finally {
     clearTimeout(timeout)

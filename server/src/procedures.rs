@@ -5,7 +5,7 @@
 //! C3). Everything older lives here: the client asks for one page at a time, so
 //! a long-lived space costs a scroll, not a connect.
 //!
-//! Procedures rather than views because a view in SpacetimeDB 2.5 takes no
+//! Procedures rather than views because a view in SpacetimeDB 2.10 takes no
 //! parameters (`Views do not take parameters other than &ViewContext`), so
 //! "older than X" cannot be expressed as one. Procedures return their rows to
 //! the caller only — nothing is written, nothing is broadcast.

@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class MyJoinRequestsHandle : RemoteTableHandle<EventContext, JoinRequest>
         {
-            protected override string RemoteTableName => "my_join_requests";
+            public override string RemoteTableName => "my_join_requests";
 
             internal MyJoinRequestsHandle(DbConnection conn) : base(conn)
             {
