@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class ArchiveDmServerInvitesHandle : RemoteTableHandle<EventContext, DmServerInvite>
         {
-            protected override string RemoteTableName => "archive_dm_server_invites";
+            public override string RemoteTableName => "archive_dm_server_invites";
 
             internal ArchiveDmServerInvitesHandle(DbConnection conn) : base(conn)
             {

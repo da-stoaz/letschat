@@ -191,7 +191,7 @@ export async function uploadFiles(
       const next = await uploadSingleFile(file, scope, onStage, onProgress)
       uploaded.push(next)
     } catch (error) {
-      throw new Error(buildUploadErrorMessage(file.name, error))
+      throw new Error(buildUploadErrorMessage(file.name, error), { cause: error })
     }
   }
 

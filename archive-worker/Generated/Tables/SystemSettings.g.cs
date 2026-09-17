@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class SystemSettingsHandle : RemoteTableHandle<EventContext, SystemSettings>
         {
-            protected override string RemoteTableName => "system_settings";
+            public override string RemoteTableName => "system_settings";
 
             public sealed class IdUniqueIndex : UniqueIndexBase<byte>
             {
@@ -41,11 +41,13 @@ namespace SpacetimeDB.Types
     {
         public global::SpacetimeDB.Col<SystemSettings, byte> Id { get; }
         public global::SpacetimeDB.Col<SystemSettings, SpaceCreatePolicy> SpaceCreatePolicy { get; }
+        public global::SpacetimeDB.Col<SystemSettings, string> TrustedIssuer { get; }
 
         public SystemSettingsCols(string tableName)
         {
             Id = new global::SpacetimeDB.Col<SystemSettings, byte>(tableName, "id");
             SpaceCreatePolicy = new global::SpacetimeDB.Col<SystemSettings, SpaceCreatePolicy>(tableName, "space_create_policy");
+            TrustedIssuer = new global::SpacetimeDB.Col<SystemSettings, string>(tableName, "trusted_issuer");
         }
     }
 

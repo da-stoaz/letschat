@@ -1,14 +1,13 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { flexRender, type SortingState } from '@tanstack/react-table'
 import {
-  type Column,
-  type ColumnDef,
-  type SortingState,
-  flexRender,
+  type LegacyColumn as Column,
+  type LegacyColumnDef as ColumnDef,
   getCoreRowModel,
   getFilteredRowModel,
   getSortedRowModel,
-  useReactTable,
-} from '@tanstack/react-table'
+  useLegacyTable as useReactTable,
+} from '@tanstack/react-table/legacy'
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -227,9 +226,6 @@ export function MembersTab({
     [role, serverId, normalizedSelf, canModerateMembers, isOwner, onSetMemberAction],
   )
 
-  // TanStack Table returns non-memoizable functions; React Compiler skips
-  // optimizing this component, which is the expected/supported behavior.
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: sortedMembers,
     columns,

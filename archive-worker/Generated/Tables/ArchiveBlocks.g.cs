@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class ArchiveBlocksHandle : RemoteTableHandle<EventContext, Block>
         {
-            protected override string RemoteTableName => "archive_blocks";
+            public override string RemoteTableName => "archive_blocks";
 
             internal ArchiveBlocksHandle(DbConnection conn) : base(conn)
             {

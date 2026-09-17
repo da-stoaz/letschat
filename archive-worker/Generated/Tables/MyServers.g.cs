@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class MyServersHandle : RemoteTableHandle<EventContext, Server>
         {
-            protected override string RemoteTableName => "my_servers";
+            public override string RemoteTableName => "my_servers";
 
             internal MyServersHandle(DbConnection conn) : base(conn)
             {

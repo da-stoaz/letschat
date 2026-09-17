@@ -84,7 +84,7 @@ async function generateLivekitToken(room: string, identity: Identity): Promise<s
     // dead and signing out is the honest outcome.
     if (isInvalidAuthSessionError(error)) {
       forceSignOutForExpiredSession()
-      throw new Error('Session expired. Please log in again.')
+      throw new Error('Session expired. Please log in again.', { cause: error })
     }
     throw error
   }

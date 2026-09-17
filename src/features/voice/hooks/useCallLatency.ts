@@ -53,6 +53,7 @@ async function measureRoomRtt(room: RoomWithEngine): Promise<number | null> {
     if (typeof transport?.getStats !== 'function') continue
     try {
       const report = await transport.getStats()
+      if (!report) continue
       const rtt = readCandidatePairRtt(report)
       if (rtt !== null) return rtt
     } catch {

@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class ArchivePinnedMessagesHandle : RemoteTableHandle<EventContext, PinnedMessage>
         {
-            protected override string RemoteTableName => "archive_pinned_messages";
+            public override string RemoteTableName => "archive_pinned_messages";
 
             internal ArchivePinnedMessagesHandle(DbConnection conn) : base(conn)
             {

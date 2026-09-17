@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class ArchiveChannelsHandle : RemoteTableHandle<EventContext, Channel>
         {
-            protected override string RemoteTableName => "archive_channels";
+            public override string RemoteTableName => "archive_channels";
 
             internal ArchiveChannelsHandle(DbConnection conn) : base(conn)
             {

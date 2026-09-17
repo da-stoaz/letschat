@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class MyVisibleUsersHandle : RemoteTableHandle<EventContext, User>
         {
-            protected override string RemoteTableName => "my_visible_users";
+            public override string RemoteTableName => "my_visible_users";
 
             internal MyVisibleUsersHandle(DbConnection conn) : base(conn)
             {
@@ -33,6 +33,8 @@ namespace SpacetimeDB.Types
         public global::SpacetimeDB.Col<User, string> AvatarUrl { get; }
         public global::SpacetimeDB.Col<User, SpacetimeDB.Timestamp> CreatedAt { get; }
         public global::SpacetimeDB.Col<User, bool> IsAdmin { get; }
+        public global::SpacetimeDB.Col<User, bool> Suspended { get; }
+        public global::SpacetimeDB.Col<User, ulong> MinTokenGeneration { get; }
 
         public MyVisibleUsersCols(string tableName)
         {
@@ -42,6 +44,8 @@ namespace SpacetimeDB.Types
             AvatarUrl = new global::SpacetimeDB.Col<User, string>(tableName, "avatar_url");
             CreatedAt = new global::SpacetimeDB.Col<User, SpacetimeDB.Timestamp>(tableName, "created_at");
             IsAdmin = new global::SpacetimeDB.Col<User, bool>(tableName, "is_admin");
+            Suspended = new global::SpacetimeDB.Col<User, bool>(tableName, "suspended");
+            MinTokenGeneration = new global::SpacetimeDB.Col<User, ulong>(tableName, "min_token_generation");
         }
     }
 

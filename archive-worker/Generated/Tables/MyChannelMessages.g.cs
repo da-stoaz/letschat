@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class MyChannelMessagesHandle : RemoteTableHandle<EventContext, Message>
         {
-            protected override string RemoteTableName => "my_channel_messages";
+            public override string RemoteTableName => "my_channel_messages";
 
             internal MyChannelMessagesHandle(DbConnection conn) : base(conn)
             {

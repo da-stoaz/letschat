@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class MyTypingStatesHandle : RemoteTableHandle<EventContext, TypingState>
         {
-            protected override string RemoteTableName => "my_typing_states";
+            public override string RemoteTableName => "my_typing_states";
 
             internal MyTypingStatesHandle(DbConnection conn) : base(conn)
             {

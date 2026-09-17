@@ -92,7 +92,7 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
           wheel={{ step: 0.2 }}
           pinch={{ step: 5 }}
           panning={{ velocityDisabled: true }}
-          onTransformed={(_ref, next) => {
+          onTransform={(_ref, next) => {
             setZoomScale(next.scale)
           }}
         >

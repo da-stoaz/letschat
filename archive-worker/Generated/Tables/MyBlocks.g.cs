@@ -15,7 +15,7 @@ namespace SpacetimeDB.Types
     {
         public sealed class MyBlocksHandle : RemoteTableHandle<EventContext, Block>
         {
-            protected override string RemoteTableName => "my_blocks";
+            public override string RemoteTableName => "my_blocks";
 
             internal MyBlocksHandle(DbConnection conn) : base(conn)
             {

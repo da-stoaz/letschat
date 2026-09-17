@@ -1,6 +1,6 @@
 # LetsChat security model
 
-> Security baseline reviewed 2026-09-15 at version 1.0.14.
+> Security baseline reviewed 2026-09-16 at version 1.0.14.
 
 This document defines the trust boundaries and invariants that security fixes
 must preserve. [`BUG_ANALYSIS.md`](BUG_ANALYSIS.md) is the actionable finding
@@ -110,12 +110,16 @@ promotes the first registered account remains the A8 land-grab risk.
 
 ## Current operational security debt
 
-GitHub Dependabot reported **33 open alerts** on 2026-09-15: 1 critical,
-18 high, 11 moderate, and 3 low. Most are in the static `site/` build toolchain;
-two are Rust lockfile findings (`quinn-proto` and `glib`). A scanner severity is
-not proof that the vulnerable path is reachable in production, but the critical
-Astro update and high-severity runtime/build dependencies should be triaged
-before the next release.
+The 2026-09-16 dependency refresh upgraded the web app, static site, Rust,
+.NET, Tauri, and SpacetimeDB dependency sets. `bun audit`, the static site's
+`npm audit`, and NuGet's transitive vulnerability scan are clean; the former
+`quinn-proto` alert is patched by `0.11.18`.
+
+One known Cargo alert remains: stable Tauri 2's Linux GTK stack still resolves
+`glib 0.18.5`, while the advisory is fixed in `glib 0.20`. The fixed release is
+not compatible with that dependency chain, and Tauri 3 is still prerelease, so
+the application does not take an alpha framework upgrade solely to force the
+transitive version. Recheck this constraint on the next stable Tauri release.
 
 Use the live [Dependabot alerts](https://github.com/da-stoaz/letschat/security/dependabot)
 for package versions and remediation status; do not copy that changing list into
