@@ -5,6 +5,7 @@ import {
   createChannel,
   makeOpenJoinable,
   uniqueName,
+  ownerSql,
   ReducerError,
   type TestUser,
 } from './harness'
@@ -24,6 +25,11 @@ async function sendMessage(user: TestUser, channelId: number, content: string): 
 async function pinnedIds(user: TestUser): Promise<number[]> {
   const { rows } = await user.sql('SELECT message_id FROM my_pinned_messages')
   return rows.map((r) => Number(r.message_id))
+}
+
+function privatePinCount(messageId: number): number {
+  const out = ownerSql(`SELECT pin_id FROM pinned_message WHERE message_id = ${messageId}`)
+  return out.split('\n').filter((line) => /^\s*\d+\s*$/.test(line)).length
 }
 
 describe('pin_message / unpin_message / my_pinned_messages', () => {
@@ -77,5 +83,18 @@ describe('pin_message / unpin_message / my_pinned_messages', () => {
 
     await owner.call('delete_message', [mid])
     expect(await pinnedIds(owner)).not.toContain(mid)
+  })
+
+  it('deleting a server reuses channel cleanup and removes its pins', async () => {
+    const cleanupOwner = await makeUser('pin_cleanup')
+    const cleanupServerId = await createServer(cleanupOwner)
+    const cleanupChannelId = await createChannel(cleanupOwner, cleanupServerId)
+    const mid = await sendMessage(cleanupOwner, cleanupChannelId, `pin-server-${uniqueName()}`)
+
+    await cleanupOwner.call('pin_message', [cleanupChannelId, mid])
+    expect(privatePinCount(mid)).toBe(1)
+
+    await cleanupOwner.call('delete_server', [cleanupServerId])
+    expect(privatePinCount(mid)).toBe(0)
   })
 })

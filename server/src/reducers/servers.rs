@@ -6,6 +6,8 @@ use crate::helpers::{
 };
 use crate::schema::*;
 
+use super::channels::delete_channel_with_dependencies;
+
 /// Anti-spam cap: how many spaces one owner may list on Discover at once.
 const MAX_DISCOVERABLE_PER_OWNER: usize = 10;
 
@@ -309,38 +311,16 @@ pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String>
     let channel_ids: Vec<u64> = ctx
         .db
         .channel()
-        .iter()
-        .filter(|c| c.server_id == server_id)
+        .server_id()
+        .filter(server_id)
         .map(|c| c.id)
         .collect();
-
-    for channel_id in &channel_ids {
-        let messages: Vec<Message> = ctx
-            .db
-            .message()
-            .iter()
-            .filter(|m| m.channel_id == *channel_id)
-            .collect();
-        for msg in messages {
-            ctx.db.message().id().delete(msg.id);
-        }
-
-        let participants: Vec<VoiceParticipant> = ctx
-            .db
-            .voice_participant()
-            .iter()
-            .filter(|v| v.channel_id == *channel_id)
-            .collect();
-        for vp in participants {
-            ctx.db.voice_participant().voice_key().delete(&vp.voice_key);
-        }
-    }
 
     let members: Vec<ServerMember> = ctx
         .db
         .server_member()
-        .iter()
-        .filter(|m| m.server_id == server_id)
+        .server_id()
+        .filter(server_id)
         .collect();
     for member in members {
         ctx.db
@@ -349,22 +329,12 @@ pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String>
             .delete(&member.member_key);
     }
 
-    let bans: Vec<Ban> = ctx
-        .db
-        .ban()
-        .iter()
-        .filter(|b| b.server_id == server_id)
-        .collect();
+    let bans: Vec<Ban> = ctx.db.ban().server_id().filter(server_id).collect();
     for ban_row in bans {
         ctx.db.ban().ban_key().delete(&ban_row.ban_key);
     }
 
-    let invites: Vec<Invite> = ctx
-        .db
-        .invite()
-        .iter()
-        .filter(|i| i.server_id == server_id)
-        .collect();
+    let invites: Vec<Invite> = ctx.db.invite().server_id().filter(server_id).collect();
     for invite_row in invites {
         ctx.db.invite().token().delete(&invite_row.token);
     }
@@ -372,15 +342,18 @@ pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String>
     let join_requests: Vec<JoinRequest> = ctx
         .db
         .join_request()
-        .iter()
-        .filter(|r| r.server_id == server_id)
+        .server_id()
+        .filter(server_id)
         .collect();
     for request in join_requests {
-        ctx.db.join_request().request_key().delete(&request.request_key);
+        ctx.db
+            .join_request()
+            .request_key()
+            .delete(&request.request_key);
     }
 
     for channel_id in channel_ids {
-        ctx.db.channel().id().delete(channel_id);
+        delete_channel_with_dependencies(ctx, channel_id);
     }
 
     ctx.db.server().id().delete(server_id);
@@ -404,8 +377,8 @@ pub fn leave_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> 
     let channel_ids: Vec<u64> = ctx
         .db
         .channel()
-        .iter()
-        .filter(|c| c.server_id == server_id)
+        .server_id()
+        .filter(server_id)
         .map(|c| c.id)
         .collect();
 

@@ -145,8 +145,8 @@ fn remove_dm_voice_rows_for_pair(ctx: &ReducerContext, a: Identity, b: Identity)
     let keys: Vec<String> = ctx
         .db
         .dm_voice_participant()
-        .iter()
-        .filter(|row| row.room_key == room_key)
+        .room_key()
+        .filter(&room_key)
         .map(|row| row.dm_voice_key)
         .collect();
     for key in keys {

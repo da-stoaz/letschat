@@ -92,4 +92,45 @@ describe('voice presence — connection lifecycle', () => {
       'client_disconnected should sweep the dead connection’s presence row',
     ).toBe(true)
   })
+
+  it('disconnect only sweeps rows owned by that connection', async () => {
+    const secondServerId = await createServer(owner)
+    const { rows } = await owner.sql('SELECT id, server_id, kind FROM my_channels')
+    const secondVoice = rows.find(
+      (row) =>
+        Number(row.server_id) === secondServerId && Array.isArray(row.kind) && row.kind[0] === 1,
+    )
+    if (!secondVoice) throw new Error('second seeded voice channel not found')
+    const secondVoiceChannelId = Number(secondVoice.id)
+
+    const firstConn = await connect(owner.token)
+    const secondConn = await connect(owner.token)
+    try {
+      firstConn.reducers.joinVoiceChannel({ channelId: BigInt(voiceChannelId) })
+      secondConn.reducers.joinVoiceChannel({ channelId: BigInt(secondVoiceChannelId) })
+
+      expect(
+        await until(
+          () =>
+            voiceRowCount(voiceChannelId) === 1 &&
+            voiceRowCount(secondVoiceChannelId) === 1,
+        ),
+      ).toBe(true)
+
+      firstConn.disconnect()
+      expect(
+        await until(
+          () =>
+            voiceRowCount(voiceChannelId) === 0 &&
+            voiceRowCount(secondVoiceChannelId) === 1,
+        ),
+        'disconnect should leave the same user’s row from another connection alone',
+      ).toBe(true)
+    } finally {
+      firstConn.disconnect()
+      secondConn.disconnect()
+    }
+
+    expect(await until(() => voiceRowCount(secondVoiceChannelId) === 0)).toBe(true)
+  })
 })
