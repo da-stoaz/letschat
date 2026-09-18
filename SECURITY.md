@@ -128,7 +128,7 @@ the architecture document.
 
 The remaining code findings are prioritized in
 [`BUG_ANALYSIS.md`](BUG_ANALYSIS.md). At this baseline there is no open S1;
-open S2 items are A8, C4, C5, C6, and C7.
+open S2 items are C4, C5, C6, and C7.
 
 ## Security review workflow
 
