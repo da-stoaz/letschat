@@ -1,6 +1,6 @@
 # LetsChat security model
 
-> Security baseline reviewed 2026-09-18 at version 1.0.17.
+> Security baseline reviewed 2026-09-18 at version 1.0.18.
 
 This document defines the trust boundaries and invariants that security fixes
 must preserve. [`BUG_ANALYSIS.md`](BUG_ANALYSIS.md) is the actionable finding
@@ -128,7 +128,7 @@ the architecture document.
 
 The remaining code findings are prioritized in
 [`BUG_ANALYSIS.md`](BUG_ANALYSIS.md). At this baseline there is no open S1;
-open S2 items are C5, C6, and C7.
+the only open S2 item is C7.
 
 ## Security review workflow
 
