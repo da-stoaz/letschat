@@ -152,9 +152,8 @@ export async function makeUser(prefix = 'u'): Promise<TestUser> {
 /**
  * Mint a user and promote it to instance admin.
  *
- * Goes through owner `spacetime sql` because that is genuinely the only way to
- * make the FIRST admin — `set_user_admin` is itself admin-gated, so on a real
- * instance the bootstrap admin is set exactly like this.
+ * Goes through owner `spacetime sql` because integration fixtures need isolated
+ * temporary admins without coupling tests to the module owner's reserved row.
  */
 export async function makeAdmin(prefix = 'adm'): Promise<TestUser> {
   const user = await makeUser(prefix)

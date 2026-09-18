@@ -5,20 +5,17 @@ use crate::schema::*;
 
 /// Singleton primary key. `SystemSettings` is intentionally a 1-row table.
 const SETTINGS_ID: u8 = 1;
+/// Deliberately outside the client-valid username alphabet, so a regular
+/// registration can never collide with the module owner's reserved row.
+const MODULE_OWNER_USERNAME: &str = "@module-owner";
 
-/// Lifecycle reducer — runs once when the module is first published. Seeds
-/// the singleton config row and marks the publisher as the first instance
-/// admin so they can promote others (e.g. core-api's service identity) via
-/// `set_user_admin`.
+/// Lifecycle reducer — runs when the module is first published or the database
+/// is cleared. Seeds the singleton config row and a dedicated admin row for the
+/// module owner so bootstrap authority belongs to the publisher, never whichever
+/// public account happens to register first.
 #[spacetimedb::reducer(init)]
 pub fn init(ctx: &ReducerContext) -> Result<(), String> {
-    if ctx
-        .db
-        .system_settings()
-        .id()
-        .find(SETTINGS_ID)
-        .is_none()
-    {
+    if ctx.db.system_settings().id().find(SETTINGS_ID).is_none() {
         ctx.db.system_settings().insert(SystemSettings {
             id: SETTINGS_ID,
             space_create_policy: SpaceCreatePolicy::Anyone,
@@ -26,18 +23,27 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
         });
     }
 
-    // The publisher (whoever ran `spacetime publish`) gets instance admin so
-    // there is always one bootstrap admin to grant further admin rights from.
-    // No User row exists yet for them — the row is created lazily on first
-    // sign-in via `register_user`; for now we record the identity by promoting
-    // any existing row, and otherwise leave it for `set_user_admin` to apply
-    // once the publisher has registered.
+    // The publisher already controls the module and can replace its code, so it
+    // is the natural bootstrap authority. Give it a real User row immediately:
+    // admin-gated reducers call `require_account`, and merely remembering the
+    // identity without a row would leave a fresh instance locked out.
     let publisher = ctx.sender();
     if let Some(mut user) = ctx.db.user().identity().find(publisher) {
         if !user.is_admin {
             user.is_admin = true;
             ctx.db.user().identity().update(user);
         }
+    } else {
+        ctx.db.user().insert(User {
+            identity: publisher,
+            username: MODULE_OWNER_USERNAME.to_string(),
+            display_name: "Module Owner".to_string(),
+            avatar_url: None,
+            created_at: ctx.timestamp,
+            is_admin: true,
+            suspended: false,
+            min_token_generation: 0,
+        });
     }
 
     Ok(())
@@ -175,9 +181,8 @@ pub fn admin_set_account_access(
     Ok(())
 }
 
-/// Grants or revokes instance-admin status. Instance-admin gated, so the
-/// only way to bootstrap a NEW instance is via the publisher identity from
-/// `init` — no anonymous escalation path.
+/// Grants or revokes instance-admin status. Instance-admin gated; `init` gives
+/// the module owner the initial admin row, so there is no public bootstrap path.
 #[spacetimedb::reducer]
 pub fn set_user_admin(
     ctx: &ReducerContext,
@@ -197,12 +202,27 @@ pub fn set_user_admin(
         )?;
     }
 
-    let mut user = ctx
-        .db
-        .user()
-        .identity()
-        .find(target)
-        .ok_or_else(|| "target user has not registered yet".to_string())?;
+    let Some(mut user) = ctx.db.user().identity().find(target) else {
+        // Core-api learns that an account is an administrator before the client
+        // creates its module User row. Preserve that explicit, admin-authorized
+        // decision and let register_user consume it atomically on first connect.
+        if is_admin {
+            if ctx
+                .db
+                .pending_admin_grant()
+                .identity()
+                .find(target)
+                .is_none()
+            {
+                ctx.db
+                    .pending_admin_grant()
+                    .insert(PendingAdminGrant { identity: target });
+            }
+        } else {
+            ctx.db.pending_admin_grant().identity().delete(target);
+        }
+        return Ok(());
+    };
 
     if user.is_admin != is_admin {
         user.is_admin = is_admin;

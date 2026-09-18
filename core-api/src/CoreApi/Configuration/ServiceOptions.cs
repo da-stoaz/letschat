@@ -116,13 +116,12 @@ public sealed class ServiceOptions
     public required string SpacetimeModuleName { get; init; }
 
     /// <summary>
-    /// Bearer token for the SpacetimeDB Identity that core-api signs reducer
-    /// calls with. Optional — when unset, instance-admin features that require
-    /// SpacetimeDB writes (space create policy, future admin pushes) are
-    /// disabled in the panel with a clear hint. To bootstrap: publish the
-    /// module, generate a token (<c>spacetime token gen</c>), promote that
-    /// token's identity to admin (<c>spacetime call letschat set_user_admin
-    /// &lt;identity&gt; true</c>) using the publisher identity, then set this var.
+    /// Bearer token for the SpacetimeDB module owner. The module's init reducer
+    /// creates that publisher identity's admin row, so no public account is used
+    /// for bootstrap. Optional — when unset, instance-admin features that require
+    /// SpacetimeDB writes are disabled in the panel. Retrieve the persisted
+    /// publisher credential with <c>spacetime login show --token</c> in the same
+    /// CLI data directory that published the module, then set this variable.
     /// </summary>
     public string? SpacetimeServiceToken { get; init; }
 

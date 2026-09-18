@@ -14,11 +14,11 @@ namespace CoreApi.Services;
 /// in SpacetimeDB rather than Postgres.
 ///
 /// <para>
-/// Authenticates with a long-lived bearer token configured via
-/// <see cref="ServiceOptions.SpacetimeServiceToken"/>. The token's Identity
-/// must be promoted to <c>is_admin = true</c> via the publisher's CLI before
-/// reducer calls succeed — see the <c>SPACETIMEDB_SERVICE_TOKEN</c> doc
-/// comment on <see cref="ServiceOptions"/>.
+/// Authenticates with the module owner's long-lived bearer token configured via
+/// <see cref="ServiceOptions.SpacetimeServiceToken"/>. The module's
+/// <c>init</c> reducer gives that publisher identity its dedicated admin row —
+/// see the <c>SPACETIMEDB_SERVICE_TOKEN</c> doc comment on
+/// <see cref="ServiceOptions"/>.
 /// </para>
 /// </summary>
 public sealed class SpacetimeClient(
@@ -536,8 +536,8 @@ public sealed class SpacetimeClient(
     /// <para>
     /// No-ops (returns <c>false</c>) when no admin credential is available.
     /// Returns <c>true</c> when the reducer was called; throws if SpacetimeDB
-    /// rejects it with every credential (e.g. none is admin, or the target
-    /// hasn't registered a <c>User</c> row yet).
+    /// rejects it with every credential. Grants for targets that have not yet
+    /// registered are retained by the module and consumed by <c>register_user</c>.
     /// </para>
     /// </summary>
     public async Task<bool> SyncUserAdminAsync(
@@ -579,11 +579,10 @@ public sealed class SpacetimeClient(
     /// </para>
     ///
     /// <para>
-    /// Best-effort and idempotent, and it needs an admin credential — which a
-    /// brand-new instance does not have until its first user registers (that
-    /// first registration is what creates the bootstrap admin). So it is called
-    /// both at startup and whenever an admin signs in, and the first call that
-    /// finds an admin wins; later calls are skipped via
+    /// Best-effort and idempotent, and it needs an admin credential. The module
+    /// owner receives that credential during <c>init</c>; core-api uses it when
+    /// <c>SPACETIMEDB_SERVICE_TOKEN</c> is configured. This is called both at
+    /// startup and whenever an admin signs in; later calls are skipped via
     /// <see cref="_trustedIssuerPinned"/>. Until it succeeds the module leaves
     /// the check off rather than locking the instance out.
     /// </para>

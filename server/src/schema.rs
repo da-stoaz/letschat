@@ -58,6 +58,16 @@ pub struct SystemSettings {
     pub trusted_issuer: Option<String>,
 }
 
+/// An admin grant for an account that has not created its chat-side `User` row
+/// yet. Core-api syncs its Admin role during sign-in, before the client connects
+/// and calls `register_user`; keeping the grant here makes that ordering safe.
+/// The row is consumed atomically by `register_user` and is never client-visible.
+#[spacetimedb::table(accessor = pending_admin_grant)]
+pub struct PendingAdminGrant {
+    #[primary_key]
+    pub identity: Identity,
+}
+
 /// Records the identity of the archive replication worker (storage-tiering,
 /// plan 2). Singleton, primary key fixed at 1; a row existing == a worker
 /// identity is registered. The `archive_*` views and (later) the eviction /
@@ -119,8 +129,9 @@ pub struct User {
     pub created_at: Timestamp,
     /// Instance-level admin flag (independent of per-server Owner/Moderator).
     /// Gates `set_space_create_policy`, `set_user_admin`, and the policy
-    /// check in `create_server`. Default is `false`; populated by the
-    /// `init` reducer (publisher becomes admin) and by `set_user_admin`.
+    /// check in `create_server`. Default is `false`; the `init` reducer inserts
+    /// a dedicated admin row for the module owner, while `set_user_admin`
+    /// manages every later grant or revocation.
     #[default(false)]
     pub is_admin: bool,
     /// Instance-level lockout. `true` makes `require_account` refuse every

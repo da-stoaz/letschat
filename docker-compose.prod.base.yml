@@ -103,7 +103,9 @@ services:
       # propagation, the trusted-issuer pin and the identity migration.
       SPACETIMEDB_HTTP_URL: "${SPACETIMEDB_HTTP_URL:-http://spacetimedb:3000}"
       SPACETIMEDB_MODULE_NAME: "${SPACETIMEDB_MODULE_NAME:-letschat}"
-      # Optional; see "Promoting core-api as a SpacetimeDB admin" in DEPLOYMENT.md.
+      # Required before exposing a fresh deployment; see "Promoting core-api as
+      # a SpacetimeDB admin" in DEPLOYMENT.md. Left empty here so upgrades of an
+      # existing stack do not fail before the operator has migrated its .env.
       SPACETIMEDB_SERVICE_TOKEN: "${SPACETIMEDB_SERVICE_TOKEN:-}"
 
       # ── Cold archive (storage-tiering, plan 2 Part A) ────────────────────

@@ -176,9 +176,9 @@ public static class DbInitializer
     /// See <see cref="Services.SpacetimeClient.PinTrustedIssuerAsync"/>.
     ///
     /// <para>
-    /// Never fatal: a brand-new instance has no admin to sign the call with
-    /// until its first user registers, and SpacetimeDB may simply not be up yet.
-    /// Both are expected, and an admin sign-in retries.
+    /// Never fatal: the module owner's service token may not be configured yet,
+    /// and SpacetimeDB may simply not be up. Both are expected, and an admin
+    /// sign-in retries.
     /// </para>
     /// </summary>
     private static async Task PinTrustedIssuerBestEffortAsync(
@@ -189,8 +189,8 @@ public static class DbInitializer
             if (!await spacetime.PinTrustedIssuerAsync())
             {
                 logger.LogInformation(
-                    "SpacetimeDB trusted issuer not pinned yet: no instance admin exists. "
-                    + "It is pinned automatically once an admin signs in.");
+                    "SpacetimeDB trusted issuer not pinned yet: no admin credential is configured. "
+                    + "Set SPACETIMEDB_SERVICE_TOKEN to the module owner's token.");
             }
         }
         catch (Exception ex)

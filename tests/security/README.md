@@ -41,7 +41,7 @@ Vitest projects and therefore also requires SpacetimeDB.
 
 | Area | What is pinned |
 |---|---|
-| Anonymous identity | account gate, trusted issuer, and first-admin bootstrap |
+| Anonymous identity | account gate, trusted issuer, and module-owner bootstrap |
 | Private tables/views | base-table privacy and per-caller `my_*` filtering |
 | Membership | kick, ban, ownership transfer, DM friendship/block gates |
 | Message history | bounded views and authorized pagination procedures |

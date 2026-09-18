@@ -1,6 +1,6 @@
 # LetsChat security model
 
-> Security baseline reviewed 2026-09-16 at version 1.0.14.
+> Security baseline reviewed 2026-09-18 at version 1.0.16.
 
 This document defines the trust boundaries and invariants that security fixes
 must preserve. [`BUG_ANALYSIS.md`](BUG_ANALYSIS.md) is the actionable finding
@@ -89,10 +89,11 @@ paths. Production compose publishes the admin listener only on
 `127.0.0.1:48788`, intended for an SSH tunnel. Never route it through the public
 Cloudflare or Caddy ingress.
 
-For first boot, prefer `ADMIN_BOOTSTRAP_USERNAME` and a generated
-`ADMIN_BOOTSTRAP_PASSWORD`, sign in once, then remove the bootstrap values. Do
-not expose open registration before an administrator exists: the fallback that
-promotes the first registered account remains the A8 land-grab risk.
+For first boot, configure `SPACETIMEDB_SERVICE_TOKEN` with the persisted module
+owner token, then use `ADMIN_BOOTSTRAP_USERNAME` and a generated
+`ADMIN_BOOTSTRAP_PASSWORD` for the human administrator. The module owner receives
+the only initial chat-domain admin row during publish; public registrations are
+never implicitly promoted. Remove the account-bootstrap values after first use.
 
 ## Deployment invariants
 

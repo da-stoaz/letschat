@@ -29,9 +29,8 @@ import {
   type TestUser,
 } from './harness'
 
-// Created in `beforeAll` so it is this file's first registration, and handed
-// back in `afterAll` — the suite shares one database. Same reasoning as
-// anonymous-identity.test.ts.
+// Created in `beforeAll` and handed back in `afterAll` because the suite shares
+// one database. Same reasoning as anonymous-identity.test.ts.
 let admin: TestUser
 
 beforeAll(async () => {

@@ -39,12 +39,8 @@ function issuerOf(token: string): string {
 
 // An admin, needed to set instance-wide settings.
 //
-// Created in `beforeAll` rather than at module scope so it is this file's FIRST
-// registration: `register_user` grants instance admin to the first account on
-// an instance that has none, so a registration racing ahead of this one would
-// leave the database with two admins and break `admin-bootstrap.test.ts`. The
-// suite shares one database, so this file also hands back exactly what it took
-// (see the teardown below).
+// The suite shares one database, so this file hands back the temporary admin bit
+// it adds (see the teardown below).
 let admin: TestUser
 
 beforeAll(async () => {
