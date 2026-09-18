@@ -36,6 +36,7 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A8](#a8) | ~~Erstregistrierung wird automatisch Instanz-Admin (Land-Grab)~~ · **✅ behoben (PR #88)** | ~~S2~~ | Auth |
 | [A9](#a9) | Account-Enumeration über `/auth/register` | S3 | Auth |
 | [A10](#a10) | LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde | S3 | Voice |
+| [A11](#a11) | Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT | S2 | Auth |
 | [B1](#b1) | ~~`transfer_ownership` auf sich selbst sperrt den Owner dauerhaft aus~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B2](#b2) | ~~Owner kann sich selbst kicken/bannen → verwaister Space~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B3](#b3) | ~~`edit_direct_message` prüft weder Block noch Freundschaft~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
@@ -406,6 +407,54 @@ aber das entwertet das bereits ausgestellte Token nicht.
 
 **Richtung für einen Fix:** Kürzere Token-Laufzeit (Minuten statt einer Stunde) plus
 ein serverseitiger `RemoveParticipant`-Aufruf an die LiveKit-API bei Kick/Ban/Leave.
+
+---
+
+<a id="a11"></a>
+## A11 — Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT · **S2**
+
+**Stellen:** `core-api/src/CoreApi/Program.cs:179-205`,
+`core-api/src/CoreApi/Endpoints/AuthEndpoints.cs:22-48`
+
+Alle rate-limitierten Auth-Endpunkte teilen dieselbe Fixed-Window-Policy und werden
+ausschließlich nach der öffentlichen Client-IP partitioniert. Der Standardwert von
+10 Requests pro 300 Sekunden gilt damit gemeinsam für Login, Registrierung,
+Bestätigungsmail, Passwort-Reset, Link und Passwortänderung.
+
+Eine öffentliche IP entspricht nicht zuverlässig einem Nutzer. Hinter Carrier-Grade
+NAT, Firmen-Gateways oder VPN-Ausgängen können Hunderte oder Tausende Nutzer denselben
+Bucket teilen. Ein einzelner Teilnehmer hinter diesem Ausgang kann die zehn Requests
+gezielt verbrauchen und dadurch alle anderen Nutzer dieser IP für bis zu fünf Minuten
+von den betroffenen Auth-Funktionen ausschließen. Wiederholtes Leeren jedes neuen
+Fensters macht daraus einen Availability-DoS. Die in [A2](#a2) korrigierte Auswertung
+von `X-Forwarded-For` verhindert einen instanzweiten Proxy-Bucket, kann gemeinsam
+genutzte öffentliche Adressen aber prinzipbedingt nicht auflösen.
+
+Der Account-Lockout begrenzt Passwortversuche bereits auf fünf Fehlschläge pro Konto.
+Er ersetzt keinen Schutz vor Username-Spraying, zeigt aber, dass ein sehr kleiner
+zusätzlicher IP-Bucket beim Login unnötig viel Kollateralschaden verursacht. Der
+Admin-Login verwendet den IP-Limiter derzeit nicht; er ist produktiv nur über den
+loopbackgebundenen Port und einen SSH-Tunnel erreichbar.
+
+**Plan für den Fix:**
+
+1. Die gemeinsame Policy in getrennte Budgets für Login, Registrierung und
+   Mail-/Reset-Aktionen aufteilen, damit ein gefluteter Endpunkt keinen anderen
+   Auth-Flow blockiert.
+2. Beim Login den bestehenden Account-Lockout als enge Grenze beibehalten und nur
+   ein deutlich großzügigeres IP-Limit gegen breit gestreute Username-Angriffe und
+   Ressourcen-DoS ergänzen. Die konkreten Werte anhand eines realistischen Burst-Tests
+   festlegen, nicht aus dem bisherigen Wert ableiten.
+3. Registrierung und Mail-Versand separat begrenzen; wo ein validierter
+   Ziel-Identifier vorhanden ist, diesen zusätzlich zur großzügigen IP-Grenze
+   begrenzen, damit wechselnde IPs kein unbegrenztes Mail-Aufkommen erzeugen.
+4. Den privaten Admin-Login nicht künstlich an den öffentlichen 10/5-Minuten-Bucket
+   hängen. Falls der Admin-Port jemals öffentlich erreichbar wird, bekommt er eine
+   eigene Defense-in-Depth-Policy.
+5. Regressionstests ergänzen: viele legitime Konten hinter einer IP blockieren sich
+   nicht gegenseitig; ein einzelnes Konto wird weiterhin gesperrt; Username-Spraying
+   erreicht schließlich 429; und das Ausschöpfen des Mail-/Registrierungsbudgets
+   verbraucht nicht das Login-Budget.
 
 ---
 

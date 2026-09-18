@@ -30,6 +30,9 @@ enforcement therefore matters directly to credential protection (finding E4).
 - The public JSON API has a 256 KiB request-body limit. Files never transit it.
 - Abuse-prone auth endpoints use an IP-partitioned fixed-window rate limiter;
   only the adjacent private/loopback proxy is trusted for forwarded headers.
+  Its currently shared, low per-IP budget can deny auth service to unrelated
+  users behind the same CGNAT, VPN, or corporate gateway; this availability
+  risk and the split-policy remediation are tracked as A11.
 - Application access tokens live for one hour and refresh tokens for seven
   days. A per-account token generation immediately invalidates older HTTP
   sessions after a credential change.
@@ -128,7 +131,7 @@ the architecture document.
 
 The remaining code findings are prioritized in
 [`BUG_ANALYSIS.md`](BUG_ANALYSIS.md). At this baseline there is no open S1;
-the only open S2 item is C7.
+the open S2 items are A11 and C7.
 
 ## Security review workflow
 
