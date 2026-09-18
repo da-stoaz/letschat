@@ -48,7 +48,7 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [C1](#c1) | ~~Jede eingehende Nachricht löst drei volle Durchläufe der Historie aus~~ · **✅ behoben (PR #73)** | ~~S1~~ | Client |
 | [C2](#c2) | ~~Initialer Sync ist O(N²) und läuft in den 5-Sekunden-Timeout~~ · **✅ behoben (PR #73)** | ~~S1~~ | Client |
 | [C3](#c3) | ~~`my_channel_messages` liefert die komplette Historie ohne Limit~~ · **✅ behoben (PR #77)** | ~~S1~~ | Views |
-| [C4](#c4) | `my_server_members` gibt alle Mitglieder aller Discover-Spaces preis | S2 | Views |
+| [C4](#c4) | ~~`my_server_members` gibt alle Mitglieder aller Discover-Spaces preis~~ · **✅ behoben (PR #89)** | ~~S2~~ | Views |
 | [C5](#c5) | Typing-Indikator macht pro Tastenanschlag einen Full-Table-Scan | S2 | Modul |
 | [C6](#c6) | Lösch-Reducer scannen ganze Tabellen statt Indizes zu nutzen | S2 | Modul |
 | [C7](#c7) | Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients | S2 | Client |
@@ -705,38 +705,20 @@ Scroll-an-den-Anfang → Nachladen → Rendern.
 ---
 
 <a id="c4"></a>
-## C4 — `my_server_members` gibt alle Mitglieder aller Discover-Spaces preis · **S2**
+## C4 — `my_server_members` gab alle Mitglieder aller Discover-Spaces preis · ✅ **behoben**
 
-**Stelle:** `server/src/views.rs:231-243`
+**Behoben in PR #89** (`fix/private-discover-members`).
 
-```rust
-let mut visible = my_server_ids(ctx);
-for server in ctx.db.server().is_discoverable().filter(true) {
-    visible.insert(server.id);              // <- jeder Discover-Space
-}
-for server_id in &visible {
-    rows.extend(ctx.db.server_member().server_id().filter(*server_id));
-}
-```
+`my_server_members` liefert nur noch Mitglieder von Spaces, denen der aufrufende
+Client selbst angehört. Discover-Karten beziehen ihre Zahl aus der separaten View
+`discover_server_member_counts`, die pro öffentlichem Space ausschließlich
+`server_id` und `member_count` veröffentlicht. Identitäten, Rollen, Beitrittszeiten
+und Timeouts fremder Mitglieder verlassen den Server nicht mehr.
 
-Der Kommentar nennt den Zweck: *"so Discover cards can show member counts for spaces
-the caller hasn't joined"*. Ausgeliefert wird dafür aber die vollständige
-`ServerMember`-Zeile — `user_identity`, `role`, `joined_at` und `timeout_until` — für
-**jedes** Mitglied **jedes** öffentlich gelisteten Space, an **jeden** verbundenen
-Client.
-
-**Auswirkung — zwei Probleme:**
-
-1. **Datenschutz.** Für eine Zahl auf einer Karte wird die komplette
-   Mitgliederstruktur offengelegt. Wer in welchem öffentlichen Space Moderator ist,
-   seit wann, und wer aktuell einen Timeout hat, ist für jeden sichtbar.
-2. **Skalierung.** Die Datenmenge wächst mit (Anzahl Discover-Spaces × deren
-   Mitgliederzahl) und wird an jeden Client repliziert — unabhängig davon, ob er die
-   Discover-Seite überhaupt öffnet. Zusammen mit [C7](#c7) ist das der Auslöser für
-   instanzweite Re-Sync-Wellen.
-
-**Richtung für einen Fix:** Eine separate View, die pro Discover-Space nur eine
-aggregierte Mitgliederzahl liefert.
+Der Client abonniert die Aggregation separat. Änderungen daran aktualisieren nur
+noch den Discover-Store statt der sechs serverbezogenen Stores. Ein Black-box-Test
+gegen die HTTP-/SQL-Grenze verifiziert sowohl die leere fremde Mitglieder-View als
+auch den weiterhin korrekten aggregierten Count.
 
 ---
 
@@ -820,24 +802,25 @@ Verbindungsabbruch und skaliert mit der Gesamtzahl aller Voice-Teilnehmer.
 <a id="c7"></a>
 ## C7 — Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients · **S2**
 
-**Stellen:** `src/lib/spacetimedb/events.ts:204-206`, `sync.ts:453-461`
+**Stellen:** `watchLiveTables` in `src/lib/spacetimedb/events.ts` und
+`syncServerScopedState` in `src/lib/spacetimedb/sync.ts`
 
 ```ts
-conn.db.my_server_members.onInsert(() => syncServerScopedState(conn))
-conn.db.my_server_members.onUpdate(() => syncServerScopedState(conn))
-conn.db.my_server_members.onDelete(() => syncServerScopedState(conn))
+const serverScoped = stale('serverScoped', () => syncServerScopedState(conn))
+conn.db.my_server_members.onInsert(serverScoped)
+conn.db.my_server_members.onUpdate(serverScoped)
+conn.db.my_server_members.onDelete(serverScoped)
 ```
 
 `syncServerScopedState` führt sechs vollständige Re-Syncs aus: `syncServers`,
 `syncMembers`, `syncChannels`, `syncInvites`, `syncDiscover`, `syncJoinRequests`.
 
-Kombiniert mit [C4](#c4) — `my_server_members` enthält alle Mitglieder aller
-Discover-Spaces — bedeutet das: **Jeder Beitritt, jedes Verlassen, jede Rollenänderung
-und jede Timeout-Änderung in irgendeinem öffentlich gelisteten Space löst bei jedem
-verbundenen Client der Instanz sechs volle Re-Syncs aus.**
-
-Auf einer Instanz mit einigen aktiven öffentlichen Spaces ist das ein dauerhafter
-Grundlast-Sturm auf allen Clients.
+Seit [C4](#c4) behoben ist, erhalten nur noch Mitglieder des betroffenen Space die
+vollständigen Mitglieder-Events; Discover-Counts aktualisieren separat nur den
+Discover-Store. Offen bleibt: Jeder Beitritt, jedes Verlassen, jede Rollenänderung
+und jede Timeout-Änderung baut bei jedem verbundenen Mitglied des Space weiterhin
+sechs Stores vollständig neu auf. Außerdem aktualisiert eine Count-Änderung den
+Discover-Store auch bei Clients, die die Discover-Seite nicht geöffnet haben.
 
 ---
 
@@ -1343,13 +1326,11 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
-**Stand:** 15 von 43 Befunden sind erledigt; 28 bleiben offen. Darunter ist kein S1
-und es bleiben vier S2. Behoben sind A1–A8, B1–B3, C1–C3 und G1. D4 bleibt als
+**Stand:** 16 von 43 Befunden sind erledigt; 27 bleiben offen. Darunter ist kein S1
+und es bleiben drei S2. Behoben sind A1–A8, B1–B3, C1–C4 und G1. D4 bleibt als
 kleinerer Restbefund für bestätigte Anhänge offen.
 
-**Zuerst — Zugangs- und Datengrenzen:** [C4](#c4) (Discover-Mitgliederdaten) auf
-eine Aggregation statt fremder Zeilen umstellen. [E1](#e1) sollte anschließend
-clientseitig fail-closed werden.
+**Zuerst — Zugangs- und Datengrenzen:** [E1](#e1) clientseitig fail-closed machen.
 
 **Danach — Betriebsfähigkeit unter Last:**
 [C5](#c5)/[C6](#c6) (Full-Table-Scans in Typing- und Lösch-Reducern) und [C7](#c7)

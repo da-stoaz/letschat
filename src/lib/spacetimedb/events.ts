@@ -16,6 +16,7 @@ import {
   syncReadStates,
   syncInvites,
   syncDmServerInvites,
+  syncDiscover,
   syncServerScopedState,
   syncChannels,
   syncMessages,
@@ -275,6 +276,11 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
   conn.db.my_server_members.onInsert(serverScoped)
   conn.db.my_server_members.onUpdate(serverScoped)
   conn.db.my_server_members.onDelete(serverScoped)
+
+  const discover = stale('discover', () => syncDiscover(conn))
+  conn.db.discover_server_member_counts.onInsert(discover)
+  conn.db.discover_server_member_counts.onUpdate(discover)
+  conn.db.discover_server_member_counts.onDelete(discover)
 
   const channels = stale('channels', () => syncChannels(conn))
   conn.db.my_channels.onInsert(channels)

@@ -67,6 +67,12 @@ export const DirectMessage = __t.object("DirectMessage", {
 });
 export type DirectMessage = __Infer<typeof DirectMessage>;
 
+export const DiscoverServerMemberCount = __t.object("DiscoverServerMemberCount", {
+  serverId: __t.u64(),
+  memberCount: __t.u64(),
+});
+export type DiscoverServerMemberCount = __Infer<typeof DiscoverServerMemberCount>;
+
 // The tagged union or sum type for the algebraic type `DmInviteStatus`.
 export const DmInviteStatus = __t.enum("DmInviteStatus", {
   Pending: __t.unit(),
@@ -171,6 +177,11 @@ export const Message = __t.object("Message", {
   deleted: __t.bool(),
 });
 export type Message = __Infer<typeof Message>;
+
+export const PendingAdminGrant = __t.object("PendingAdminGrant", {
+  identity: __t.identity(),
+});
+export type PendingAdminGrant = __Infer<typeof PendingAdminGrant>;
 
 export const PinnedMessage = __t.object("PinnedMessage", {
   pinId: __t.u64(),
