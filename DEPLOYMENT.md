@@ -179,37 +179,36 @@ Some admin-panel surfaces (currently: the **Spaces → create policy** card on
 than to the Postgres `SystemConfig` row. core-api needs a SpacetimeDB
 identity that has `is_admin = true` to call those reducers.
 
-Run this once, after the first `spacetime publish`:
+Run this once, after `module-init` has published the database:
 
-> **Where the first admin comes from.** The module's `init` reducer can only
-> promote the publisher if a `User` row already exists for it — and in a Compose
-> deployment the publisher is the automated `module-init` container, which never
-> signs in. So the first admin is instead granted on registration: **the first
-> account to register on an instance that has no admin becomes the instance
-> admin.** Sign in once with your own account before exposing a new instance
-> publicly, and you are that admin. (Everything admin-gated depends on this,
-> including `set_archive_service_identity` — see *Cold archive*.)
+> **Where the first admin comes from.** The module's `init` reducer creates a
+> reserved `@module-owner` user for the publishing identity and marks it admin.
+> That identity already controls the module code, and Compose persists its CLI
+> credentials in `module_init_home`. A public account is never promoted merely
+> for registering first.
 
 ```bash
-# 1. Generate a long-lived token (and identity) for core-api.
-spacetime token gen > core-api.token
-CORE_API_IDENTITY=$(spacetime identity list | grep -A1 "$(cat core-api.token)" | tail -1 | awk '{print $1}')
+# 1. Read the persisted publisher identity and token from module-init's volume.
+#    Use the same compose files as the running deployment.
+docker compose -f docker-compose.prod.base.yml \
+  -f docker-compose.prod.<track>.yml \
+  run --rm module-init login show --token
 
-# 2. As the instance admin (the first-registered account, see the note above),
-#    grant core-api's identity instance-admin status:
-spacetime call letschat set_user_admin "$CORE_API_IDENTITY" true
+# 2. Copy the reported token into .env, then recreate core-api so Compose loads it.
+SPACETIMEDB_SERVICE_TOKEN=<publisher-token>
+docker compose -f docker-compose.prod.base.yml \
+  -f docker-compose.prod.<track>.yml \
+  up -d --force-recreate core-api
 
-# 3. Put the token in core-api's environment and restart:
-echo "SPACETIMEDB_SERVICE_TOKEN=$(cat core-api.token)" >> .env
-docker compose -f docker-compose.prod.base.yml restart core-api
-
-# 4. Verify: /admin/config now shows the Spaces card as editable; the
-#    audit log records the bootstrap.
+# 3. Verify: core-api logs the trusted-issuer pin. After the configured human
+#    bootstrap admin signs in, /admin/config shows the Spaces card as editable.
 ```
 
-If you skip this, the rest of core-api works fine — only the Spaces card on
-`/admin/config` renders read-only with a hint pointing back at these
-instructions.
+The module retains an explicit admin grant when the target account has not yet
+created its chat-side row; `register_user` consumes that grant on first connect.
+This keeps the normal sign-in-before-WebSocket ordering race-free. If you skip
+the service token, admin writes remain unavailable and the trusted OIDC issuer
+cannot be pinned, so do not expose a fresh deployment in that state.
 
 ## Cold archive (durability)
 
@@ -369,15 +368,13 @@ caller came through core-api. Two checks in the module close that door:
   `REQUIRE_EMAIL_CONFIRMATION` and `REQUIRE_ADMIN_APPROVAL` binding on the chat
   side and not just on the HTTP API.
 
-**You do not configure this.** core-api pushes its own `SPACETIME_OIDC_ISSUER`
-into the module with the `set_trusted_issuer` reducer, at startup and again
-whenever an instance admin signs in. Two things follow:
+core-api pushes its own `SPACETIME_OIDC_ISSUER` into the module with the
+`set_trusted_issuer` reducer, at startup and again whenever an administrator
+signs in. Two things follow:
 
-1. **The pin needs an instance admin to exist.** A brand-new instance has none
-   until its first account registers (see the first-admin bootstrap above), so
-   that first registration is deliberately ungated and the pin lands moments
-   later. This is the operational reason to **sign in once yourself before
-   exposing a new instance publicly** — unchanged advice, now load-bearing.
+1. **The pin uses the module-owner credential.** Configure
+   `SPACETIMEDB_SERVICE_TOKEN` from `module_init_home` as described above before
+   exposing a fresh deployment. No public user participates in this bootstrap.
 
 2. **Until it is pinned, the check is off, not on.** An unpinned instance
    behaves exactly as it did before, so publishing a new module to a running
@@ -389,9 +386,9 @@ Confirm it took, as an instance admin:
 spacetime sql -s <server> <database> "SELECT trusted_issuer FROM system_settings"
 ```
 
-An empty result means no admin existed when core-api last tried. Sign in with an
-admin account and check again; `core-api` logs
-`Pinned SpacetimeDB trusted issuer to …` when it succeeds.
+An empty result means the owner credential was absent or the module was
+unreachable when core-api last tried. Fix that configuration and restart;
+core-api logs `Pinned SpacetimeDB trusted issuer to …` when it succeeds.
 
 ## Ending a session: disables and password resets
 
@@ -451,9 +448,10 @@ The first time the stack starts, the bootstrap admin from
 is created automatically. Change the password as soon as you sign in and
 unset those env vars on the next deploy.
 
-Do not expose registration before this bootstrap has completed. Without a seeded
-administrator, the first registered SpacetimeDB user is promoted to instance admin;
-this known land-grab risk is tracked as A8 in `BUG_ANALYSIS.md`.
+The separate SpacetimeDB module owner is seeded during publish and is the only
+initial chat-domain admin. Normal registrations are never promoted implicitly;
+core-api forwards the configured human administrator's explicit role through
+the owner credential.
 
 ## Service / Env Reference
 

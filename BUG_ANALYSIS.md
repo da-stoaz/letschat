@@ -33,7 +33,7 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A5](#a5) | ~~Upload-Größenlimit und Tagesquote sind clientseitig deklariert, nicht durchgesetzt~~ · **✅ behoben (PR #83)** | ~~S2~~ | Storage |
 | [A6](#a6) | ~~Presigned Download-URLs ohne Zugriffsprüfung auf den Storage-Key~~ · **✅ behoben (PR #83)** | ~~S2~~ | Storage |
 | [A7](#a7) | ~~Kein Account-Lockout, keine Passwort-Längenobergrenze → Argon2-DoS~~ · **✅ behoben (PR #84)** | ~~S2~~ | Auth |
-| [A8](#a8) | Erstregistrierung wird automatisch Instanz-Admin (Land-Grab) | S2 | Auth |
+| [A8](#a8) | ~~Erstregistrierung wird automatisch Instanz-Admin (Land-Grab)~~ · **✅ behoben (PR #88)** | ~~S2~~ | Auth |
 | [A9](#a9) | Account-Enumeration über `/auth/register` | S3 | Auth |
 | [A10](#a10) | LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde | S3 | Voice |
 | [B1](#b1) | ~~`transfer_ownership` auf sich selbst sperrt den Owner dauerhaft aus~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
@@ -329,33 +329,29 @@ setzt Platzhalter); auf einer alten Dev-Datenbank hilft
 ---
 
 <a id="a8"></a>
-## A8 — Erstregistrierung wird automatisch Instanz-Admin · **S2**
+## A8 — Erstregistrierung wird automatisch Instanz-Admin · ✅ **behoben**
 
-**Stelle:** `server/src/reducers/users.rs:38-46`
+**Behoben in PR #88** (`fix/secure-admin-bootstrap`).
 
-```rust
-let is_first_admin = !ctx.db.user().iter().any(|user| user.is_admin);
-```
+- Der `init`-Reducer legt für `ctx.sender()` — die von SpacetimeDB authentifizierte
+  Module-Owner-/Publisher-Identity — sofort den reservierten User `@module-owner` mit
+  `is_admin = true` an. Diese Identity kontrolliert ohnehin den ausführbaren
+  Modulcode und ist damit die richtige Bootstrap-Autorität.
+- `register_user` leitet Adminrechte nicht mehr aus Tabellenleere oder
+  Registrierungsreihenfolge ab. Normale Registrierungen bleiben Nicht-Admins; der
+  Full-Table-Scan auf `user` entfällt ebenfalls.
+- Ein bereits autorisierter Admin kann die deterministische Identity eines
+  Core-API-Admins schon vor dessen erster Chat-Verbindung freigeben. Der private
+  `pending_admin_grant` wird beim späteren `register_user` derselben Identity atomar
+  verbraucht. So bleibt die bestehende Reihenfolge HTTP-Login → WebSocket-Registrierung
+  ohne zweiten Login funktionsfähig, ohne einen öffentlichen Bootstrap-Pfad zu öffnen.
+- Die Produktionsanleitung verwendet den im `module_init_home` persistierten
+  Publisher-Token als `SPACETIMEDB_SERVICE_TOKEN`; erste öffentliche Registrierung
+  ist kein Betriebs-Schritt mehr.
 
-Der Kommentar darüber begründet das Verhalten ausführlich und schließt mit:
-*"Operators should sign in once before exposing a new instance publicly."* Das ist
-eine Betriebsanweisung, keine technische Schranke.
-
-**Auswirkung:** Auf einer frisch veröffentlichten Instanz wird derjenige
-Instanz-Admin, der zuerst `register_user` aufruft. Seit [A1](#a1) braucht der Angreifer
-dafür ein vom vertrauenswürdigen Issuer signiertes Token, also einen nutzbaren
-`core-api`-Account; eine anonyme WebSocket-Verbindung genügt nicht mehr. Solange die
-öffentliche Registrierung aber vor dem ersten Betreiber-Login erreichbar ist, bleibt
-das Rennen bestehen. Der so erlangte Admin kann `set_space_create_policy`, `set_user_admin` und
-`set_archive_service_identity` aufrufen, und die Last-Admin-Schranke in
-`set_user_admin` (`system.rs:95-101`) hält ihn danach dort.
-
-Das Zeitfenster ist real: es reicht von `spacetime publish` bis zum ersten Login des
-Betreibers, und bei einem automatisierten Container-Deployment ist genau dieser Login
-das, was der Kommentar als „geschieht nicht" beschreibt.
-
-**Nebenbefund (S4):** Der Ausdruck ist ein Full-Table-Scan über `user` bei *jeder*
-Registrierung, nicht nur der ersten.
+Regressionstest: `tests/security/admin-bootstrap.test.ts` prüft sowohl den beim
+Publish angelegten Module Owner und einen nicht privilegierten ersten öffentlichen
+User als auch einen expliziten Grant, dessen Ziel sich erst danach registriert.
 
 ---
 
@@ -1347,13 +1343,13 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
-**Stand:** 14 von 43 Befunden sind erledigt; 29 bleiben offen. Darunter ist kein S1
-und es bleiben fünf S2. Behoben sind A1–A7, B1–B3, C1–C3 und G1. D4 bleibt als
+**Stand:** 15 von 43 Befunden sind erledigt; 28 bleiben offen. Darunter ist kein S1
+und es bleiben vier S2. Behoben sind A1–A8, B1–B3, C1–C3 und G1. D4 bleibt als
 kleinerer Restbefund für bestätigte Anhänge offen.
 
-**Zuerst — Zugangs- und Datengrenzen:** [A8](#a8) (Admin-Land-Grab) technisch
-schließen und [C4](#c4) (Discover-Mitgliederdaten) auf eine Aggregation statt fremder
-Zeilen umstellen. [E1](#e1) sollte anschließend clientseitig fail-closed werden.
+**Zuerst — Zugangs- und Datengrenzen:** [C4](#c4) (Discover-Mitgliederdaten) auf
+eine Aggregation statt fremder Zeilen umstellen. [E1](#e1) sollte anschließend
+clientseitig fail-closed werden.
 
 **Danach — Betriebsfähigkeit unter Last:**
 [C5](#c5)/[C6](#c6) (Full-Table-Scans in Typing- und Lösch-Reducern) und [C7](#c7)

@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { makeUser, ownerSql, ReducerError, type TestUser } from './harness'
+import {
+  makeAdmin,
+  makeUser,
+  mintIdentity,
+  ownerSql,
+  ReducerError,
+  type TestUser,
+} from './harness'
 
-// The first-admin bootstrap is a privilege grant, so it needs a guard against
-// the obvious abuse: everyone becoming an admin. Exactly one account may be
-// promoted this way, and only while the instance has no admin at all.
-//
-// Context: a container deployment publishes the module with an automated
-// identity that never signs in, so `init` cannot promote anyone. Without this
-// bootstrap a fresh instance has zero admins and no way to create one, which
-// makes `set_archive_service_identity` — and therefore the entire cold-archive
-// durability guarantee — permanently unreachable.
+// Bootstrap authority belongs to the identity that published the module. The
+// init reducer gives that owner a reserved User row immediately; public account
+// registration must never grant instance-admin rights, even to the first user.
 
 /** Identities are printed as long hex; header and rule lines never match. */
 function adminIdentities(): string[] {
@@ -26,35 +27,44 @@ async function isAdmin(user: TestUser): Promise<boolean> {
 }
 
 describe('instance admin bootstrap', () => {
-  it('grants admin to the first registrant and to nobody after', async () => {
-    // Order-independent: claim the bootstrap here if no other file has, so the
-    // assertions below hold however vitest orders the suite.
-    if (adminIdentities().length === 0) {
-      const first = await makeUser('firstadm')
-      expect(await isAdmin(first)).toBe(true)
-    }
+  it('seeds the module owner and never promotes a public registrant', async () => {
+    expect(
+      ownerSql("SELECT is_admin FROM user WHERE username = '@module-owner'"),
+    ).toMatch(/\btrue\b/i)
 
-    // Compare against a baseline rather than asserting a global count of one.
-    // The suite shares a database and other files legitimately promote admins
-    // of their own (`makeAdmin`), so "exactly one admin exists" is a claim about
-    // the whole suite's ordering, not about this bootstrap — and it made this
-    // test fail on roughly half of all runs. What actually matters is that
-    // registering does not ADD an admin once the instance has one.
+    // Compare against a baseline because the suite shares one database and
+    // other files legitimately promote temporary admins of their own.
     const baseline = adminIdentities()
     expect(baseline.length).toBeGreaterThanOrEqual(1)
 
-    // The instance now has an admin, so nobody else is promoted on registration.
-    const later = await makeUser('late')
-    expect(await isAdmin(later)).toBe(false)
+    const firstPublicUser = await makeUser('first_public')
+    expect(await isAdmin(firstPublicUser)).toBe(false)
     expect(adminIdentities()).toEqual(baseline)
 
-    // …and a non-admin cannot promote itself,
-    await expect(later.call('set_user_admin', [later.idArg, true])).rejects.toThrow(ReducerError)
-    // …nor register the archive service, the reducer this bootstrap exists for.
-    await expect(later.call('set_archive_service_identity', [later.idArg])).rejects.toThrow(
-      ReducerError,
-    )
+    await expect(
+      firstPublicUser.call('set_user_admin', [firstPublicUser.idArg, true]),
+    ).rejects.toThrow(ReducerError)
+    await expect(
+      firstPublicUser.call('set_archive_service_identity', [firstPublicUser.idArg]),
+    ).rejects.toThrow(ReducerError)
 
     expect(adminIdentities()).toEqual(baseline)
+  })
+
+  it('applies an explicit admin grant when the target registers later', async () => {
+    const grantor = await makeAdmin('grantor')
+    const futureAdmin = await mintIdentity('future_admin')
+
+    try {
+      await grantor.call('set_user_admin', [futureAdmin.idArg, true])
+      expect(await isAdmin(futureAdmin)).toBe(false)
+
+      await futureAdmin.call('register_user', [futureAdmin.username, futureAdmin.username])
+      expect(await isAdmin(futureAdmin)).toBe(true)
+    } finally {
+      // Keep the shared suite independent even when an assertion fails.
+      ownerSql(`UPDATE user SET is_admin = false WHERE identity = 0x${grantor.identity}`)
+      ownerSql(`UPDATE user SET is_admin = false WHERE identity = 0x${futureAdmin.identity}`)
+    }
   })
 })
