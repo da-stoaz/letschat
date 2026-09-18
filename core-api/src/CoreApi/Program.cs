@@ -111,6 +111,7 @@ builder.Services.AddScoped<AccountEmailService>();
 // token generation) in step with core-api's — the chat client never asks
 // core-api, so nothing else revokes a session there.
 builder.Services.AddScoped<AccountAccessService>();
+builder.Services.AddScoped<AdminRoleService>();
 
 // Runtime-editable config + audit log (admin control panel).
 builder.Services.AddSingleton<SystemConfigService>();

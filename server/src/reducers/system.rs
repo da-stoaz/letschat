@@ -194,10 +194,10 @@ pub fn set_user_admin(
 
     // Last-admin guard — never let the system end up with zero admins, which
     // would lock everyone out of the policy/admin reducers.
-    if !is_admin {
+    if !is_admin && target == ctx.sender() {
         let admin_count = ctx.db.user().iter().filter(|u| u.is_admin).count();
         assert_or_err(
-            !(target == ctx.sender() && admin_count <= 1),
+            admin_count > 1,
             "cannot revoke admin from the last remaining admin",
         )?;
     }

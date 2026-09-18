@@ -24,6 +24,7 @@ namespace CoreApi.Pages.Admin;
 public sealed class CreateUserModel(
     UserManager<ApplicationUser> users,
     SpacetimeTokenService spacetime,
+    AdminRoleService adminRoles,
     AuditService audit) : PageModel
 {
     [BindProperty] public string Username { get; set; } = string.Empty;
@@ -98,9 +99,15 @@ public sealed class CreateUserModel(
             return Page();
         }
 
+        var createdAsAdmin = false;
         if (IsAdmin)
         {
-            await users.AddToRoleAsync(user, DbInitializer.AdminRole);
+            var role = await adminRoles.SetAsync(user, true);
+            createdAsAdmin = role.Succeeded;
+            if (!role.Succeeded)
+            {
+                Error = $"Created {user.UserName}, but administrator setup failed. {role.Error}";
+            }
         }
 
         await audit.RecordAsync(
@@ -108,7 +115,7 @@ public sealed class CreateUserModel(
             "user.create",
             "user",
             user.Id,
-            $"Created {user.UserName}{(IsAdmin ? " (admin)" : string.Empty)}");
+            $"Created {user.UserName}{(createdAsAdmin ? " (admin)" : string.Empty)}");
 
         return Redirect($"/admin/users/{user.Id}");
     }
