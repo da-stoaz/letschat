@@ -92,15 +92,21 @@ describe('my_servers: member spaces ∪ discoverable spaces', () => {
   })
 })
 
-describe('my_server_members: not exposed for spaces you are not in', () => {
+describe('server membership visibility', () => {
   let alice: TestUser
   let bob: TestUser
+  let carol: TestUser
   let privateServerId: number
+  let discoverableServerId: number
 
   beforeAll(async () => {
     alice = await makeUser('alice')
     bob = await makeUser('bob')
+    carol = await makeUser('carol')
     privateServerId = await createServer(alice) // private: ModeratorsOnly, not discoverable
+    discoverableServerId = await createServer(alice)
+    await makeOpenJoinable(alice, discoverableServerId)
+    await carol.call('join_discoverable_server', [discoverableServerId])
   })
 
   it('the owner sees their own membership row', async () => {
@@ -111,6 +117,20 @@ describe('my_server_members: not exposed for spaces you are not in', () => {
   it('a non-member cannot see the membership of a private space', async () => {
     const { rows } = await bob.sql('SELECT server_id FROM my_server_members')
     expect(rows.map((r) => Number(r.server_id))).not.toContain(privateServerId)
+  })
+
+  it('a non-member sees only the count for a discoverable space', async () => {
+    const members = await bob.sql(
+      `SELECT user_identity, role, joined_at, timeout_until FROM my_server_members WHERE server_id = ${discoverableServerId}`,
+    )
+    expect(members.rows).toHaveLength(0)
+
+    const counts = await bob.sql(
+      `SELECT server_id, member_count FROM discover_server_member_counts WHERE server_id = ${discoverableServerId}`,
+    )
+    expect(counts.rows).toEqual([
+      expect.objectContaining({ server_id: discoverableServerId, member_count: 2 }),
+    ])
   })
 })
 

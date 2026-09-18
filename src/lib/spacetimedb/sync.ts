@@ -162,13 +162,9 @@ export function syncServers(conn: DbConnection): void {
 export function syncDiscover(conn: DbConnection): void {
   const joined = joinedServerIds(conn)
 
-  // Member counts are computed across the full (public) server_member table so
-  // a discover card can show how many people are in a space the caller hasn't
-  // joined.
   const memberCounts = new Map<number, number>()
-  for (const member of conn.db.my_server_members.iter()) {
-    const sid = toU64Number(member.serverId)
-    memberCounts.set(sid, (memberCounts.get(sid) ?? 0) + 1)
+  for (const row of conn.db.discover_server_member_counts.iter()) {
+    memberCounts.set(toU64Number(row.serverId), toU64Number(row.memberCount))
   }
 
   const servers = Array.from(conn.db.my_servers.iter())

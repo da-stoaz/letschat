@@ -177,8 +177,8 @@ pub struct Server {
     pub created_at: Timestamp,
     /// Opt-in: when true the space is listed on the "Discover" surface for
     /// non-members. Owner-controlled via `set_server_discovery`. Default off.
-    /// Indexed so the `my_servers` / `my_server_members` views can pull the
-    /// discoverable set without a full-table scan (view handles are index-only).
+    /// Indexed so the Discover views can pull the discoverable set without a
+    /// full-table scan (view handles are index-only).
     #[index(btree)]
     #[default(false)]
     pub is_discoverable: bool,
@@ -193,9 +193,9 @@ pub struct Server {
     pub tags: Option<Vec<String>>,
 }
 
-// Private: the `my_server_members` view exposes members of spaces the caller
-// belongs to (plus discoverable spaces, for Discover member counts). Keeps the
-// full membership graph off the public `/sql` surface.
+// Private: `my_server_members` exposes only members of spaces the caller belongs
+// to; Discover receives aggregate counts from `discover_server_member_counts`.
+// Keeps the full membership graph off the public `/sql` surface.
 #[spacetimedb::table(
     accessor = server_member,
     index(accessor = by_server_and_user, btree(columns = [server_id, user_identity]))

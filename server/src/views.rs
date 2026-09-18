@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::Bound;
 
-use spacetimedb::{Identity, Timestamp, ViewContext};
+use spacetimedb::{Identity, SpacetimeType, Timestamp, ViewContext};
 
 use crate::schema::{
     Ban, Block, Channel, DirectMessage, DmServerInvite, DmVoiceParticipant, Friend, FriendStatus,
@@ -23,6 +23,12 @@ use crate::schema::{
 /// client memory and per-reconnect bandwidth grew without limit, and that full
 /// set was the multiplier that made C1/C2 quadratic.
 pub(crate) const RECENT_MESSAGE_WINDOW: usize = 200;
+
+#[derive(SpacetimeType)]
+pub struct DiscoverServerMemberCount {
+    pub server_id: u64,
+    pub member_count: u64,
+}
 
 /// The newest `RECENT_MESSAGE_WINDOW` of `rows`, oldest first.
 ///
@@ -247,21 +253,30 @@ pub fn my_servers(ctx: &ViewContext) -> Vec<Server> {
     rows
 }
 
-/// Members of spaces the caller belongs to, plus members of discoverable spaces
-/// (so Discover cards can show member counts for spaces the caller hasn't
-/// joined). A superset of every membership view the client builds.
+/// Members of spaces the caller belongs to. Discover cards use the aggregate
+/// `discover_server_member_counts` view below and never receive member details.
 #[spacetimedb::view(accessor = my_server_members, public)]
 pub fn my_server_members(ctx: &ViewContext) -> Vec<ServerMember> {
-    let mut visible = my_server_ids(ctx);
-    for server in ctx.db.server().is_discoverable().filter(true) {
-        visible.insert(server.id);
-    }
-
     let mut rows = Vec::<ServerMember>::new();
-    for server_id in &visible {
-        rows.extend(ctx.db.server_member().server_id().filter(*server_id));
+    for server_id in my_server_ids(ctx) {
+        rows.extend(ctx.db.server_member().server_id().filter(server_id));
     }
     rows
+}
+
+/// Aggregate counts for Discover cards. Exposes no identities, roles, join
+/// timestamps, or moderation state from spaces the caller has not joined.
+#[spacetimedb::view(accessor = discover_server_member_counts, public)]
+pub fn discover_server_member_counts(ctx: &ViewContext) -> Vec<DiscoverServerMemberCount> {
+    ctx.db
+        .server()
+        .is_discoverable()
+        .filter(true)
+        .map(|server| DiscoverServerMemberCount {
+            server_id: server.id,
+            member_count: ctx.db.server_member().server_id().filter(server.id).count() as u64,
+        })
+        .collect()
 }
 
 /// Channel messages for spaces the caller is a member of.

@@ -139,6 +139,7 @@ import ArchiveServerMembersRow from "./archive_server_members_table";
 import ArchiveServersRow from "./archive_servers_table";
 import ArchiveServiceRow from "./archive_service_table";
 import ArchiveUsersRow from "./archive_users_table";
+import DiscoverServerMemberCountsRow from "./discover_server_member_counts_table";
 import MyBansRow from "./my_bans_table";
 import MyBlocksRow from "./my_blocks_table";
 import MyChannelMessagesRow from "./my_channel_messages_table";
@@ -283,6 +284,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, ArchiveUsersRow),
+  discoverServerMemberCounts: __table({
+    name: 'discover_server_member_counts',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, DiscoverServerMemberCountsRow),
   myBans: __table({
     name: 'my_bans',
     indexes: [
@@ -539,6 +547,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "archive_servers": Omit<typeof tablesSchema.schemaType.tables["archiveServers"], "accessorName"> & { readonly accessorName: "archive_servers" };
     /** @deprecated Use `archiveUsers` instead. This alias will be removed in the next major version. */
     readonly "archive_users": Omit<typeof tablesSchema.schemaType.tables["archiveUsers"], "accessorName"> & { readonly accessorName: "archive_users" };
+    /** @deprecated Use `discoverServerMemberCounts` instead. This alias will be removed in the next major version. */
+    readonly "discover_server_member_counts": Omit<typeof tablesSchema.schemaType.tables["discoverServerMemberCounts"], "accessorName"> & { readonly accessorName: "discover_server_member_counts" };
     /** @deprecated Use `myBans` instead. This alias will be removed in the next major version. */
     readonly "my_bans": Omit<typeof tablesSchema.schemaType.tables["myBans"], "accessorName"> & { readonly accessorName: "my_bans" };
     /** @deprecated Use `myBlocks` instead. This alias will be removed in the next major version. */
@@ -609,6 +619,7 @@ const tableAccessorAliases = {
   "archive_server_members": "archiveServerMembers",
   "archive_servers": "archiveServers",
   "archive_users": "archiveUsers",
+  "discover_server_member_counts": "discoverServerMemberCounts",
   "my_bans": "myBans",
   "my_blocks": "myBlocks",
   "my_channel_messages": "myChannelMessages",
@@ -679,6 +690,8 @@ export type DbView = __DbViewBase & {
   readonly "archive_servers": __DbViewBase["archiveServers"];
   /** @deprecated Use `archiveUsers` instead. This alias will be removed in the next major version. */
   readonly "archive_users": __DbViewBase["archiveUsers"];
+  /** @deprecated Use `discoverServerMemberCounts` instead. This alias will be removed in the next major version. */
+  readonly "discover_server_member_counts": __DbViewBase["discoverServerMemberCounts"];
   /** @deprecated Use `myBans` instead. This alias will be removed in the next major version. */
   readonly "my_bans": __DbViewBase["myBans"];
   /** @deprecated Use `myBlocks` instead. This alias will be removed in the next major version. */
@@ -751,6 +764,8 @@ export type Tables = __TablesBase & {
   readonly "archive_servers": __TablesBase["archiveServers"];
   /** @deprecated Use `archiveUsers` instead. This alias will be removed in the next major version. */
   readonly "archive_users": __TablesBase["archiveUsers"];
+  /** @deprecated Use `discoverServerMemberCounts` instead. This alias will be removed in the next major version. */
+  readonly "discover_server_member_counts": __TablesBase["discoverServerMemberCounts"];
   /** @deprecated Use `myBans` instead. This alias will be removed in the next major version. */
   readonly "my_bans": __TablesBase["myBans"];
   /** @deprecated Use `myBlocks` instead. This alias will be removed in the next major version. */

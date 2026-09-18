@@ -292,6 +292,7 @@ async function connectWithUri(uri: string, database: string, reportErrors: boole
         tables.my_visible_users,
         tables.my_servers,
         tables.my_server_members,
+        tables.discover_server_member_counts,
         tables.my_channels,
         tables.my_channel_messages,
         tables.my_pinned_messages,
