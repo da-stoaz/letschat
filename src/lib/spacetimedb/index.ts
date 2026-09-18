@@ -2,7 +2,15 @@
 // All 29 consumer files import from '../lib/spacetimedb' and resolve here automatically.
 
 export type { SpacetimeDBClient } from './connection'
-export { spacetimedbClient, onConnect, onDisconnect, onError, getCurrentSessionToken, tables } from './connection'
+export {
+  spacetimedbClient,
+  onConnect,
+  onDisconnect,
+  onError,
+  getCurrentSessionToken,
+  REAUTHENTICATION_REQUIRED_MESSAGE,
+  tables,
+} from './connection'
 export { reducers } from './reducers'
 export {
   initializeSpacetime,

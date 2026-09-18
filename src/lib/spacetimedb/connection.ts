@@ -2,6 +2,7 @@ import { DbConnection, tables } from '../../generated'
 import { cancelPendingRefreshes, watchLiveTables } from './events'
 import { syncAll, resetClientState } from './sync'
 import { notify } from '../notifications'
+import { clearStoredAuthSessionToken } from '../authService'
 import { useConnectionStore, type ConnectionStatus } from '../../stores/connectionStore'
 import { useServerConfigStore } from '../../stores/serverConfigStore'
 import { isDesktopTauriRuntime } from '../tauri'
@@ -83,6 +84,9 @@ function teardownConnection(closeSocket = false): void {
 // ─── Token storage ────────────────────────────────────────────────────────────
 
 const SPACETIMEDB_TOKEN_KEY = 'spacetimedb.auth_token'
+
+export const REAUTHENTICATION_REQUIRED_MESSAGE =
+  'Your session is no longer valid. Please sign in again.'
 
 export function getStoredToken(): string | undefined {
   const token = localStorage.getItem(SPACETIMEDB_TOKEN_KEY)
@@ -439,17 +443,16 @@ export async function connect(): Promise<void> {
     try {
       await connectWithCompressionFallback()
     } catch (error) {
-      // A cached token the server can't verify — e.g. after the SpacetimeDB
-      // database/keys were reset — would otherwise brick the client forever:
-      // every reconnect re-presents the same dead token. Drop it and retry once,
-      // connecting anonymously so the fresh server issues a new identity/token.
+      // Never replace a rejected account token with a fresh anonymous identity.
+      // End the whole local session instead, so stale account data disappears
+      // and the user gets an explicit sign-in prompt.
       if (getStoredToken() && /verify token/i.test(getConnectionErrorDetails(error))) {
-        console.warn('[spacetimedb] stored token rejected by server; clearing it and retrying anonymously')
         clearStoredToken()
-        await connectWithCompressionFallback()
-      } else {
-        throw error
+        clearStoredAuthSessionToken()
+        disconnect()
+        throw new Error(REAUTHENTICATION_REQUIRED_MESSAGE, { cause: error })
       }
+      throw error
     }
   })()
 
@@ -481,7 +484,7 @@ export function disconnect(): void {
   if (connection) {
     const offlineReducer = connection.reducers?.setPresenceOffline
     if (typeof offlineReducer === 'function') {
-      void offlineReducer({})
+      void offlineReducer({}).catch(() => undefined)
     }
   }
   teardownConnection(true)
