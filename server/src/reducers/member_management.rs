@@ -60,8 +60,8 @@ pub fn kick_member(
     let channel_ids: Vec<u64> = ctx
         .db
         .channel()
-        .iter()
-        .filter(|c| c.server_id == server_id)
+        .server_id()
+        .filter(server_id)
         .map(|c| c.id)
         .collect();
 

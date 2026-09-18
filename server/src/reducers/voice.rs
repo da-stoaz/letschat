@@ -22,19 +22,17 @@ pub fn join_voice_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), S
     let participant_count = ctx
         .db
         .voice_participant()
-        .iter()
-        .filter(|v| v.channel_id == channel_id)
+        .channel_id()
+        .filter(channel_id)
         .count();
     assert_or_err(participant_count < 15, "voice channel is full")?;
 
     let existing_in_server: Vec<String> = ctx
         .db
         .voice_participant()
-        .iter()
+        .user_identity()
+        .filter(ctx.sender())
         .filter_map(|vp| {
-            if vp.user_identity != ctx.sender() {
-                return None;
-            }
             ctx.db
                 .channel()
                 .id()
@@ -78,8 +76,9 @@ pub fn on_client_disconnected(ctx: &ReducerContext) {
     let voice_keys: Vec<String> = ctx
         .db
         .voice_participant()
-        .iter()
-        .filter(|vp| vp.user_identity == sender && owned_by_dying_connection(&vp.connection_id))
+        .user_identity()
+        .filter(sender)
+        .filter(|vp| owned_by_dying_connection(&vp.connection_id))
         .map(|vp| vp.voice_key)
         .collect();
     for key in voice_keys {

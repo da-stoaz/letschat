@@ -365,6 +365,7 @@ pub struct VoiceParticipant {
     pub voice_key: String,
     #[index(btree)]
     pub channel_id: u64,
+    #[index(btree)]
     pub user_identity: Identity,
     pub joined_at: Timestamp,
     pub muted: bool,

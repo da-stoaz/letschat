@@ -1,59 +1,42 @@
-use spacetimedb::{ReducerContext, Table};
+use spacetimedb::{Identity, ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, find_channel, require_account};
+use crate::helpers::{
+    assert_or_err, find_channel, find_friend_row, has_member_role, require_account,
+};
 use crate::schema::*;
-
-fn normalize_identity(value: &str) -> String {
-    value.trim().to_lowercase()
-}
 
 fn parse_channel_scope(scope_key: &str) -> Option<u64> {
     let raw = scope_key.strip_prefix("channel:")?;
     raw.parse::<u64>().ok()
 }
 
-fn parse_dm_scope(scope_key: &str) -> Option<(String, String)> {
+fn parse_dm_scope(scope_key: &str) -> Option<(Identity, Identity)> {
     let raw = scope_key.strip_prefix("dm:")?;
     let mut parts = raw.split(':');
-    let a = parts.next()?;
-    let b = parts.next()?;
+    let a = parts.next()?.trim().parse::<Identity>().ok()?;
+    let b = parts.next()?.trim().parse::<Identity>().ok()?;
     if parts.next().is_some() {
         return None;
     }
-    Some((normalize_identity(a), normalize_identity(b)))
+    Some((a, b))
 }
 
 fn ensure_scope_allowed(ctx: &ReducerContext, scope_key: &str) -> Result<(), String> {
     if let Some(channel_id) = parse_channel_scope(scope_key) {
         let channel_row = find_channel(ctx, channel_id)?;
-        let is_member = ctx
-            .db
-            .server_member()
-            .server_id()
-            .filter(channel_row.server_id)
-            .any(|row| row.user_identity == ctx.sender());
+        let is_member = has_member_role(ctx, channel_row.server_id, ctx.sender()).is_some();
         return assert_or_err(is_member, "not a member of this channel server");
     }
 
     if let Some((a, b)) = parse_dm_scope(scope_key) {
-        let me = normalize_identity(&ctx.sender().to_string());
+        let me = ctx.sender();
         assert_or_err(
             a == me || b == me,
             "dm scope does not include sender identity",
         )?;
         let other = if a == me { b } else { a };
 
-        let friend_row = ctx
-            .db
-            .friend()
-            .iter()
-            .find(|row| {
-                row.status == FriendStatus::Accepted
-                    && ((row.user_a == ctx.sender()
-                        && normalize_identity(&row.user_b.to_string()) == other)
-                        || (row.user_b == ctx.sender()
-                            && normalize_identity(&row.user_a.to_string()) == other))
-            })
+        let friend_row = find_friend_row(ctx, me, other)
             .ok_or_else(|| "friendship not accepted for dm scope".to_string())?;
 
         assert_or_err(

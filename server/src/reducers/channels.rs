@@ -36,10 +36,9 @@ fn section_channels_sorted(
     let mut rows: Vec<Channel> = ctx
         .db
         .channel()
-        .iter()
-        .filter(|channel| {
-            channel.server_id == server_id && same_channel_section(&channel.section, section)
-        })
+        .server_id()
+        .filter(server_id)
+        .filter(|channel| same_channel_section(&channel.section, section))
         .collect();
 
     rows.sort_by(|left, right| {
@@ -95,12 +94,12 @@ fn move_channel_to_position(
     }
 }
 
-fn delete_channel_with_dependencies(ctx: &ReducerContext, channel_id: u64) {
+pub(super) fn delete_channel_with_dependencies(ctx: &ReducerContext, channel_id: u64) {
     let message_ids: Vec<u64> = ctx
         .db
         .message()
-        .iter()
-        .filter(|m| m.channel_id == channel_id)
+        .channel_id()
+        .filter(channel_id)
         .map(|m| m.id)
         .collect();
 
@@ -111,8 +110,8 @@ fn delete_channel_with_dependencies(ctx: &ReducerContext, channel_id: u64) {
     let participant_keys: Vec<String> = ctx
         .db
         .voice_participant()
-        .iter()
-        .filter(|v| v.channel_id == channel_id)
+        .channel_id()
+        .filter(channel_id)
         .map(|v| v.voice_key)
         .collect();
 
@@ -321,8 +320,9 @@ pub fn delete_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), Strin
         let message_channel_count = ctx
             .db
             .channel()
-            .iter()
-            .filter(|c| c.server_id == channel_row.server_id && is_message_channel(&c.kind))
+            .server_id()
+            .filter(channel_row.server_id)
+            .filter(|c| is_message_channel(&c.kind))
             .count();
         assert_or_err(
             message_channel_count > 1,
@@ -347,11 +347,9 @@ pub fn delete_channel_section(
     let section_channels: Vec<Channel> = ctx
         .db
         .channel()
-        .iter()
-        .filter(|channel| {
-            channel.server_id == server_id
-                && same_channel_section(&channel.section, &normalized_section)
-        })
+        .server_id()
+        .filter(server_id)
+        .filter(|channel| same_channel_section(&channel.section, &normalized_section))
         .collect();
 
     let channel_ids: Vec<u64> = section_channels.iter().map(|channel| channel.id).collect();
@@ -366,8 +364,9 @@ pub fn delete_channel_section(
         let total_message_channels = ctx
             .db
             .channel()
-            .iter()
-            .filter(|channel| channel.server_id == server_id && is_message_channel(&channel.kind))
+            .server_id()
+            .filter(server_id)
+            .filter(|channel| is_message_channel(&channel.kind))
             .count();
         assert_or_err(
             total_message_channels > message_channels_in_section,

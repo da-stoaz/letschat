@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
 import { AuthPage } from './pages/AuthPage'
 import { InvitePage } from './pages/InvitePage'
@@ -22,7 +22,7 @@ import { DesktopAppBanner } from './features/web/DesktopAppBanner'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
 import { ensureNotificationPermission } from './lib/notifications'
 import { useVoiceLifecycle } from './hooks/useVoiceLifecycle'
-import { initializeSpacetime } from './lib/spacetimedb'
+import { initializeSpacetime, REAUTHENTICATION_REQUIRED_MESSAGE } from './lib/spacetimedb'
 import { SplashScreen } from './components/SplashScreen'
 import { HostConfirmDialog } from './features/setup/HostConfirmDialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,9 +42,11 @@ function App() {
   const isConfigured = useServerConfigStore((s) => s.config !== null)
   const hasHydrated = useServerConfigStore((s) => s.hasHydrated)
   const location = useLocation()
+  const navigate = useNavigate()
   const onAuthRoute = location.pathname.startsWith('/auth')
   const onSetupRoute = location.pathname.startsWith('/setup')
   const onJoinRoute = location.pathname.startsWith('/join')
+  const authenticationRequired = connectionError === REAUTHENTICATION_REQUIRED_MESSAGE
 
   useEffect(() => {
     if (!notificationsEnabled) return
@@ -92,13 +94,13 @@ function App() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TriangleAlertIcon className="size-5 text-destructive" />
-              Couldn’t connect
+              {authenticationRequired ? 'Session expired' : 'Couldn’t connect'}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-muted-foreground">
-            <p>
-              We couldn’t reach the realtime server. It may be offline or unreachable, or
-              this app version may be out of date for it.
+            <p>{authenticationRequired
+              ? 'Your saved session was rejected by the server. Sign in again to reconnect to your account.'
+              : 'We couldn’t reach the realtime server. It may be offline or unreachable, or this app version may be out of date for it.'}
             </p>
             {connectionError ?
               <p className="max-h-32 overflow-auto rounded-md bg-muted/50 p-2 font-mono text-xs wrap-break-word">
@@ -106,7 +108,9 @@ function App() {
               </p>
             : null}
             <div className="flex gap-2">
-              <Button onClick={() => void initializeSpacetime().catch(() => {})}>Try again</Button>
+              {authenticationRequired ?
+                <Button onClick={() => navigate('/auth')}>Sign in again</Button>
+              : <Button onClick={() => void initializeSpacetime().catch(() => {})}>Try again</Button>}
               <Button variant="outline" onClick={() => clearServerConfig()}>
                 Change server
               </Button>

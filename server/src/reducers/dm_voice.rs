@@ -30,8 +30,8 @@ pub fn join_dm_voice(ctx: &ReducerContext, other_identity: Identity) -> Result<(
     let existing_rows: Vec<String> = ctx
         .db
         .dm_voice_participant()
-        .iter()
-        .filter(|row| row.user_identity == ctx.sender())
+        .user_identity()
+        .filter(ctx.sender())
         .map(|row| row.dm_voice_key)
         .collect();
     for key in existing_rows {
@@ -41,8 +41,8 @@ pub fn join_dm_voice(ctx: &ReducerContext, other_identity: Identity) -> Result<(
     let participant_count = ctx
         .db
         .dm_voice_participant()
-        .iter()
-        .filter(|row| row.room_key == room_key)
+        .room_key()
+        .filter(&room_key)
         .count();
     assert_or_err(
         participant_count < DM_VOICE_PARTICIPANT_LIMIT,

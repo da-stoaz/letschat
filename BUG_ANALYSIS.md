@@ -49,17 +49,17 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [C2](#c2) | ~~Initialer Sync ist O(N²) und läuft in den 5-Sekunden-Timeout~~ · **✅ behoben (PR #73)** | ~~S1~~ | Client |
 | [C3](#c3) | ~~`my_channel_messages` liefert die komplette Historie ohne Limit~~ · **✅ behoben (PR #77)** | ~~S1~~ | Views |
 | [C4](#c4) | ~~`my_server_members` gibt alle Mitglieder aller Discover-Spaces preis~~ · **✅ behoben (PR #89)** | ~~S2~~ | Views |
-| [C5](#c5) | Typing-Indikator macht pro Tastenanschlag einen Full-Table-Scan | S2 | Modul |
-| [C6](#c6) | Lösch-Reducer scannen ganze Tabellen statt Indizes zu nutzen | S2 | Modul |
+| [C5](#c5) | ~~Typing-Indikator macht pro Tastenanschlag einen Full-Table-Scan~~ · **✅ behoben (PR #90)** | ~~S2~~ | Modul |
+| [C6](#c6) | ~~Lösch-Reducer scannen ganze Tabellen statt Indizes zu nutzen~~ · **✅ behoben (PR #90)** | ~~S2~~ | Modul |
 | [C7](#c7) | Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients | S2 | Client |
 | [C8](#c8) | `cleanup_stale_invites_internal` scannt bei jeder Invite-Operation | S3 | Modul |
 | [D1](#d1) | `TypingState` wird bei Verbindungsabbruch nie aufgeräumt | S3 | Modul |
 | [D2](#d2) | Präsenz bleibt nach Absturz dauerhaft „online" | S3 | Modul |
-| [D3](#d3) | `delete_server` lässt Pins, Read-States und DM-Invites verwaist zurück | S3 | Modul |
+| [D3](#d3) | `delete_server` lässt Read-States und DM-Invites verwaist zurück | S3 | Modul |
 | [D4](#d4) | Bestätigte Anhänge werden beim Löschen ihrer Nachricht/Channels nicht entfernt | S3 | Storage |
 | [D5](#d5) | `rekey_identities` korrumpiert Daten bei verketteten Remaps | S3 | Modul |
 | [D6](#d6) | Stale Messages im Client-Store nach Hard-Delete | S4 | Client |
-| [E1](#e1) | Stiller Fallback auf anonyme Identity bei Token-Ablehnung | S3 | Client |
+| [E1](#e1) | ~~Stiller Fallback auf anonyme Identity bei Token-Ablehnung~~ · **✅ behoben (PR #90)** | ~~S3~~ | Client |
 | [E2](#e2) | Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben | S3 | Client |
 | [E3](#e3) | Discovery fällt bei nacktem Hostnamen auf `http://` zurück | S3 | Client |
 | [E4](#e4) | CSP wird nur im Report-Only-Modus ausgeliefert | S3 | Deploy |
@@ -723,79 +723,34 @@ auch den weiterhin korrekten aggregierten Count.
 ---
 
 <a id="c5"></a>
-## C5 — Typing-Indikator macht pro Tastenanschlag einen Full-Table-Scan · **S2**
+## C5 — Typing-Indikator machte im Hotpath einen Full-Table-Scan · ✅ **behoben**
 
-**Stelle:** `server/src/reducers/presence.rs:46-51` (in `ensure_scope_allowed`, ab Zeile 26)
+**Behoben in PR #90** (`fix/auth-and-scaling-batch`).
 
-```rust
-let friend_row = ctx.db.friend().iter().find(|row| {
-    row.status == FriendStatus::Accepted
-        && ((row.user_a == ctx.sender() && normalize_identity(&row.user_b.to_string()) == other)
-            || (row.user_b == ctx.sender() && normalize_identity(&row.user_a.to_string()) == other))
-})...
-```
+Die DM-Scope-Identitäten werden jetzt direkt als `Identity` geparst. Die
+Freundschaftsprüfung verwendet den vorhandenen `find_friend_row`-Lookup über den
+`pair_key`-Primärschlüssel statt `friend().iter()`. Auch die Channel-Autorisierung
+nutzt mit `has_member_role` den vorhandenen Membership-Primärschlüssel.
 
-`.iter()` ist ein Scan über **die gesamte `friend`-Tabelle der Instanz**. Pro
-geprüfter Zeile werden zusätzlich zwei `Identity::to_string()`-Allokationen und ein
-`to_lowercase()` durchgeführt.
-
-Aufgerufen wird das aus `set_typing_state` (`:100`, Aufruf in `:109`) — also bei jedem Tastenanschlag
-jedes Nutzers in jeder DM.
-
-Dabei ist der Primärschlüssel-Lookup direkt verfügbar: `find_friend_row`
-(`helpers.rs:241-243`) nutzt `friend_pair_key` und wird in `send_direct_message`,
-`join_dm_voice` und `mark_dm_read` bereits korrekt so verwendet. Nur diese eine Stelle
-scannt.
-
-**Auswirkung:** Der Aufwand für den Typing-Indikator wächst linear mit der Gesamtzahl
-aller Freundschaften der Instanz — auf dem heißesten Pfad im System.
-
-**Richtung für einen Fix:** `find_friend_row(ctx, ctx.sender(), other_identity)`
-verwenden. Da `other` hier als normalisierter String vorliegt, muss dafür die
-`Identity` rekonstruiert oder der DM-Scope-Parser so umgebaut werden, dass er
-`Identity` zurückgibt.
+Drei Black-box-Tests decken akzeptierte Freunde, Nicht-Freunde sowie erlaubte und
+abgewiesene Channel-Mitglieder ab.
 
 ---
 
 <a id="c6"></a>
-## C6 — Lösch-Reducer scannen ganze Tabellen statt Indizes zu nutzen · **S2**
+## C6 — Lösch-Reducer scannten ganze Tabellen statt Indizes zu nutzen · ✅ **behoben**
 
-**Stellen:** `server/src/reducers/servers.rs:300-378` (`delete_server`),
-`channels.rs:98-136` (`delete_channel_with_dependencies`),
-`voice.rs:19-25` (`join_voice_channel`), `voice.rs:75-81` (`on_client_disconnected`)
+**Behoben in PR #90** (`fix/auth-and-scaling-batch`).
 
-`delete_server` durchläuft für **jeden** Channel des Space die **gesamte**
-`message`-Tabelle der Instanz:
+Channel-, Message-, Mitglieder-, Ban-, Invite-, Join-Request- und Voice-Zeilen werden
+jetzt über ihre vorhandenen `server_id`-, `channel_id`-, `room_key`- und
+`user_identity`-Accessors gelesen. Für `VoiceParticipant.user_identity` kam der eine
+fehlende B-Tree-Index hinzu. `delete_server` verwendet außerdem den gemeinsamen
+`delete_channel_with_dependencies`-Pfad statt Message-, Voice- und Channel-Cleanup zu
+duplizieren.
 
-```rust
-for channel_id in &channel_ids {
-    let messages: Vec<Message> = ctx.db.message().iter()
-        .filter(|m| m.channel_id == *channel_id).collect();
-```
-
-Aufwand: O(Channels × alle Nachrichten der Instanz). Dabei existiert genau der
-passende Index — `Message.channel_id` ist als `#[index(btree)]` deklariert
-(`schema.rs`), und `views.rs:252` nutzt ihn korrekt mit
-`ctx.db.message().channel_id().filter(channel.id)`.
-
-Das gleiche Muster in derselben Datei für `voice_participant`, `server_member`, `ban`,
-`invite`, `join_request` und `channel` (Zeilen 303, 312, 322, 333, 346, 356, 366, 397)
-— alle diese Tabellen haben einen `server_id`- bzw. `channel_id`-Index, keiner wird
-benutzt.
-
-Interessanterweise ist es in `delete_channel_with_dependencies` gemischt: Der
-Pin-Teil nutzt korrekt `ctx.db.pinned_message().channel_id().filter(channel_id)`
-(`channels.rs:123-129`), der Nachrichten- und Voice-Teil direkt darüber (`:99-121`)
-scannt.
-
-Auch `on_client_disconnected` (`voice.rs:75-81`) scannt `voice_participant`
-vollständig, während der DM-Teil unmittelbar darunter (`:82-89`) den
-`user_identity`-Index nutzt.
-
-**Auswirkung:** Auf einer Instanz mit umfangreicher Historie kann `delete_server` das
-Zeit- und Energiebudget des Reducers überschreiten und die Transaktion abbrechen — der
-Space wäre dann nicht löschbar. `on_client_disconnected` läuft bei **jedem**
-Verbindungsabbruch und skaliert mit der Gesamtzahl aller Voice-Teilnehmer.
+Regressionstests prüfen, dass ein Disconnect nur die Voice-Zeilen der sterbenden
+Verbindung entfernt und dass beim Löschen eines Space dessen Pins mit verschwinden.
 
 ---
 
@@ -891,7 +846,7 @@ derselben Identity aktiv sind).
 ---
 
 <a id="d3"></a>
-## D3 — `delete_server` lässt Pins, Read-States und DM-Invites verwaist zurück · **S3**
+## D3 — `delete_server` lässt Read-States und DM-Invites verwaist zurück · **S3**
 
 **Stelle:** `server/src/reducers/servers.rs:297-379`
 
@@ -900,21 +855,18 @@ derselben Identity aktiv sind).
 
 | Tabelle | Verwaiste Zeilen |
 |---|---|
-| `pinned_message` | zeigen auf gelöschte Channels und Nachrichten |
 | `read_state` | `scope_key = "channel:{id}"` für gelöschte Channels |
 | `dm_server_invite` | verweisen auf den gelöschten Space und dessen gelöschte Token |
 
-Bemerkenswert: `delete_channel_with_dependencies` (`channels.rs:98-136`) räumt die
-Pins korrekt auf. `delete_server` löscht Channels aber direkt über
-`ctx.db.channel().id().delete(channel_id)` (`servers.rs:373-375`) und umgeht diese
-Hilfsfunktion — die Pin-Bereinigung fällt dabei durch.
+Der Pin-Anteil wurde in PR #90 behoben: `delete_server` verwendet jetzt
+`delete_channel_with_dependencies`, das Pins zusammen mit Nachrichten, Voice-Zeilen
+und Channels entfernt. Read-States und DM-Invites bleiben als Restbefund offen.
 
 `leave_server` (`:382-409`) und `kick_member` (`member_management.rs:10`) lassen
 ebenfalls `join_request`- und `read_state`-Zeilen des Betroffenen stehen.
 
-**Auswirkung:** Monoton wachsende Tabellen mit toten Verweisen. Die verwaisten Pins
-werden über `my_pinned_messages` nicht mehr ausgeliefert (die View filtert über
-existierende Channels), belegen aber dauerhaft Platz und landen im Archiv.
+**Auswirkung:** Monoton wachsende Tabellen mit toten Read-State- und
+DM-Invite-Verweisen, die dauerhaft Platz belegen und im Archiv landen.
 
 ---
 
@@ -1018,50 +970,18 @@ beidseitig gelöscht wurden (`direct_messages.rs:89-90` löscht dann hart).
 # E — Client und Deployment
 
 <a id="e1"></a>
-## E1 — Stiller Fallback auf anonyme Identity bei Token-Ablehnung · **S3**
+## E1 — Stiller Fallback auf anonyme Identity bei Token-Ablehnung · ✅ **behoben**
 
-**Stellen:** `src/lib/spacetimedb/connection.ts:426-440` (insb. `:433`), `:219-227`
+**Behoben in PR #90** (`fix/auth-and-scaling-batch`).
 
-```ts
-if (getStoredToken() && /verify token/i.test(getConnectionErrorDetails(error))) {
-  console.warn('[spacetimedb] stored token rejected by server; clearing it and retrying anonymously')
-  clearStoredToken()
-  await connectWithCompressionFallback()      // verbindet ohne Token → anonyme Identity
-}
-```
+Eine Ablehnung des gespeicherten SpacetimeDB-Tokens löst keinen anonymen zweiten
+Verbindungsversuch mehr aus. Der Client beendet stattdessen Socket und Reconnect,
+setzt den Client-State zurück, entfernt SpacetimeDB- und Core-API-Credentials und
+zeigt explizit „Session expired“ mit einer „Sign in again“-Aktion. Andere Netzwerk-
+und Schemafehler behalten den normalen Retry-Pfad.
 
-Und in `onConnect` (`:219-227`) wird die zurückgegebene Identity samt Token
-gespeichert:
-
-```ts
-useConnectionStore.getState().setIdentity(identityString)
-setStoredToken(token)                          // jetzt das anonyme Token
-```
-
-Der Kommentar begründet den Pfad damit, dass ein nicht mehr verifizierbares Token den
-Client sonst „für immer lahmlegen" würde. Die Heilung erzeugt aber einen schlechteren
-Zustand als die Krankheit.
-
-**Auswirkung:** Läuft das 30-Tage-Token ab, oder ändert sich `SPACETIME_OIDC_PRIVATE_KEY`
-serverseitig, verbindet sich der Client **still** unter einer neuen, anonymen Identity
-und überschreibt das gespeicherte Account-Token damit dauerhaft. Der Nutzer sieht eine
-angemeldete Oberfläche, ist aber jemand anderes: keine Spaces, keine Freunde, keine
-DMs, keine Nachrichten. Beim nächsten Start wird das anonyme Token wiederverwendet.
-
-`loginWithPassword` (`auth.ts:107-116`) prüft die Identität nach dem Login sehr wohl
-und wirft eine gute Fehlermeldung — dieser Pfad wird aber nur beim expliziten Login
-durchlaufen. `connect()` wird ebenso von `scheduleReconnect()` (`:344-356`, Aufruf `:352`) und von
-`call()` (`:487-489`) aufgerufen; dort greift keine Prüfung.
-
-Seit der Behebung von [A1](#a1) ist die entstandene anonyme Identity serverseitig
-nicht mehr handlungsfähig. Der Sicherheitsanteil des ursprünglichen Befunds ist damit
-geschlossen; offen bleibt der stille Identitätswechsel mit scheinbar verschwundenen
-Daten und dauerhaft überschriebenem SpacetimeDB-Token. Der Restbefund ist deshalb von
-S2 auf S3 herabgestuft.
-
-**Richtung für einen Fix:** Nach dem Reconnect prüfen, ob die verbundene Identity noch
-der zuletzt authentifizierten entspricht, und andernfalls in einen expliziten
-„Bitte erneut anmelden"-Zustand gehen, statt das Token zu überschreiben.
+Ein Unit-Test beweist, dass genau ein Verbindungsversuch mit dem Account-Token erfolgt,
+nie ohne Token weiterverbunden wird und beide Credentials samt State bereinigt werden.
 
 ---
 
@@ -1326,16 +1246,12 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
-**Stand:** 16 von 43 Befunden sind erledigt; 27 bleiben offen. Darunter ist kein S1
-und es bleiben drei S2. Behoben sind A1–A8, B1–B3, C1–C4 und G1. D4 bleibt als
+**Stand:** 19 von 43 Befunden sind erledigt; 24 bleiben offen. Darunter ist kein S1
+und es bleibt ein S2. Behoben sind A1–A8, B1–B3, C1–C6, E1 und G1. D4 bleibt als
 kleinerer Restbefund für bestätigte Anhänge offen.
 
-**Zuerst — Zugangs- und Datengrenzen:** [E1](#e1) clientseitig fail-closed machen.
-
-**Danach — Betriebsfähigkeit unter Last:**
-[C5](#c5)/[C6](#c6) (Full-Table-Scans in Typing- und Lösch-Reducern) und [C7](#c7)
-(instanzweiter Re-Sync bei Mitglieder-Events). Das schwerste Stück dieser Gruppe,
-das S1-Cluster [C1](#c1)/[C2](#c2)/[C3](#c3), ist erledigt.
+**Zuerst — Betriebsfähigkeit unter Last:** [C7](#c7) (breite Re-Syncs bei
+Mitglieder-Events). Die zuvor offenen Full-Table-Scans C5/C6 sind erledigt.
 
 **Danach — Lebenszyklus und Härtung:** [D4](#d4) (bestätigte Attachments),
 [A10](#a10) (LiveKit-Revokation), [E4](#e4) (CSP Enforcement) und die verbleibenden
