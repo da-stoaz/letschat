@@ -13,7 +13,7 @@ public sealed class UserDetailModel(
     UserManager<ApplicationUser> users,
     AccountEmailService accountEmail,
     AuditService audit,
-    SpacetimeClient spacetime,
+    AdminRoleService adminRoles,
     AccountAccessService access) : PageModel
 {
     public ApplicationUser Target { get; private set; } = null!;
@@ -140,14 +140,7 @@ public sealed class UserDetailModel(
         var user = await users.FindByIdAsync(id);
         if (user is null) return NotFound();
 
-        if (!await users.IsInRoleAsync(user, DbInitializer.AdminRole))
-        {
-            await users.AddToRoleAsync(user, DbInitializer.AdminRole);
-            await AuditAsync("user.grant-admin", user, $"Granted Admin to {user.UserName}");
-        }
-
-        Message = $"{user.UserName} is now an administrator.";
-        await SyncAdminToSpacetime(user, true);
+        await ChangeAdminRoleAsync(user, true);
         return Back(id);
     }
 
@@ -162,39 +155,36 @@ public sealed class UserDetailModel(
             return Back(id);
         }
 
-        if (await users.IsInRoleAsync(user, DbInitializer.AdminRole))
-        {
-            await users.RemoveFromRoleAsync(user, DbInitializer.AdminRole);
-            await AuditAsync("user.revoke-admin", user, $"Revoked Admin from {user.UserName}");
-        }
-
-        Message = $"{user.UserName} is no longer an administrator.";
-        await SyncAdminToSpacetime(user, false);
+        await ChangeAdminRoleAsync(user, false);
         return Back(id);
     }
 
     /// <summary>
-    /// Mirrors the Admin-role change onto the user's SpacetimeDB <c>User</c> row.
-    /// The ASP.NET role is the source of truth for the panel; this keeps the
-    /// chat-domain admin gate in sync. A failure is surfaced (not rolled back) —
-    /// the admin can retry, and a grant also re-syncs on the user's next sign-in.
+    /// Changes the authoritative Core role and mirrors it to SpacetimeDB. If the
+    /// second write fails, the first is rolled back so the same action stays
+    /// visible and can be retried without a periodic reconciler or login-time
+    /// work for ordinary accounts.
     /// </summary>
-    private async Task SyncAdminToSpacetime(ApplicationUser user, bool isAdmin)
+    private async Task ChangeAdminRoleAsync(ApplicationUser user, bool isAdmin)
     {
-        try
+        var result = await adminRoles.SetAsync(user, isAdmin);
+        if (!result.Succeeded)
         {
-            var pushed = await spacetime.SyncUserAdminAsync(user.SpacetimeIdentity, isAdmin);
-            if (!pushed && isAdmin && !spacetime.IsConfigured)
-            {
-                Error = "Role updated, but SpacetimeDB sync is off (no SPACETIMEDB_SERVICE_TOKEN). "
-                    + "The chat-domain admin flag was not changed.";
-            }
+            Error = result.Error;
+            return;
         }
-        catch (Exception ex)
+
+        if (result.Changed)
         {
-            Error = $"Role updated in the panel, but the SpacetimeDB admin flag could not be "
-                + $"{(isAdmin ? "set" : "cleared")} — {ex.Message}";
+            await AuditAsync(
+                isAdmin ? "user.grant-admin" : "user.revoke-admin",
+                user,
+                $"{(isAdmin ? "Granted Admin to" : "Revoked Admin from")} {user.UserName}");
         }
+
+        Message = isAdmin
+            ? $"{user.UserName} is now an administrator."
+            : $"{user.UserName} is no longer an administrator.";
     }
 
     private async Task SetStatusAsync(ApplicationUser user, AccountStatus status)
