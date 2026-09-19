@@ -1295,12 +1295,13 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
-**Stand:** 19 von 43 Befunden sind erledigt; 24 bleiben offen. Darunter ist kein S1
-und es bleibt ein S2. Behoben sind A1–A8, B1–B3, C1–C6, E1 und G1. D4 bleibt als
-kleinerer Restbefund für bestätigte Anhänge offen.
+**Stand:** 19 von 44 Befunden sind erledigt; 25 bleiben offen. Darunter ist kein S1;
+mit A11 und C7 bleiben zwei S2. Behoben sind A1–A8, B1–B3, C1–C6, E1 und G1. D4
+bleibt als kleinerer Restbefund für bestätigte Anhänge offen.
 
-**Zuerst — Betriebsfähigkeit unter Last:** [C7](#c7) (breite Re-Syncs bei
-Mitglieder-Events). Die zuvor offenen Full-Table-Scans C5/C6 sind erledigt.
+**Zuerst — Betriebsfähigkeit unter Last:** [A11](#a11) (gemeinsamer niedriger
+Auth-Bucket hinter CGNAT) und [C7](#c7) (breite Re-Syncs bei Mitglieder-Events).
+Die zuvor offenen Full-Table-Scans C5/C6 sind erledigt.
 
 **Danach — Lebenszyklus und Härtung:** [D4](#d4) (bestätigte Attachments),
 [A10](#a10) (LiveKit-Revokation), [E4](#e4) (CSP Enforcement) und die verbleibenden

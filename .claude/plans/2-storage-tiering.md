@@ -28,7 +28,9 @@ These have **different urgency**, so this plan is split into two parts that ship
 
 This plan is **E2EE-agnostic**: it mirrors opaque rows and does not care whether `content` is plaintext (today) or ciphertext (after [3-e2ee.md](3-e2ee.md)). It is **plan 2 of 4** — Part A lands before E2EE (E2EE's Phase 7 does a destructive column drop that A2's rebuild path de-risks); Part B lands whenever RAM demands it, and is a prerequisite for [4-efficiency-cache.md](4-efficiency-cache.md).
 
-**Prerequisite (met):** the .NET `core-api` rebuild owned by [1-control-panel.md](1-control-panel.md) is done — Postgres is already in the stack (dev port 5433).
+**Prerequisite (met):** the .NET `core-api` control plane is live and Postgres
+is already in the stack (dev port 5433); see
+[`CODEBASE.md`](../../CODEBASE.md).
 
 ---
 

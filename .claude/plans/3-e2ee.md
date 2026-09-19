@@ -12,7 +12,15 @@ This plan does **not** use the Signal Protocol. Signal's Double Ratchet makes ev
 
 The trade-off: no per-message forward secrecy. It is softened with **key epochs** — keys rotate on membership change and periodically — but a device that holds an epoch key can read all history encrypted under it. This is the standard model for E2EE team-chat tools and is the correct fit for this product.
 
-This is **plan 3 of 4** — implemented after `1-control-panel.md` and **Part A (durability)** of `2-storage-tiering.md`. Part A is a real prerequisite: this plan's Phase 7 **drops** the `deleted`/`deleted_by_*` columns, a destructive migration — Part A's cold archive + rebuild path turns that from "wipe history" into "rebuild from Postgres" (see the migration note below). Part B (eviction) of storage-tiering is **not** a prerequisite and may still be deferred. The companion `4-efficiency-cache.md` (client-side local cache and search) depends on this plan and is only sound because decryption here is repeatable.
+This is **plan 3 of 4** — the `core-api` control plane and **Part A
+(durability)** of `2-storage-tiering.md` are already implemented. Part A is a
+real prerequisite: this plan's Phase 7 **drops** the
+`deleted`/`deleted_by_*` columns, a destructive migration — Part A's cold
+archive + rebuild path turns that from "wipe history" into "rebuild from
+Postgres" (see the migration note below). Part B (eviction) of storage-tiering
+is **not** a prerequisite and may still be deferred. The companion
+`4-efficiency-cache.md` (client-side local cache and search) depends on this
+plan and is only sound because decryption here is repeatable.
 
 ---
 

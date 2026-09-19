@@ -102,9 +102,9 @@ Crucial **non-goals** for this plan:
 
 ## Relationship to other plans
 
-- **Independent of `1-control-panel.md` / `2-storage-tiering.md` /
-  `3-e2ee.md` / `4-efficiency-cache.md`.** Builds on top of them; does
-  not require changes to any of their server-side designs.
+- **Independent of the implemented control plane and of
+  `2-storage-tiering.md` / `3-e2ee.md` / `4-efficiency-cache.md`.** Builds on
+  top of them; does not require changes to any of their server-side designs.
 - **E2EE (`3-e2ee.md`) becomes more interesting with multi-instance** —
   keys naturally scope to instance, and an attacker compromising
   instance A learns nothing about messages on instance B.

@@ -10,3 +10,12 @@
   `core-api` endpoint or SpacetimeDB reducer. See [`SECURITY.md`](SECURITY.md).
 - Use additive SpacetimeDB schema changes unless a tested archive rebuild is
   part of the migration. Never bypass a destructive publish prompt casually.
+
+## Frontend UI
+
+- Hide or collapse fields that are inactive because their controlling toggle
+  is off.
+- Do not repeat an adjacent control's state in a badge. If a button already
+  says “Joining…”, a nearby “Joining…” badge is noise; reserve badges for state
+  the control cannot express, such as “In call” for a call the viewer has not
+  joined.
