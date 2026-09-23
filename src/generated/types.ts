@@ -277,6 +277,12 @@ export const StorageReferenceState = __t.object("StorageReferenceState", {
 });
 export type StorageReferenceState = __Infer<typeof StorageReferenceState>;
 
+export const StorageRestoreFence = __t.object("StorageRestoreFence", {
+  id: __t.u8(),
+  lastRestoreAt: __t.timestamp(),
+});
+export type StorageRestoreFence = __Infer<typeof StorageRestoreFence>;
+
 export const SystemSettings = __t.object("SystemSettings", {
   id: __t.u8(),
   get spaceCreatePolicy() {

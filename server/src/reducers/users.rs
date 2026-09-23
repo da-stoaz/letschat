@@ -85,7 +85,11 @@ pub fn update_profile(
     if let Some(name) = display_name {
         user_row.display_name = name;
     }
-    if let Some(next_avatar) = avatar_url.as_deref() {
+    // The client resends the current avatar with every profile save; only a
+    // change is validated, so a pre-existing value never blocks a rename.
+    if let Some(next_avatar) = avatar_url.as_deref()
+        && Some(next_avatar) != user_row.avatar_url.as_deref()
+    {
         sync_avatar_reference(ctx, &user_row.username, Some(next_avatar))?;
     }
     if avatar_url.is_some() {

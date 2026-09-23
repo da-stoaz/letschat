@@ -9,6 +9,7 @@ import {
   none,
   ownerSql,
   some,
+  timestamp,
   type TestUser,
 } from './harness'
 
@@ -64,6 +65,9 @@ describe('object-storage reference lifecycle', () => {
 
     // A collector may only claim after the derived reference index has been
     // rebuilt at least once. This is also the additive-upgrade safety gate.
+    // Earlier files restore archive rows, which fences rebuilds for a quiet
+    // period; this suite starts from a settled module.
+    ownerSql('DELETE FROM storage_restore_fence')
     await admin.call('rebuild_storage_references')
   })
 
@@ -158,6 +162,32 @@ describe('object-storage reference lifecycle', () => {
 
     expect(await claim(admin, cascadedMessageKey)).toContain(cascadedMessageKey)
     expect(await claim(admin, cascadedIconKey)).toContain(cascadedIconKey)
+  })
+
+  it('fences cleanup while an archive restore is in flight', async () => {
+    const worker = await makeUser('storage_worker')
+    await admin.call('set_archive_service_identity', [worker.idArg])
+    const liveKey = `uploads/ch/${channelId}/${owner.username}/restored.bin`
+    const collectedKey = `uploads/ch/${channelId}/${owner.username}/collected.bin`
+    expect(await claim(admin, collectedKey)).toContain(collectedKey)
+
+    // A restored row may name an already-collected object; that must not
+    // abort the whole restore batch.
+    const restoredId = 900_000_000 + Math.floor(Math.random() * 1_000_000)
+    const restore = (id: number, key: string) => worker.call('archive_restore_message', [
+      [[id, channelId, owner.idArg, attachmentContent(key), timestamp(Date.now() * 1000), none, false]],
+    ])
+    await restore(restoredId, liveKey)
+    await restore(restoredId + 1, collectedKey)
+
+    // Mid-restore: no claims, and no rebuild that would miss later batches.
+    await expect(admin.call('claim_unreferenced_storage', [randomBytes(16).toString('hex'), [liveKey]]))
+      .rejects.toThrow('storage references are not ready')
+    await expect(admin.call('rebuild_storage_references')).rejects.toThrow('archive restore in progress')
+
+    ownerSql('DELETE FROM storage_restore_fence') // stands in for the quiet period
+    await admin.call('rebuild_storage_references')
+    expect(await claim(admin, liveKey)).not.toContain(liveKey)
   })
 
   it('keeps cleanup admin-only and rejects malformed batches', async () => {

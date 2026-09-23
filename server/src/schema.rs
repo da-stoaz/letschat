@@ -456,6 +456,17 @@ pub struct StorageReferenceState {
     pub ready: bool,
 }
 
+/// Last time an `archive_restore_*` reducer added reference-bearing rows. A
+/// rebuild during an in-flight archive restore would see users but not yet
+/// their messages and let cleanup delete live attachments, so the rebuild
+/// waits for a quiet period after the most recent restore batch.
+#[spacetimedb::table(accessor = storage_restore_fence)]
+pub struct StorageRestoreFence {
+    #[primary_key]
+    pub id: u8,
+    pub last_restore_at: Timestamp,
+}
+
 /// Permanent tombstone acquired atomically only while a storage key has no
 /// live reference. Reference reducers reject claimed keys, closing the race
 /// between garbage-collection lookup and MinIO deletion.

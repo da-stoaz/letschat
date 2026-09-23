@@ -413,6 +413,9 @@ public sealed class SpacetimeClient(
         }
         catch (Exception ex)
         {
+            // Most often "storage references are not ready" after a module
+            // wipe or archive restore: re-run the rebuild gate next sweep.
+            _storageReferencesReady = false;
             logger.LogWarning(ex,
                 "SpacetimeDB could not claim unreferenced storage; no objects will be deleted.");
             return null;

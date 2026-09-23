@@ -20,6 +20,11 @@ public sealed class PendingUploadSweeper(
     private const long ConfirmedGraceSeconds = 3600;
     private const int BatchSize = 500;
     private bool _inventoryImported;
+    // Keyset cursor over ConfirmedUploads. Referenced objects keep their rows
+    // forever, so always taking the oldest batch would re-check the same live
+    // objects and never reach newer orphans once more than BatchSize exist.
+    private long _cursorConfirmedAt;
+    private string? _cursorStorageKey;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -111,14 +116,23 @@ public sealed class PendingUploadSweeper(
         }
 
         var cutoff = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - ConfirmedGraceSeconds;
-        var candidates = await db.ConfirmedUploads
+        var query = db.ConfirmedUploads
             .AsNoTracking()
-            .Where(upload => upload.ConfirmedAt < cutoff)
+            .Where(upload => upload.ConfirmedAt < cutoff);
+        if (_cursorStorageKey is { } afterKey)
+        {
+            var afterAt = _cursorConfirmedAt;
+            query = query.Where(upload => upload.ConfirmedAt > afterAt
+                || (upload.ConfirmedAt == afterAt && string.Compare(upload.StorageKey, afterKey) > 0));
+        }
+        var candidates = await query
             .OrderBy(upload => upload.ConfirmedAt)
+            .ThenBy(upload => upload.StorageKey)
             .Take(BatchSize)
             .ToListAsync(ct);
         if (candidates.Count == 0)
         {
+            _cursorStorageKey = null;
             return;
         }
 
@@ -128,6 +142,9 @@ public sealed class PendingUploadSweeper(
         {
             return;
         }
+        // A short page means the end was reached: wrap around next sweep.
+        _cursorConfirmedAt = candidates[^1].ConfirmedAt;
+        _cursorStorageKey = candidates.Count < BatchSize ? null : candidates[^1].StorageKey;
 
         var swept = 0;
         foreach (var upload in candidates.Where(upload => claimed.Contains(upload.StorageKey)))

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Deserialize;
-use spacetimedb::{Identity, ReducerContext, Table};
+use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
 
 use crate::helpers::require_system_admin;
 use crate::schema::*;
@@ -11,6 +11,8 @@ const MARKER_PREFIX: &str = "[[LC_ATTACHMENTS_V1:";
 const MARKER_SUFFIX: &str = "]]";
 const MAX_ATTACHMENTS_PER_MESSAGE: usize = 20;
 const REFERENCE_STATE_ID: u8 = 1;
+/// Quiet period after the last archive restore batch before a rebuild is trusted.
+const RESTORE_QUIET_MICROS: i64 = 10 * 60 * 1_000_000;
 
 #[derive(Deserialize)]
 struct AttachmentPayload {
@@ -85,34 +87,59 @@ pub(crate) fn sync_message_references(
 
 /// Rebuild helper: archive rows were already accepted by the live reducers, so
 /// recreate every syntactically valid reference without re-running current
-/// scope rules that may have changed since the message was written.
-pub(crate) fn restore_message_references(
-    ctx: &ReducerContext,
-    owner_key: String,
-    content: &str,
-) -> Result<(), String> {
-    let keys = attachment_keys(content)?;
-    for key in &keys {
-        ensure_not_claimed(ctx, key)?;
-    }
-    replace_references(ctx, &owner_key, keys);
-    Ok(())
+/// scope rules that may have changed since the message was written. Never
+/// fails: one legacy row with unparsable metadata, or a key whose object was
+/// already collected, must not abort a whole restore batch or the rebuild.
+pub(crate) fn restore_message_references(ctx: &ReducerContext, owner_key: String, content: &str) {
+    let keys = attachment_keys(content).unwrap_or_default();
+    replace_references(ctx, &owner_key, unclaimed(ctx, keys));
 }
 
 pub(crate) fn restore_single_reference(
     ctx: &ReducerContext,
     owner_key: String,
     storage_key: Option<&str>,
-) -> Result<(), String> {
+) {
     let keys = storage_key
         .filter(|key| key.starts_with("uploads/") && !key.contains(".."))
         .map(|key| vec![key.to_string()])
         .unwrap_or_default();
-    for key in &keys {
-        ensure_not_claimed(ctx, key)?;
+    replace_references(ctx, &owner_key, unclaimed(ctx, keys));
+}
+
+fn unclaimed(ctx: &ReducerContext, keys: Vec<String>) -> Vec<String> {
+    keys.into_iter()
+        .filter(|key| ensure_not_claimed(ctx, key).is_ok())
+        .collect()
+}
+
+/// Called by the archive restore reducers: cleanup stops trusting the
+/// reference table until a rebuild runs after the restore has gone quiet.
+pub(crate) fn fence_archive_restore(ctx: &ReducerContext) {
+    if let Some(mut state) = ctx
+        .db
+        .storage_reference_state()
+        .id()
+        .find(REFERENCE_STATE_ID)
+    {
+        state.ready = false;
+        ctx.db.storage_reference_state().id().update(state);
     }
-    replace_references(ctx, &owner_key, keys);
-    Ok(())
+    let fence = StorageRestoreFence {
+        id: REFERENCE_STATE_ID,
+        last_restore_at: ctx.timestamp,
+    };
+    if ctx
+        .db
+        .storage_restore_fence()
+        .id()
+        .find(REFERENCE_STATE_ID)
+        .is_some()
+    {
+        ctx.db.storage_restore_fence().id().update(fence);
+    } else {
+        ctx.db.storage_restore_fence().insert(fence);
+    }
 }
 
 pub(crate) fn sync_avatar_reference(
@@ -169,6 +196,11 @@ pub(crate) fn remove_references(ctx: &ReducerContext, owner_key: &str) {
 #[spacetimedb::reducer]
 pub fn rebuild_storage_references(ctx: &ReducerContext) -> Result<(), String> {
     require_system_admin(ctx, ctx.sender())?;
+    if let Some(fence) = ctx.db.storage_restore_fence().id().find(REFERENCE_STATE_ID)
+        && ctx.timestamp < fence.last_restore_at + TimeDuration::from_micros(RESTORE_QUIET_MICROS)
+    {
+        return Err("archive restore in progress; storage references not rebuilt yet".into());
+    }
 
     for row in ctx.db.storage_reference().iter().collect::<Vec<_>>() {
         ctx.db
@@ -179,21 +211,21 @@ pub fn rebuild_storage_references(ctx: &ReducerContext) -> Result<(), String> {
 
     for row in ctx.db.message().iter() {
         if !row.deleted {
-            restore_message_references(ctx, message_owner_key(row.id), &row.content)?;
+            restore_message_references(ctx, message_owner_key(row.id), &row.content);
         }
     }
     for row in ctx.db.direct_message().iter() {
-        restore_message_references(ctx, direct_message_owner_key(row.id), &row.content)?;
+        restore_message_references(ctx, direct_message_owner_key(row.id), &row.content);
     }
     for row in ctx.db.user().iter() {
         restore_single_reference(
             ctx,
             avatar_owner_key(&row.username),
             row.avatar_url.as_deref(),
-        )?;
+        );
     }
     for row in ctx.db.server().iter() {
-        restore_single_reference(ctx, icon_owner_key(row.id), row.icon_url.as_deref())?;
+        restore_single_reference(ctx, icon_owner_key(row.id), row.icon_url.as_deref());
     }
 
     let state = StorageReferenceState {
