@@ -82,6 +82,8 @@ function storageErrorCode(responseText: string | null): string | null {
   return match ? match[1] : null
 }
 
+class StorageFullError extends Error {}
+
 async function uploadFileToStorage(
   body: Blob,
   uploadUrl: string,
@@ -121,6 +123,12 @@ async function uploadFileToStorage(
         return
       }
       const code = storageErrorCode(request.responseText)
+      if (request.status === 507 || code === 'XMinioStorageFull') {
+        reject(new StorageFullError(
+          'Object storage is full. Please contact the instance administrator or retry after space is freed.',
+        ))
+        return
+      }
       reject(
         new Error(
           code
@@ -180,6 +188,7 @@ async function uploadMultipart(
         lastError = null
         break
       } catch (error) {
+        if (error instanceof StorageFullError) throw error
         lastError = error
       }
     }
@@ -238,9 +247,20 @@ export async function uploadSingleFile(
       await uploadMultipart(file, request, mimeType, onProgress)
     } else {
       if (!request.uploadUrl) throw new Error('Server did not return an upload URL.')
-      await uploadFileToStorage(file, request.uploadUrl, mimeType, (loaded) =>
-        reportProgress(file, loaded, onProgress),
-      )
+      try {
+        await uploadFileToStorage(file, request.uploadUrl, mimeType, (loaded) =>
+          reportProgress(file, loaded, onProgress),
+        )
+      } catch (error) {
+        // Single PUT has no resumable session. Release its quota reservation
+        // now; the sweeper retains/retries it if storage abort is unavailable.
+        try {
+          await withSessionTokenRetry((sessionToken) =>
+            authServiceUploadAbort({ sessionToken, uploadId: request.uploadId }),
+          )
+        } catch { /* The pending row stays tracked for the expiry sweeper. */ }
+        throw error
+      }
     }
     active.uploaded = true
   }

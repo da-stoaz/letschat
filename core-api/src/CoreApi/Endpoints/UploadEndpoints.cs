@@ -16,7 +16,6 @@ namespace CoreApi.Endpoints;
 public static class UploadEndpoints
 {
     private const long MaxProfileImageSize = 10L * 1024 * 1024; // 10 MiB
-    private const long DailyQuota = 2L * 1024 * 1024 * 1024;   // 2 GB / user / day
     private const int PresignUploadSeconds = 600;              // 10 min to PUT
     private const int PresignDownloadSeconds = 3600;           // 1 h GET lifetime
     private const long PendingUploadTtlSeconds = 900;          // 15 min to /confirm
@@ -40,6 +39,7 @@ public static class UploadEndpoints
         routes.MapPost("/uploads/part-url", PartUrl);
         routes.MapPost("/uploads/status", Status);
         routes.MapPost("/uploads/abort", AbortUpload);
+        routes.MapPost("/uploads/quota", QuotaStatus);
         routes.MapPost("/uploads/download-url", DownloadUrl);
         routes.MapPost("/uploads/download-urls", DownloadUrls);
     }
@@ -50,7 +50,7 @@ public static class UploadEndpoints
         UserManager<ApplicationUser> users,
         AppDbContext db,
         StorageService storage,
-        SystemConfigService config,
+        StorageInventoryState inventory,
         CancellationToken ct)
     {
         var username = await RequireSession(payload.SessionToken, tokens, users);
@@ -75,17 +75,6 @@ public static class UploadEndpoints
         {
             throw ApiException.BadRequest("file_size must be greater than 0.");
         }
-
-        var limits = config.Current;
-        var maxFileSize = limits.UploadMaxFileSizeMiB * UploadLimits.MiB;
-        var partSize = limits.UploadPartSizeMiB * UploadLimits.MiB;
-        if (payload.FileSize > maxFileSize)
-        {
-            throw ApiException.BadRequest(
-                $"File exceeds the maximum allowed size of {limits.UploadMaxFileSizeMiB} MiB.");
-        }
-        // Old clients retain their single-PUT behavior (and its proxy cap).
-        var multipart = payload.SupportsMultipart && payload.FileSize > partSize;
 
         var mimeType = payload.MimeType.Trim().ToLowerInvariant();
         if (mimeType.Length == 0)
@@ -117,44 +106,42 @@ public static class UploadEndpoints
         var storageKey = StorageKey.Build(
             payload.Scope, username, extension.Length == 0 ? uploadId : $"{uploadId}.{extension}");
 
-        var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var pendingUpload = new PendingUpload
         {
-            await using var transaction = db.Database.IsRelational()
-                ? await db.Database.BeginTransactionAsync(ct)
-                : null;
-            var quota = await LockQuotaAsync(db, username, today);
-            var reserved = await db.PendingUploads
-                .Where(p => p.Username == username && (p.QuotaDate == today || p.QuotaDate == ""))
-                .SumAsync(p => (long?)p.FileSize, ct) ?? 0;
-            if (quota.BytesUploaded + reserved + payload.FileSize > DailyQuota)
-            {
-                throw ApiException.BadRequest(
-                    $"Daily upload quota of {DailyQuota / 1024 / 1024 / 1024} GB exceeded.");
-            }
-
-            db.PendingUploads.Add(new PendingUpload
-            {
-                Id = uploadId,
-                Username = username,
-                StorageKey = storageKey,
-                FileName = fileName,
-                FileSize = payload.FileSize,
-                MimeType = mimeType,
-                QuotaDate = today,
-                ExpiresAt = UnixNow() + (multipart ? MultipartUploadTtlSeconds : PendingUploadTtlSeconds),
-                PartSize = multipart ? partSize : 0,
-            });
-            await db.SaveChangesAsync(ct);
-            if (transaction is not null) await transaction.CommitAsync(ct);
-        }
+            Id = uploadId,
+            Username = username,
+            StorageKey = storageKey,
+            FileName = fileName,
+            FileSize = payload.FileSize,
+            MimeType = mimeType,
+        };
+        var (partSize, multipart) = await ReserveAsync(
+            db, pendingUpload, payload.SupportsMultipart, inventory, ct);
 
         if (!multipart)
         {
-            var url = await storage.PresignPutAsync(storageKey, payload.FileSize, PresignUploadSeconds);
-            return new UploadRequestResponse(uploadId, url, PresignUploadSeconds);
+            try
+            {
+                var url = await storage.PresignPutAsync(storageKey, payload.FileSize, PresignUploadSeconds);
+                return new UploadRequestResponse(uploadId, url, PresignUploadSeconds);
+            }
+            catch
+            {
+                await ReleaseUnissuedReservationAsync(db, uploadId);
+                throw;
+            }
         }
 
-        var multipartId = await storage.InitiateMultipartAsync(storageKey, mimeType, ct);
+        string multipartId;
+        try
+        {
+            multipartId = await storage.InitiateMultipartAsync(storageKey, mimeType, ct);
+        }
+        catch
+        {
+            await ReleaseUnissuedReservationAsync(db, uploadId);
+            throw;
+        }
         try
         {
             var pending = await db.PendingUploads.FindAsync([uploadId], ct)
@@ -164,12 +151,116 @@ public static class UploadEndpoints
         }
         catch
         {
-            try { await storage.AbortMultipartAsync(storageKey, multipartId, CancellationToken.None); }
+            try
+            {
+                await storage.AbortMultipartAsync(storageKey, multipartId, CancellationToken.None);
+                await ReleaseUnissuedReservationAsync(db, uploadId);
+            }
             catch { /* MinIO's stale-multipart cleanup is the crash/failure fallback. */ }
             throw;
         }
         return new UploadRequestResponse(uploadId, null, (int)MultipartUploadTtlSeconds,
             "multipart", partSize, checked((int)((payload.FileSize + partSize - 1) / partSize)));
+    }
+
+    private static async Task ReleaseUnissuedReservationAsync(AppDbContext db, string uploadId)
+    {
+        try
+        {
+            var pending = await db.PendingUploads.FindAsync([uploadId]);
+            if (pending is null) return;
+            db.PendingUploads.Remove(pending);
+            await db.SaveChangesAsync(CancellationToken.None);
+        }
+        catch { /* The expiry sweeper retains and retries tracked reservations. */ }
+    }
+
+    /// <summary>
+    /// One short transaction serializes reservations across users, which is
+    /// needed for the optional instance-wide limit. Confirm moves pending to
+    /// confirmed atomically; one UNION ALL sum sees either side, never neither.
+    /// ponytail: global row lock; shard only if measured request throughput needs it.
+    /// </summary>
+    internal static async Task<(long PartSize, bool Multipart)> ReserveAsync(
+        AppDbContext db, PendingUpload pending, bool supportsMultipart,
+        StorageInventoryState inventory, CancellationToken ct = default)
+    {
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
+        var settings = db.Database.IsRelational()
+            ? await db.SystemConfig.FromSqlRaw("SELECT * FROM \"SystemConfig\" WHERE \"Id\" = 1 FOR UPDATE")
+                .SingleAsync(ct)
+            : await db.SystemConfig.SingleAsync(ct);
+        if (pending.FileSize > settings.UploadMaxFileSizeMiB * UploadLimits.MiB)
+            throw ApiException.BadRequest(
+                $"File exceeds the maximum allowed size of {settings.UploadMaxFileSizeMiB} MiB.");
+
+        var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var quota = await LockQuotaAsync(db, pending.Username, today);
+        var reservedToday = await db.PendingUploads
+            .Where(row => row.Username == pending.Username && (row.QuotaDate == today || row.QuotaDate == ""))
+            .SumAsync(row => (long?)row.FileSize, ct) ?? 0;
+        var dailyLimit = settings.DailyUploadQuotaMiB * UploadLimits.MiB;
+        if (quota.BytesUploaded + reservedToday + pending.FileSize > dailyLimit)
+            throw ApiException.BadRequest(
+                $"Daily upload quota exceeded: {Math.Max(0, (dailyLimit - quota.BytesUploaded - reservedToday) / UploadLimits.MiB)} MiB remaining of {settings.DailyUploadQuotaMiB} MiB for this UTC day.");
+
+        if (settings.UserStorageLimitMiB > 0 || settings.InstanceStorageLimitMiB > 0)
+        {
+            if (!inventory.IsReady)
+                throw ApiException.ServiceUnavailable(
+                    "Storage usage is still being checked. Please retry the upload shortly.");
+
+            if (settings.UserStorageLimitMiB > 0)
+            {
+                var used = await StorageUsage.RetainedAndPendingAsync(db, pending.Username, ct);
+                var limit = settings.UserStorageLimitMiB * UploadLimits.MiB;
+                if (used + pending.FileSize > limit)
+                    throw ApiException.BadRequest(
+                        $"Your stored-file quota is exceeded: {Math.Max(0, (limit - used) / UploadLimits.MiB)} MiB remaining of {settings.UserStorageLimitMiB} MiB.");
+            }
+            if (settings.InstanceStorageLimitMiB > 0)
+            {
+                var used = await StorageUsage.RetainedAndPendingAsync(db, null, ct);
+                if (used + pending.FileSize > settings.InstanceStorageLimitMiB * UploadLimits.MiB)
+                    throw ApiException.BadRequest(
+                        "This LetsChat instance has reached its configured storage limit. Please contact the administrator.");
+            }
+        }
+
+        var partSize = settings.UploadPartSizeMiB * UploadLimits.MiB;
+        // Old clients retain their single-PUT behavior (and its proxy cap).
+        var multipart = supportsMultipart && pending.FileSize > partSize;
+        pending.QuotaDate = today;
+        pending.ExpiresAt = UnixNow() + (multipart ? MultipartUploadTtlSeconds : PendingUploadTtlSeconds);
+        pending.PartSize = multipart ? partSize : 0;
+        db.PendingUploads.Add(pending);
+        await db.SaveChangesAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
+        return (partSize, multipart);
+    }
+
+    private static async Task<UploadQuotaResponse> QuotaStatus(
+        UploadQuotaRequest request, TokenService tokens, UserManager<ApplicationUser> users,
+        AppDbContext db, StorageInventoryState inventory, CancellationToken ct)
+    {
+        var username = await RequireSession(request.SessionToken, tokens, users);
+        var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var settings = await db.SystemConfig.AsNoTracking().SingleAsync(ct);
+        var charged = await db.UploadQuotas.AsNoTracking()
+            .Where(row => row.Username == username && row.QuotaDate == today)
+            .Select(row => (long?)row.BytesUploaded).SingleOrDefaultAsync(ct) ?? 0;
+        var reserved = await db.PendingUploads.AsNoTracking()
+            .Where(row => row.Username == username && (row.QuotaDate == today || row.QuotaDate == ""))
+            .SumAsync(row => (long?)row.FileSize, ct) ?? 0;
+        var stored = inventory.IsReady
+            ? await StorageUsage.RetainedAndPendingAsync(db, username, ct)
+            : (long?)null;
+        return new UploadQuotaResponse(
+            today, settings.DailyUploadQuotaMiB * UploadLimits.MiB, charged, reserved,
+            settings.UserStorageLimitMiB * UploadLimits.MiB, stored,
+            settings.InstanceStorageLimitMiB * UploadLimits.MiB);
     }
 
     private static async Task<UploadConfirmResponse> ConfirmUpload(
@@ -254,7 +345,9 @@ public static class UploadEndpoints
         var quota = await LockQuotaAsync(db, username, quotaDate);
 
         // Rows created by an older deployment were not reserved at request time.
-        if (pending.QuotaDate.Length == 0 && quota.BytesUploaded + actualSize.Value > DailyQuota)
+        var dailyLimit = (await db.SystemConfig.AsNoTracking().SingleAsync(ct)).DailyUploadQuotaMiB
+            * UploadLimits.MiB;
+        if (pending.QuotaDate.Length == 0 && quota.BytesUploaded + actualSize.Value > dailyLimit)
         {
             await storage.DeleteObjectAsync(pending.StorageKey);
             db.PendingUploads.Remove(pending);
@@ -264,7 +357,7 @@ public static class UploadEndpoints
                 await transaction.CommitAsync();
             }
             throw ApiException.BadRequest(
-                $"Daily upload quota of {DailyQuota / 1024 / 1024 / 1024} GB exceeded.");
+                "Daily upload quota exceeded for this UTC day.");
         }
 
         quota.BytesUploaded += actualSize.Value;

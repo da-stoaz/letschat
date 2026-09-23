@@ -131,11 +131,14 @@ by SpacetimeDB. This keeps PostgreSQL account data out of public chat views.
    cleanup is the fallback for an initiation crash before the upload ID is saved.
 
 Default limits: 500 MiB per attachment, 64 MiB per multipart part, 10 MiB per
-avatar/space icon, and 2 GiB of
-uploads per user per UTC day. The daily
-quota is an anti-abuse rate limit, not a storage quota — nothing caps the bytes
-a user keeps in the bucket over time. The quota and download-resume work is specified
-in `.claude/plans/object-storage.md`.
+avatar/space icon, and 2 GiB of uploads per user per UTC day. Daily, per-user
+stored, and installation stored limits are runtime admin settings, seeded once
+from `.env`; the stored limits default to unlimited. `/uploads/request` locks the
+config row across users and reserves against both daily usage and retained
+confirmed-plus-pending bytes. A bucket inventory must finish before stored
+limits are enforced. Failed storage deletion keeps the registry row charged;
+MinIO volume exhaustion is reported separately from configured quotas. Space-
+specific limits and download resume remain in `.claude/plans/object-storage.md`.
 
 ### Voice and video
 

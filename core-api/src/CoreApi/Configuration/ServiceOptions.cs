@@ -1,4 +1,5 @@
 using System.Net;
+using CoreApi.Services;
 
 namespace CoreApi.Configuration;
 
@@ -57,6 +58,9 @@ public sealed class ServiceOptions
     public required string MinioPublicEndpoint { get; init; }
     public required int UploadPartSizeMiB { get; init; }
     public required int UploadMaxFileSizeMiB { get; init; }
+    public long DailyUploadQuotaMiB { get; init; } = UploadLimits.DefaultDailyMiB;
+    public long UserStorageLimitMiB { get; init; }
+    public long InstanceStorageLimitMiB { get; init; }
 
     public required string LiveKitApiKey { get; init; }
     public required string LiveKitApiSecret { get; init; }
@@ -172,6 +176,10 @@ public sealed class ServiceOptions
             config[key] is not { Length: > 0 } value ? fallback
                 : int.TryParse(value, out var parsed) ? parsed : 0;
 
+        long GetInitialUploadLong(string key, long fallback) =>
+            config[key] is not { Length: > 0 } value ? fallback
+                : long.TryParse(value, out var parsed) ? parsed : -1;
+
         var minioInternal = Get("MINIO_INTERNAL_ENDPOINT", "http://127.0.0.1:4390");
 
         return new ServiceOptions
@@ -192,6 +200,9 @@ public sealed class ServiceOptions
             MinioPublicEndpoint = Get("MINIO_PUBLIC_ENDPOINT", minioInternal),
             UploadPartSizeMiB = GetInitialUploadInt("UPLOAD_PART_SIZE_MIB", 64),
             UploadMaxFileSizeMiB = GetInitialUploadInt("UPLOAD_MAX_FILE_SIZE_MIB", 500),
+            DailyUploadQuotaMiB = GetInitialUploadLong("DAILY_UPLOAD_QUOTA_MIB", UploadLimits.DefaultDailyMiB),
+            UserStorageLimitMiB = GetInitialUploadLong("USER_STORAGE_LIMIT_MIB", 0),
+            InstanceStorageLimitMiB = GetInitialUploadLong("INSTANCE_STORAGE_LIMIT_MIB", 0),
 
             LiveKitApiKey = Get("LIVEKIT_API_KEY", "devkey"),
             LiveKitApiSecret = Get("LIVEKIT_API_SECRET", DevLiveKitApiSecret),

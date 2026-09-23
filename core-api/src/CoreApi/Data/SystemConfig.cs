@@ -38,6 +38,11 @@ public sealed class SystemConfig
 
     public int UploadPartSizeMiB { get; set; } = 64;
     public int UploadMaxFileSizeMiB { get; set; } = 500;
+    public long DailyUploadQuotaMiB { get; set; } = 2048;
+    public long UserStorageLimitMiB { get; set; }
+    public long InstanceStorageLimitMiB { get; set; }
+    /// <summary>Migration marker: unlike the stored limits, zero cannot signal an unseeded row.</summary>
+    public bool UploadQuotaSettingsSeeded { get; set; } = true;
 
     // ── Email / SMTP ─────────────────────────────────────────────────────────
 

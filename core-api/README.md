@@ -91,6 +91,7 @@ important groups are:
 | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET` | object storage credentials and bucket |
 | `MINIO_INTERNAL_ENDPOINT`, `MINIO_PUBLIC_ENDPOINT` | server-side and client-visible S3 endpoints |
 | `UPLOAD_PART_SIZE_MIB`, `UPLOAD_MAX_FILE_SIZE_MIB` | initial upload limits; later editable in `/admin/config` |
+| `DAILY_UPLOAD_QUOTA_MIB`, `USER_STORAGE_LIMIT_MIB`, `INSTANCE_STORAGE_LIMIT_MIB` | initial daily and retained-byte limits; stored limits use `0` for unlimited and all three are later editable in `/admin/config` |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | media server and grant signing |
 | `DISCOVERY_*` | values returned to clients by discovery |
 | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD`, `ADMIN_BOOTSTRAP_EMAIL` | optional first-run administrator |
@@ -122,14 +123,17 @@ authorization/readiness sentinel. Missing authorization or an unavailable
 dependency fails closed: the object and registry row remain for retry.
 
 Initial limits are 500 MiB per attachment and 64 MiB per multipart part;
-`UPLOAD_MAX_FILE_SIZE_MIB` and `UPLOAD_PART_SIZE_MIB` seed runtime-editable
-values in `/admin/config`. Avatars/icons remain limited to 10 MiB and `image/*`.
-The upload-rate limit remains 2 GiB per user per UTC day. Single PUT has a
-10-minute URL and 15-minute confirmation window; multipart sessions last two
-hours and part URLs at most 10 minutes. Download URLs last one hour, with at
-most 128 keys per download batch. The daily quota
-only bounds the upload rate; there is no cap on
-the total bytes a user has stored. Behind a Cloudflare Tunnel, multipart parts
+the five upload/quota `.env` values seed runtime-editable values in
+`/admin/config`. Avatars/icons remain limited to 10 MiB and `image/*`.
+The daily upload-rate limit starts at 2 GiB per user; stored-byte limits per
+user and per installation default to unlimited (`0`). Confirmed registry bytes
+and all pending reservations count until storage deletion succeeds; a full
+MinIO volume reports a separate storage-full error even when the configured
+instance limit is unlimited. Authenticated clients can read personal usage via
+`POST /uploads/quota`. Single PUT has a 10-minute URL and 15-minute
+confirmation window; multipart sessions last two hours and part URLs at most
+10 minutes. Download URLs last one hour, with at most 128 keys per download
+batch. Behind a Cloudflare Tunnel, multipart parts
 remain below the 100 MB Free/Pro request-body cap; see `DEPLOYMENT.md`.
 
 ## Legacy account import

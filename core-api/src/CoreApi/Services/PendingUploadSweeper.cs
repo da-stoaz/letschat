@@ -12,6 +12,7 @@ public sealed class PendingUploadSweeper(
     IServiceScopeFactory scopes,
     StorageService storage,
     SpacetimeClient spacetime,
+    StorageInventoryState inventory,
     ILogger<PendingUploadSweeper> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
@@ -98,14 +99,15 @@ public sealed class PendingUploadSweeper(
 
     private async Task SweepUnreferencedConfirmedAsync(AppDbContext db, CancellationToken ct)
     {
-        if (!await spacetime.EnsureStorageReferencesReadyAsync(ct))
-        {
-            return;
-        }
         if (!_inventoryImported)
         {
             await ImportExistingObjectsAsync(db, ct);
             _inventoryImported = true;
+            inventory.MarkReady();
+        }
+        if (!await spacetime.EnsureStorageReferencesReadyAsync(ct))
+        {
+            return;
         }
 
         var cutoff = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - ConfirmedGraceSeconds;
@@ -215,4 +217,12 @@ public sealed class PendingUploadSweeper(
                 "Adopted {Count} existing MinIO object(s) into lifecycle tracking.", imported);
         }
     }
+}
+
+/// <summary>New quota-limited reservations wait for a complete bucket inventory after startup.</summary>
+public sealed class StorageInventoryState
+{
+    private volatile bool _ready;
+    public bool IsReady => _ready;
+    internal void MarkReady() => _ready = true;
 }

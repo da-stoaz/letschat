@@ -31,6 +31,9 @@ public static class MiscEndpoints
                 version.RecommendedClientVersion,
                 version.MinClientVersion,
                 config.Current.UploadPartSizeMiB * UploadLimits.MiB,
-                config.Current.UploadMaxFileSizeMiB * UploadLimits.MiB));
+                config.Current.UploadMaxFileSizeMiB * UploadLimits.MiB,
+                config.Current.DailyUploadQuotaMiB * UploadLimits.MiB,
+                config.Current.UserStorageLimitMiB * UploadLimits.MiB,
+                config.Current.InstanceStorageLimitMiB * UploadLimits.MiB));
     }
 }

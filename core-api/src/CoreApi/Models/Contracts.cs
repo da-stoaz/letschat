@@ -122,6 +122,17 @@ public sealed record UploadRequestPayload(
     UploadScope? Scope = null,
     bool SupportsMultipart = false);
 
+public sealed record UploadQuotaRequest(SessionToken SessionToken);
+
+public sealed record UploadQuotaResponse(
+    string UtcDate,
+    long DailyLimitBytes,
+    long DailyChargedBytes,
+    long DailyReservedBytes,
+    long UserStoredLimitBytes,
+    long? UserStoredAndPendingBytes,
+    long InstanceStoredLimitBytes);
+
 /// <summary>
 /// Where an upload is going, so the storage key can carry who may read it
 /// (<see cref="Services.StorageKey"/>). <c>kind</c> is one of
@@ -181,4 +192,7 @@ public sealed record WellKnownResponse(
     string RecommendedClient,
     string MinClient,
     long UploadPartSizeBytes,
-    long UploadMaxFileSizeBytes);
+    long UploadMaxFileSizeBytes,
+    long DailyUploadQuotaBytes,
+    long UserStorageLimitBytes,
+    long InstanceStorageLimitBytes);

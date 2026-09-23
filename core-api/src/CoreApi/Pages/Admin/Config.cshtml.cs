@@ -10,7 +10,9 @@ namespace CoreApi.Pages.Admin;
 public sealed class ConfigModel(
     SystemConfigService configService,
     AuditService audit,
-    SpacetimeClient spacetime) : PageModel
+    SpacetimeClient spacetime,
+    AppDbContext db,
+    StorageInventoryState inventory) : PageModel
 {
     [BindProperty] public bool RegistrationOpen { get; set; }
     [BindProperty] public bool RequireEmailConfirmation { get; set; }
@@ -19,6 +21,9 @@ public sealed class ConfigModel(
     [BindProperty] public int RateLimitWindowSeconds { get; set; }
     [BindProperty] public int UploadPartSizeMiB { get; set; }
     [BindProperty] public int UploadMaxFileSizeMiB { get; set; }
+    [BindProperty] public long DailyUploadQuotaMiB { get; set; }
+    [BindProperty] public long UserStorageLimitMiB { get; set; }
+    [BindProperty] public long InstanceStorageLimitMiB { get; set; }
     [BindProperty] public string SmtpHost { get; set; } = string.Empty;
     [BindProperty] public int SmtpPort { get; set; }
     [BindProperty] public string? SmtpUser { get; set; }
@@ -32,6 +37,7 @@ public sealed class ConfigModel(
     [BindProperty] public string SpaceCreatePolicy { get; set; } = "Anyone";
 
     public bool SmtpPasswordSet { get; private set; }
+    public long? InstanceStoredAndPendingBytes { get; private set; }
 
     /// <summary>True when SPACETIMEDB_SERVICE_TOKEN is set; gates the space-policy form.</summary>
     public bool SpacetimeWriteEnabled => spacetime.IsConfigured;
@@ -49,6 +55,9 @@ public sealed class ConfigModel(
         RateLimitWindowSeconds = c.RateLimitWindowSeconds;
         UploadPartSizeMiB = c.UploadPartSizeMiB;
         UploadMaxFileSizeMiB = c.UploadMaxFileSizeMiB;
+        DailyUploadQuotaMiB = c.DailyUploadQuotaMiB;
+        UserStorageLimitMiB = c.UserStorageLimitMiB;
+        InstanceStorageLimitMiB = c.InstanceStorageLimitMiB;
         SmtpHost = c.SmtpHost;
         SmtpPort = c.SmtpPort;
         SmtpUser = c.SmtpUser;
@@ -56,6 +65,8 @@ public sealed class ConfigModel(
         EmailFromAddress = c.EmailFromAddress;
         EmailFromName = c.EmailFromName;
         SmtpPasswordSet = !string.IsNullOrEmpty(c.SmtpPassword);
+        if (inventory.IsReady)
+            InstanceStoredAndPendingBytes = await StorageUsage.RetainedAndPendingAsync(db, null);
 
         try
         {
@@ -77,7 +88,8 @@ public sealed class ConfigModel(
             SmtpPasswordSet = !string.IsNullOrEmpty(configService.Current.SmtpPassword);
             return Page();
         }
-        if (UploadLimits.ValidationError(UploadPartSizeMiB, UploadMaxFileSizeMiB) is { } uploadError)
+        if (UploadLimits.ValidationError(UploadPartSizeMiB, UploadMaxFileSizeMiB,
+            DailyUploadQuotaMiB, UserStorageLimitMiB, InstanceStorageLimitMiB) is { } uploadError)
         {
             Error = uploadError;
             SmtpPasswordSet = !string.IsNullOrEmpty(configService.Current.SmtpPassword);
@@ -93,6 +105,9 @@ public sealed class ConfigModel(
             c.RateLimitWindowSeconds = RateLimitWindowSeconds;
             c.UploadPartSizeMiB = UploadPartSizeMiB;
             c.UploadMaxFileSizeMiB = UploadMaxFileSizeMiB;
+            c.DailyUploadQuotaMiB = DailyUploadQuotaMiB;
+            c.UserStorageLimitMiB = UserStorageLimitMiB;
+            c.InstanceStorageLimitMiB = InstanceStorageLimitMiB;
             c.SmtpHost = SmtpHost.Trim();
             c.SmtpPort = SmtpPort;
             c.SmtpUser = string.IsNullOrWhiteSpace(SmtpUser) ? null : SmtpUser.Trim();

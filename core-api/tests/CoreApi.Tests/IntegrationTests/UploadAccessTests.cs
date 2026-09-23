@@ -325,6 +325,97 @@ public sealed class UploadAccessTests
     }
 
     [Fact]
+    public async Task Configured_Daily_User_And_Instance_Limits_Count_Pending_And_Confirmed_Objects()
+    {
+        using var factory = new LetsChatWebApplicationFactory();
+        var client = factory.CreateClient();
+        var (alice, _) = await RegisterAsync(client, "storagealice");
+        var (bob, _) = await RegisterAsync(client, "storagebob");
+        factory.Services.GetRequiredService<StorageInventoryState>().MarkReady();
+        var config = factory.Services.GetRequiredService<SystemConfigService>();
+        await config.UpdateAsync(row =>
+        {
+            row.DailyUploadQuotaMiB = 10;
+            row.UserStorageLimitMiB = 12;
+            row.InstanceStorageLimitMiB = 20;
+        });
+
+        Task<HttpResponseMessage> Request(JsonElement token, int mib, string name) =>
+            LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+            {
+                sessionToken = token,
+                fileName = name,
+                fileSize = mib * UploadLimits.MiB,
+                mimeType = "application/octet-stream",
+            });
+
+        Assert.Equal(HttpStatusCode.OK, (await Request(alice, 6, "alice-first.bin")).StatusCode);
+        var daily = await Request(alice, 6, "alice-daily.bin");
+        Assert.Equal(HttpStatusCode.BadRequest, daily.StatusCode);
+        Assert.Contains("Daily upload quota", await daily.Content.ReadAsStringAsync());
+
+        await config.UpdateAsync(row => row.DailyUploadQuotaMiB = 30);
+        Assert.Equal(HttpStatusCode.OK, (await Request(alice, 6, "alice-second.bin")).StatusCode);
+        var user = await Request(alice, 1, "alice-stored.bin");
+        Assert.Equal(HttpStatusCode.BadRequest, user.StatusCode);
+        Assert.Contains("stored-file quota", await user.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, (await Request(bob, 7, "bob-first.bin")).StatusCode);
+        var instance = await Request(bob, 2, "bob-instance.bin");
+        Assert.Equal(HttpStatusCode.BadRequest, instance.StatusCode);
+        Assert.Contains("instance", await instance.Content.ReadAsStringAsync());
+
+        var usage = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/quota",
+            new { sessionToken = alice });
+        Assert.Equal(HttpStatusCode.OK, usage.StatusCode);
+        using var doc = JsonDocument.Parse(await usage.Content.ReadAsStringAsync());
+        Assert.Equal(12 * UploadLimits.MiB,
+            doc.RootElement.GetProperty("userStoredAndPendingBytes").GetInt64());
+        Assert.Equal(12 * UploadLimits.MiB,
+            doc.RootElement.GetProperty("dailyReservedBytes").GetInt64());
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var promoted = db.PendingUploads.Single(row => row.FileName == "alice-first.bin");
+        db.ConfirmedUploads.Add(new ConfirmedUpload
+        {
+            StorageKey = promoted.StorageKey, Username = promoted.Username,
+            FileName = promoted.FileName, FileSize = promoted.FileSize,
+            MimeType = promoted.MimeType, ConfirmedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        });
+        db.PendingUploads.Remove(promoted);
+        await db.SaveChangesAsync();
+        Assert.Equal(19 * UploadLimits.MiB, await StorageUsage.RetainedAndPendingAsync(db, null));
+
+        // A failed object deletion leaves the row charged; only successful
+        // MinIO deletion followed by registry removal releases the allowance.
+        db.ConfirmedUploads.Remove(db.ConfirmedUploads.Single());
+        await db.SaveChangesAsync();
+        Assert.Equal(HttpStatusCode.OK, (await Request(bob, 2, "bob-after-cleanup.bin")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Stored_Quota_Rejects_New_Reservations_Until_Inventory_Is_Complete()
+    {
+        using var factory = new LetsChatWebApplicationFactory();
+        var client = factory.CreateClient();
+        var (alice, _) = await RegisterAsync(client, "inventorystatus");
+        await factory.Services.GetRequiredService<SystemConfigService>()
+            .UpdateAsync(row => row.UserStorageLimitMiB = 10);
+
+        var response = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+        {
+            sessionToken = alice,
+            fileName = "test.bin",
+            fileSize = 1,
+            mimeType = "application/octet-stream",
+        });
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Contains("Storage usage is still being checked", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Admin_Limits_Appear_In_Discovery_And_Gate_New_Uploads()
     {
         using var factory = new LetsChatWebApplicationFactory();

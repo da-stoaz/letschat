@@ -64,7 +64,7 @@ import SiteFooter from "@/components/SiteFooter.astro";
         </article>
         <article class="service-card rounded-xl p-4 space-y-1">
           <p class="font-medium">MinIO</p>
-          <p class="text-muted-foreground">S3-compatible object storage. Required for uploads, attachments, and download URLs. Large files use multipart PUTs (initially 64 MiB each), staying below Cloudflare's 100 MB per-request cap. The initial per-file limit is 500 MiB; the daily upload-rate limit is 2 GiB per user.</p>
+          <p class="text-muted-foreground">S3-compatible object storage. Required for uploads, attachments, and download URLs. Large files use multipart PUTs (initially 64 MiB each), staying below Cloudflare's 100 MB per-request cap. The initial per-file limit is 500 MiB and the daily upload allowance is 2 GiB per user. Admins can also set per-user and installation stored-byte limits; both default to unlimited. A full MinIO volume is reported separately.</p>
         </article>
         <article class="service-card rounded-xl p-4 space-y-1">
           <p class="font-medium">Module Init</p>

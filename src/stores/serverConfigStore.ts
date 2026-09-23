@@ -8,6 +8,9 @@ export interface ServerConfig {
   livekitUrl: string
   uploadPartSizeBytes?: number
   uploadMaxFileSizeBytes?: number
+  dailyUploadQuotaBytes?: number
+  userStorageLimitBytes?: number
+  instanceStorageLimitBytes?: number
 }
 
 /**

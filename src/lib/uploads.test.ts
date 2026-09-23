@@ -17,6 +17,7 @@ vi.mock('./uploadSession', () => ({ withSessionTokenRetry: (fn: (token: object) 
 class FakeXHR {
   static sent: Array<{ url: string; size: number }> = []
   static failures = 0
+  static storageFull = false
   upload: { onprogress?: (event: { lengthComputable: boolean; total: number; loaded: number }) => void } = {}
   onload?: () => void
   onerror?: () => void
@@ -30,6 +31,12 @@ class FakeXHR {
   set responseType(_value: string) {}
   send(body: Blob): void {
     FakeXHR.sent.push({ url: this.url, size: body.size })
+    if (FakeXHR.storageFull) {
+      this.status = 507
+      this.responseText = '<Error><Code>XMinioStorageFull</Code></Error>'
+      this.onload?.()
+      return
+    }
     if (this.url.endsWith('part=2') && FakeXHR.failures++ < 3) {
       this.status = 503
       this.onload?.()
@@ -46,6 +53,7 @@ describe('multipart upload', () => {
     vi.clearAllMocks()
     FakeXHR.sent = []
     FakeXHR.failures = 0
+    FakeXHR.storageFull = false
     vi.stubGlobal('XMLHttpRequest', FakeXHR)
   })
 
@@ -101,5 +109,39 @@ describe('multipart upload', () => {
     await expect(uploadFiles([file], { kind: 'channel', channelId: 1 }, onStage))
       .rejects.toThrow('test.bin: Daily upload quota exceeded.')
     expect(onStage.mock.calls.map(([, stage]) => stage)).toEqual(['requesting', 'failed'])
+  })
+
+  it('reports a full MinIO volume and promptly releases a failed single-PUT reservation', async () => {
+    FakeXHR.storageFull = true
+    vi.mocked(authServiceUploadRequest).mockResolvedValue({
+      uploadId: 'upload-full', uploadUrl: 'https://storage.test/upload', expiresIn: 600,
+      mode: 'single', partSizeBytes: null, partCount: null,
+    })
+    vi.mocked(authServiceUploadAbort).mockResolvedValue()
+    const file = new File(['data'], 'test.bin')
+
+    await expect(uploadSingleFile(file, { kind: 'channel', channelId: 1 }))
+      .rejects.toThrow('Object storage is full')
+    expect(authServiceUploadAbort).toHaveBeenCalledWith(
+      expect.objectContaining({ uploadId: 'upload-full' }),
+    )
+    expect(authServiceUploadConfirm).not.toHaveBeenCalled()
+  })
+
+  it('does not retry a multipart part when MinIO reports a full volume', async () => {
+    FakeXHR.storageFull = true
+    vi.mocked(authServiceUploadRequest).mockResolvedValue({
+      uploadId: 'multipart-full', uploadUrl: null, expiresIn: 7200,
+      mode: 'multipart', partSizeBytes: 5, partCount: 2,
+    })
+    vi.mocked(authServiceUploadStatus).mockResolvedValue({ completedParts: [] })
+    vi.mocked(authServiceUploadPartUrl).mockResolvedValue({
+      url: 'https://storage.test/part=1', expiresIn: 600,
+    })
+
+    await expect(uploadSingleFile(new File(['123456'], 'test.bin'),
+      { kind: 'channel', channelId: 1 })).rejects.toThrow('Object storage is full')
+    expect(FakeXHR.sent).toHaveLength(1)
+    expect(authServiceUploadConfirm).not.toHaveBeenCalled()
   })
 })

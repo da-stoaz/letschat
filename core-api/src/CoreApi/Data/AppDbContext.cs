@@ -42,6 +42,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             upload.Property(u => u.QuotaDate).HasMaxLength(10);
             upload.Property(u => u.MultipartUploadId).HasMaxLength(512);
             upload.HasIndex(u => u.ExpiresAt);
+            upload.HasIndex(u => u.Username);
         });
 
         builder.Entity<UploadQuota>(quota =>
@@ -59,6 +60,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             upload.Property(u => u.FileName).HasMaxLength(512);
             upload.Property(u => u.MimeType).HasMaxLength(256);
             upload.HasIndex(u => u.ConfirmedAt);
+            upload.HasIndex(u => u.Username);
             upload.Property(u => u.UploadId).HasMaxLength(64);
             upload.HasIndex(u => u.UploadId).IsUnique().HasFilter("\"UploadId\" IS NOT NULL");
         });

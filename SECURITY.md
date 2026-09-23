@@ -67,8 +67,10 @@ URLs:
 
 - attachments default to a 500 MiB per-file maximum, configurable by an admin;
   avatars/icons remain limited to 10 MiB and `image/*`;
-- a user is limited to 2 GiB per UTC day;
-- upload requests reserve the declared bytes under a PostgreSQL row lock;
+- the initial per-user upload-rate limit is 2 GiB per UTC day, configurable by
+  an admin independently of optional per-user and installation stored limits;
+- upload requests reserve the declared bytes under a PostgreSQL config-row
+  lock, preventing concurrent users from overbooking the installation limit;
 - the exact `Content-Length` is signed for a single PUT or each multipart part;
   multipart completion checks every part and HEAD-verifies the assembled size;
 - single-PUT grants expire after 15 minutes; multipart sessions after two hours.

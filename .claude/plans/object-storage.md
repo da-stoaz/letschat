@@ -1,8 +1,8 @@
 # Plan: Object storage lifecycle, quotas, and resilient transfers
 
-> **Status (2026-09-23): Phase 0 committed on `feature/object-storage`;
-> Phase 2 implemented locally, not yet committed or production-accepted.**
-> Stored-byte quotas and resumable downloads remain later phases. This plan is
+> **Status (2026-09-23): Phases 0 and 2 committed on `feature/object-storage`;
+> Phase 1 is being implemented locally, not yet production-accepted.**
+> Resumable downloads remain a later phase. This plan is
 > separate from `2-storage-tiering.md`, which concerns
 > hot/cold message rows.
 
@@ -92,7 +92,8 @@ permanent.
 - The cleanup credential must be a Core API service token mapped to a current
   SpacetimeDB system administrator. User tokens must not expose lifecycle views
   or reducers.
-- Reference rebuild must complete before inventory adoption or cleanup. Core API
+- Reference rebuild must complete before deletion claims or cleanup. Bucket
+  inventory adoption itself is non-destructive and may run earlier; Core API
   cleanup must be stopped during a destructive SpacetimeDB reset so no in-flight
   claim can outlive the tombstone table. The normal domain/archive restore and a
   reference rebuild must finish before cleanup resumes.
@@ -110,20 +111,64 @@ resume remains a later phase.
 
 ## Phase 1 — Stored-byte quotas
 
-Build quotas from `ConfirmedUpload`; do not create another usage counter that can
-drift from object truth.
+Implement the agreed scope now: configurable per-user daily upload allowance,
+per-user retained-object allowance, and an optional whole-installation retained-
+object allowance. A LetsChat installation (Core API + its MinIO bucket) is the
+"instance"; it is not a chat space. Keep the existing 2 GiB/day default. Seed
+the new settings once from environment variables, let the admin panel change
+them at runtime, and use `0 = unlimited` only for stored-byte allowances. Both
+stored-byte limits default to unlimited so existing installations are not
+silently capped; the operator can set either independently. Per-space quotas
+are deferred: channel keys contain a
+channel id, not a reliable immutable space id, and the request endpoint does
+not currently validate that mapping. Do not pretend a per-space number is
+enforced by charging every channel upload to an arbitrary space.
 
-- Add configurable per-user, per-space, and whole-instance stored-byte limits.
-- At `/uploads/request`, calculate retained bytes plus pending reservations under
-  the existing user lock and reject before signing.
-- Keep a confirmed object charged while deletion is pending or failing. Usage
-  falls only after MinIO deletion succeeds and the registry row is removed.
-- Charge the uploader for user quota and the containing space for space quota;
-  DMs have no space charge.
-- Expose limits and current usage through authenticated account/admin surfaces
-  and discovery so clients show the effective maximum before upload.
-- Keep the server/client avatar and icon limit aligned when limits become
-  runtime-configurable.
+1. Use `ConfirmedUpload` (including adopted legacy objects) plus `PendingUpload`
+   as the stored-byte source of truth. Do not add an independently mutable usage
+   counter. A confirmed object remains charged while cleanup is claimed,
+   waiting, or failing; usage falls only after MinIO deletion succeeds and the
+   registry row is removed. An expired/failed pending reservation remains
+   charged until abort/sweep removes it after storage cleanup.
+2. Before enforcing stored-byte limits, complete the existing bucket inventory
+   import for this Core API process. Inventory adoption only adds registry rows;
+   move it ahead of the SpacetimeDB reference-readiness check, which still gates
+   every deletion claim. If inventory fails, reject quota-limited new requests
+   with a retryable service error instead of accepting against an incomplete
+   registry. Unlimited installations retain the old availability behavior. Do
+   not scan the bucket per request.
+3. Serialize `/uploads/request` across users with one PostgreSQL config-row
+   lock, then lock the existing user/day quota row. Inside that transaction,
+   check daily charged bytes + today's pending reservations and stored confirmed
+   bytes + **all** pending reservations against the effective limits before
+   inserting the new pending row. Compute each retained+pending sum in one SQL
+   statement/snapshot so a concurrent pending→confirmed promotion cannot fall
+   between separate sums. This deliberately simple global lock is adequate for
+   the current low upload-request rate; measure before adding counters/shards.
+   Lowering a limit blocks new requests but does not delete existing objects or
+   invalidate already-reserved upload sessions. Confirm remains idempotent and
+   honors accepted reservations; only pre-reservation legacy rows need a final
+   daily check.
+4. Return distinct, actionable errors for file, daily, user stored, and instance
+   stored limits. Publish static limits in discovery; keep usage private (an
+   authenticated account read and an admin-only aggregate view). The server is
+   authoritative; a stale client hint must never grant an upload.
+5. A full MinIO volume is **not** the same as an application quota. Recognize
+   MinIO's `XMinioStorageFull` / HTTP 507 on the direct PUT and show a clear
+   "storage full, contact the instance admin" error even when the instance
+   limit is unlimited. Do not mark the upload confirmed. Best-effort abort a
+   failed single-PUT reservation promptly; retain tracked state for the sweeper
+   if abort fails. Preserve multipart parts for retry after transient errors,
+   and let explicit cancel/expiry release their reservations. Exercise these
+   cases with simulated storage responses; do not fill the real dev volume.
+
+Verification: migration/one-time env seed and admin edits, quota boundaries,
+parallel requests by one and multiple users, old pending/confirmed migration,
+inventory-unavailable fail-closed behavior, failed cleanup still charged,
+successful cleanup released, HTTP 507/XML storage-full wording, abort failure
+retaining recovery state, and existing multipart/authorization suites. Staging
+must verify a real MinIO low-space response and the configured production
+volume before claiming production acceptance.
 
 ## Phase 2 — Multipart uploads
 

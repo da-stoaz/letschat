@@ -487,16 +487,31 @@ cross-restart resume and download resume are not implemented. Core API enforces:
 | Per file | 500 MiB initially | `UPLOAD_MAX_FILE_SIZE_MIB`, then `/admin/config` |
 | Multipart part | 64 MiB initially | `UPLOAD_PART_SIZE_MIB`, then `/admin/config` (5–90 MiB) |
 | Avatar / space icon | 10 MiB and `image/*` | enforced by core-api and mirrored in the client pickers |
-| Per user | 2 GiB **per UTC day** of *uploaded* bytes | `DailyQuota` in `UploadEndpoints.cs`, reserved at `/uploads/request` under a row lock |
-| Stored bytes per user | **no cap** | the daily quota resets at midnight UTC; nothing limits how much a user keeps in the bucket over time (per-user/space/instance storage quotas are planned in `.claude/plans/object-storage.md`) |
+| Per-user upload rate | 2 GiB per UTC day initially | `DAILY_UPLOAD_QUOTA_MIB`, then `/admin/config`; charged bytes plus today's pending reservations |
+| Stored bytes per user | unlimited initially (`0`) | `USER_STORAGE_LIMIT_MIB`, then `/admin/config`; confirmed objects plus all pending reservations |
+| Stored bytes per installation | unlimited initially (`0`) | `INSTANCE_STORAGE_LIMIT_MIB`, then `/admin/config`; all confirmed objects plus all pending reservations in this bucket |
 
-The two upload-size `.env` values seed the PostgreSQL `SystemConfig` fields
+The five upload/quota `.env` values seed the PostgreSQL `SystemConfig` fields
 once. Later changes in `/admin/config` take effect for new requests immediately;
 editing `.env` again does not overwrite them. Existing sessions retain their
-original part size. The API publishes the effective limits in discovery. Raising
-the file maximum above 500 MiB is possible (up to the 2 GiB daily allowance),
+original reservation and part size. The API publishes the effective limits in
+discovery; authenticated users can read current personal usage at
+`POST /uploads/quota`. The admin page shows tracked installation usage. Stored
+quota changes never delete existing files; a lower limit blocks new requests
+until enough tracked objects are removed. Registry rows remain charged until
+MinIO deletion succeeds. At startup, quota-limited upload requests wait for a
+complete bucket inventory; a failed inventory returns a retryable error, not an
+undercounted allowance. Raising the file maximum above 500 MiB is possible
+(up to the separate 2 GiB per-file cap),
 but browser downloads still buffer the whole file in RAM until download
 streaming/resume is implemented.
+
+An unlimited installation quota does **not** guarantee free disk on the MinIO
+volume: MinIO metadata, incomplete multipart uploads, other buckets, and other
+services also use space. If MinIO reports `XMinioStorageFull` / HTTP 507, the
+client shows an explicit storage-full error and never confirms the file. Failed
+single-PUT reservations are aborted best-effort; tracked failures are retried
+by the sweeper. Multipart sessions remain retryable until cancelled or expired.
 
 What the proxy adds on top:
 

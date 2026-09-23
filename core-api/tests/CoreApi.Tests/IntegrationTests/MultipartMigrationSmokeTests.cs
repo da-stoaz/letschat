@@ -44,12 +44,16 @@ public sealed class MultipartMigrationSmokeTests
                 var row = await db.SystemConfig.SingleAsync();
                 Assert.Equal(0, row.UploadPartSizeMiB);
                 Assert.Equal(0, row.UploadMaxFileSizeMiB);
+                Assert.False(row.UploadQuotaSettingsSeeded);
             }
 
             var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["UPLOAD_PART_SIZE_MIB"] = "32",
                 ["UPLOAD_MAX_FILE_SIZE_MIB"] = "400",
+                ["DAILY_UPLOAD_QUOTA_MIB"] = "4096",
+                ["USER_STORAGE_LIMIT_MIB"] = "8192",
+                ["INSTANCE_STORAGE_LIMIT_MIB"] = "0",
             }).Build();
             var options = ServiceOptions.FromConfiguration(config);
             var services = new ServiceCollection()
@@ -63,9 +67,17 @@ public sealed class MultipartMigrationSmokeTests
                 await system.InitializeAsync();
                 Assert.Equal(32, system.Current.UploadPartSizeMiB);
                 Assert.Equal(400, system.Current.UploadMaxFileSizeMiB);
-                await system.UpdateAsync(row => row.UploadPartSizeMiB = 16);
+                Assert.Equal(4096, system.Current.DailyUploadQuotaMiB);
+                Assert.Equal(8192, system.Current.UserStorageLimitMiB);
+                Assert.True(system.Current.UploadQuotaSettingsSeeded);
+                await system.UpdateAsync(row =>
+                {
+                    row.UploadPartSizeMiB = 16;
+                    row.UserStorageLimitMiB = 500;
+                });
                 await system.InitializeAsync();
                 Assert.Equal(16, system.Current.UploadPartSizeMiB);
+                Assert.Equal(500, system.Current.UserStorageLimitMiB);
             }
         }
         finally

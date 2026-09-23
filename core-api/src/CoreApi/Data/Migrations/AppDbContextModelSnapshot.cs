@@ -191,6 +191,8 @@ namespace CoreApi.Data.Migrations
 
                     b.HasIndex("ConfirmedAt");
 
+                    b.HasIndex("Username");
+
                     b.HasIndex("UploadId")
                         .IsUnique()
                         .HasFilter("\"UploadId\" IS NOT NULL");
@@ -242,6 +244,8 @@ namespace CoreApi.Data.Migrations
 
                     b.HasIndex("ExpiresAt");
 
+                    b.HasIndex("Username");
+
                     b.ToTable("PendingUploads");
                 });
 
@@ -249,6 +253,18 @@ namespace CoreApi.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .HasColumnType("integer");
+
+                    b.Property<long>("DailyUploadQuotaMiB")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("InstanceStorageLimitMiB")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("UploadQuotaSettingsSeeded")
+                        .HasColumnType("boolean");
+
+                    b.Property<long>("UserStorageLimitMiB")
+                        .HasColumnType("bigint");
 
                     b.Property<int>("UploadMaxFileSizeMiB")
                         .HasColumnType("integer");

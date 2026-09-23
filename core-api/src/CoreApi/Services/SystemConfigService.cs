@@ -31,24 +31,34 @@ public sealed class SystemConfigService(IServiceScopeFactory scopeFactory, Servi
         var row = await db.SystemConfig.FirstOrDefaultAsync(c => c.Id == SystemConfig.SingletonId);
         if (row is null)
         {
-            var envError = UploadLimits.ValidationError(options.UploadPartSizeMiB, options.UploadMaxFileSizeMiB);
+            var envError = UploadLimits.ValidationError(options.UploadPartSizeMiB, options.UploadMaxFileSizeMiB,
+                options.DailyUploadQuotaMiB, options.UserStorageLimitMiB, options.InstanceStorageLimitMiB);
             if (envError is not null) throw new InvalidOperationException(envError);
             row = SeedFrom(options);
             db.SystemConfig.Add(row);
             await db.SaveChangesAsync();
         }
-        else if (row.UploadPartSizeMiB == 0 || row.UploadMaxFileSizeMiB == 0)
+        else if (row.UploadPartSizeMiB == 0 || row.UploadMaxFileSizeMiB == 0 || !row.UploadQuotaSettingsSeeded)
         {
-            var envError = UploadLimits.ValidationError(options.UploadPartSizeMiB, options.UploadMaxFileSizeMiB);
+            var envError = UploadLimits.ValidationError(options.UploadPartSizeMiB, options.UploadMaxFileSizeMiB,
+                options.DailyUploadQuotaMiB, options.UserStorageLimitMiB, options.InstanceStorageLimitMiB);
             if (envError is not null) throw new InvalidOperationException(envError);
             // Newly added columns use zero on upgrade. Seed each only once;
             // subsequent .env edits never override the persisted admin choice.
             if (row.UploadPartSizeMiB == 0) row.UploadPartSizeMiB = options.UploadPartSizeMiB;
             if (row.UploadMaxFileSizeMiB == 0) row.UploadMaxFileSizeMiB = options.UploadMaxFileSizeMiB;
+            if (!row.UploadQuotaSettingsSeeded)
+            {
+                row.DailyUploadQuotaMiB = options.DailyUploadQuotaMiB;
+                row.UserStorageLimitMiB = options.UserStorageLimitMiB;
+                row.InstanceStorageLimitMiB = options.InstanceStorageLimitMiB;
+                row.UploadQuotaSettingsSeeded = true;
+            }
             await db.SaveChangesAsync();
         }
 
-        var error = UploadLimits.ValidationError(row.UploadPartSizeMiB, row.UploadMaxFileSizeMiB);
+        var error = UploadLimits.ValidationError(row.UploadPartSizeMiB, row.UploadMaxFileSizeMiB,
+            row.DailyUploadQuotaMiB, row.UserStorageLimitMiB, row.InstanceStorageLimitMiB);
         if (error is not null) throw new InvalidOperationException(error);
 
         _current = row;
@@ -62,7 +72,8 @@ public sealed class SystemConfigService(IServiceScopeFactory scopeFactory, Servi
 
         var row = await db.SystemConfig.FirstAsync(c => c.Id == SystemConfig.SingletonId);
         apply(row);
-        var error = UploadLimits.ValidationError(row.UploadPartSizeMiB, row.UploadMaxFileSizeMiB);
+        var error = UploadLimits.ValidationError(row.UploadPartSizeMiB, row.UploadMaxFileSizeMiB,
+            row.DailyUploadQuotaMiB, row.UserStorageLimitMiB, row.InstanceStorageLimitMiB);
         if (error is not null) throw new ArgumentException(error);
         row.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync();
@@ -80,6 +91,10 @@ public sealed class SystemConfigService(IServiceScopeFactory scopeFactory, Servi
         RateLimitWindowSeconds = o.RateLimitWindowSeconds,
         UploadPartSizeMiB = o.UploadPartSizeMiB,
         UploadMaxFileSizeMiB = o.UploadMaxFileSizeMiB,
+        DailyUploadQuotaMiB = o.DailyUploadQuotaMiB,
+        UserStorageLimitMiB = o.UserStorageLimitMiB,
+        InstanceStorageLimitMiB = o.InstanceStorageLimitMiB,
+        UploadQuotaSettingsSeeded = true,
         SmtpHost = o.SmtpHost,
         SmtpPort = o.SmtpPort,
         SmtpUser = o.SmtpUser,
