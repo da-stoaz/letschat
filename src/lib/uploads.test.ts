@@ -76,11 +76,8 @@ describe('multipart upload', () => {
     const scope = { kind: 'channel' as const, channelId: 1 }
 
     await expect(uploadSingleFile(file, scope)).rejects.toThrow('Storage upload failed (503)')
-    expect(FakeXHR.sent).toEqual([
-      { url: 'https://storage.test/part=2', size: 5 },
-      { url: 'https://storage.test/part=2', size: 5 },
-      { url: 'https://storage.test/part=2', size: 5 },
-    ])
+    expect(FakeXHR.sent.filter((sent) => sent.url.endsWith('part=2'))).toHaveLength(3)
+    expect(FakeXHR.sent.some((sent) => sent.url.endsWith('part=1'))).toBe(false)
 
     await expect(uploadSingleFile(file, scope)).resolves.toMatchObject({ fileSize: 11 })
     expect(authServiceUploadRequest).toHaveBeenCalledTimes(1)
@@ -99,6 +96,78 @@ describe('multipart upload', () => {
     await expect(uploadSingleFile(file, { kind: 'channel', channelId: 1 })).rejects.toThrow('offline')
     await cancelUpload(file)
     expect(authServiceUploadAbort).toHaveBeenCalledWith(expect.objectContaining({ uploadId: 'upload-2' }))
+  })
+
+  it('keeps several parts in flight and reports combined progress', async () => {
+    const pendingSends: Array<() => void> = []
+    let maxInFlight = 0
+    class SlowXHR extends FakeXHR {
+      override send(body: Blob): void {
+        pendingSends.push(() => super.send(body))
+        maxInFlight = Math.max(maxInFlight, pendingSends.length)
+        queueMicrotask(() => setTimeout(() => pendingSends.shift()?.(), 0))
+      }
+    }
+    vi.stubGlobal('XMLHttpRequest', SlowXHR)
+    FakeXHR.failures = 3 // no injected part=2 failures here
+    vi.mocked(authServiceUploadRequest).mockResolvedValue({
+      uploadId: 'upload-parallel', uploadUrl: null, expiresIn: 7200,
+      mode: 'multipart', partSizeBytes: 2, partCount: 6,
+    })
+    vi.mocked(authServiceUploadStatus).mockResolvedValue({ completedParts: [] })
+    vi.mocked(authServiceUploadPartUrl).mockImplementation(async ({ partNumber }) => ({
+      url: `https://storage.test/part=${partNumber}`, expiresIn: 600,
+    }))
+    vi.mocked(authServiceUploadConfirm).mockResolvedValue({
+      storageKey: 'uploads/ch/1/me/p.bin', fileName: 'p.bin',
+      fileSize: 11, mimeType: 'application/octet-stream',
+    })
+    const onProgress = vi.fn()
+
+    await uploadSingleFile(new File(['hello world'], 'p.bin'), { kind: 'channel', channelId: 1 },
+      undefined, onProgress)
+
+    expect(maxInFlight).toBeGreaterThan(1)
+    expect(maxInFlight).toBeLessThanOrEqual(4)
+    expect(FakeXHR.sent.map((sent) => sent.url).sort()).toEqual(
+      [1, 2, 3, 4, 5, 6].map((n) => `https://storage.test/part=${n}`),
+    )
+    const loaded = onProgress.mock.calls.map(([, progress]) => progress.loadedBytes)
+    expect(Math.max(...loaded)).toBe(11)
+    expect(loaded.every((bytes: number) => bytes <= 11)).toBe(true)
+  })
+
+  it('stays at one part in flight while parts upload slowly', async () => {
+    let now = 0
+    vi.spyOn(performance, 'now').mockImplementation(() => (now += 20_000))
+    const pendingSends: Array<() => void> = []
+    let maxInFlight = 0
+    class SlowXHR extends FakeXHR {
+      override send(body: Blob): void {
+        pendingSends.push(() => super.send(body))
+        maxInFlight = Math.max(maxInFlight, pendingSends.length)
+        setTimeout(() => pendingSends.shift()?.(), 0)
+      }
+    }
+    vi.stubGlobal('XMLHttpRequest', SlowXHR)
+    FakeXHR.failures = 3
+    vi.mocked(authServiceUploadRequest).mockResolvedValue({
+      uploadId: 'upload-slow', uploadUrl: null, expiresIn: 7200,
+      mode: 'multipart', partSizeBytes: 2, partCount: 6,
+    })
+    vi.mocked(authServiceUploadStatus).mockResolvedValue({ completedParts: [] })
+    vi.mocked(authServiceUploadPartUrl).mockImplementation(async ({ partNumber }) => ({
+      url: `https://storage.test/part=${partNumber}`, expiresIn: 600,
+    }))
+    vi.mocked(authServiceUploadConfirm).mockResolvedValue({
+      storageKey: 'uploads/ch/1/me/s.bin', fileName: 's.bin',
+      fileSize: 11, mimeType: 'application/octet-stream',
+    })
+
+    await uploadSingleFile(new File(['hello world'], 's.bin'), { kind: 'channel', channelId: 1 })
+    expect(maxInFlight).toBe(1)
+    expect(FakeXHR.sent).toHaveLength(6)
+    vi.restoreAllMocks()
   })
 
   it('marks a rejected upload request as failed', async () => {
@@ -135,13 +204,14 @@ describe('multipart upload', () => {
       mode: 'multipart', partSizeBytes: 5, partCount: 2,
     })
     vi.mocked(authServiceUploadStatus).mockResolvedValue({ completedParts: [] })
-    vi.mocked(authServiceUploadPartUrl).mockResolvedValue({
-      url: 'https://storage.test/part=1', expiresIn: 600,
-    })
+    vi.mocked(authServiceUploadPartUrl).mockImplementation(async ({ partNumber }) => ({
+      url: `https://storage.test/part=${partNumber}`, expiresIn: 600,
+    }))
 
     await expect(uploadSingleFile(new File(['123456'], 'test.bin'),
       { kind: 'channel', channelId: 1 })).rejects.toThrow('Object storage is full')
-    expect(FakeXHR.sent).toHaveLength(1)
+    const urls = FakeXHR.sent.map((sent) => sent.url)
+    expect(new Set(urls).size).toBe(urls.length)
     expect(authServiceUploadConfirm).not.toHaveBeenCalled()
   })
 })

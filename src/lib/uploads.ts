@@ -9,6 +9,9 @@ export { clearSignedDownloadUrlCache, getSignedDownloadUrl, getSignedDownloadUrl
 export type { UploadScope } from './authService'
 
 const DEFAULT_MIME_TYPE = 'application/octet-stream'
+// A part finishing within FAST_PART_MS earns one more part in flight, up to the max.
+const MAX_PARALLEL_PARTS = 4
+const FAST_PART_MS = 15_000
 const activeUploads = new WeakMap<File, {
   scope: string
   request: UploadRequestResponse
@@ -172,30 +175,65 @@ async function uploadMultipart(
   }
   reportProgress(file, doneBytes, onProgress)
 
-  for (let number = 1; number <= partCount; number += 1) {
-    if (completed.has(number)) continue
-    const start = (number - 1) * partSize
-    const body = file.slice(start, Math.min(file.size, start + partSize))
+  // WebKit (the Tauri webview) sends one XHR body at well under local disk or
+  // MinIO speed and idles between requests, so a fast link needs several
+  // parts in flight. On a slow link that only splits the same bandwidth and
+  // stretches each part towards its URL expiry, so start with one part and
+  // add more only while parts keep finishing quickly.
+  const pending = Array.from({ length: partCount }, (_, index) => index + 1)
+    .filter((number) => !completed.has(number))
+  const inFlight = new Map<number, number>()
+  const report = () => {
+    let loaded = doneBytes
+    for (const bytes of inFlight.values()) loaded += bytes
+    reportProgress(file, loaded, onProgress)
+  }
+  let failure: unknown = null
+  let limit = 1
+
+  async function uploadPart(number: number): Promise<void> {
+    const start = (number - 1) * partSize!
+    const body = file.slice(start, Math.min(file.size, start + partSize!))
     let lastError: unknown
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 3 && failure === null; attempt += 1) {
       try {
         const { url } = await withSessionTokenRetry((sessionToken) =>
           authServiceUploadPartUrl({ sessionToken, uploadId: request.uploadId, partNumber: number }),
         )
-        await uploadFileToStorage(body, url, mimeType, (loaded) =>
-          reportProgress(file, doneBytes + loaded, onProgress),
-        )
-        lastError = null
-        break
+        const startedAt = performance.now()
+        await uploadFileToStorage(body, url, mimeType, (loaded) => {
+          inFlight.set(number, loaded)
+          report()
+        })
+        limit = performance.now() - startedAt < FAST_PART_MS
+          ? Math.min(MAX_PARALLEL_PARTS, limit + 1)
+          : Math.max(1, limit - 1)
+        inFlight.delete(number)
+        doneBytes += body.size
+        report()
+        return
       } catch (error) {
+        inFlight.delete(number)
+        limit = 1
         if (error instanceof StorageFullError) throw error
         lastError = error
       }
     }
     if (lastError) throw lastError
-    doneBytes += body.size
-    reportProgress(file, doneBytes, onProgress)
   }
+
+  const active = new Set<Promise<void>>()
+  while (failure === null && (pending.length > 0 || active.size > 0)) {
+    while (failure === null && active.size < limit && pending.length > 0) {
+      const task: Promise<void> = uploadPart(pending.shift()!)
+        .catch((error: unknown) => { failure ??= error })
+        .finally(() => active.delete(task))
+      active.add(task)
+    }
+    if (active.size > 0) await Promise.race(active)
+  }
+  await Promise.all(active)
+  if (failure !== null) throw failure
 }
 
 export async function uploadSingleFile(
