@@ -15,12 +15,12 @@ namespace CoreApi.Endpoints;
 /// </summary>
 public static class UploadEndpoints
 {
-    private const long MaxFileSize = 500L * 1024 * 1024;       // 500 MB
     private const long MaxProfileImageSize = 10L * 1024 * 1024; // 10 MiB
     private const long DailyQuota = 2L * 1024 * 1024 * 1024;   // 2 GB / user / day
     private const int PresignUploadSeconds = 600;              // 10 min to PUT
     private const int PresignDownloadSeconds = 3600;           // 1 h GET lifetime
     private const long PendingUploadTtlSeconds = 900;          // 15 min to /confirm
+    private const long MultipartUploadTtlSeconds = 7200;       // 2 h to /confirm
     private const int MaxBatchKeys = 128;
 
     private static readonly string[] BlockedMimePrefixes =
@@ -37,6 +37,9 @@ public static class UploadEndpoints
     {
         routes.MapPost("/uploads/request", RequestUpload);
         routes.MapPost("/uploads/confirm", ConfirmUpload);
+        routes.MapPost("/uploads/part-url", PartUrl);
+        routes.MapPost("/uploads/status", Status);
+        routes.MapPost("/uploads/abort", AbortUpload);
         routes.MapPost("/uploads/download-url", DownloadUrl);
         routes.MapPost("/uploads/download-urls", DownloadUrls);
     }
@@ -46,7 +49,9 @@ public static class UploadEndpoints
         TokenService tokens,
         UserManager<ApplicationUser> users,
         AppDbContext db,
-        StorageService storage)
+        StorageService storage,
+        SystemConfigService config,
+        CancellationToken ct)
     {
         var username = await RequireSession(payload.SessionToken, tokens, users);
 
@@ -71,11 +76,16 @@ public static class UploadEndpoints
             throw ApiException.BadRequest("file_size must be greater than 0.");
         }
 
-        if (payload.FileSize > MaxFileSize)
+        var limits = config.Current;
+        var maxFileSize = limits.UploadMaxFileSizeMiB * UploadLimits.MiB;
+        var partSize = limits.UploadPartSizeMiB * UploadLimits.MiB;
+        if (payload.FileSize > maxFileSize)
         {
             throw ApiException.BadRequest(
-                $"File exceeds the maximum allowed size of {MaxFileSize / 1024 / 1024} MB.");
+                $"File exceeds the maximum allowed size of {limits.UploadMaxFileSizeMiB} MiB.");
         }
+        // Old clients retain their single-PUT behavior (and its proxy cap).
+        var multipart = payload.SupportsMultipart && payload.FileSize > partSize;
 
         var mimeType = payload.MimeType.Trim().ToLowerInvariant();
         if (mimeType.Length == 0)
@@ -107,40 +117,59 @@ public static class UploadEndpoints
         var storageKey = StorageKey.Build(
             payload.Scope, username, extension.Length == 0 ? uploadId : $"{uploadId}.{extension}");
 
-        var uploadUrl = await storage.PresignPutAsync(storageKey, payload.FileSize, PresignUploadSeconds);
-
         var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        await using var transaction = db.Database.IsRelational()
-            ? await db.Database.BeginTransactionAsync()
-            : null;
-        var quota = await LockQuotaAsync(db, username, today);
-        var reserved = await db.PendingUploads
-            .Where(p => p.Username == username && (p.QuotaDate == today || p.QuotaDate == ""))
-            .SumAsync(p => (long?)p.FileSize) ?? 0;
-        if (quota.BytesUploaded + reserved + payload.FileSize > DailyQuota)
         {
-            throw ApiException.BadRequest(
-                $"Daily upload quota of {DailyQuota / 1024 / 1024 / 1024} GB exceeded.");
+            await using var transaction = db.Database.IsRelational()
+                ? await db.Database.BeginTransactionAsync(ct)
+                : null;
+            var quota = await LockQuotaAsync(db, username, today);
+            var reserved = await db.PendingUploads
+                .Where(p => p.Username == username && (p.QuotaDate == today || p.QuotaDate == ""))
+                .SumAsync(p => (long?)p.FileSize, ct) ?? 0;
+            if (quota.BytesUploaded + reserved + payload.FileSize > DailyQuota)
+            {
+                throw ApiException.BadRequest(
+                    $"Daily upload quota of {DailyQuota / 1024 / 1024 / 1024} GB exceeded.");
+            }
+
+            db.PendingUploads.Add(new PendingUpload
+            {
+                Id = uploadId,
+                Username = username,
+                StorageKey = storageKey,
+                FileName = fileName,
+                FileSize = payload.FileSize,
+                MimeType = mimeType,
+                QuotaDate = today,
+                ExpiresAt = UnixNow() + (multipart ? MultipartUploadTtlSeconds : PendingUploadTtlSeconds),
+                PartSize = multipart ? partSize : 0,
+            });
+            await db.SaveChangesAsync(ct);
+            if (transaction is not null) await transaction.CommitAsync(ct);
         }
 
-        db.PendingUploads.Add(new PendingUpload
+        if (!multipart)
         {
-            Id = uploadId,
-            Username = username,
-            StorageKey = storageKey,
-            FileName = fileName,
-            FileSize = payload.FileSize,
-            MimeType = mimeType,
-            QuotaDate = today,
-            ExpiresAt = UnixNow() + PendingUploadTtlSeconds,
-        });
-        await db.SaveChangesAsync();
-        if (transaction is not null)
-        {
-            await transaction.CommitAsync();
+            var url = await storage.PresignPutAsync(storageKey, payload.FileSize, PresignUploadSeconds);
+            return new UploadRequestResponse(uploadId, url, PresignUploadSeconds);
         }
 
-        return new UploadRequestResponse(uploadId, uploadUrl, PresignUploadSeconds);
+        var multipartId = await storage.InitiateMultipartAsync(storageKey, mimeType, ct);
+        try
+        {
+            var pending = await db.PendingUploads.FindAsync([uploadId], ct)
+                ?? throw new InvalidOperationException("Upload reservation disappeared during initiation.");
+            pending.MultipartUploadId = multipartId;
+            await db.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            try { await storage.AbortMultipartAsync(storageKey, multipartId, CancellationToken.None); }
+            catch { /* MinIO's stale-multipart cleanup is the crash/failure fallback. */ }
+            throw;
+        }
+        return new UploadRequestResponse(uploadId, null, (int)MultipartUploadTtlSeconds,
+            "multipart", partSize, checked((int)((payload.FileSize + partSize - 1) / partSize)));
     }
 
     private static async Task<UploadConfirmResponse> ConfirmUpload(
@@ -148,35 +177,63 @@ public static class UploadEndpoints
         TokenService tokens,
         UserManager<ApplicationUser> users,
         AppDbContext db,
-        StorageService storage)
+        StorageService storage,
+        CancellationToken ct)
     {
         var username = await RequireSession(payload.SessionToken, tokens, users);
-
-        var pending = await db.PendingUploads.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == payload.UploadId)
-            ?? throw ApiException.BadRequest("Upload ID not found or already confirmed.");
-
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
+        var pending = await LockPendingAsync(db, payload.UploadId, ct);
+        if (pending is null)
+        {
+            var confirmed = await db.ConfirmedUploads.AsNoTracking()
+                .FirstOrDefaultAsync(row => row.UploadId == payload.UploadId, ct)
+                ?? throw ApiException.BadRequest("Upload ID not found.");
+            if (confirmed.Username != username)
+                throw ApiException.Unauthorized("Upload does not belong to this session.");
+            return new UploadConfirmResponse(
+                confirmed.StorageKey, confirmed.FileName, confirmed.FileSize, confirmed.MimeType);
+        }
         if (!string.Equals(pending.Username, username, StringComparison.Ordinal))
         {
             throw ApiException.Unauthorized("Upload does not belong to this session.");
         }
-
-        if (pending.ExpiresAt < UnixNow())
+        if (pending.ExpiresAt <= UnixNow())
         {
+            if (pending.MultipartUploadId is { } expiredId)
+                await storage.AbortMultipartAsync(pending.StorageKey, expiredId, ct);
             await storage.DeleteObjectAsync(pending.StorageKey);
             db.PendingUploads.Remove(pending);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
+            if (transaction is not null) await transaction.CommitAsync(ct);
             throw ApiException.BadRequest("Upload session expired. Please start over.");
         }
 
-        var actualSize = await storage.GetObjectSizeAsync(pending.StorageKey)
-            ?? throw ApiException.BadRequest(
-                "File has not been uploaded yet — complete the PUT request first.");
+        var actualSize = await storage.GetObjectSizeAsync(pending.StorageKey);
+        if (pending.PartSize > 0 && pending.MultipartUploadId is { } multipartId && actualSize is null)
+        {
+            var parts = await storage.ListPartsAsync(pending.StorageKey, multipartId, ct);
+            var count = checked((int)((pending.FileSize + pending.PartSize - 1) / pending.PartSize));
+            if (parts.Count != count || parts.Where((part, index) =>
+                    part.Number != index + 1
+                    || part.Size != ExpectedPartSize(pending, index + 1)
+                    || string.IsNullOrEmpty(part.ETag)).Any())
+            {
+                throw ApiException.BadRequest("Upload is incomplete or a part has the wrong size.");
+            }
+            await storage.CompleteMultipartAsync(pending.StorageKey, multipartId, parts, ct);
+            actualSize = await storage.GetObjectSizeAsync(pending.StorageKey);
+        }
+        if (actualSize is null)
+        {
+            throw ApiException.BadRequest("File has not been uploaded yet — complete the PUT request first.");
+        }
 
         // Content-Length is signed, and the real object size is checked again:
         // a backend that ignored the signed header cannot turn one reservation
         // into a larger object.
-        var rejection = actualSize != pending.FileSize
+        var rejection = actualSize.Value != pending.FileSize
             ? "Uploaded file size does not match the reserved size."
             : null;
 
@@ -186,25 +243,9 @@ public static class UploadEndpoints
             // storage-fill this check exists to prevent.
             await storage.DeleteObjectAsync(pending.StorageKey);
             db.PendingUploads.Remove(pending);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
+            if (transaction is not null) await transaction.CommitAsync(ct);
             throw ApiException.BadRequest(rejection);
-        }
-
-        await using var transaction = db.Database.IsRelational()
-            ? await db.Database.BeginTransactionAsync()
-            : null;
-        if (transaction is not null)
-        {
-            pending = await db.PendingUploads
-                .FromSqlInterpolated($"""
-                    SELECT * FROM "PendingUploads" WHERE "Id" = {payload.UploadId} FOR UPDATE
-                    """)
-                .SingleOrDefaultAsync()
-                ?? throw ApiException.BadRequest("Upload ID not found or already confirmed.");
-        }
-        else
-        {
-            db.PendingUploads.Attach(pending);
         }
         var quotaDate = pending.QuotaDate.Length == 0
             ? DateTimeOffset.FromUnixTimeSeconds(pending.ExpiresAt - PendingUploadTtlSeconds)
@@ -213,11 +254,11 @@ public static class UploadEndpoints
         var quota = await LockQuotaAsync(db, username, quotaDate);
 
         // Rows created by an older deployment were not reserved at request time.
-        if (pending.QuotaDate.Length == 0 && quota.BytesUploaded + actualSize > DailyQuota)
+        if (pending.QuotaDate.Length == 0 && quota.BytesUploaded + actualSize.Value > DailyQuota)
         {
             await storage.DeleteObjectAsync(pending.StorageKey);
             db.PendingUploads.Remove(pending);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
             if (transaction is not null)
             {
                 await transaction.CommitAsync();
@@ -226,26 +267,118 @@ public static class UploadEndpoints
                 $"Daily upload quota of {DailyQuota / 1024 / 1024 / 1024} GB exceeded.");
         }
 
-        quota.BytesUploaded += actualSize;
+        quota.BytesUploaded += actualSize.Value;
         db.ConfirmedUploads.Add(new ConfirmedUpload
         {
+            UploadId = pending.Id,
             StorageKey = pending.StorageKey,
             Username = pending.Username,
             FileName = pending.FileName,
-            FileSize = actualSize,
+            FileSize = actualSize.Value,
             MimeType = pending.MimeType,
             ConfirmedAt = UnixNow(),
         });
         db.PendingUploads.Remove(pending);
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(ct);
         if (transaction is not null)
         {
             await transaction.CommitAsync();
         }
 
         return new UploadConfirmResponse(
-            pending.StorageKey, pending.FileName, actualSize, pending.MimeType);
+            pending.StorageKey, pending.FileName, actualSize.Value, pending.MimeType);
     }
+
+    private static async Task<UploadPartUrlResponse> PartUrl(
+        UploadPartPayload payload,
+        TokenService tokens,
+        UserManager<ApplicationUser> users,
+        AppDbContext db,
+        StorageService storage)
+    {
+        var username = await RequireSession(payload.SessionToken, tokens, users);
+        var pending = await RequireMultipartPendingAsync(db, payload.UploadId, username);
+        var count = checked((int)((pending.FileSize + pending.PartSize - 1) / pending.PartSize));
+        if (payload.PartNumber < 1 || payload.PartNumber > count)
+        {
+            throw ApiException.BadRequest("Invalid upload part number.");
+        }
+        var expected = ExpectedPartSize(pending, payload.PartNumber);
+        var lifetime = (int)Math.Min(PresignUploadSeconds, pending.ExpiresAt - UnixNow());
+        if (lifetime <= 0) throw ApiException.BadRequest("Upload session expired.");
+        var url = await storage.PresignPartAsync(
+            pending.StorageKey, pending.MultipartUploadId!, payload.PartNumber, expected, lifetime);
+        return new UploadPartUrlResponse(url, lifetime);
+    }
+
+    private static async Task<UploadStatusResponse> Status(
+        UploadSessionPayload payload,
+        TokenService tokens,
+        UserManager<ApplicationUser> users,
+        AppDbContext db,
+        StorageService storage,
+        CancellationToken ct)
+    {
+        var username = await RequireSession(payload.SessionToken, tokens, users);
+        var pending = await RequireMultipartPendingAsync(db, payload.UploadId, username);
+        var count = checked((int)((pending.FileSize + pending.PartSize - 1) / pending.PartSize));
+        if (await storage.GetObjectSizeAsync(pending.StorageKey) == pending.FileSize)
+            return new UploadStatusResponse(Enumerable.Range(1, count).ToList());
+        var parts = await storage.ListPartsAsync(pending.StorageKey, pending.MultipartUploadId!, ct);
+        return new UploadStatusResponse(parts
+            .Where(part => part.Number >= 1 && part.Number <= count
+                && part.Size == ExpectedPartSize(pending, part.Number))
+            .Select(part => part.Number).ToList());
+    }
+
+    private static async Task<IResult> AbortUpload(
+        UploadSessionPayload payload,
+        TokenService tokens,
+        UserManager<ApplicationUser> users,
+        AppDbContext db,
+        StorageService storage,
+        CancellationToken ct)
+    {
+        var username = await RequireSession(payload.SessionToken, tokens, users);
+        await using var tx = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(ct) : null;
+        var pending = await LockPendingAsync(db, payload.UploadId, ct)
+            ?? throw ApiException.BadRequest("Upload ID not found or already confirmed.");
+        if (pending.Username != username) throw ApiException.Unauthorized("Upload does not belong to this session.");
+        if (pending.MultipartUploadId is { } multipartId)
+        {
+            await storage.AbortMultipartAsync(pending.StorageKey, multipartId, ct);
+        }
+        // A completion that reached MinIO but not PostgreSQL can leave a final
+        // object while the pending row still exists. Both forms are cleaned.
+        await storage.DeleteObjectAsync(pending.StorageKey);
+        db.PendingUploads.Remove(pending);
+        await db.SaveChangesAsync(ct);
+        if (tx is not null) await tx.CommitAsync(ct);
+        return Results.NoContent();
+    }
+
+    private static async Task<PendingUpload> RequireMultipartPendingAsync(
+        AppDbContext db, string uploadId, string username)
+    {
+        var pending = await db.PendingUploads.AsNoTracking().FirstOrDefaultAsync(row => row.Id == uploadId)
+            ?? throw ApiException.BadRequest("Upload ID not found or already confirmed.");
+        if (pending.Username != username) throw ApiException.Unauthorized("Upload does not belong to this session.");
+        if (pending.ExpiresAt <= UnixNow()) throw ApiException.BadRequest("Upload session expired.");
+        if (pending.MultipartUploadId is null || pending.PartSize <= 0)
+            throw ApiException.BadRequest("This is not a multipart upload.");
+        return pending;
+    }
+
+    private static long ExpectedPartSize(PendingUpload pending, int partNumber) =>
+        Math.Min(pending.PartSize, pending.FileSize - (partNumber - 1L) * pending.PartSize);
+
+    private static async Task<PendingUpload?> LockPendingAsync(
+        AppDbContext db, string uploadId, CancellationToken ct) =>
+        db.Database.IsRelational()
+            ? await db.PendingUploads.FromSqlInterpolated($"""
+                SELECT * FROM "PendingUploads" WHERE "Id" = {uploadId} FOR UPDATE
+                """).SingleOrDefaultAsync(ct)
+            : await db.PendingUploads.FirstOrDefaultAsync(row => row.Id == uploadId, ct);
 
     private static async Task<DownloadUrlResponse> DownloadUrl(
         DownloadUrlPayload payload,

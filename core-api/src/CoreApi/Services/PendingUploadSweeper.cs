@@ -58,22 +58,23 @@ public sealed class PendingUploadSweeper(
         {
             try
             {
-                await storage.DeleteObjectAsync(pending.StorageKey);
-                if (db.Database.IsRelational())
-                {
-                    swept += await db.PendingUploads
-                        .Where(p => p.Id == pending.Id && p.ExpiresAt < cutoff)
-                        .ExecuteDeleteAsync(ct);
-                }
-                else
-                {
-                    var current = await db.PendingUploads.FindAsync([pending.Id], ct);
-                    if (current is not null && current.ExpiresAt < cutoff)
-                    {
-                        db.PendingUploads.Remove(current);
-                        swept += await db.SaveChangesAsync(ct);
-                    }
-                }
+                // Hold the same row lock as /uploads/confirm and /uploads/abort.
+                // An old sweep candidate must never abort a session completing
+                // concurrently or delete its just-confirmed object.
+                await using var tx = db.Database.IsRelational()
+                    ? await db.Database.BeginTransactionAsync(ct) : null;
+                var current = db.Database.IsRelational()
+                    ? await db.PendingUploads.FromSqlInterpolated($"""
+                        SELECT * FROM "PendingUploads" WHERE "Id" = {pending.Id} FOR UPDATE
+                        """).SingleOrDefaultAsync(ct)
+                    : await db.PendingUploads.FindAsync([pending.Id], ct);
+                if (current is null || current.ExpiresAt >= cutoff) continue;
+                if (current.MultipartUploadId is { } multipartId)
+                    await storage.AbortMultipartAsync(current.StorageKey, multipartId, ct);
+                await storage.DeleteObjectAsync(current.StorageKey);
+                db.PendingUploads.Remove(current);
+                swept += await db.SaveChangesAsync(ct);
+                if (tx is not null) await tx.CommitAsync(ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

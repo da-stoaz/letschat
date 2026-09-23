@@ -14,5 +14,7 @@ public sealed class MigrationTests
         using var db = new AppDbContext(options);
 
         Assert.Contains("20260919150000_TrackConfirmedUploads", db.Database.GetMigrations());
+        Assert.Contains("20260923120000_MultipartUploadSettings", db.Database.GetMigrations());
+        Assert.False(db.Database.HasPendingModelChanges());
     }
 }

@@ -19,6 +19,12 @@ public sealed class PendingUpload
 
     /// <summary>Unix epoch seconds after which the pending record is invalid.</summary>
     public long ExpiresAt { get; set; }
+
+    /// <summary>Null for legacy single PUT; set after MinIO initiates multipart.</summary>
+    public string? MultipartUploadId { get; set; }
+
+    /// <summary>Frozen at request time so admin edits do not alter an in-flight session.</summary>
+    public long PartSize { get; set; }
 }
 
 /// <summary>
@@ -42,6 +48,8 @@ public sealed class UploadQuota
 /// </summary>
 public sealed class ConfirmedUpload
 {
+    /// <summary>Allows an interrupted /confirm response to be retried idempotently.</summary>
+    public string? UploadId { get; set; }
     public string StorageKey { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
     public string FileName { get; set; } = string.Empty;

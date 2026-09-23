@@ -55,6 +55,8 @@ public sealed class ServiceOptions
     public required string MinioBucket { get; init; }
     public required string MinioInternalEndpoint { get; init; }
     public required string MinioPublicEndpoint { get; init; }
+    public required int UploadPartSizeMiB { get; init; }
+    public required int UploadMaxFileSizeMiB { get; init; }
 
     public required string LiveKitApiKey { get; init; }
     public required string LiveKitApiSecret { get; init; }
@@ -164,6 +166,12 @@ public sealed class ServiceOptions
                 ? parsed
                 : fallback;
 
+        // New upload fields are seeded only once. An invalid initial value is
+        // rejected during seeding, but .env no longer controls an existing row.
+        int GetInitialUploadInt(string key, int fallback) =>
+            config[key] is not { Length: > 0 } value ? fallback
+                : int.TryParse(value, out var parsed) ? parsed : 0;
+
         var minioInternal = Get("MINIO_INTERNAL_ENDPOINT", "http://127.0.0.1:4390");
 
         return new ServiceOptions
@@ -182,6 +190,8 @@ public sealed class ServiceOptions
             MinioBucket = Get("MINIO_BUCKET", "letschat-files"),
             MinioInternalEndpoint = minioInternal,
             MinioPublicEndpoint = Get("MINIO_PUBLIC_ENDPOINT", minioInternal),
+            UploadPartSizeMiB = GetInitialUploadInt("UPLOAD_PART_SIZE_MIB", 64),
+            UploadMaxFileSizeMiB = GetInitialUploadInt("UPLOAD_MAX_FILE_SIZE_MIB", 500),
 
             LiveKitApiKey = Get("LIVEKIT_API_KEY", "devkey"),
             LiveKitApiSecret = Get("LIVEKIT_API_SECRET", DevLiveKitApiSecret),

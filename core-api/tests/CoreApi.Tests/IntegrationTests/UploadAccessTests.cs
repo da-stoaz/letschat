@@ -299,13 +299,13 @@ public sealed class UploadAccessTests
         var client = factory.CreateClient();
         var (alice, _) = await RegisterAsync(client, "quotauser");
 
-        for (var requestNumber = 0; requestNumber < 4; requestNumber++)
+        for (var requestNumber = 0; requestNumber < 32; requestNumber++)
         {
             var accepted = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
             {
                 sessionToken = alice,
                 fileName = $"large-{requestNumber}.bin",
-                fileSize = 500L * 1024 * 1024,
+                fileSize = 64L * 1024 * 1024,
                 mimeType = "application/octet-stream",
                 scope = new { kind = "channel", channelId = 1 },
             });
@@ -316,12 +316,61 @@ public sealed class UploadAccessTests
         {
             sessionToken = alice,
             fileName = "one-too-many.bin",
-            fileSize = 500L * 1024 * 1024,
+            fileSize = 64L * 1024 * 1024,
             mimeType = "application/octet-stream",
             scope = new { kind = "channel", channelId = 1 },
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_Limits_Appear_In_Discovery_And_Gate_New_Uploads()
+    {
+        using var factory = new LetsChatWebApplicationFactory();
+        var client = factory.CreateClient();
+        var (alice, _) = await RegisterAsync(client, "uploadlimits");
+        var config = factory.Services.GetRequiredService<SystemConfigService>();
+        await config.UpdateAsync(row =>
+        {
+            row.UploadPartSizeMiB = 8;
+            row.UploadMaxFileSizeMiB = 16;
+        });
+
+        using var discovery = JsonDocument.Parse(await client.GetStringAsync("/.well-known/letschat.json"));
+        Assert.Equal(8L * 1024 * 1024,
+            discovery.RootElement.GetProperty("uploadPartSizeBytes").GetInt64());
+        Assert.Equal(16L * 1024 * 1024,
+            discovery.RootElement.GetProperty("uploadMaxFileSizeBytes").GetInt64());
+
+        var oversized = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+        {
+            sessionToken = alice,
+            fileName = "too-large.bin",
+            fileSize = 17L * 1024 * 1024,
+            mimeType = "application/octet-stream",
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, oversized.StatusCode);
+
+        var oldClient = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+        {
+            sessionToken = alice,
+            fileName = "needs-multipart.bin",
+            fileSize = 9L * 1024 * 1024,
+            mimeType = "application/octet-stream",
+        });
+        Assert.Equal(HttpStatusCode.OK, oldClient.StatusCode);
+        using (var oldResponse = JsonDocument.Parse(await oldClient.Content.ReadAsStringAsync()))
+            Assert.Equal("single", oldResponse.RootElement.GetProperty("mode").GetString());
+
+        var small = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+        {
+            sessionToken = alice,
+            fileName = "small.bin",
+            fileSize = 8L * 1024 * 1024,
+            mimeType = "application/octet-stream",
+        });
+        Assert.Equal(HttpStatusCode.OK, small.StatusCode);
     }
 
     [Fact]

@@ -22,6 +22,8 @@ public sealed class TokenServiceTests
         MinioBucket = "b",
         MinioInternalEndpoint = "http://localhost:1",
         MinioPublicEndpoint = "http://localhost:1",
+        UploadPartSizeMiB = 64,
+        UploadMaxFileSizeMiB = 500,
         LiveKitApiKey = "k",
         LiveKitApiSecret = "this-is-a-sufficiently-long-livekit-secret",
         DiscoverySpacetimeDbUri = "ws://x",

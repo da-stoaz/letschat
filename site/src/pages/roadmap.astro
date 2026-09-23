@@ -4,7 +4,7 @@ import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
 import { GITHUB_DISCUSSIONS, GITHUB_ISSUE_NEW } from "@/lib/site";
 
-const updatedAt = "August 29, 2026";
+const updatedAt = "September 23, 2026";
 
 // Delivered and merged to main.
 const shipped = [
@@ -136,7 +136,7 @@ const upcoming = [
     effort: "Multi-week",
     goals: [
       "Build storage quotas on the shipped object registry and lifecycle cleanup — confirmed uploads can no longer become permanent orphans.",
-      "Chunked/multipart MinIO uploads so large files aren't capped by the proxy body limit (today: one PUT per file, 100 MB ceiling behind a Cloudflare Tunnel).",
+      "Roll out and verify multipart uploads through Cloudflare Tunnel; add cross-restart upload continuation later.",
       "Per-space role & access management (Discord-style roles) plus per-user, per-space and instance storage quotas (today only a 2 GiB/user/UTC-day upload rate limit exists — stored bytes are uncapped).",
       "Drop the core-api↔SpacetimeDB admin-identity coupling; add operator-facing server logging.",
     ],

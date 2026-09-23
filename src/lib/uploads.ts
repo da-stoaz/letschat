@@ -1,12 +1,33 @@
-import { authServiceUploadConfirm, authServiceUploadRequest, type UploadScope } from './authService'
+import {
+  authServiceUploadAbort, authServiceUploadConfirm, authServiceUploadPartUrl, authServiceUploadRequest,
+  authServiceUploadStatus, type UploadRequestResponse, type UploadScope,
+} from './authService'
 import { withSessionTokenRetry } from './uploadSession'
 import type { ChatMessageAttachment } from '../types/attachments'
 
 export { clearSignedDownloadUrlCache, getSignedDownloadUrl, getSignedDownloadUrls } from './downloadUrls'
 export type { UploadScope } from './authService'
 
-export const MAX_UPLOAD_FILE_SIZE_BYTES = 500 * 1024 * 1024 // 500 MB
 const DEFAULT_MIME_TYPE = 'application/octet-stream'
+const activeUploads = new WeakMap<File, {
+  scope: string
+  request: UploadRequestResponse
+  expiresAt: number
+  uploaded: boolean
+}>()
+
+/** Explicitly release a multipart reservation when a queued file is removed. */
+export async function cancelUpload(file: File): Promise<void> {
+  const active = activeUploads.get(file)
+  if (!active) return
+  try {
+    await withSessionTokenRetry((sessionToken) =>
+      authServiceUploadAbort({ sessionToken, uploadId: active.request.uploadId }),
+    )
+  } finally {
+    if (activeUploads.get(file) === active) activeUploads.delete(file)
+  }
+}
 
 const BLOCKED_MIME_PREFIXES = [
   'application/x-msdownload',
@@ -62,10 +83,10 @@ function storageErrorCode(responseText: string | null): string | null {
 }
 
 async function uploadFileToStorage(
-  file: File,
+  body: Blob,
   uploadUrl: string,
   mimeType: string,
-  onProgress?: UploadProgressCallback,
+  onBytes?: (loaded: number) => void,
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const request = new XMLHttpRequest()
@@ -75,12 +96,7 @@ async function uploadFileToStorage(
 
     request.upload.onprogress = (event) => {
       if (!event.lengthComputable) return
-      const totalBytes = Math.max(1, event.total)
-      onProgress?.(file, {
-        loadedBytes: event.loaded,
-        totalBytes,
-        fraction: Math.min(1, event.loaded / totalBytes),
-      })
+      onBytes?.(Math.min(body.size, event.loaded))
     }
 
     request.onerror = () => {
@@ -100,11 +116,7 @@ async function uploadFileToStorage(
     }
     request.onload = () => {
       if (request.status >= 200 && request.status < 300) {
-        onProgress?.(file, {
-          loadedBytes: file.size,
-          totalBytes: Math.max(1, file.size),
-          fraction: 1,
-        })
+        onBytes?.(body.size)
         resolve()
         return
       }
@@ -118,8 +130,63 @@ async function uploadFileToStorage(
       )
     }
 
-    request.send(file)
+    request.send(body)
   })
+}
+
+function reportProgress(file: File, loaded: number, onProgress?: UploadProgressCallback): void {
+  onProgress?.(file, {
+    loadedBytes: loaded,
+    totalBytes: file.size,
+    fraction: Math.min(1, loaded / file.size),
+  })
+}
+
+async function uploadMultipart(
+  file: File,
+  request: UploadRequestResponse,
+  mimeType: string,
+  onProgress?: UploadProgressCallback,
+): Promise<void> {
+  const partSize = request.partSizeBytes
+  const partCount = request.partCount
+  if (!partSize || !partCount || partSize <= 0 || partCount !== Math.ceil(file.size / partSize)) {
+    throw new Error('Server returned invalid multipart upload parameters.')
+  }
+  const status = await withSessionTokenRetry((sessionToken) =>
+    authServiceUploadStatus({ sessionToken, uploadId: request.uploadId }),
+  )
+  const completed = new Set(status.completedParts)
+  let doneBytes = 0
+  for (const number of completed) {
+    if (number < 1 || number > partCount) throw new Error('Server returned an invalid uploaded part.')
+    doneBytes += Math.min(partSize, file.size - (number - 1) * partSize)
+  }
+  reportProgress(file, doneBytes, onProgress)
+
+  for (let number = 1; number <= partCount; number += 1) {
+    if (completed.has(number)) continue
+    const start = (number - 1) * partSize
+    const body = file.slice(start, Math.min(file.size, start + partSize))
+    let lastError: unknown
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const { url } = await withSessionTokenRetry((sessionToken) =>
+          authServiceUploadPartUrl({ sessionToken, uploadId: request.uploadId, partNumber: number }),
+        )
+        await uploadFileToStorage(body, url, mimeType, (loaded) =>
+          reportProgress(file, doneBytes + loaded, onProgress),
+        )
+        lastError = null
+        break
+      } catch (error) {
+        lastError = error
+      }
+    }
+    if (lastError) throw lastError
+    doneBytes += body.size
+    reportProgress(file, doneBytes, onProgress)
+  }
 }
 
 export async function uploadSingleFile(
@@ -134,32 +201,49 @@ export async function uploadSingleFile(
     throw new Error('File is empty.')
   }
 
-  if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
-    throw new Error(`File exceeds ${Math.round(MAX_UPLOAD_FILE_SIZE_BYTES / 1024 / 1024)} MB.`)
-  }
-
   if (isBlockedMimeType(mimeType)) {
     throw new Error('This file type is not allowed.')
   }
 
   onStage?.(file, 'requesting')
-  const request = await withSessionTokenRetry((sessionToken) =>
-    authServiceUploadRequest({
-      sessionToken,
-      fileName: file.name,
-      fileSize: file.size,
-      mimeType,
-      scope,
-    }),
-  )
+  const scopeKey = JSON.stringify(scope)
+  let active = activeUploads.get(file)
+  if (active && (active.scope !== scopeKey || active.expiresAt <= Date.now())) {
+    // The old session is either unusable or belongs to another storage scope.
+    // Cleanup is best-effort; the server sweeper handles an outage.
+    void cancelUpload(file).catch(() => undefined)
+    activeUploads.delete(file)
+    active = undefined
+  }
+  if (!active) {
+    const request = await withSessionTokenRetry((sessionToken) =>
+      authServiceUploadRequest({
+        sessionToken,
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType,
+        scope,
+        supportsMultipart: true,
+      }),
+    )
+    active = { scope: scopeKey, request, expiresAt: Date.now() + request.expiresIn * 1000 - 10_000, uploaded: false }
+    if (request.mode === 'multipart') activeUploads.set(file, active)
+  }
+  const request = active.request
 
   onStage?.(file, 'uploading')
-  onProgress?.(file, {
-    loadedBytes: 0,
-    totalBytes: Math.max(1, file.size),
-    fraction: 0,
-  })
-  await uploadFileToStorage(file, request.uploadUrl, mimeType, onProgress)
+  reportProgress(file, 0, onProgress)
+  if (!active.uploaded) {
+    if (request.mode === 'multipart') {
+      await uploadMultipart(file, request, mimeType, onProgress)
+    } else {
+      if (!request.uploadUrl) throw new Error('Server did not return an upload URL.')
+      await uploadFileToStorage(file, request.uploadUrl, mimeType, (loaded) =>
+        reportProgress(file, loaded, onProgress),
+      )
+    }
+    active.uploaded = true
+  }
 
   onStage?.(file, 'confirming')
   const confirmed = await withSessionTokenRetry((sessionToken) =>
@@ -168,6 +252,7 @@ export async function uploadSingleFile(
       uploadId: request.uploadId,
     }),
   )
+  activeUploads.delete(file)
   onStage?.(file, 'done')
 
   return {

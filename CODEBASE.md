@@ -110,11 +110,10 @@ by SpacetimeDB. This keeps PostgreSQL account data out of public chat views.
    metadata, and daily quota while reserving the declared bytes in a locked
    PostgreSQL transaction. The owning chat reducer validates that scope again
    when the object is attached.
-2. The client uploads directly to MinIO using the signed method, object key,
-   expiry, and exact `Content-Length` — as a **single `PUT` of the whole file**.
-   There is no multipart/chunked upload, so the proxy in front of MinIO sees the
-   full file as one request body (Cloudflare Tunnel caps that at 100 MB on
-   Free/Pro; see `DEPLOYMENT.md`, "Upload limits").
+2. The client uploads directly to MinIO using signed, exact-`Content-Length`
+   PUTs. Files up to the configured part size use one PUT; larger files use
+   numbered S3 multipart PUTs below Cloudflare's per-request cap. Core API
+   checks MinIO's part list before completing the object.
 3. `/uploads/confirm` verifies the stored object, atomically converts the
    reservation into confirmed quota, and retains a confirmed-object registry
    row. The object therefore never becomes unknown after confirmation.
@@ -127,13 +126,15 @@ by SpacetimeDB. This keeps PostgreSQL account data out of public chat views.
    Failed storage deletion retains the registry row and claim for retry.
 5. Download endpoints re-check channel or DM access before returning a
    short-lived URL.
-6. A background sweeper removes expired, unconfirmed objects before releasing
-   their reservations.
+6. A background sweeper aborts expired multipart sessions or removes expired
+   single-PUT objects before releasing their reservations. MinIO's stale-upload
+   cleanup is the fallback for an initiation crash before the upload ID is saved.
 
-Limits: 500 MiB per attachment, 10 MiB per avatar/space icon, and 2 GiB of
+Default limits: 500 MiB per attachment, 64 MiB per multipart part, 10 MiB per
+avatar/space icon, and 2 GiB of
 uploads per user per UTC day. The daily
 quota is an anti-abuse rate limit, not a storage quota — nothing caps the bytes
-a user keeps in the bucket over time. The next quota/multipart work is specified
+a user keeps in the bucket over time. The quota and download-resume work is specified
 in `.claude/plans/object-storage.md`.
 
 ### Voice and video

@@ -64,7 +64,7 @@ import SiteFooter from "@/components/SiteFooter.astro";
         </article>
         <article class="service-card rounded-xl p-4 space-y-1">
           <p class="font-medium">MinIO</p>
-          <p class="text-muted-foreground">S3-compatible object storage. Required for uploads, attachments, and download URLs. Uploads are one PUT per file (500 MiB max, 2 GiB per user per UTC day) — behind a Cloudflare Tunnel the proxy caps that at 100 MB.</p>
+          <p class="text-muted-foreground">S3-compatible object storage. Required for uploads, attachments, and download URLs. Large files use multipart PUTs (initially 64 MiB each), staying below Cloudflare's 100 MB per-request cap. The initial per-file limit is 500 MiB; the daily upload-rate limit is 2 GiB per user.</p>
         </article>
         <article class="service-card rounded-xl p-4 space-y-1">
           <p class="font-medium">Module Init</p>
@@ -151,9 +151,9 @@ import SiteFooter from "@/components/SiteFooter.astro";
               <td class="p-3">Set to public <code class="text-xs">https://files...</code> endpoint clients can reach</td>
             </tr>
             <tr>
-              <td class="p-3">Uploads over 100 MB fail with <code class="text-xs">413</code> (tunnel track)</td>
-              <td class="p-3">Cloudflare caps proxied request bodies at 100 MB (Free/Pro); uploads are a single PUT</td>
-              <td class="p-3">No workaround within the tunnel topology — use the Caddy track for files up to 500 MiB. Downloads are unaffected by this request-body cap.</td>
+              <td class="p-3">Upload part fails with <code class="text-xs">413</code> (tunnel track)</td>
+              <td class="p-3">Cloudflare caps each proxied request body at 100 MB (Free/Pro)</td>
+              <td class="p-3">Keep the multipart part size at or below 90 MiB in the admin panel. Older clients still send one PUT and remain subject to Cloudflare's request cap.</td>
             </tr>
             <tr>
               <td class="p-3">Caddy cert issuance fails</td>

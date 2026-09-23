@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2Icon, PaperclipIcon, SendHorizonalIcon, XIcon } from 'lucide-react'
 import { reducers } from '../../lib/spacetimedb'
-import { MAX_UPLOAD_FILE_SIZE_BYTES, isBlockedMimeType, uploadFiles, type UploadScope } from '../../lib/uploads'
+import { cancelUpload, isBlockedMimeType, uploadFiles, type UploadScope } from '../../lib/uploads'
 import type { Identity } from '../../types/domain'
 import type { ChatMessageAttachment } from '../../types/attachments'
 import { TypingIndicator } from './TypingIndicator'
@@ -154,10 +154,6 @@ export function ChatComposer({
         rejectedReasons.push(`${file.name}: empty file`)
         continue
       }
-      if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
-        rejectedReasons.push(`${file.name}: exceeds ${Math.round(MAX_UPLOAD_FILE_SIZE_BYTES / 1024 / 1024)} MB`)
-        continue
-      }
       if (mimeType && isBlockedMimeType(mimeType)) {
         rejectedReasons.push(`${file.name}: blocked file type`)
         continue
@@ -270,6 +266,7 @@ export function ChatComposer({
                     className="ml-auto shrink-0 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
                     onClick={() => {
                       if (submitting) return
+                      void cancelUpload(entry.file).catch(() => undefined)
                       setLocalError(null)
                       setQueuedFiles((current) => current.filter((item) => item.id !== entry.id))
                       setUploadStageByFileId((current) => {

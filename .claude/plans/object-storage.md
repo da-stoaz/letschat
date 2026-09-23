@@ -1,9 +1,9 @@
 # Plan: Object storage lifecycle, quotas, and resilient transfers
 
-> **Status (2026-09-22): Phase 0 implemented and locally verified on
-> `analysis`; production acceptance still requires a deployment smoke test.**
-> Stored-byte quotas, multipart uploads, and resumable downloads are later
-> phases. This plan is separate from `2-storage-tiering.md`, which concerns
+> **Status (2026-09-23): Phase 0 committed on `feature/object-storage`;
+> Phase 2 implemented locally, not yet committed or production-accepted.**
+> Stored-byte quotas and resumable downloads remain later phases. This plan is
+> separate from `2-storage-tiering.md`, which concerns
 > hot/cold message rows.
 
 ## Goal and invariants
@@ -127,20 +127,67 @@ drift from object truth.
 
 ## Phase 2 — Multipart uploads
 
-Keep exact size enforcement. Multipart does not require dropping
-`Content-Length`; sign and verify it per part.
+This phase can be implemented before Phase 1; it does not create a stored-byte
+quota or change the existing daily upload-rate reservation.
 
-1. Initiate an upload with declared total size and bounded part size.
-2. Presign numbered `UploadPart` requests, each below the deployment proxy cap.
-3. Persist uploaded part numbers/ETags and allow retry/resume within a TTL.
-4. Complete only when ordered parts total the reserved size; then HEAD-verify and
-   promote through the same `ConfirmedUpload` path.
-5. Abort expired sessions and remove incomplete multipart data before releasing
-   reservations.
+Keep the existing single-PUT protocol for files up to the configured part
+size. Multipart-capable clients use S3-compatible multipart above it; old
+clients retain their single-PUT behavior and proxy limitations. Initial
+defaults are 64 MiB per part (below Cloudflare Free/Pro's 100 MB *per-request*
+body limit) and 500 MiB per file. The 2 GiB/user/UTC-day upload-rate limit
+remains unchanged. Stored-byte quotas are Phase 1 and are not silently
+introduced by multipart.
 
-For Cloudflare Tunnel, choose a part size below the plan's request-body limit.
-The effective upload limit must be returned by discovery/configuration so the
-client does not accept a file the selected topology cannot upload.
+The part size and per-file maximum are runtime `SystemConfig` values, seeded
+once from `UPLOAD_PART_SIZE_MIB` and `UPLOAD_MAX_FILE_SIZE_MIB`. Existing
+installations already have a config row, so migration/initialization must seed
+these *new fields* once without overwriting later admin edits. The admin panel
+edits both, validates S3's non-final-part minimum and the 90 MiB part ceiling
+for the Cloudflare Free/Pro proxy cap, and publishes effective bytes in
+discovery. New requests observe a saved value immediately; every pending
+session freezes its own part size and reserved file size. Old clients still use one PUT up to the
+configured per-file maximum; behind Cloudflare they retain the older 100 MB
+per-request ceiling.
+
+1. `/uploads/request` still validates metadata, checks/reserves the full file
+   size, and records `PendingUpload` before creating a MinIO multipart session.
+   Store the MinIO upload ID on that row. If initiation or persisting the ID
+   fails, abort the MinIO session when possible. Keep the existing response
+   shape for single PUT; return mode, part size/count, and application upload ID for
+   multipart-capable clients.
+2. An authenticated part-URL endpoint checks session ownership, expiry, part
+   number, and the *exact expected length* for that part, then presigns its
+   `UploadPart` PUT with `Content-Length`. The browser/Tauri webview sends
+   `File.slice(...)` directly to MinIO, reports aggregate progress, and retries
+   only failed parts. Bound simultaneous parts to avoid needless memory use.
+3. A status endpoint obtains completed part numbers, sizes, and ETags from
+   MinIO `ListParts`. MinIO is the source of truth: do not add a second ETag
+   table. A live client can continue after a network interruption within the
+   session TTL. Cross-reload resume requires reselecting and identifying the
+   original local file; do not claim that capability until it is implemented
+   and tested.
+4. `/uploads/confirm` (or an explicitly named multipart completion endpoint)
+   locks the pending session, lists parts server-side, requires consecutive
+   parts with exactly the expected sizes and total, then completes in order
+   with MinIO's ETags. HEAD-verify the assembled object and promote it through
+   the existing `ConfirmedUpload`/daily-counter transaction. On retry after a
+   crash between MinIO completion and DB promotion, reconcile an already
+   completed, correctly sized object instead of creating a second charge.
+5. On cancellation/expiry, abort the multipart session before dropping the
+   pending reservation. Failed aborts retain tracked state for retry. Because
+   incomplete parts are invisible to the normal object inventory, configure
+   and verify MinIO's built-in stale-multipart cleanup as the fallback for a
+   crash between MinIO initiation and persisting its upload ID. Do not add a
+   duplicate application-wide incomplete-upload scanner unless testing proves
+   that fallback insufficient. Never abort an active session.
+
+Presigned part URLs must expire no later than their session. The multipart
+session TTL must be long enough for the configured maximum over a realistic slow
+connection, and the sweeper must not race completion. Browser CORS must allow
+the part PUTs; reading part ETags in the client is unnecessary because the API
+uses `ListParts`. Downloads remain one assembled object and are unchanged by
+this phase. The API should advertise the file and part limits so clients do
+not maintain a divergent hard-coded maximum.
 
 ## Phase 3 — Resumable downloads
 
@@ -202,6 +249,23 @@ production-accepted and released.
 ## Later-phase verification
 
 - Concurrent quota requests cannot exceed any configured stored-byte limit.
-- Multipart retry, out-of-order/missing part, expired session, and proxy-sized
-  parts preserve exact total-size enforcement.
 - Browser and Tauri resumed downloads verify object identity before appending.
+
+## Phase 2 verification
+
+- [x] 144/144 Core API tests with opt-in live MinIO and temporary PostgreSQL
+  migration tests: wrong signed part length rejected, parts listed/completed,
+  missing part rejected, owner checked, confirm idempotent, abort and expiry
+  sweep remove multipart sessions, and existing config rows seed new fields once.
+- [x] Frontend unit tests (42/42), frontend and website production builds,
+  86/86 SpacetimeDB security tests, lint, `.NET` format, EF model comparison,
+  and dev/tunnel/Caddy Compose syntax.
+- [x] Local MinIO browser and Tauri-origin multipart PUT preflights returned
+  `204` with matching `Access-Control-Allow-Origin` and `PUT` allowed.
+- [ ] Verify >100 MB upload and browser/Tauri CORS through the deployed
+  Cloudflare Tunnel. Exercise both direct and interrupted transfers in the
+  packaged clients; local tests cover the shared upload code, not the GUI.
+- [ ] Verify MinIO stale-multipart cleanup on the exact production image after
+  a crash between initiation and PostgreSQL update. The app explicitly aborts
+  tracked expired sessions, but cannot test the 24-hour storage fallback in a
+  short local run.

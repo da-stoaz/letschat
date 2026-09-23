@@ -6,6 +6,8 @@ export interface WellKnown {
   auth?: string
   livekit?: string
   database?: string
+  uploadPartSizeBytes?: number
+  uploadMaxFileSizeBytes?: number
 }
 
 /** Adds a scheme if the user typed a bare host, and trims trailing slashes. */
@@ -37,5 +39,7 @@ export async function discoverConfig(serverUrl: string): Promise<ServerConfig> {
     authServiceUrl: json.auth!,
     livekitUrl: json.livekit!,
     spacetimedbDatabase: json.database ?? 'letschat',
+    uploadPartSizeBytes: json.uploadPartSizeBytes,
+    uploadMaxFileSizeBytes: json.uploadMaxFileSizeBytes,
   }
 }

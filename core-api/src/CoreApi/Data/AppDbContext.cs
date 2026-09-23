@@ -40,6 +40,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             upload.HasKey(u => u.Id);
             upload.Property(u => u.Id).HasMaxLength(64);
             upload.Property(u => u.QuotaDate).HasMaxLength(10);
+            upload.Property(u => u.MultipartUploadId).HasMaxLength(512);
             upload.HasIndex(u => u.ExpiresAt);
         });
 
@@ -58,6 +59,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             upload.Property(u => u.FileName).HasMaxLength(512);
             upload.Property(u => u.MimeType).HasMaxLength(256);
             upload.HasIndex(u => u.ConfirmedAt);
+            upload.Property(u => u.UploadId).HasMaxLength(64);
+            upload.HasIndex(u => u.UploadId).IsUnique().HasFilter("\"UploadId\" IS NOT NULL");
         });
 
         builder.Entity<SystemConfig>(config =>

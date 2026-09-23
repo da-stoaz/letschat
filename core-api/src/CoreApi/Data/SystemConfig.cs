@@ -34,6 +34,11 @@ public sealed class SystemConfig
     public int RateLimitPermitLimit { get; set; } = 10;
     public int RateLimitWindowSeconds { get; set; } = 300;
 
+    // ── Uploads ──────────────────────────────────────────────────────────────
+
+    public int UploadPartSizeMiB { get; set; } = 64;
+    public int UploadMaxFileSizeMiB { get; set; } = 500;
+
     // ── Email / SMTP ─────────────────────────────────────────────────────────
 
     public string SmtpHost { get; set; } = "localhost";

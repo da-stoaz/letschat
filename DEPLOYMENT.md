@@ -474,37 +474,40 @@ the owner credential.
 | Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
 | Service domains | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | Used by `deploy/caddy/Caddyfile` (Caddy track) **and by the `web` container on both tracks** — `deploy/web/Caddyfile` builds the browser client's Content-Security-Policy from them. Left unset on the tunnel track the CSP is emitted with empty hosts; it is report-only, so nothing breaks, but the policy protects nothing |
 
-## Upload limits — and the Cloudflare Tunnel ceiling
+## Upload limits and multipart transfers
 
-Attachments, profile pictures and space icons are uploaded as **one presigned
-`PUT` of the whole file** straight to `files.<domain>` (MinIO). There is no
-chunked / multipart upload and no resume — the proxy in front of MinIO sees the
-entire file as a single request body. What core-api enforces:
+Files up to the configured part size are uploaded in one presigned PUT straight
+to MinIO. Larger files use S3 multipart: each numbered PUT carries one part,
+and core-api checks all sizes before asking MinIO to assemble the object.
+Interrupted uploads can retry completed parts within the live two-hour session;
+cross-restart resume and download resume are not implemented. Core API enforces:
 
 | Limit | Value | Where |
 |-------|-------|-------|
-| Per file | 500 MiB | `MaxFileSize` in `UploadEndpoints.cs`, mirrored in the client |
+| Per file | 500 MiB initially | `UPLOAD_MAX_FILE_SIZE_MIB`, then `/admin/config` |
+| Multipart part | 64 MiB initially | `UPLOAD_PART_SIZE_MIB`, then `/admin/config` (5–90 MiB) |
 | Avatar / space icon | 10 MiB and `image/*` | enforced by core-api and mirrored in the client pickers |
 | Per user | 2 GiB **per UTC day** of *uploaded* bytes | `DailyQuota` in `UploadEndpoints.cs`, reserved at `/uploads/request` under a row lock |
 | Stored bytes per user | **no cap** | the daily quota resets at midnight UTC; nothing limits how much a user keeps in the bucket over time (per-user/space/instance storage quotas are planned in `.claude/plans/object-storage.md`) |
 
-Neither value is configurable via env yet.
+The two upload-size `.env` values seed the PostgreSQL `SystemConfig` fields
+once. Later changes in `/admin/config` take effect for new requests immediately;
+editing `.env` again does not overwrite them. Existing sessions retain their
+original part size. The API publishes the effective limits in discovery. Raising
+the file maximum above 500 MiB is possible (up to the 2 GiB daily allowance),
+but browser downloads still buffer the whole file in RAM until download
+streaming/resume is implemented.
 
 What the proxy adds on top:
 
-- **Caddy track** — `deploy/caddy/Caddyfile` sets no `request_body max_size`,
-  so the 500 MiB app limit is the effective one.
-- **Tunnel track** — every `files.<domain>` request is proxied by Cloudflare,
-  and Cloudflare caps the request body at **100 MB on Free and Pro** (200 MB
-  Business, up to 5 GB Enterprise). An upload above that never reaches MinIO:
-  Cloudflare answers `413` and the client shows
-  *"Storage upload failed (413)"*, even though the picker accepted the file.
-  There is no way around it on this track — tunnel hostnames are always
-  proxied, so a DNS-only (grey-cloud) `files` record is not an option.
-  **Downloads are not affected by this request-body cap**: files uploaded
-  elsewhere (or under 100 MB) can still be downloaded through the tunnel.
-  Multipart parts below the per-request cap are planned in
-  `.claude/plans/object-storage.md`.
+- **Caddy track** — `deploy/caddy/Caddyfile` sets no `request_body max_size`;
+  the configured app limit applies.
+- **Tunnel track** — Cloudflare caps each request body at **100 MB on Free and
+  Pro**. The default 64 MiB multipart parts stay below that cap, so a larger
+  file can pass as several requests. A part size above 90 MiB is rejected by
+  core-api configuration validation. **Downloads are not affected** by the
+  request-body cap. Old clients without multipart support keep using one PUT;
+  behind a tunnel those requests still fail above Cloudflare's body cap.
 
 Confirmed objects are retained in PostgreSQL and referenced atomically by the
 SpacetimeDB rows that use them. The lifecycle collector waits one hour, rebuilds

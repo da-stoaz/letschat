@@ -143,6 +143,8 @@ services:
       MINIO_ACCESS_KEY: "${MINIO_ACCESS_KEY}"
       MINIO_SECRET_KEY: "${MINIO_SECRET_KEY}"
       MINIO_BUCKET: "letschat-files"
+      UPLOAD_PART_SIZE_MIB: "${UPLOAD_PART_SIZE_MIB:-64}"
+      UPLOAD_MAX_FILE_SIZE_MIB: "${UPLOAD_MAX_FILE_SIZE_MIB:-500}"
 
       DISCOVERY_SPACETIMEDB_URI: "${DISCOVERY_SPACETIMEDB_URI}"
       DISCOVERY_AUTH_URL: "${DISCOVERY_AUTH_URL}"
@@ -285,6 +287,8 @@ services:
       # nothing a non-browser client cannot bypass anyway. Pin it only together
       # with the desktop origins — see .env.production.*.example for the list.
       MINIO_API_CORS_ALLOW_ORIGIN: "${MINIO_CORS_ALLOW_ORIGIN:-*}"
+      MINIO_API_STALE_UPLOADS_EXPIRY: 24h
+      MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: 6h
     volumes:
       - minio_data:/data
     restart: unless-stopped

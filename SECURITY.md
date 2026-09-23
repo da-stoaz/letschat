@@ -65,12 +65,15 @@ client bindings; changes to a UI permission do not replace a reducer check.
 MinIO must not be publicly browsable. `core-api` brokers access with presigned
 URLs:
 
-- an attachment is limited to 500 MiB; avatars/icons to 10 MiB and `image/*`;
+- attachments default to a 500 MiB per-file maximum, configurable by an admin;
+  avatars/icons remain limited to 10 MiB and `image/*`;
 - a user is limited to 2 GiB per UTC day;
 - upload requests reserve the declared bytes under a PostgreSQL row lock;
-- the exact `Content-Length` is signed and verified against the stored object;
-- unconfirmed grants expire after 15 minutes and a background sweeper deletes
-  their objects before releasing quota;
+- the exact `Content-Length` is signed for a single PUT or each multipart part;
+  multipart completion checks every part and HEAD-verifies the assembled size;
+- single-PUT grants expire after 15 minutes; multipart sessions after two hours.
+  The sweeper deletes or aborts them before releasing quota, with MinIO's stale
+  multipart cleanup covering a crash before the upload ID reaches PostgreSQL;
 - confirmation retains a PostgreSQL registry row, while SpacetimeDB creates and
   removes normalized object references atomically with the owning chat row;
 - the lifecycle collector adopts legacy MinIO inventory, then an admin-gated

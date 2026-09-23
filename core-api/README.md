@@ -90,6 +90,7 @@ important groups are:
 | `SPACETIME_*` | module URL, database name, and service credentials |
 | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET` | object storage credentials and bucket |
 | `MINIO_INTERNAL_ENDPOINT`, `MINIO_PUBLIC_ENDPOINT` | server-side and client-visible S3 endpoints |
+| `UPLOAD_PART_SIZE_MIB`, `UPLOAD_MAX_FILE_SIZE_MIB` | initial upload limits; later editable in `/admin/config` |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | media server and grant signing |
 | `DISCOVERY_*` | values returned to clients by discovery |
 | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD`, `ADMIN_BOOTSTRAP_EMAIL` | optional first-run administrator |
@@ -101,10 +102,11 @@ start with known public development secrets or endpoints.
 
 ## Attachment guarantees
 
-Clients upload bytes directly to MinIO as one `PUT` per file — there is no
-multipart/chunked upload. `core-api` reserves the declared size against the
-user's daily quota before returning a presigned PUT, signs the exact
-`Content-Length`, verifies the resulting object on confirmation, and checks chat
+Clients upload bytes directly to MinIO as one signed PUT up to the configured
+part size or as numbered S3 multipart PUTs above it. `core-api` reserves the
+declared size against the user's daily quota before returning presigned URLs,
+signs each PUT's exact `Content-Length`, verifies the resulting object on
+confirmation, and checks chat
 scope again before minting a download URL. Expired unconfirmed objects are
 removed by `PendingUploadSweeper`; their quota stays reserved when storage
 deletion fails so a storage outage cannot reopen the quota.
@@ -119,13 +121,16 @@ Core API trusts only claims returned with the protected view's
 authorization/readiness sentinel. Missing authorization or an unavailable
 dependency fails closed: the object and registry row remain for retry.
 
-Limits are 500 MiB per attachment, 10 MiB and `image/*` for avatars/icons,
-2 GiB per user per UTC day, 10 minutes for the PUT URL, 15 minutes to confirm,
-one hour for a download URL, and 128 keys per download batch. The daily quota
+Initial limits are 500 MiB per attachment and 64 MiB per multipart part;
+`UPLOAD_MAX_FILE_SIZE_MIB` and `UPLOAD_PART_SIZE_MIB` seed runtime-editable
+values in `/admin/config`. Avatars/icons remain limited to 10 MiB and `image/*`.
+The upload-rate limit remains 2 GiB per user per UTC day. Single PUT has a
+10-minute URL and 15-minute confirmation window; multipart sessions last two
+hours and part URLs at most 10 minutes. Download URLs last one hour, with at
+most 128 keys per download batch. The daily quota
 only bounds the upload rate; there is no cap on
-the total bytes a user has stored. Behind a Cloudflare Tunnel the effective
-per-file limit is Cloudflare's request-body cap (100 MB on Free/Pro), see
-`DEPLOYMENT.md`.
+the total bytes a user has stored. Behind a Cloudflare Tunnel, multipart parts
+remain below the 100 MB Free/Pro request-body cap; see `DEPLOYMENT.md`.
 
 ## Legacy account import
 

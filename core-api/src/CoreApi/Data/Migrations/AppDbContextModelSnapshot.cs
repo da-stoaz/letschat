@@ -159,6 +159,9 @@ namespace CoreApi.Data.Migrations
 
             modelBuilder.Entity("CoreApi.Data.ConfirmedUpload", b =>
                 {
+                    b.Property<string>("UploadId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
                     b.Property<string>("StorageKey")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
@@ -188,6 +191,10 @@ namespace CoreApi.Data.Migrations
 
                     b.HasIndex("ConfirmedAt");
 
+                    b.HasIndex("UploadId")
+                        .IsUnique()
+                        .HasFilter("\"UploadId\" IS NOT NULL");
+
                     b.ToTable("ConfirmedUploads");
                 });
 
@@ -210,6 +217,13 @@ namespace CoreApi.Data.Migrations
                     b.Property<string>("MimeType")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("MultipartUploadId")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<long>("PartSize")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("QuotaDate")
                         .IsRequired()
@@ -234,6 +248,12 @@ namespace CoreApi.Data.Migrations
             modelBuilder.Entity("CoreApi.Data.SystemConfig", b =>
                 {
                     b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UploadMaxFileSizeMiB")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UploadPartSizeMiB")
                         .HasColumnType("integer");
 
                     b.Property<string>("EmailFromAddress")

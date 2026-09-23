@@ -85,6 +85,20 @@
     </div>
 
     <div class="card">
+        <h2>File uploads</h2>
+        <p class="hint" style="margin-top:0">Limits for new uploads. Existing upload sessions keep their original part size.</p>
+        <div class="field">
+            <label for="ups">Multipart part size (MiB)</label>
+            <input class="input" type="number" min="5" max="90" id="ups" name="UploadPartSizeMiB" value="@Model.UploadPartSizeMiB">
+        </div>
+        <div class="field">
+            <label for="umf">Maximum file size (MiB)</label>
+            <input class="input" type="number" min="5" max="2048" id="umf" name="UploadMaxFileSizeMiB" value="@Model.UploadMaxFileSizeMiB">
+        </div>
+        <p class="hint">Browser downloads currently buffer the whole file in memory. Raising this limit can strain clients until download streaming/resume is implemented.</p>
+    </div>
+
+    <div class="card">
         <h2>Email / SMTP</h2>
         <div class="field">
             <label for="sh">SMTP host</label>

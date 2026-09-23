@@ -65,14 +65,12 @@ import { GITHUB_REPO } from "@/lib/site";
           no sound.
         </Callout>
 
-        <Callout type="warning" title="The other exception — files over 100 MB">
-          Every upload is a <strong>single PUT of the whole file</strong> through the <code>files</code> hostname,
-          and Cloudflare caps proxied request bodies at <strong>100 MB</strong> on the Free and Pro plans
-          (200 MB Business, up to 5 GB Enterprise). Larger files are rejected with a <code>413</code> before they
-          ever reach your server, even though the app itself allows 500 MiB per file. Tunnel hostnames are
-          always proxied, so there is no DNS-only escape hatch for <code>files</code>. <strong>Downloads are not
-          affected by this request-body cap</strong>. If you need bigger uploads today, use the
-          <a href="/self-hosting/caddy">Caddy track</a>; chunked uploads are on the roadmap.
+        <Callout type="note" title="Large file uploads use multipart">
+          Cloudflare caps each proxied request body at <strong>100 MB</strong> on Free and Pro.
+          LetsChat splits larger files into multipart PUTs (64 MiB per part by default), so a file can
+          exceed that per-request limit. The admin panel limits part size to 90 MiB to leave headroom.
+          Older clients without multipart support still send one PUT and remain subject to the 100 MB request cap.
+          Downloads are not affected by this request-body cap.
         </Callout>
       </article>
 

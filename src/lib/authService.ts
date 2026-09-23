@@ -122,6 +122,7 @@ type UploadRequestPayload = {
   fileSize: number
   mimeType: string
   scope: UploadScope
+  supportsMultipart?: boolean
 }
 
 type UploadConfirmPayload = {
@@ -145,9 +146,15 @@ type RenewSessionPayload = {
 
 export interface UploadRequestResponse {
   uploadId: string
-  uploadUrl: string
+  uploadUrl: string | null
   expiresIn: number
+  mode?: 'single' | 'multipart'
+  partSizeBytes?: number | null
+  partCount?: number | null
 }
+
+export interface UploadStatusResponse { completedParts: number[] }
+export interface UploadPartUrlResponse { url: string; expiresIn: number }
 
 export interface UploadConfirmResponse {
   storageKey: string
@@ -294,6 +301,18 @@ export async function authServiceUploadRequest(payload: UploadRequestPayload): P
 
 export async function authServiceUploadConfirm(payload: UploadConfirmPayload): Promise<UploadConfirmResponse> {
   return postJson<UploadConfirmResponse, UploadConfirmPayload>('/uploads/confirm', payload)
+}
+
+export async function authServiceUploadPartUrl(payload: UploadConfirmPayload & { partNumber: number }): Promise<UploadPartUrlResponse> {
+  return postJson<UploadPartUrlResponse, typeof payload>('/uploads/part-url', payload)
+}
+
+export async function authServiceUploadStatus(payload: UploadConfirmPayload): Promise<UploadStatusResponse> {
+  return postJson<UploadStatusResponse, UploadConfirmPayload>('/uploads/status', payload)
+}
+
+export async function authServiceUploadAbort(payload: UploadConfirmPayload): Promise<void> {
+  await postJson<unknown, UploadConfirmPayload>('/uploads/abort', payload)
 }
 
 export async function authServiceDownloadUrl(payload: DownloadUrlPayload): Promise<DownloadUrlResponse> {

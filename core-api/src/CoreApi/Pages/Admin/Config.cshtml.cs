@@ -17,6 +17,8 @@ public sealed class ConfigModel(
     [BindProperty] public bool RequireAdminApproval { get; set; }
     [BindProperty] public int RateLimitPermitLimit { get; set; }
     [BindProperty] public int RateLimitWindowSeconds { get; set; }
+    [BindProperty] public int UploadPartSizeMiB { get; set; }
+    [BindProperty] public int UploadMaxFileSizeMiB { get; set; }
     [BindProperty] public string SmtpHost { get; set; } = string.Empty;
     [BindProperty] public int SmtpPort { get; set; }
     [BindProperty] public string? SmtpUser { get; set; }
@@ -45,6 +47,8 @@ public sealed class ConfigModel(
         RequireAdminApproval = c.RequireAdminApproval;
         RateLimitPermitLimit = c.RateLimitPermitLimit;
         RateLimitWindowSeconds = c.RateLimitWindowSeconds;
+        UploadPartSizeMiB = c.UploadPartSizeMiB;
+        UploadMaxFileSizeMiB = c.UploadMaxFileSizeMiB;
         SmtpHost = c.SmtpHost;
         SmtpPort = c.SmtpPort;
         SmtpUser = c.SmtpUser;
@@ -73,6 +77,12 @@ public sealed class ConfigModel(
             SmtpPasswordSet = !string.IsNullOrEmpty(configService.Current.SmtpPassword);
             return Page();
         }
+        if (UploadLimits.ValidationError(UploadPartSizeMiB, UploadMaxFileSizeMiB) is { } uploadError)
+        {
+            Error = uploadError;
+            SmtpPasswordSet = !string.IsNullOrEmpty(configService.Current.SmtpPassword);
+            return Page();
+        }
 
         await configService.UpdateAsync(c =>
         {
@@ -81,6 +91,8 @@ public sealed class ConfigModel(
             c.RequireAdminApproval = RequireAdminApproval;
             c.RateLimitPermitLimit = RateLimitPermitLimit;
             c.RateLimitWindowSeconds = RateLimitWindowSeconds;
+            c.UploadPartSizeMiB = UploadPartSizeMiB;
+            c.UploadMaxFileSizeMiB = UploadMaxFileSizeMiB;
             c.SmtpHost = SmtpHost.Trim();
             c.SmtpPort = SmtpPort;
             c.SmtpUser = string.IsNullOrWhiteSpace(SmtpUser) ? null : SmtpUser.Trim();
