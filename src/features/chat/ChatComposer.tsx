@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 
-type UploadStage = 'requesting' | 'uploading' | 'confirming' | 'done'
+type UploadStage = 'requesting' | 'uploading' | 'confirming' | 'done' | 'failed'
 
 type QueuedFile = {
   id: string
@@ -65,6 +65,8 @@ function stageLabel(stage: UploadStage): string {
       return 'Finalizing…'
     case 'done':
       return 'Uploaded'
+    case 'failed':
+      return 'Failed'
     default:
       return ''
   }
@@ -256,7 +258,7 @@ export function ChatComposer({
                   <span className="shrink-0 text-muted-foreground">{formatFileSize(entry.file.size)}</span>
                   {stage ? (
                     <span className="inline-flex items-center gap-1 text-muted-foreground">
-                      {stage !== 'done' ? <Loader2Icon className="size-3 animate-spin" /> : null}
+                      {stage !== 'done' && stage !== 'failed' ? <Loader2Icon className="size-3 animate-spin" /> : null}
                       {stageLabel(stage)}
                     </span>
                   ) : null}

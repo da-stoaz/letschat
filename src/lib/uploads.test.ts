@@ -3,7 +3,7 @@ import {
   authServiceUploadAbort, authServiceUploadConfirm, authServiceUploadPartUrl,
   authServiceUploadRequest, authServiceUploadStatus,
 } from './authService'
-import { cancelUpload, uploadSingleFile } from './uploads'
+import { cancelUpload, uploadFiles, uploadSingleFile } from './uploads'
 
 vi.mock('./authService', () => ({
   authServiceUploadRequest: vi.fn(),
@@ -91,5 +91,15 @@ describe('multipart upload', () => {
     await expect(uploadSingleFile(file, { kind: 'channel', channelId: 1 })).rejects.toThrow('offline')
     await cancelUpload(file)
     expect(authServiceUploadAbort).toHaveBeenCalledWith(expect.objectContaining({ uploadId: 'upload-2' }))
+  })
+
+  it('marks a rejected upload request as failed', async () => {
+    vi.mocked(authServiceUploadRequest).mockRejectedValue(new Error('Daily upload quota exceeded.'))
+    const file = new File(['data'], 'test.bin')
+    const onStage = vi.fn()
+
+    await expect(uploadFiles([file], { kind: 'channel', channelId: 1 }, onStage))
+      .rejects.toThrow('test.bin: Daily upload quota exceeded.')
+    expect(onStage.mock.calls.map(([, stage]) => stage)).toEqual(['requesting', 'failed'])
   })
 })

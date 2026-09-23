@@ -38,7 +38,7 @@ const BLOCKED_MIME_PREFIXES = [
   'application/x-dosexec',
 ]
 
-type UploadStage = 'requesting' | 'uploading' | 'confirming' | 'done'
+type UploadStage = 'requesting' | 'uploading' | 'confirming' | 'done' | 'failed'
 type UploadStageCallback = (file: File, stage: UploadStage) => void
 export type UploadProgress = {
   loadedBytes: number
@@ -276,6 +276,7 @@ export async function uploadFiles(
       const next = await uploadSingleFile(file, scope, onStage, onProgress)
       uploaded.push(next)
     } catch (error) {
+      onStage?.(file, 'failed')
       throw new Error(buildUploadErrorMessage(file.name, error), { cause: error })
     }
   }
