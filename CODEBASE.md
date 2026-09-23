@@ -96,25 +96,75 @@ docker-compose.prod.caddy.yml
 Messages initially synchronize in bounded windows and older history is loaded
 through explicit pagination reducers.
 
+### Account settings
+
+The client separates account identity, credential security, connection details,
+and notification preferences into Account, Security, Connection, and
+Notifications tabs. Private account metadata such as email comes from the
+session-authenticated `/auth/account` endpoint; chat profile data remains owned
+by SpacetimeDB. This keeps PostgreSQL account data out of public chat views.
+
 ### Attachments
 
-1. `/uploads/request` validates ownership/scope, size, MIME metadata, and daily
-   quota while reserving the declared bytes in a locked PostgreSQL transaction.
-2. The client uploads directly to MinIO using the signed method, object key,
-   expiry, and exact `Content-Length`.
-3. `/uploads/confirm` verifies the stored object and atomically converts the
-   reservation into confirmed quota.
-4. Download endpoints re-check channel or DM access before returning a
+1. `/uploads/request` validates and encodes the requested scope, size, MIME
+   metadata, and daily quota while reserving the declared bytes in a locked
+   PostgreSQL transaction. The owning chat reducer validates that scope again
+   when the object is attached.
+2. The client uploads directly to MinIO using signed, exact-`Content-Length`
+   PUTs. Files up to the configured part size use one PUT; larger files use
+   numbered S3 multipart PUTs below Cloudflare's per-request cap. Core API
+   checks MinIO's part list before completing the object.
+3. `/uploads/confirm` verifies the stored object, atomically converts the
+   reservation into confirmed quota, and retains a confirmed-object registry
+   row. The object therefore never becomes unknown after confirmation.
+4. SpacetimeDB maintains normalized object references in the same transaction
+   as message, DM, avatar, or space-icon changes. A fail-closed collector adopts
+   legacy MinIO inventory, then an admin-only reducer atomically claims only
+   unreferenced keys. Reference creation rejects claimed keys, closing the race
+   between the cleanup decision and MinIO deletion. A protected claim view must
+   return its authorization/readiness sentinel before Core API deletes anything.
+   Failed storage deletion retains the registry row and claim for retry.
+5. Confirmed videos queue a poster job; `VideoThumbnailWorker` renders
+   `{videoKey}.thumb.jpg` with ffmpeg via range reads. Chat renders that poster
+   and mounts the `<video>` only on click.
+5. Download endpoints re-check channel or DM access before returning a
    short-lived URL.
-5. A background sweeper removes expired, unconfirmed objects before releasing
-   their reservations. Confirmed-object lifecycle gaps are tracked in
-   `BUG_ANALYSIS.md`.
+6. A background sweeper aborts expired multipart sessions or removes expired
+   single-PUT objects before releasing their reservations. MinIO's stale-upload
+   cleanup is the fallback for an initiation crash before the upload ID is saved.
+
+Default limits: 500 MiB per attachment, 64 MiB per multipart part, 10 MiB per
+avatar/space icon, and 2 GiB of uploads per user per UTC day. Daily, per-user
+stored, and installation stored limits are runtime admin settings, seeded once
+from `.env`; the stored limits default to unlimited. `/uploads/request` locks the
+config row across users and reserves against both daily usage and retained
+confirmed-plus-pending bytes. A bucket inventory must finish before stored
+limits are enforced. Failed storage deletion keeps the registry row charged;
+MinIO volume exhaustion is reported separately from configured quotas. Space-
+specific limits and download resume remain in `.claude/plans/object-storage.md`.
 
 ### Voice and video
 
 `core-api` issues LiveKit grants only after checking SpacetimeDB presence and
 room scope. Media then travels through LiveKit; app-visible join/leave and
 control state is maintained through the SpacetimeDB module.
+
+### Instance administration and space discovery
+
+ASP.NET Core Identity's `Admin` role is authoritative for human instance
+administrators. `AdminRoleService` mirrors each grant or revocation to the
+SpacetimeDB `User.is_admin` projection; if that write fails, it rolls the Core
+role back and restores the previous module value when possible. Independently,
+the persisted module-owner identity is the infrastructure bootstrap admin, so
+the first public registration never gains control of the instance.
+
+Chat-domain policy stays in SpacetimeDB, where reducers can enforce it without
+trusting the client. The `SystemSettings` singleton holds the space-creation
+policy (`Anyone` by default or `AdminsOnly`). Discoverability is owner opt-in;
+owners may set a short description and tags and may list at most ten spaces.
+An `Everyone` space supports direct join, while a `ModeratorsOnly` space uses a
+moderator-reviewed join request. Non-members receive only the scoped discovery
+metadata and aggregate member count, not the space's membership rows.
 
 ### Archiving
 

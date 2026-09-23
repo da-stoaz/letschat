@@ -119,7 +119,19 @@ public sealed record UploadRequestPayload(
     string FileName,
     long FileSize,
     string MimeType,
-    UploadScope? Scope = null);
+    UploadScope? Scope = null,
+    bool SupportsMultipart = false);
+
+public sealed record UploadQuotaRequest(SessionToken SessionToken);
+
+public sealed record UploadQuotaResponse(
+    string UtcDate,
+    long DailyLimitBytes,
+    long DailyChargedBytes,
+    long DailyReservedBytes,
+    long UserStoredLimitBytes,
+    long? UserStoredAndPendingBytes,
+    long InstanceStoredLimitBytes);
 
 /// <summary>
 /// Where an upload is going, so the storage key can carry who may read it
@@ -134,9 +146,19 @@ public sealed record UploadScope(
     string? Partner = null,
     ulong? ServerId = null);
 
-public sealed record UploadRequestResponse(string UploadId, string UploadUrl, int ExpiresIn);
+public sealed record UploadRequestResponse(
+    string UploadId, string? UploadUrl, int ExpiresIn,
+    string Mode = "single", long? PartSizeBytes = null, int? PartCount = null);
 
 public sealed record UploadConfirmPayload(SessionToken SessionToken, string UploadId);
+
+public sealed record UploadPartPayload(SessionToken SessionToken, string UploadId, int PartNumber);
+
+public sealed record UploadSessionPayload(SessionToken SessionToken, string UploadId);
+
+public sealed record UploadPartUrlResponse(string Url, int ExpiresIn);
+
+public sealed record UploadStatusResponse(List<int> CompletedParts);
 
 public sealed record UploadConfirmResponse(
     string StorageKey,
@@ -168,4 +190,9 @@ public sealed record WellKnownResponse(
     string Database,
     string ServerVersion,
     string RecommendedClient,
-    string MinClient);
+    string MinClient,
+    long UploadPartSizeBytes,
+    long UploadMaxFileSizeBytes,
+    long DailyUploadQuotaBytes,
+    long UserStorageLimitBytes,
+    long InstanceStorageLimitBytes);

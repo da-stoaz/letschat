@@ -474,6 +474,80 @@ the owner credential.
 | Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
 | Service domains | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | Used by `deploy/caddy/Caddyfile` (Caddy track) **and by the `web` container on both tracks** — `deploy/web/Caddyfile` builds the browser client's Content-Security-Policy from them. Left unset on the tunnel track the CSP is emitted with empty hosts; it is report-only, so nothing breaks, but the policy protects nothing |
 
+## Upload limits and multipart transfers
+
+Files up to the configured part size are uploaded in one presigned PUT straight
+to MinIO. Larger files use S3 multipart: each numbered PUT carries one part,
+and core-api checks all sizes before asking MinIO to assemble the object.
+Interrupted uploads can retry completed parts within the live two-hour session;
+cross-restart resume and download resume are not implemented. Core API enforces:
+
+| Limit | Value | Where |
+|-------|-------|-------|
+| Per file | 500 MiB initially | `UPLOAD_MAX_FILE_SIZE_MIB`, then `/admin/config` |
+| Multipart part | 64 MiB initially | `UPLOAD_PART_SIZE_MIB`, then `/admin/config` (5–90 MiB) |
+| Avatar / space icon | 10 MiB and `image/*` | enforced by core-api and mirrored in the client pickers |
+| Per-user upload rate | 2 GiB per UTC day initially | `DAILY_UPLOAD_QUOTA_MIB`, then `/admin/config`; charged bytes plus today's pending reservations |
+| Stored bytes per user | unlimited initially (`0`) | `USER_STORAGE_LIMIT_MIB`, then `/admin/config`; confirmed objects plus all pending reservations |
+| Stored bytes per installation | unlimited initially (`0`) | `INSTANCE_STORAGE_LIMIT_MIB`, then `/admin/config`; all confirmed objects plus all pending reservations in this bucket |
+
+The five upload/quota `.env` values seed the PostgreSQL `SystemConfig` fields
+once. Later changes in `/admin/config` take effect for new requests immediately;
+editing `.env` again does not overwrite them. Existing sessions retain their
+original reservation and part size. The API publishes the effective limits in
+discovery; authenticated users can read current personal usage at
+`POST /uploads/quota`. The admin page shows tracked installation usage. Stored
+quota changes never delete existing files; a lower limit blocks new requests
+until enough tracked objects are removed. Registry rows remain charged until
+MinIO deletion succeeds. At startup, quota-limited upload requests wait for a
+complete bucket inventory; a failed inventory returns a retryable error, not an
+undercounted allowance. Raising the file maximum above 500 MiB is possible
+(up to the separate 2 GiB per-file cap),
+but browser downloads still buffer the whole file in RAM until download
+streaming/resume is implemented.
+
+An unlimited installation quota does **not** guarantee free disk on the MinIO
+volume: MinIO metadata, incomplete multipart uploads, other buckets, and other
+services also use space. If MinIO reports `XMinioStorageFull` / HTTP 507, the
+client shows an explicit storage-full error and never confirms the file. Failed
+single-PUT reservations are aborted best-effort; tracked failures are retried
+by the sweeper. Multipart sessions remain retryable until cancelled or expired.
+
+What the proxy adds on top:
+
+- **Caddy track** — `deploy/caddy/Caddyfile` sets no `request_body max_size`;
+  the configured app limit applies.
+- **Tunnel track** — Cloudflare caps each request body at **100 MB on Free and
+  Pro**. The default 64 MiB multipart parts stay below that cap, so a larger
+  file can pass as several requests. A part size above 90 MiB is rejected by
+  core-api configuration validation. **Downloads are not affected** by the
+  request-body cap. Old clients without multipart support keep using one PUT;
+  behind a tunnel those requests still fail above Cloudflare's body cap.
+
+Confirmed objects are retained in PostgreSQL and referenced atomically by the
+SpacetimeDB rows that use them. The lifecycle collector waits one hour, rebuilds
+the reference table after upgrades/restores, and adopts pre-existing `uploads/`
+objects from MinIO. An admin-only reducer then atomically creates permanent
+deletion claims only for keys that have no reference; every reference-writing
+reducer rejects claimed keys. Core API deletes only claims returned by the
+protected view together with its authorization/readiness sentinel. If
+SpacetimeDB, MinIO, or the admin credential is unavailable, cleanup stops and
+retains the registry row for retry. `SPACETIMEDB_SERVICE_TOKEN` or a synchronized
+chat-domain admin is therefore required for cleanup, but an outage cannot make
+the collector guess and delete live data.
+
+Video posters are rendered by core-api in the background (`VideoThumbnailWorker`):
+one job at a time, below-normal priority, 60 s timeout, three attempts. ffmpeg
+reads the video through range requests (index plus a few frames, never the whole
+file) and stores `{videoKey}.thumb.jpg` next to it, which inherits the video's
+read rule and is deleted with it. The core-api image ships ffmpeg; outside the
+image set `FFMPEG_PATH` or install it on `PATH`. Without ffmpeg the worker logs a
+warning and videos show a play placeholder; jobs stay pending until it is available.
+
+Stop Core API during any destructive SpacetimeDB reset. Restore the chat-domain
+data and run the reference rebuild before starting it again; this prevents an
+in-flight deletion claim from outliving the SpacetimeDB tombstone table.
+
 ## Troubleshooting: file and profile-picture uploads fail silently
 
 **Symptom:** in production a profile picture or chat attachment never uploads.

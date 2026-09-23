@@ -85,6 +85,42 @@
     </div>
 
     <div class="card">
+        <h2>File uploads</h2>
+        <p class="hint" style="margin-top:0">Limits for new uploads. Existing upload sessions keep their original part size.</p>
+        <div class="field">
+            <label for="ups">Multipart part size (MiB)</label>
+            <input class="input" type="number" min="5" max="90" id="ups" name="UploadPartSizeMiB" value="@Model.UploadPartSizeMiB">
+        </div>
+        <div class="field">
+            <label for="umf">Maximum file size (MiB)</label>
+            <input class="input" type="number" min="5" max="2048" id="umf" name="UploadMaxFileSizeMiB" value="@Model.UploadMaxFileSizeMiB">
+        </div>
+        <div class="field">
+            <label for="udq">Daily upload allowance per user (MiB, UTC day)</label>
+            <input class="input" type="number" min="1" id="udq" name="DailyUploadQuotaMiB" value="@Model.DailyUploadQuotaMiB">
+        </div>
+        <div class="field">
+            <label for="uus">Stored files per user (MiB)</label>
+            <input class="input" type="number" min="0" id="uus" name="UserStorageLimitMiB" value="@Model.UserStorageLimitMiB">
+            <div class="hint">0 means unlimited. Pending uploads reserve space; deleting a file releases it after storage cleanup succeeds.</div>
+        </div>
+        <div class="field">
+            <label for="uis">Stored files across this installation (MiB)</label>
+            <input class="input" type="number" min="0" id="uis" name="InstanceStorageLimitMiB" value="@Model.InstanceStorageLimitMiB">
+            <div class="hint">0 means unlimited. This counts objects in this MinIO bucket, not free space on the underlying volume.</div>
+        </div>
+        @if (Model.InstanceStoredAndPendingBytes is { } usedBytes)
+        {
+            <p class="hint">Currently tracked across this installation: @((usedBytes / (1024.0 * 1024)).ToString("N1")) MiB, including pending uploads.</p>
+        }
+        else
+        {
+            <p class="hint">Storage inventory is still loading; usage is not available yet.</p>
+        }
+        <p class="hint">Browser downloads currently buffer the whole file in memory. Raising this limit can strain clients until download streaming/resume is implemented.</p>
+    </div>
+
+    <div class="card">
         <h2>Email / SMTP</h2>
         <div class="field">
             <label for="sh">SMTP host</label>

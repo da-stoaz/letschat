@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2Icon, PaperclipIcon, SendHorizonalIcon, XIcon } from 'lucide-react'
 import { reducers } from '../../lib/spacetimedb'
-import { MAX_UPLOAD_FILE_SIZE_BYTES, isBlockedMimeType, uploadFiles, type UploadScope } from '../../lib/uploads'
+import { cancelUpload, isBlockedMimeType, uploadFiles, type UploadScope } from '../../lib/uploads'
 import type { Identity } from '../../types/domain'
 import type { ChatMessageAttachment } from '../../types/attachments'
 import { TypingIndicator } from './TypingIndicator'
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 
-type UploadStage = 'requesting' | 'uploading' | 'confirming' | 'done'
+type UploadStage = 'requesting' | 'uploading' | 'confirming' | 'done' | 'failed'
 
 type QueuedFile = {
   id: string
@@ -65,6 +65,8 @@ function stageLabel(stage: UploadStage): string {
       return 'Finalizing…'
     case 'done':
       return 'Uploaded'
+    case 'failed':
+      return 'Failed'
     default:
       return ''
   }
@@ -152,10 +154,6 @@ export function ChatComposer({
       const mimeType = file.type?.trim().toLowerCase() ?? ''
       if (file.size <= 0) {
         rejectedReasons.push(`${file.name}: empty file`)
-        continue
-      }
-      if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
-        rejectedReasons.push(`${file.name}: exceeds ${Math.round(MAX_UPLOAD_FILE_SIZE_BYTES / 1024 / 1024)} MB`)
         continue
       }
       if (mimeType && isBlockedMimeType(mimeType)) {
@@ -260,7 +258,7 @@ export function ChatComposer({
                   <span className="shrink-0 text-muted-foreground">{formatFileSize(entry.file.size)}</span>
                   {stage ? (
                     <span className="inline-flex items-center gap-1 text-muted-foreground">
-                      {stage !== 'done' ? <Loader2Icon className="size-3 animate-spin" /> : null}
+                      {stage !== 'done' && stage !== 'failed' ? <Loader2Icon className="size-3 animate-spin" /> : null}
                       {stageLabel(stage)}
                     </span>
                   ) : null}
@@ -270,6 +268,7 @@ export function ChatComposer({
                     className="ml-auto shrink-0 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
                     onClick={() => {
                       if (submitting) return
+                      void cancelUpload(entry.file).catch(() => undefined)
                       setLocalError(null)
                       setQueuedFiles((current) => current.filter((item) => item.id !== entry.id))
                       setUploadStageByFileId((current) => {

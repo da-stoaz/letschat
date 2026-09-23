@@ -62,13 +62,19 @@ public sealed class LetsChatWebApplicationFactory : WebApplicationFactory<Progra
     /// <c>/livekit/token</c>'s room-authorization query) without a live module.
     /// </summary>
     public HttpMessageHandler? SpacetimeTransport { get; init; }
+    public string? MinioEndpoint { get; init; }
+    public string? MinioBucket { get; init; }
+    public string? MinioAccessKey { get; init; }
+    public string? MinioSecretKey { get; init; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         // Stay out of the Development env so appsettings.Development.json
         // (with its real SMTP, REQUIRE_EMAIL_CONFIRMATION, etc.) doesn't
         // override the test config below.
-        builder.UseEnvironment("Testing");
+        // The opt-in live-MinIO smoke uses the documented dev credentials;
+        // Testing deliberately rejects those public defaults at startup.
+        builder.UseEnvironment(MinioEndpoint is null ? "Testing" : "Development");
 
         // Free ports so two factories started in parallel can't collide.
         builder.UseUrls("http://127.0.0.1:0");
@@ -85,11 +91,11 @@ public sealed class LetsChatWebApplicationFactory : WebApplicationFactory<Progra
                 ["AUTH_BIND"] = "127.0.0.1:0",
                 ["ADMIN_BIND"] = "127.0.0.1:0",
                 ["AUTH_JWT_SECRET"] = "this-is-a-test-jwt-secret-value-with-enough-bytes-to-sign",
-                ["MINIO_ACCESS_KEY"] = "test",
-                ["MINIO_SECRET_KEY"] = "test",
-                ["MINIO_BUCKET"] = "test",
-                ["MINIO_INTERNAL_ENDPOINT"] = "http://localhost:0",
-                ["MINIO_PUBLIC_ENDPOINT"] = "http://localhost:0",
+                ["MINIO_ACCESS_KEY"] = MinioAccessKey ?? "test",
+                ["MINIO_SECRET_KEY"] = MinioSecretKey ?? "test",
+                ["MINIO_BUCKET"] = MinioBucket ?? "test",
+                ["MINIO_INTERNAL_ENDPOINT"] = MinioEndpoint ?? "http://localhost:0",
+                ["MINIO_PUBLIC_ENDPOINT"] = MinioEndpoint ?? "http://localhost:0",
                 ["LIVEKIT_API_KEY"] = "test",
                 ["LIVEKIT_API_SECRET"] = "long-enough-livekit-secret-for-tests-1234567890",
                 ["DISCOVERY_SPACETIMEDB_URI"] = "ws://localhost:4300",

@@ -56,6 +56,7 @@ import ArchiveRestoreUserReducer from "./archive_restore_user_reducer";
 import BanMemberReducer from "./ban_member_reducer";
 import BlockUserReducer from "./block_user_reducer";
 import CancelJoinRequestReducer from "./cancel_join_request_reducer";
+import ClaimUnreferencedStorageReducer from "./claim_unreferenced_storage_reducer";
 import CleanupExpiredInvitesReducer from "./cleanup_expired_invites_reducer";
 import CreateChannelReducer from "./create_channel_reducer";
 import CreateInviteReducer from "./create_invite_reducer";
@@ -83,6 +84,7 @@ import MoveChannelReducer from "./move_channel_reducer";
 import MoveChannelRelativeReducer from "./move_channel_relative_reducer";
 import MoveChannelToReducer from "./move_channel_to_reducer";
 import PinMessageReducer from "./pin_message_reducer";
+import RebuildStorageReferencesReducer from "./rebuild_storage_references_reducer";
 import RegisterUserReducer from "./register_user_reducer";
 import RekeyIdentitiesReducer from "./rekey_identities_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
@@ -158,6 +160,7 @@ import MyServersRow from "./my_servers_table";
 import MyTypingStatesRow from "./my_typing_states_table";
 import MyVisibleUsersRow from "./my_visible_users_table";
 import MyVoiceParticipantsRow from "./my_voice_participants_table";
+import StorageDeletionClaimsForCleanupRow from "./storage_deletion_claims_for_cleanup_table";
 import SystemSettingsRow from "./system_settings_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -417,6 +420,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyVoiceParticipantsRow),
+  storageDeletionClaimsForCleanup: __table({
+    name: 'storage_deletion_claims_for_cleanup',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, StorageDeletionClaimsForCleanupRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -443,6 +453,7 @@ const reducersSchema = __reducers(
   __reducerSchema("ban_member", BanMemberReducer),
   __reducerSchema("block_user", BlockUserReducer),
   __reducerSchema("cancel_join_request", CancelJoinRequestReducer),
+  __reducerSchema("claim_unreferenced_storage", ClaimUnreferencedStorageReducer),
   __reducerSchema("cleanup_expired_invites", CleanupExpiredInvitesReducer),
   __reducerSchema("create_channel", CreateChannelReducer),
   __reducerSchema("create_invite", CreateInviteReducer),
@@ -470,6 +481,7 @@ const reducersSchema = __reducers(
   __reducerSchema("move_channel_relative", MoveChannelRelativeReducer),
   __reducerSchema("move_channel_to", MoveChannelToReducer),
   __reducerSchema("pin_message", PinMessageReducer),
+  __reducerSchema("rebuild_storage_references", RebuildStorageReferencesReducer),
   __reducerSchema("register_user", RegisterUserReducer),
   __reducerSchema("rekey_identities", RekeyIdentitiesReducer),
   __reducerSchema("remove_friend", RemoveFriendReducer),
@@ -585,6 +597,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "my_visible_users": Omit<typeof tablesSchema.schemaType.tables["myVisibleUsers"], "accessorName"> & { readonly accessorName: "my_visible_users" };
     /** @deprecated Use `myVoiceParticipants` instead. This alias will be removed in the next major version. */
     readonly "my_voice_participants": Omit<typeof tablesSchema.schemaType.tables["myVoiceParticipants"], "accessorName"> & { readonly accessorName: "my_voice_participants" };
+    /** @deprecated Use `storageDeletionClaimsForCleanup` instead. This alias will be removed in the next major version. */
+    readonly "storage_deletion_claims_for_cleanup": Omit<typeof tablesSchema.schemaType.tables["storageDeletionClaimsForCleanup"], "accessorName"> & { readonly accessorName: "storage_deletion_claims_for_cleanup" };
   };
 };
 
@@ -638,6 +652,7 @@ const tableAccessorAliases = {
   "my_typing_states": "myTypingStates",
   "my_visible_users": "myVisibleUsers",
   "my_voice_participants": "myVoiceParticipants",
+  "storage_deletion_claims_for_cleanup": "storageDeletionClaimsForCleanup",
 } as const;
 
 function __withTableAccessorAliases<T extends object>(target: T, freeze = false): T {
@@ -728,6 +743,8 @@ export type DbView = __DbViewBase & {
   readonly "my_visible_users": __DbViewBase["myVisibleUsers"];
   /** @deprecated Use `myVoiceParticipants` instead. This alias will be removed in the next major version. */
   readonly "my_voice_participants": __DbViewBase["myVoiceParticipants"];
+  /** @deprecated Use `storageDeletionClaimsForCleanup` instead. This alias will be removed in the next major version. */
+  readonly "storage_deletion_claims_for_cleanup": __DbViewBase["storageDeletionClaimsForCleanup"];
 };
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
@@ -802,6 +819,8 @@ export type Tables = __TablesBase & {
   readonly "my_visible_users": __TablesBase["myVisibleUsers"];
   /** @deprecated Use `myVoiceParticipants` instead. This alias will be removed in the next major version. */
   readonly "my_voice_participants": __TablesBase["myVoiceParticipants"];
+  /** @deprecated Use `storageDeletionClaimsForCleanup` instead. This alias will be removed in the next major version. */
+  readonly "storage_deletion_claims_for_cleanup": __TablesBase["storageDeletionClaimsForCleanup"];
 };
 
 /** The tables available in this remote SpacetimeDB module. Each table reference doubles as a query builder. */

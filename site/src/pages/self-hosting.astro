@@ -64,7 +64,7 @@ import SiteFooter from "@/components/SiteFooter.astro";
         </article>
         <article class="service-card rounded-xl p-4 space-y-1">
           <p class="font-medium">MinIO</p>
-          <p class="text-muted-foreground">S3-compatible object storage. Required for uploads, attachments, and download URLs.</p>
+          <p class="text-muted-foreground">S3-compatible object storage. Required for uploads, attachments, and download URLs. Large files use multipart PUTs (initially 64 MiB each), staying below Cloudflare's 100 MB per-request cap. The initial per-file limit is 500 MiB and the daily upload allowance is 2 GiB per user. Admins can also set per-user and installation stored-byte limits; both default to unlimited. A full MinIO volume is reported separately.</p>
         </article>
         <article class="service-card rounded-xl p-4 space-y-1">
           <p class="font-medium">Module Init</p>
@@ -149,6 +149,11 @@ import SiteFooter from "@/components/SiteFooter.astro";
               <td class="p-3">Upload/download errors</td>
               <td class="p-3">Wrong <code class="text-xs">MINIO_PUBLIC_ENDPOINT</code></td>
               <td class="p-3">Set to public <code class="text-xs">https://files...</code> endpoint clients can reach</td>
+            </tr>
+            <tr>
+              <td class="p-3">Upload part fails with <code class="text-xs">413</code> (tunnel track)</td>
+              <td class="p-3">Cloudflare caps each proxied request body at 100 MB (Free/Pro)</td>
+              <td class="p-3">Keep the multipart part size at or below 90 MiB in the admin panel. Older clients still send one PUT and remain subject to Cloudflare's request cap.</td>
             </tr>
             <tr>
               <td class="p-3">Caddy cert issuance fails</td>
@@ -301,4 +306,3 @@ import SiteFooter from "@/components/SiteFooter.astro";
     100% { transform: translate3d(0, 0, 0) scale(1); }
   }
 </style>
-

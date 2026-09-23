@@ -6,14 +6,15 @@ namespace CoreApi.Data;
 
 /// <summary>
 /// EF Core context for the PostgreSQL <c>auth</c> database: the ASP.NET Core
-/// Identity schema (<c>AspNetUsers</c>, <c>AspNetRoles</c>, …) plus the two
-/// upload bookkeeping tables carried over from the legacy service.
+/// Identity schema (<c>AspNetUsers</c>, <c>AspNetRoles</c>, …) plus upload
+/// reservation, confirmed-object, and daily-rate bookkeeping.
 /// </summary>
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     : IdentityDbContext<ApplicationUser, IdentityRole, string>(options)
 {
     public DbSet<PendingUpload> PendingUploads => Set<PendingUpload>();
     public DbSet<UploadQuota> UploadQuotas => Set<UploadQuota>();
+    public DbSet<ConfirmedUpload> ConfirmedUploads => Set<ConfirmedUpload>();
     public DbSet<SystemConfig> SystemConfig => Set<SystemConfig>();
     public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
 
@@ -39,7 +40,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             upload.HasKey(u => u.Id);
             upload.Property(u => u.Id).HasMaxLength(64);
             upload.Property(u => u.QuotaDate).HasMaxLength(10);
+            upload.Property(u => u.MultipartUploadId).HasMaxLength(512);
             upload.HasIndex(u => u.ExpiresAt);
+            upload.HasIndex(u => u.Username);
         });
 
         builder.Entity<UploadQuota>(quota =>
@@ -47,6 +50,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             quota.HasKey(q => new { q.Username, q.QuotaDate });
             quota.Property(q => q.Username).HasMaxLength(64);
             quota.Property(q => q.QuotaDate).HasMaxLength(10);
+        });
+
+        builder.Entity<ConfirmedUpload>(upload =>
+        {
+            upload.HasKey(u => u.StorageKey);
+            upload.Property(u => u.StorageKey).HasMaxLength(512);
+            upload.Property(u => u.Username).HasMaxLength(64);
+            upload.Property(u => u.FileName).HasMaxLength(512);
+            upload.Property(u => u.MimeType).HasMaxLength(256);
+            upload.HasIndex(u => u.ConfirmedAt);
+            upload.HasIndex(u => u.Username);
+            upload.Property(u => u.UploadId).HasMaxLength(64);
+            upload.HasIndex(u => u.UploadId).IsUnique().HasFilter("\"UploadId\" IS NOT NULL");
         });
 
         builder.Entity<SystemConfig>(config =>

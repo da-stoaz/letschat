@@ -1,115 +1,270 @@
-# Infrastructure Plan: Durability & Storage Tiering — PostgreSQL Cold Archive
+# Plan: Message storage tiering
 
-> **Status (reviewed 2026-09-16): Part A implemented in production; Part B
-> deferred.** All 14 durable tables replicate and rebuild, including pinned
-> messages, and rebuilds reseed module-managed id counters. The current operator
-> procedure is in [`DEPLOYMENT.md`](../../DEPLOYMENT.md); intermediate gap notes
-> below are retained only where they still apply.
+> **Status (reviewed 2026-09-19): durability is implemented; eviction is
+> deferred until measurements justify it.** This document describes only the
+> remaining hot/cold split. The production archive and rebuild procedure are
+> documented in [`DEPLOYMENT.md`](../../DEPLOYMENT.md).
 
-## Historical context and remaining Part B problem
+## Implemented baseline
 
-Two structural problems motivated this plan:
+- The archive worker mirrors all 14 durable SpacetimeDB tables into PostgreSQL.
+- A destructive SpacetimeDB publish can be rebuilt from that archive. Restore
+  reducers are worker-only, idempotent, preserve ids/timestamps, and reseed the
+  module id counters.
+- `my_channel_messages` and `my_direct_messages` already expose only the newest
+  `RECENT_MESSAGE_WINDOW` rows per channel/conversation. The current value is
+  **200**.
+- The client already pages older history in pages of 100 through
+  `load_older_channel_messages` and `load_older_direct_messages` and merges it
+  into separate history stores.
 
-1. **Fragile durability / destructive migrations — closed by Part A.** A
-   destructive publish can wipe SpacetimeDB, but the PostgreSQL archive now
-   provides the tested rebuild source.
-2. **Unbounded RAM — still deferred.** SpacetimeDB keeps its working set in
-   memory. Chat history continues to grow because Part B eviction has not been
-   implemented.
+The remaining problem is server memory: those views bound client subscriptions,
+but every message still remains in SpacetimeDB and the paging procedures still
+scan SpacetimeDB history. Client memory and reconnect traffic are bounded;
+server memory is not.
 
-These have **different urgency**, so this plan is split into two parts that ship independently:
+## Trigger and scope
 
-| Part | Fixes | Status |
-|---|---|---|
-| **A — Durability (cold archive)** | Message loss + destructive-migration wipes | **DONE & verified** — replication, full rebuild, pinned messages, and id counters |
-| **B — Eviction (hot/cold tiering)** | Unbounded RAM | **Deferred** — only when RAM pressure is real |
+Do not implement eviction speculatively. Start it when production measurements
+show either sustained SpacetimeDB memory growth approaching the host budget or
+history paging scans causing material latency/CPU. Record the measurement and
+chosen budget before enabling eviction.
 
-**Why the split** (decided 2026-07-21): at friends-scale, messages are tiny text rows — millions of them are a few GB of RAM, years away from a problem. Durability is needed *today*; eviction is a scale optimisation with no current trigger. Deferring eviction is *safe precisely because Part A ships first*: once a full Postgres copy exists, even an unexpected RAM ceiling loses no data — you turn on eviction then.
+When triggered:
 
-This plan is **E2EE-agnostic**: it mirrors opaque rows and does not care whether `content` is plaintext (today) or ciphertext (after [3-e2ee.md](3-e2ee.md)). It is **plan 2 of 4** — Part A lands before E2EE (E2EE's Phase 7 does a destructive column drop that A2's rebuild path de-risks); Part B lands whenever RAM demands it, and is a prerequisite for [4-efficiency-cache.md](4-efficiency-cache.md).
+- Tier only `Message` and `DirectMessage`. Keep all other durable tables hot.
+- Keep the newest **200** rows per channel/DM conversation, using the existing
+  `RECENT_MESSAGE_WINDOW` as the single product boundary.
+- Keep pinned channel messages hot even when older than the window. Pins are
+  already capped at 50 per channel, so this exception remains bounded.
+- PostgreSQL becomes the authority for evicted rows; SpacetimeDB remains the
+  authority for live state and authorization.
+- Use two explicit deployment switches, both defaulting to `false`:
+  `ARCHIVE_HISTORY_ENABLED` makes core-api/client use PostgreSQL history;
+  `ARCHIVE_EVICTION_ENABLED` lets the worker create new cold rows. The second
+  may never be enabled before the first.
+- Extend `/.well-known/letschat.json` with `archiveHistory: boolean`. It is
+  `true` exactly when `ARCHIVE_HISTORY_ENABLED=true`, even during a temporary
+  archive outage: once cold rows exist, silently falling back to incomplete
+  SpacetimeDB history would be worse than reporting the outage.
 
-**Prerequisite (met):** the .NET `core-api` rebuild owned by [1-control-panel.md](1-control-panel.md) is done — Postgres is already in the stack (dev port 5433).
+## Safety invariants
 
----
+These must hold before the first row is evicted:
 
-# Part A — Durability (cold archive)
+1. Never evict a row until its PostgreSQL upsert has committed.
+2. Eviction is not deletion. A row removed from SpacetimeDB for tiering must
+   remain in PostgreSQL.
+3. A user/moderator deletion must not be resurrected by reconnect, reconcile,
+   rebuild, or a retry.
+4. Worker restarts and repeated batches are idempotent. A partial batch may
+   leave a row in both tiers, never in neither tier.
+5. Archive reads and writes fail closed when current authorization cannot be
+   verified against SpacetimeDB.
+6. New ids are greater than every hot **and cold** archived id.
 
-## A1 — Live replication — ✅ DONE & VERIFIED (2026-07-21, at SpacetimeDB 2.5)
+The current worker violates invariant 2: every `archive_messages` /
+`archive_direct_messages` `OnDelete` deletes the PostgreSQL row, and full
+reconcile deletes every archive row missing upstream. That behavior must change
+before eviction reducers exist.
 
-> **History:** A1 was first built on the `2-storage-tiering` branch (phase-1, 2026-06-14) at SpacetimeDB 2.4, then went stale (68 commits behind, un-merged). It was **de-staled and re-verified onto main at 2.5** on branch `feat/storage-tiering-a` — module, core-api, and worker all build; a full backfill replicated **message 74, direct_message 20, user 10, channel 38 at exact parity**. An earlier idea to rewrite this as a simpler *snapshot poller* was **dropped**: the CDC implementation already exists, is correct, and solves the hard problems below better than a rewrite would.
+## Phase 1 — Make replication eviction-aware
 
-The mechanism is a **live CDC replication worker**, not a snapshot poller:
+Add worker-owned operational metadata to the two PostgreSQL message tables:
+`storage_tier` (`hot|evicting|cold`, default `hot`, enforced by a check
+constraint) and nullable `eviction_batch_id`. SpacetimeDB rows do not carry
+these fields. An upsert observed from SpacetimeDB makes the archive row hot
+unless it is already part of an active eviction batch.
 
-- **Gated `archive_*` views (`server/src/views.rs`).** Every sensitive base table is private, so private tables aren't emitted into client bindings at all — the worker can't subscribe to them directly. Instead the module exposes one `archive_<table>` **view per durable table**, each gated to a registered service identity (`is_archive_service`). For any other caller they return empty, exactly like the `my_*` views. **This is why there is no owner-token coupling** — the worker uses a purpose-built service identity, not the publisher's owner token. (An earlier concern that the worker would need the owner token was wrong; the gated-view design predates and resolves it.)
-- **Service-identity registration.** `ArchiveService` singleton table (`schema.rs`) + `set_archive_service_identity` reducer (`reducers/archive.rs`), instance-admin gated (same trust boundary as `set_user_admin`). One-time bootstrap: start the worker → it logs its identity → an admin calls the reducer with it → the gated views light up and the worker backfills (it subscribes to `archive_service` too, so no reconnect needed).
-- **The worker (`archive-worker/`, .NET Worker Service, `SpacetimeDB.ClientSDK` 2.5.0).** Subscribes to the `archive_*` views; mirrors every insert/update/delete into Postgres through a **single-consumer write queue** (`ArchiveDatabase`) so DB I/O never blocks the client tick and writes apply in arrival order; **reconciles** the full archive against the live snapshot on each (re)subscribe; reconnects with backoff; persists its auto-issued token so its identity is stable across restarts. Handles the keyless-view delete/insert-ordering subtlety (only delete when the PK is truly gone from the SDK cache).
-- **The `archive` database + schema is owned by core-api** (`Data/Archive/ArchiveDbContext` + EF migration `ArchiveInitialSchema`), applied on startup like the `auth` context. **Optional and fail-safe:** unset `ARCHIVE_DATABASE_URL` → context not registered, archive disabled; configured-but-unreachable → logged, auth continues. The archive can never take down the essential auth service.
+Add one small SpacetimeDB coordination table containing `batch_id`, message
+kind, and the bounded id list. It holds only unacknowledged eviction receipts,
+not history, and is not part of the PostgreSQL archive.
 
-**Scope:** all 14 durable domain tables: user, server, channel, member, ban,
-join request, invite, DM server invite, message, direct message, friend, block,
-read state, and pinned message. Ephemeral presence, typing, and voice tables are
-deliberately not archived.
+Evict in this order:
 
-### A1 follow-ups — ✅ closed
+1. Select rows outside the newest-200 window from PostgreSQL; exclude pinned
+   channel messages.
+2. In one PostgreSQL transaction, assign a unique batch id and mark those rows
+   `evicting` only after their archived content is present.
+3. Call worker-only batch reducers (`archive_evict_messages` and
+   `archive_evict_direct_messages`). In one SpacetimeDB transaction each reducer
+   validates the complete batch, inserts its receipt, then deletes the rows.
+   Existing receipts make a retry idempotent; an absent or newly pinned/hot id
+   rejects the complete batch without partial deletion.
+4. After observing the committed receipt, mark the matching PostgreSQL rows
+   `cold`, commit, then call `archive_ack_eviction(batch_id)` to remove the
+   receipt. Delete callbacks for `evicting|cold` rows never delete the archive
+   row; callbacks for hot rows retain their current delete behavior.
 
-- `PinnedMessage` is archived and restored with the rest of the durable set.
-- An unregistered worker refuses reconciliation instead of interpreting gated,
-  empty views as deletion of the live dataset.
-- Production compose includes the worker and archive database wiring.
+On restart, resolve unfinished batches before selecting new work: receipt
+present means finish `cold` + acknowledge; all rows still live means retry the
+reducer; neither receipt nor live row means a real concurrent deletion, so
+remove the archived row. A rejected reducer returns the batch to hot and runs a
+targeted reconcile. This closes the crash window where eviction and a genuine
+hard delete would otherwise be indistinguishable.
 
-## A2 — Migration rebuild tooling — ✅ FULL-FLEET DONE & VERIFIED (2026-07-22)
+For message tables, reconnect reconciliation compares only rows marked hot.
+Cold rows are intentionally absent upstream and must never be considered stale.
+Normal hot-row deletes continue to remove/archive-update the corresponding row.
 
-The durability payoff: make a destructive SpacetimeDB migration non-lossy — a `--delete-data` wipe becomes *rebuild the whole database from the Postgres archive*.
+Also handle parent deletion explicitly: deleting a channel/server must remove
+its cold channel messages and pins from PostgreSQL even if the worker was
+offline during the live delete. This can be part of parent reconciliation; it
+must not rely only on transient callbacks.
 
-- **14 restore reducers** in `server/src/reducers/archive.rs`, one per durable
-  table, including `pinned_message`. They are worker-only, perform batched
-  verbatim upserts, preserve primary keys and timestamps, and raise the
-  module-managed id counters for auto-increment-shaped tables. Every reducer is
-  idempotent per primary key, so a partial rebuild can be rerun safely.
-- **Worker rebuild mode** (`archive-worker/Rebuild.cs`, `ARCHIVE_REBUILD=1`): connect as the service identity, read every `archive_*` table from Postgres (reverse of `Replication`'s column map — identities from hex, timestamps from µs BIGINT, unit enums via `Enum.Parse`, `Vec<String>` from `text[]`, options from nullable columns), call the restore reducers in 500-row batches, then exit.
+The reducers must verify the registered archive-service identity, accept small
+bounded batches, and reject the whole batch when an id is absent, still inside
+the hot window, or currently pinned. Do not expose a general hard-delete
+reducer.
 
-**Verified end-to-end** on a throwaway `rebuildtest` database with fixtures
-spanning all 14 durable tables: seed → replicate → publish with `--delete-data`
-→ re-register the worker → rebuild → compare exact row parity. Enums, arrays,
-options, microsecond timestamps, explicit ids, pins, and post-rebuild inserts are
-covered by `tests/security/archive-rebuild.test.ts` and the rebuild fixture.
+## Phase 2 — Serve cold history from core-api
 
-### Operator runbook (destructive migration)
-1. **Maintenance mode** — pause client writes (brief downtime).
-2. **Drain** — confirm the replication worker is caught up (archive == live counts), then stop it.
-3. **Wipe + republish** — `spacetime publish --delete-data` with the new schema. This also wipes the `archive_service` registration.
-4. **Re-register the worker identity** — as the module owner: `spacetime sql <db> "INSERT INTO archive_service (id, service_identity) VALUES (1, 0x<worker-identity>)"` (no admin user exists post-wipe, so use owner SQL, not the admin reducer).
-5. **Rebuild** — run the worker once with `ARCHIVE_REBUILD=1`; it reloads from Postgres and exits. (A per-migration transform on the old→new row shape is the only bespoke part if columns changed; message/dm currently restore 1:1.)
-6. **Restart** the worker in steady-state; **exit maintenance mode.**
+Add authenticated `POST /archive/channel-messages` and
+`POST /archive/direct-messages` endpoints matching the client’s existing
+history contract. Every JSON request carries the existing `SessionToken` plus:
 
-**Why this matters now:** E2EE ([3-e2ee.md](3-e2ee.md)) Phase 7 drops the `deleted`/`deleted_by_*` columns on message/direct_message — exactly the tables A2 covers. A2 turns that from "wipe history" into "rebuild from archive."
+- channel: `channelId`, `beforeSentAt`, `beforeId`, `limit`
+- DM: `partnerIdentity`, `beforeSentAt`, `beforeId`, `limit`
+- maximum page size: 100
+- order: oldest-to-newest within each returned page
 
-## Verification checklist (Part A)
-1. **Mirror fidelity** — Postgres matches SpacetimeDB after inserts/edits/deletes. ✅ (backfill parity 74/20/10/38)
-2. **Worker resilience** — kill/restart mid-stream → reconciles, no loss/duplicates. ✅ (reconnect + reconcile path)
-3. **Bootstrap** — register the service identity → gated views deliver → backfill. ✅
-4. **Migration rebuild** (A2) — destructive test migration → rebuild → ids/timestamps/relationships intact. ✅
-5. **Post-rebuild ids** — restored maxima raise module-managed `IdCounter`
-   rows; a fresh insert after rebuild does not collide. ✅
+Use `(sent_at, id)` as the cursor so equal timestamps cannot skip or duplicate
+rows. The schema migration must add `(channel_id, sent_at, id)` and
+`(conversation_key, sent_at, id)` indexes; the current two-column indexes do not
+fully support that cursor.
 
----
+The API first verifies that `beforeId` exists in the same archived
+channel/conversation and that its stored timestamp matches `beforeSentAt`; use
+the stored value for the query. For the first page this id is the oldest live
+row; if its archive copy has not committed yet, return retryable `503` rather
+than paging past a replication gap. Later cursors came from PostgreSQL and
+therefore pass the same check naturally.
 
-# Part B — Eviction (hot/cold tiering) — DEFERRED
+Before reading:
 
-**Trigger to build:** SpacetimeDB RAM becomes a real limit (monitor host RAM vs module memory). Not before — Part A already guarantees durability.
+- validate the body token with the existing
+  `TokenService.RequireAccountAsync` path, then mint the corresponding
+  per-account SpacetimeDB token server-side; never put a session token in a URL;
+- for channel history, verify the channel still exists and the caller is a
+  current member of its server;
+- for DMs, verify the caller is one party to the conversation;
+- return no archive data if SpacetimeDB or the authorization check is
+  unavailable.
 
-When that day comes, Part B keeps only a hot working set in SpacetimeDB and serves older history from the archive. It builds directly on A1's live CDC worker (the low-lag mirror is exactly what safe copy-before-evict needs). The worker's reconcile already carries a `NOTE (phase 2)` marking where Message/DirectMessage reconcile must switch to hot-window scoping so an **evicted** row (absent upstream) is not mistaken for a **deleted** one.
+Do not use archived membership as authorization: it may be stale after a user
+leaves or is removed.
 
-## What Part B adds
-- **Hotness rule:** keep the last N messages per conversation in SpacetimeDB (default N ≈ 100). RAM bounded by `conversation_count × N × avg_row_size`. Only `Message`/`DirectMessage` evicted; bounded tables stay resident.
-- **`archive_evict(message_ids)` / `archive_evict_dm(ids)` reducers** (worker-only): bulk hard-delete aged rows *after* confirming they're safely in Postgres. Replaces A1's "absent == deleted" reconcile assumption.
-- **Archive read API (`core-api`):** `GET /archive/channel-messages` / `/archive/direct-messages`, JWT-authorized, membership-checked, reading Postgres.
-- **Client hot/cold stitching:** scroll above the hot window → fetch older pages from the archive API; recent stays live. Cold ranges are snapshots. Change `connection.ts` to subscribe to the hot window instead of all messages.
-- **Evicted-message edit/delete write-through:** cold target → `PATCH`/`DELETE /archive/messages/:id` on core-api. (Rejected: "promotion" back into SpacetimeDB — reintroduces demand-driven RAM.)
+## Phase 3 — Reuse the existing client paging path
 
-## Hand-off notes for Part B / E2EE / cache
-- **Eviction ≠ deletion.** Once eviction exists, "row absent, no deletion signal" means *possibly evicted, fetch from archive*. This is why [4-efficiency-cache.md](4-efficiency-cache.md)'s tombstones and long-offline reconciliation depend on **Part B**, not Part A.
-- **E2EE-agnostic throughout.** When [3-e2ee.md](3-e2ee.md) lands, `content` becomes ciphertext; the archive holds ciphertext just as happily — no changes to A1/A2/B machinery.
+Keep the current live subscriptions and message stores. Replace only the
+transport behind `loadOlderChannelMessages` and
+`loadOlderDirectMessages` with the core-api archive endpoints once tiering is
+enabled. PostgreSQL already contains hot and cold rows, so one archive cursor
+can page continuously; the existing store merge-by-id handles overlap at the
+hot/cold boundary.
 
-## Effort (Part B, when triggered)
-~3–3.5 weeks: eviction + reducers ~0.5 week · hot-window reconcile switch ~0.5 week · archive read API + client stitching ~1.5 weeks · evicted-message write-through ~0.5 week.
+Refresh the existing discovery document when connecting. Missing or false
+`archiveHistory` keeps the current SpacetimeDB procedures for compatibility
+with older/non-tiered servers. When it is true, use only the archive endpoints:
+on network errors or `5xx`, keep the page retryable and show the outage; never
+mark history exhausted or fall back to SpacetimeDB. `401/403` remain terminal
+authorization failures.
+
+Change `my_channel_messages` to return the union of the newest 200 messages and
+all pinned messages in each visible channel, deduplicated by id. Keeping an old
+pin hot without including it in this view would leave the client with the pin
+metadata but no message content.
+
+Archive responses must carry enough local metadata for the client to route an
+edit/delete of a cold row to core-api. Recent live rows continue to use the
+SpacetimeDB reducers.
+
+## Phase 4 — Preserve cold-message mutations
+
+Cold history must retain today’s behavior rather than becoming silently
+read-only:
+
+- channel edit: sender only;
+- channel delete: sender or current server moderator/owner; retain the existing
+  soft-deleted tombstone representation;
+- DM edit: sender only and the same current friendship/block checks as the live
+  reducer;
+- DM delete: per-party flags, physically remove only after both parties delete.
+
+Implement these as core-api archive mutations with current SpacetimeDB-backed
+authorization. Updates apply directly to PostgreSQL because the row is no
+longer hot. Reject a request if the row is hot, avoiding two write authorities
+for the same row.
+
+## Phase 5 — Make rebuild tier-aware
+
+The current rebuild restores every archived message, which would undo tiering.
+Change it to restore:
+
+- all non-message durable tables;
+- the newest 200 messages per channel and DM conversation;
+- every pinned channel message outside that window.
+
+Reseed message and DM id counters from the maximum id in the **entire** archive,
+not only the subset restored into SpacetimeDB. The PostgreSQL cold set remains
+unchanged throughout rebuild.
+
+The current `archive_reseed_id_counters` scans only rows present in
+SpacetimeDB, so it cannot provide those two maxima after a tiered rebuild. Add a
+worker-only `archive_raise_message_id_counters(message_max,
+direct_message_max)` reducer. The worker reads both `MAX(id)` values from the
+full PostgreSQL tables, calls this reducer after restoring the hot subset, and
+waits for its committed result before declaring rebuild complete. Existing
+restore/reseed behavior remains unchanged for the other id-managed tables.
+
+## Rollout
+
+1. Ship the PostgreSQL migration, receipt table/reducers, eviction-aware
+   reconciliation, tier-aware rebuild, archive endpoints, discovery capability,
+   cold mutations, and client transport while both feature switches are false.
+2. Verify archive/live parity and run a dry mode that reports candidate counts
+   without deleting anything.
+3. Enable `ARCHIVE_HISTORY_ENABLED` first and verify archive paging while every
+   row still exists in SpacetimeDB. Then enable `ARCHIVE_EVICTION_ENABLED` for
+   small batches on one worker instance. Monitor worker errors, archive counts,
+   SpacetimeDB memory, history latency, and authorization failures.
+4. Increase batch size only after reconnect/restart tests pass in
+   production-like conditions.
+
+Rollback is: set `ARCHIVE_EVICTION_ENABLED=false` to stop new batches but leave
+`ARCHIVE_HISTORY_ENABLED=true`. Existing cold rows remain readable from
+PostgreSQL; the rebuild path can rehydrate the hot subset or, in an emergency
+maintenance operation, all history. Disable archive history only after a full
+rehydration has been verified.
+
+## Acceptance tests
+
+- The newest 200 rows per conversation remain hot; row 201 becomes cold.
+- Pinned rows remain hot, with at most the existing 50-row exception per
+  channel, and their content is included in `my_channel_messages`.
+- Killing the worker before/after the cold marker and before/after the reducer
+  call loses no data and converges after restart.
+- Reconnect reconciliation neither deletes cold rows nor resurrects deleted
+  rows.
+- Authorized scrolling crosses the tier boundary without gaps or duplicates;
+  removed members and unrelated users receive no cold history.
+- Equal-timestamp messages page deterministically.
+- A server without `archiveHistory` uses SpacetimeDB paging; an archive-enabled
+  server returns a retryable error rather than incomplete fallback history when
+  PostgreSQL is unavailable.
+- Cold channel/DM edit and delete semantics match the live reducers.
+- Channel/server deletion cleans up cold dependent rows.
+- Destructive rebuild restores only the intended hot set and allocates fresh
+  ids above the full archive maximum.
+- A load test demonstrates that SpacetimeDB message row count and memory settle
+  near the configured hot-set bound.
+
+## Non-goals
+
+- No eviction of users, memberships, channels, pins, or other durable metadata.
+- No client SQLite cache; that remains in
+  [`4-efficiency-cache.md`](4-efficiency-cache.md).
+- No E2EE design changes. Archived `content` can remain opaque when
+  [`3-e2ee.md`](3-e2ee.md) lands.
+- No second message-history implementation in the client; reuse the current
+  pagination and stores.

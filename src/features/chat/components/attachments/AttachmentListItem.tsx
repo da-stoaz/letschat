@@ -1,14 +1,16 @@
-import { useRef, useState } from 'react'
-import { DownloadIcon, ExternalLinkIcon, FileIcon, ImageIcon, Loader2Icon, MusicIcon, VideoIcon, XIcon } from 'lucide-react'
+import { useCallback, useRef, useState } from 'react'
+import { DownloadIcon, ExternalLinkIcon, FileIcon, ImageIcon, Loader2Icon, MusicIcon, PlayIcon, VideoIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { downloadAttachment } from '@/lib/attachmentDownload'
 import type { ChatMessageAttachment } from '@/types/attachments'
 import { formatFileSize, getAttachmentKind } from './attachmentUtils'
+import { InlineVideo } from './InlineVideo'
 import type { AttachmentResolution } from './useAttachmentResolver'
 
 type AttachmentListItemProps = {
   attachment: ChatMessageAttachment
   resolution: AttachmentResolution
+  thumbnailUrl?: string | null
   onRetry: (storageKey: string) => void
   onOpenImage: (image: { url: string; fileName: string }) => void
   onOpenPdf: (pdf: { url: string; fileName: string }) => void
@@ -25,9 +27,16 @@ function isPdfAttachment(attachment: ChatMessageAttachment): boolean {
   )
 }
 
-export function AttachmentListItem({ attachment, resolution, onRetry, onOpenImage, onOpenPdf }: AttachmentListItemProps) {
+export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRetry, onOpenImage, onOpenPdf }: AttachmentListItemProps) {
   const cancelDownloadRef = useRef<(() => Promise<void>) | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [resumeAt, setResumeAt] = useState(0)
+  const stopVideo = useCallback((position: number) => {
+    setResumeAt(position)
+    setIsPlaying(false)
+  }, [])
+  const [posterMissing, setPosterMissing] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [downloadProgressFraction, setDownloadProgressFraction] = useState<number | null>(null)
   const kind = getAttachmentKind(attachment.mimeType)
@@ -56,9 +65,33 @@ export function AttachmentListItem({ attachment, resolution, onRetry, onOpenImag
               <img src={resolution.url ?? ''} alt={attachment.fileName} className="max-h-56 w-full object-contain" />
             </button>
           ) : kind === 'video' ? (
-            <video src={resolution.url ?? ''} controls className="max-h-56 w-full bg-black" />
+            isPlaying ? (
+              <InlineVideo url={resolution.url ?? ''} startAt={resumeAt} onStop={stopVideo} />
+            ) : (
+              // No <video> until asked: WebKit buffers media on render whatever
+              // `preload` says, which pulled GBs per page load. Only the small
+              // poster image is fetched up front.
+              <button
+                type="button"
+                aria-label={`Play ${attachment.fileName}`}
+                className="relative flex h-56 w-full items-center justify-center bg-black focus:outline-none"
+                onClick={() => setIsPlaying(true)}
+              >
+                {thumbnailUrl && !posterMissing ? (
+                  <img
+                    src={thumbnailUrl}
+                    alt=""
+                    className="max-h-56 w-full object-contain"
+                    onError={() => setPosterMissing(true)}
+                  />
+                ) : null}
+                <span className="absolute flex size-14 items-center justify-center rounded-full bg-black/60 text-white">
+                  <PlayIcon className="size-7 fill-current" />
+                </span>
+              </button>
+            )
           ) : (
-            <audio src={resolution.url ?? ''} controls className="w-full p-1.5" />
+            <audio src={resolution.url ?? ''} preload="none" controls className="w-full p-1.5" />
           )}
         </div>
       ) : null}

@@ -577,8 +577,9 @@ dependencies = [
 
 [[package]]
 name = "letschat_server"
-version = "1.0.19"
+version = "1.1.0"
 dependencies = [
+ "base64",
  "jsonwebtoken",
  "serde",
  "serde_json",

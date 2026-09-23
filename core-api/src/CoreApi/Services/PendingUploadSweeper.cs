@@ -4,17 +4,27 @@ using Microsoft.EntityFrameworkCore;
 namespace CoreApi.Services;
 
 /// <summary>
-/// Removes objects whose upload was never confirmed. Pending rows continue to
-/// reserve quota until the corresponding object has actually been deleted.
+/// Removes unconfirmed uploads and confirmed objects no longer referenced by
+/// the chat domain. Database rows remain until MinIO deletion succeeds, so a
+/// dependency outage can delay cleanup but can never make an object unknown.
 /// </summary>
 public sealed class PendingUploadSweeper(
     IServiceScopeFactory scopes,
     StorageService storage,
+    SpacetimeClient spacetime,
+    StorageInventoryState inventory,
     ILogger<PendingUploadSweeper> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
     private const long GraceSeconds = 60;
+    private const long ConfirmedGraceSeconds = 3600;
     private const int BatchSize = 500;
+    private bool _inventoryImported;
+    // Keyset cursor over ConfirmedUploads. Referenced objects keep their rows
+    // forever, so always taking the oldest batch would re-check the same live
+    // objects and never reach newer orphans once more than BatchSize exist.
+    private long _cursorConfirmedAt;
+    private string? _cursorStorageKey;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -54,22 +64,23 @@ public sealed class PendingUploadSweeper(
         {
             try
             {
-                await storage.DeleteObjectAsync(pending.StorageKey);
-                if (db.Database.IsRelational())
-                {
-                    swept += await db.PendingUploads
-                        .Where(p => p.Id == pending.Id && p.ExpiresAt < cutoff)
-                        .ExecuteDeleteAsync(ct);
-                }
-                else
-                {
-                    var current = await db.PendingUploads.FindAsync([pending.Id], ct);
-                    if (current is not null && current.ExpiresAt < cutoff)
-                    {
-                        db.PendingUploads.Remove(current);
-                        swept += await db.SaveChangesAsync(ct);
-                    }
-                }
+                // Hold the same row lock as /uploads/confirm and /uploads/abort.
+                // An old sweep candidate must never abort a session completing
+                // concurrently or delete its just-confirmed object.
+                await using var tx = db.Database.IsRelational()
+                    ? await db.Database.BeginTransactionAsync(ct) : null;
+                var current = db.Database.IsRelational()
+                    ? await db.PendingUploads.FromSqlInterpolated($"""
+                        SELECT * FROM "PendingUploads" WHERE "Id" = {pending.Id} FOR UPDATE
+                        """).SingleOrDefaultAsync(ct)
+                    : await db.PendingUploads.FindAsync([pending.Id], ct);
+                if (current is null || current.ExpiresAt >= cutoff) continue;
+                if (current.MultipartUploadId is { } multipartId)
+                    await storage.AbortMultipartAsync(current.StorageKey, multipartId, ct);
+                await storage.DeleteObjectAsync(current.StorageKey);
+                db.PendingUploads.Remove(current);
+                swept += await db.SaveChangesAsync(ct);
+                if (tx is not null) await tx.CommitAsync(ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -87,5 +98,154 @@ public sealed class PendingUploadSweeper(
         {
             logger.LogInformation("Removed {Count} expired pending upload(s) from storage.", swept);
         }
+
+        await SweepUnreferencedConfirmedAsync(db, ct);
     }
+
+    private async Task SweepUnreferencedConfirmedAsync(AppDbContext db, CancellationToken ct)
+    {
+        if (!_inventoryImported)
+        {
+            await ImportExistingObjectsAsync(db, ct);
+            _inventoryImported = true;
+            inventory.MarkReady();
+        }
+        if (!await spacetime.EnsureStorageReferencesReadyAsync(ct))
+        {
+            return;
+        }
+
+        var cutoff = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - ConfirmedGraceSeconds;
+        var query = db.ConfirmedUploads
+            .AsNoTracking()
+            .Where(upload => upload.ConfirmedAt < cutoff);
+        if (_cursorStorageKey is { } afterKey)
+        {
+            var afterAt = _cursorConfirmedAt;
+            query = query.Where(upload => upload.ConfirmedAt > afterAt
+                || (upload.ConfirmedAt == afterAt && string.Compare(upload.StorageKey, afterKey) > 0));
+        }
+        var candidates = await query
+            .OrderBy(upload => upload.ConfirmedAt)
+            .ThenBy(upload => upload.StorageKey)
+            .Take(BatchSize)
+            .ToListAsync(ct);
+        if (candidates.Count == 0)
+        {
+            _cursorStorageKey = null;
+            return;
+        }
+
+        var claimed = await spacetime.ClaimUnreferencedStorageAsync(
+            candidates.Select(upload => upload.StorageKey).ToArray(), ct);
+        if (claimed is null)
+        {
+            return;
+        }
+        // A short page means the end was reached: wrap around next sweep.
+        _cursorConfirmedAt = candidates[^1].ConfirmedAt;
+        _cursorStorageKey = candidates.Count < BatchSize ? null : candidates[^1].StorageKey;
+
+        var swept = 0;
+        foreach (var upload in candidates.Where(upload => claimed.Contains(upload.StorageKey)))
+        {
+            try
+            {
+                await storage.DeleteObjectAsync(upload.StorageKey);
+                await storage.DeleteObjectAsync(upload.StorageKey + VideoThumbnailWorker.KeySuffix);
+                if (db.Database.IsRelational())
+                {
+                    swept += await db.ConfirmedUploads
+                        .Where(row => row.StorageKey == upload.StorageKey && row.ConfirmedAt < cutoff)
+                        .ExecuteDeleteAsync(ct);
+                }
+                else
+                {
+                    var current = await db.ConfirmedUploads.FindAsync([upload.StorageKey], ct);
+                    if (current is not null && current.ConfirmedAt < cutoff)
+                    {
+                        db.ConfirmedUploads.Remove(current);
+                        swept += await db.SaveChangesAsync(ct);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Could not remove unreferenced confirmed object {StorageKey}; will retry.",
+                    upload.StorageKey);
+            }
+        }
+
+        if (swept > 0)
+        {
+            logger.LogInformation("Removed {Count} unreferenced confirmed object(s) from storage.", swept);
+        }
+    }
+
+    private async Task ImportExistingObjectsAsync(AppDbContext db, CancellationToken ct)
+    {
+        string? continuationToken = null;
+        var imported = 0;
+        do
+        {
+            var page = await storage.ListObjectsPageAsync(continuationToken, ct);
+            continuationToken = page.NextContinuationToken;
+            var keys = page.Objects.Select(item => item.StorageKey).ToArray();
+            var known = await db.ConfirmedUploads
+                .Where(row => keys.Contains(row.StorageKey))
+                .Select(row => row.StorageKey)
+                .ToHashSetAsync(StringComparer.Ordinal, ct);
+            var pending = await db.PendingUploads
+                .Where(row => keys.Contains(row.StorageKey))
+                .Select(row => row.StorageKey)
+                .ToHashSetAsync(StringComparer.Ordinal, ct);
+
+            foreach (var item in page.Objects)
+            {
+                var parsed = StorageKey.TryParse(item.StorageKey);
+                // Derived posters live and die with their video, never as uploads.
+                if (item.StorageKey.EndsWith(VideoThumbnailWorker.KeySuffix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                if (parsed is null || item.Size <= 0
+                    || known.Contains(item.StorageKey) || pending.Contains(item.StorageKey))
+                {
+                    continue;
+                }
+                db.ConfirmedUploads.Add(new ConfirmedUpload
+                {
+                    StorageKey = item.StorageKey,
+                    Username = parsed.Uploader,
+                    FileName = Path.GetFileName(item.StorageKey),
+                    FileSize = item.Size,
+                    MimeType = "application/octet-stream",
+                    ConfirmedAt = new DateTimeOffset(item.LastModifiedUtc.ToUniversalTime())
+                        .ToUnixTimeSeconds(),
+                });
+                imported++;
+            }
+            await db.SaveChangesAsync(ct);
+        }
+        while (!string.IsNullOrEmpty(continuationToken));
+
+        if (imported > 0)
+        {
+            logger.LogInformation(
+                "Adopted {Count} existing MinIO object(s) into lifecycle tracking.", imported);
+        }
+    }
+}
+
+/// <summary>New quota-limited reservations wait for a complete bucket inventory after startup.</summary>
+public sealed class StorageInventoryState
+{
+    private volatile bool _ready;
+    public bool IsReady => _ready;
+    internal void MarkReady() => _ready = true;
 }

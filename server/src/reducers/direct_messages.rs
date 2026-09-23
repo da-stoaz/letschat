@@ -4,6 +4,9 @@ use crate::helpers::{
     assert_or_err, find_friend_row, has_block_either_direction, next_id, require_account,
 };
 use crate::schema::*;
+use crate::storage_refs::{
+    AttachmentScope, direct_message_owner_key, remove_references, sync_message_references,
+};
 
 #[spacetimedb::reducer]
 pub fn send_direct_message(
@@ -28,7 +31,7 @@ pub fn send_direct_message(
         "friendship not accepted",
     )?;
 
-    ctx.db.direct_message().insert(DirectMessage {
+    let message_row = ctx.db.direct_message().insert(DirectMessage {
         id: next_id!(ctx, direct_message, id),
         sender_identity: ctx.sender(),
         recipient_identity,
@@ -38,6 +41,13 @@ pub fn send_direct_message(
         deleted_by_sender: false,
         deleted_by_recipient: false,
     });
+    sync_message_references(
+        ctx,
+        direct_message_owner_key(message_row.id),
+        &message_row.content,
+        ctx.sender(),
+        AttachmentScope::DirectMessage(recipient_identity),
+    )?;
 
     Ok(())
 }
@@ -84,6 +94,13 @@ pub fn edit_direct_message(
         "friendship not accepted",
     )?;
 
+    sync_message_references(
+        ctx,
+        direct_message_owner_key(message_id),
+        &new_content,
+        ctx.sender(),
+        AttachmentScope::DirectMessage(dm_row.recipient_identity),
+    )?;
     dm_row.content = new_content;
     dm_row.edited_at = Some(ctx.timestamp);
     ctx.db.direct_message().id().update(dm_row);
@@ -110,6 +127,7 @@ pub fn delete_direct_message(ctx: &ReducerContext, message_id: u64) -> Result<()
     }
 
     if dm_row.deleted_by_sender && dm_row.deleted_by_recipient {
+        remove_references(ctx, &direct_message_owner_key(dm_row.id));
         ctx.db.direct_message().id().delete(dm_row.id);
     } else {
         ctx.db.direct_message().id().update(dm_row);

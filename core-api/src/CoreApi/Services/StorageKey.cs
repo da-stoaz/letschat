@@ -21,11 +21,11 @@ public enum StorageScope
 }
 
 /// <summary>
-/// A storage key, parsed. The path is the only record of who may read the
-/// object (BUG_ANALYSIS A6): the scope is fixed when the upload is requested
-/// and <c>/uploads/download-url</c> decides from the key plus the caller's own
-/// row visibility in the chat module. Nothing is stored for it, and the module
-/// never needs to know a key exists.
+/// A storage key, parsed. The path remains the authorization record for who may
+/// read the object (BUG_ANALYSIS A6): the scope is fixed when the upload is
+/// requested and <c>/uploads/download-url</c> decides from the key plus the
+/// caller's row visibility. SpacetimeDB separately stores normalized references
+/// for lifecycle cleanup; those references never widen read access.
 ///
 /// <para>
 /// A scope only ever narrows who may read; it cannot widen what the module

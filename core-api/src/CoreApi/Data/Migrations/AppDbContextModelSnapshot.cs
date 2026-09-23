@@ -157,6 +157,55 @@ namespace CoreApi.Data.Migrations
                     b.ToTable("AuditLog");
                 });
 
+            modelBuilder.Entity("CoreApi.Data.ConfirmedUpload", b =>
+                {
+                    b.Property<string>("UploadId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+                    b.Property<string>("StorageKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<long>("ConfirmedAt")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("ThumbnailAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ThumbnailState")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("StorageKey");
+
+                    b.HasIndex("ConfirmedAt");
+
+                    b.HasIndex("Username");
+
+                    b.HasIndex("UploadId")
+                        .IsUnique()
+                        .HasFilter("\"UploadId\" IS NOT NULL");
+
+                    b.ToTable("ConfirmedUploads");
+                });
+
             modelBuilder.Entity("CoreApi.Data.PendingUpload", b =>
                 {
                     b.Property<string>("Id")
@@ -177,6 +226,13 @@ namespace CoreApi.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("MultipartUploadId")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<long>("PartSize")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("QuotaDate")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -194,12 +250,32 @@ namespace CoreApi.Data.Migrations
 
                     b.HasIndex("ExpiresAt");
 
+                    b.HasIndex("Username");
+
                     b.ToTable("PendingUploads");
                 });
 
             modelBuilder.Entity("CoreApi.Data.SystemConfig", b =>
                 {
                     b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("DailyUploadQuotaMiB")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("InstanceStorageLimitMiB")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("UploadQuotaSettingsSeeded")
+                        .HasColumnType("boolean");
+
+                    b.Property<long>("UserStorageLimitMiB")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("UploadMaxFileSizeMiB")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UploadPartSizeMiB")
                         .HasColumnType("integer");
 
                     b.Property<string>("EmailFromAddress")

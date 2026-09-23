@@ -2,6 +2,7 @@ use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{assert_or_err, find_channel, next_id, require_account, require_mod_or_owner};
 use crate::schema::*;
+use crate::storage_refs::{message_owner_key, remove_references};
 
 const CHANNEL_SECTION_MAX_LEN: usize = 40;
 
@@ -104,6 +105,7 @@ pub(super) fn delete_channel_with_dependencies(ctx: &ReducerContext, channel_id:
         .collect();
 
     for msg_id in message_ids {
+        remove_references(ctx, &message_owner_key(msg_id));
         ctx.db.message().id().delete(msg_id);
     }
 

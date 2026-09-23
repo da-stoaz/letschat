@@ -4,7 +4,7 @@ import { AttachmentImageLightbox } from './components/attachments/AttachmentImag
 import { AttachmentImageGrid, type AttachmentImageGridItem } from './components/attachments/AttachmentImageGrid'
 import { AttachmentListItem } from './components/attachments/AttachmentListItem'
 import { AttachmentPdfLightbox } from './components/attachments/AttachmentPdfLightbox'
-import { getAttachmentKind } from './components/attachments/attachmentUtils'
+import { getAttachmentKind, videoThumbnailKey } from './components/attachments/attachmentUtils'
 import { useAttachmentResolver } from './components/attachments/useAttachmentResolver'
 
 type PreviewPdf = {
@@ -75,6 +75,11 @@ export function MessageAttachmentList({ attachments }: { attachments: ChatMessag
             key={attachment.storageKey}
             attachment={attachment}
             resolution={getResolution(attachment.storageKey)}
+            thumbnailUrl={
+              getAttachmentKind(attachment.mimeType) === 'video'
+                ? getResolution(videoThumbnailKey(attachment.storageKey)).url
+                : null
+            }
             onRetry={retry}
             onOpenImage={(image) => {
               const index = imageGridItems.findIndex((item) => item.fileName === image.fileName && item.url === image.url)

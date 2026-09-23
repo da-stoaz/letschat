@@ -64,6 +64,14 @@ import { GITHUB_REPO } from "@/lib/site";
           your router (Step&nbsp;7). Skip that and text chat works perfectly — voice calls just connect with
           no sound.
         </Callout>
+
+        <Callout type="note" title="Large file uploads use multipart">
+          Cloudflare caps each proxied request body at <strong>100 MB</strong> on Free and Pro.
+          LetsChat splits larger files into multipart PUTs (64 MiB per part by default), so a file can
+          exceed that per-request limit. The admin panel limits part size to 90 MiB to leave headroom.
+          Older clients without multipart support still send one PUT and remain subject to the 100 MB request cap.
+          Downloads are not affected by this request-body cap.
+        </Callout>
       </article>
 
       <!-- ── Browser vs desktop ────────────────────────────────────────── -->

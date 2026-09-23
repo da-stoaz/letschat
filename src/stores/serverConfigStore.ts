@@ -6,6 +6,11 @@ export interface ServerConfig {
   spacetimedbDatabase: string
   authServiceUrl: string
   livekitUrl: string
+  uploadPartSizeBytes?: number
+  uploadMaxFileSizeBytes?: number
+  dailyUploadQuotaBytes?: number
+  userStorageLimitBytes?: number
+  instanceStorageLimitBytes?: number
 }
 
 /**

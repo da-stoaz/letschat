@@ -140,6 +140,14 @@ async fn save_attachment_file(
         return Ok(false);
     };
 
+    let safe_operation_id: String = operation_id
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric() || *character == '-')
+        .take(64)
+        .collect();
+    let temporary_name = format!(".{suggested_file_name}.{safe_operation_id}.part");
+    let temporary_path = path.with_file_name(temporary_name);
+
     let response = reqwest::Client::new()
         .get(url)
         .send()
@@ -150,21 +158,31 @@ async fn save_attachment_file(
         return Err(format!("Download failed ({status})."));
     }
     let total_bytes = response.content_length();
-    let mut file =
-        std::fs::File::create(&path).map_err(|error| format!("Saving file failed: {error}"))?;
+    let mut file = std::fs::File::create(&temporary_path)
+        .map_err(|error| format!("Saving file failed: {error}"))?;
     let mut stream = response.bytes_stream();
     let mut bytes_downloaded: u64 = 0;
 
     while let Some(chunk) = stream.next().await {
         if is_attachment_download_cancelled(&operation_id) {
             drop(file);
-            let _ = std::fs::remove_file(&path);
+            let _ = std::fs::remove_file(&temporary_path);
             return Ok(false);
         }
 
-        let bytes = chunk.map_err(|error| format!("Reading download response failed: {error}"))?;
-        file.write_all(&bytes)
-            .map_err(|error| format!("Saving file failed: {error}"))?;
+        let bytes = match chunk {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                drop(file);
+                let _ = std::fs::remove_file(&temporary_path);
+                return Err(format!("Reading download response failed: {error}"));
+            }
+        };
+        if let Err(error) = file.write_all(&bytes) {
+            drop(file);
+            let _ = std::fs::remove_file(&temporary_path);
+            return Err(format!("Saving file failed: {error}"));
+        }
         bytes_downloaded += bytes.len() as u64;
 
         let _ = app.emit(
@@ -178,8 +196,16 @@ async fn save_attachment_file(
         );
     }
 
-    file.flush()
-        .map_err(|error| format!("Saving file failed: {error}"))?;
+    if let Err(error) = file.flush() {
+        drop(file);
+        let _ = std::fs::remove_file(&temporary_path);
+        return Err(format!("Saving file failed: {error}"));
+    }
+    drop(file);
+    if let Err(error) = std::fs::rename(&temporary_path, &path) {
+        let _ = std::fs::remove_file(&temporary_path);
+        return Err(format!("Finalizing download failed: {error}"));
+    }
 
     let _ = app.emit(
         "attachment-download-progress",

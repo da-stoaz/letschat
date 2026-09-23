@@ -21,7 +21,7 @@ public static class MiscEndpoints
         routes.MapGet("/.well-known/jwks.json",
             (SpacetimeTokenService spacetime) => Results.Json(spacetime.Jwks()));
 
-        routes.MapGet("/.well-known/letschat.json", (ServiceOptions options, VersionInfo version) =>
+        routes.MapGet("/.well-known/letschat.json", (ServiceOptions options, VersionInfo version, SystemConfigService config) =>
             new WellKnownResponse(
                 options.DiscoverySpacetimeDbUri,
                 options.DiscoveryAuthUrl,
@@ -29,6 +29,11 @@ public static class MiscEndpoints
                 options.DiscoveryDatabase,
                 version.ServerVersion,
                 version.RecommendedClientVersion,
-                version.MinClientVersion));
+                version.MinClientVersion,
+                config.Current.UploadPartSizeMiB * UploadLimits.MiB,
+                config.Current.UploadMaxFileSizeMiB * UploadLimits.MiB,
+                config.Current.DailyUploadQuotaMiB * UploadLimits.MiB,
+                config.Current.UserStorageLimitMiB * UploadLimits.MiB,
+                config.Current.InstanceStorageLimitMiB * UploadLimits.MiB));
     }
 }

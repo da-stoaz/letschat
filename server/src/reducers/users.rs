@@ -3,6 +3,7 @@ use spacetimedb::{ReducerContext, Table};
 use crate::helpers::{assert_or_err, is_valid_username, normalize_username, require_account};
 use crate::reducers::system::require_trusted_issuer;
 use crate::schema::*;
+use crate::storage_refs::sync_avatar_reference;
 
 #[spacetimedb::reducer]
 pub fn register_user(
@@ -83,6 +84,13 @@ pub fn update_profile(
 
     if let Some(name) = display_name {
         user_row.display_name = name;
+    }
+    // The client resends the current avatar with every profile save; only a
+    // change is validated, so a pre-existing value never blocks a rename.
+    if let Some(next_avatar) = avatar_url.as_deref()
+        && Some(next_avatar) != user_row.avatar_url.as_deref()
+    {
+        sync_avatar_reference(ctx, &user_row.username, Some(next_avatar))?;
     }
     if avatar_url.is_some() {
         user_row.avatar_url = avatar_url;

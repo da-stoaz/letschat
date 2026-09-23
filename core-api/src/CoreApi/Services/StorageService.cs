@@ -21,6 +21,7 @@ public sealed class StorageService : IDisposable
     private readonly AmazonS3Client _presign;
     private readonly string _bucket;
     private readonly string _presignScheme;
+    private readonly bool _internalHttp;
 
     public StorageService(ServiceOptions options)
     {
@@ -29,6 +30,7 @@ public sealed class StorageService : IDisposable
         var credentials = new BasicAWSCredentials(options.MinioAccessKey, options.MinioSecretKey);
 
         _internal = BuildClient(credentials, options.MinioInternalEndpoint);
+        _internalHttp = options.MinioInternalEndpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
         _presign = BuildClient(credentials, options.MinioPublicEndpoint);
     }
 
@@ -63,6 +65,75 @@ public sealed class StorageService : IDisposable
         return ForceScheme(await _presign.GetPreSignedURLAsync(request));
     }
 
+    public async Task<string> InitiateMultipartAsync(string storageKey, string mimeType, CancellationToken ct)
+    {
+        var response = await _internal.InitiateMultipartUploadAsync(new InitiateMultipartUploadRequest
+        {
+            BucketName = _bucket,
+            Key = storageKey,
+            ContentType = mimeType,
+        }, ct);
+        return response.UploadId;
+    }
+
+    public async Task<string> PresignPartAsync(
+        string storageKey, string multipartId, int partNumber, long length, int expiresInSeconds)
+    {
+        var request = new GetPreSignedUrlRequest
+        {
+            BucketName = _bucket,
+            Key = storageKey,
+            Verb = HttpVerb.PUT,
+            UploadId = multipartId,
+            PartNumber = partNumber,
+            Expires = DateTime.UtcNow.AddSeconds(expiresInSeconds),
+        };
+        request.Headers["Content-Length"] = length.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return ForceScheme(await _presign.GetPreSignedURLAsync(request));
+    }
+
+    public async Task<IReadOnlyList<StoredPart>> ListPartsAsync(
+        string storageKey, string multipartId, CancellationToken ct)
+    {
+        var response = await _internal.ListPartsAsync(new ListPartsRequest
+        {
+            BucketName = _bucket,
+            Key = storageKey,
+            UploadId = multipartId,
+        }, ct);
+        // A 2 GiB file with the minimum 5 MiB part size has at most 410 parts.
+        if (response.IsTruncated == true)
+        {
+            throw new InvalidOperationException("Multipart part list was unexpectedly truncated.");
+        }
+        return (response.Parts ?? [])
+            .Select(part => new StoredPart(part.PartNumber ?? 0, part.Size ?? 0, part.ETag ?? ""))
+            .OrderBy(part => part.Number)
+            .ToArray();
+    }
+
+    public Task CompleteMultipartAsync(
+        string storageKey, string multipartId, IReadOnlyList<StoredPart> parts, CancellationToken ct) =>
+        _internal.CompleteMultipartUploadAsync(new CompleteMultipartUploadRequest
+        {
+            BucketName = _bucket,
+            Key = storageKey,
+            UploadId = multipartId,
+            PartETags = parts.Select(part => new PartETag(part.Number, part.ETag)).ToList(),
+        }, ct);
+
+    public async Task AbortMultipartAsync(string storageKey, string multipartId, CancellationToken ct)
+    {
+        try
+        {
+            await _internal.AbortMultipartUploadAsync(_bucket, storageKey, multipartId, ct);
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Already completed or aborted; retrying cleanup must stay safe.
+        }
+    }
+
     /// <summary>Short-lived presigned GET URL for displaying/downloading a file.</summary>
     public async Task<string> PresignGetAsync(string storageKey, int expiresInSeconds) =>
         ForceScheme(await _presign.GetPreSignedURLAsync(new GetPreSignedUrlRequest
@@ -72,6 +143,29 @@ public sealed class StorageService : IDisposable
             Verb = HttpVerb.GET,
             Expires = DateTime.UtcNow.AddSeconds(expiresInSeconds),
         }));
+
+    /// <summary>Presigned GET on the internal endpoint, for server-side readers such as ffmpeg.</summary>
+    public string PresignInternalGet(string storageKey, int expiresInSeconds) =>
+        _internal.GetPreSignedURL(new GetPreSignedUrlRequest
+        {
+            BucketName = _bucket,
+            Key = storageKey,
+            Verb = HttpVerb.GET,
+            Expires = DateTime.UtcNow.AddSeconds(expiresInSeconds),
+            Protocol = _internalHttp ? Protocol.HTTP : Protocol.HTTPS,
+        });
+
+    public async Task PutObjectAsync(string storageKey, byte[] body, string contentType, CancellationToken ct)
+    {
+        using var stream = new MemoryStream(body);
+        await _internal.PutObjectAsync(new PutObjectRequest
+        {
+            BucketName = _bucket,
+            Key = storageKey,
+            InputStream = stream,
+            ContentType = contentType,
+        }, ct);
+    }
 
     /// <summary>
     /// HEAD-checks an object via the internal endpoint and returns its real size,
@@ -95,6 +189,25 @@ public sealed class StorageService : IDisposable
     /// <summary>Removes an object that failed confirmation, so a rejected upload does not linger.</summary>
     public Task DeleteObjectAsync(string storageKey) =>
         _internal.DeleteObjectAsync(_bucket, storageKey);
+
+    /// <summary>One bounded page used to adopt objects created before lifecycle tracking existed.</summary>
+    public async Task<StorageObjectPage> ListObjectsPageAsync(
+        string? continuationToken, CancellationToken ct)
+    {
+        var response = await _internal.ListObjectsV2Async(new ListObjectsV2Request
+        {
+            BucketName = _bucket,
+            Prefix = "uploads/",
+            ContinuationToken = continuationToken,
+        }, ct);
+        var objects = (response.S3Objects ?? [])
+            .Select(item => new StoredObject(
+                item.Key,
+                item.Size ?? 0,
+                item.LastModified ?? DateTime.UtcNow))
+            .ToList();
+        return new StorageObjectPage(objects, response.NextContinuationToken);
+    }
 
     /// <summary>
     /// Rewrites the presigned URL's scheme to match the configured public
@@ -120,3 +233,7 @@ public sealed class StorageService : IDisposable
         _presign.Dispose();
     }
 }
+
+public sealed record StoredObject(string StorageKey, long Size, DateTime LastModifiedUtc);
+public sealed record StorageObjectPage(IReadOnlyList<StoredObject> Objects, string? NextContinuationToken);
+public sealed record StoredPart(int Number, long Size, string ETag);

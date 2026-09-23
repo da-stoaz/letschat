@@ -29,6 +29,8 @@ public sealed class SpacetimeClient(
     ILogger<SpacetimeClient> logger)
 {
     private const string ClientName = "spacetimedb";
+    internal const string StorageCleanupAuthorizationSentinel = "__letschat_cleanup_authorized__";
+    private bool _storageReferencesReady;
 
     /// <summary>
     /// Builds the ordered list of credentials an admin reducer call may be signed
@@ -101,7 +103,7 @@ public sealed class SpacetimeClient(
     /// self-healing across the identity migration, where which credential holds
     /// admin changes. Any other failure, or exhausting all credentials, throws.
     /// </summary>
-    private async Task PostAdminReducerAsync(string reducer, object args, CancellationToken ct)
+    private async Task<string> PostAdminReducerAsync(string reducer, object args, CancellationToken ct)
     {
         var candidates = await ResolveAdminTokensAsync();
         if (candidates.Count == 0)
@@ -127,7 +129,7 @@ public sealed class SpacetimeClient(
             var response = await http.SendAsync(request, ct);
             if (response.IsSuccessStatusCode)
             {
-                return;
+                return token;
             }
 
             lastStatus = (int)response.StatusCode;
@@ -378,6 +380,135 @@ public sealed class SpacetimeClient(
         }
 
         return await ReadSqlRowsAsync(response, ct);
+    }
+
+    /// <summary>
+    /// Atomically claims candidate object keys which currently have no chat
+    /// reference, then returns the claims through an admin-only view. Reference
+    /// reducers reject claimed keys, so a key cannot become live between this
+    /// decision and MinIO deletion. The protected view must return its
+    /// authorization sentinel before an empty set is trusted. <c>null</c> means
+    /// unknown and makes the storage collector fail closed.
+    /// </summary>
+    public async Task<HashSet<string>?> ClaimUnreferencedStorageAsync(
+        IReadOnlyCollection<string> storageKeys, CancellationToken ct = default)
+    {
+        if (storageKeys.Count == 0)
+        {
+            return [];
+        }
+
+        string claimToken;
+        var batchId = Guid.NewGuid().ToString("N");
+        try
+        {
+            claimToken = await PostAdminReducerAsync(
+                "claim_unreferenced_storage",
+                new List<object> { batchId, storageKeys.ToArray() },
+                ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Most often "storage references are not ready" after a module
+            // wipe or archive restore: re-run the rebuild gate next sweep.
+            _storageReferencesReady = false;
+            logger.LogWarning(ex,
+                "SpacetimeDB could not claim unreferenced storage; no objects will be deleted.");
+            return null;
+        }
+
+        static string Quote(string value) => $"'{value.Replace("'", "''", StringComparison.Ordinal)}'";
+        var wanted = storageKeys
+            .Append(StorageCleanupAuthorizationSentinel)
+            .Select(key => $"storage_key = {Quote(key)}");
+        var sql = "SELECT storage_key FROM storage_deletion_claims_for_cleanup WHERE "
+            + string.Join(" OR ", wanted);
+        var url = $"{options.SpacetimeHttpUrl.TrimEnd('/')}/v1/database/{options.SpacetimeModuleName}/sql";
+        var http = httpFactory.CreateClient(ClientName);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(sql),
+        };
+        request.Headers.Authorization = new("Bearer", claimToken);
+
+        try
+        {
+            using var response = await http.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _storageReferencesReady = false;
+                logger.LogWarning(
+                    "SpacetimeDB storage-claim view returned {Status}; no objects will be deleted.",
+                    (int)response.StatusCode);
+                return null;
+            }
+
+            var rows = await ReadSqlRowsAsync(response, ct);
+            if (rows is null)
+            {
+                _storageReferencesReady = false;
+                logger.LogWarning(
+                    "SpacetimeDB storage-claim view returned malformed data; no objects will be deleted.");
+                return null;
+            }
+            var found = rows
+                .Where(row => row.Count > 0 && row[0].ValueKind == JsonValueKind.String)
+                .Select(row => row[0].GetString()!)
+                .ToHashSet(StringComparer.Ordinal);
+            if (!found.Remove(StorageCleanupAuthorizationSentinel))
+            {
+                _storageReferencesReady = false;
+                logger.LogWarning(
+                    "SpacetimeDB storage-claim view omitted its sentinel; no objects will be deleted.");
+                return null;
+            }
+            _storageReferencesReady = true;
+            return found;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "SpacetimeDB storage-claim query failed; no objects will be deleted.");
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Ensures the module's derived object-reference table represents all live
+    /// rows before cleanup begins. Idempotent and retried after a missing view
+    /// sentinel, such as after a module wipe/rebuild while core-api stayed up.
+    /// </summary>
+    public async Task<bool> EnsureStorageReferencesReadyAsync(CancellationToken ct = default)
+    {
+        if (_storageReferencesReady)
+        {
+            return true;
+        }
+        try
+        {
+            await PostAdminReducerAsync("rebuild_storage_references", Array.Empty<object>(), ct);
+            _storageReferencesReady = true;
+            return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Could not rebuild SpacetimeDB storage references; no objects will be deleted.");
+            return false;
+        }
     }
 
     /// <summary>One statement's result from the SpacetimeDB <c>/sql</c> endpoint.</summary>

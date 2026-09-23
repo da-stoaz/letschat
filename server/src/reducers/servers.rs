@@ -5,6 +5,7 @@ use crate::helpers::{
     require_account, require_member_role, require_owner, require_system_admin, voice_key,
 };
 use crate::schema::*;
+use crate::storage_refs::{icon_owner_key, remove_references, sync_icon_reference};
 
 use super::channels::delete_channel_with_dependencies;
 
@@ -298,6 +299,14 @@ pub fn set_server_icon(
         .id()
         .find(server_id)
         .ok_or_else(|| "server not found".to_string())?;
+    let uploader = ctx
+        .db
+        .user()
+        .identity()
+        .find(ctx.sender())
+        .ok_or_else(|| "user not found".to_string())?
+        .username;
+    sync_icon_reference(ctx, server_id, &uploader, normalized_icon_url.as_deref())?;
     server_row.icon_url = normalized_icon_url;
     ctx.db.server().id().update(server_row);
     Ok(())
@@ -356,6 +365,7 @@ pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String>
         delete_channel_with_dependencies(ctx, channel_id);
     }
 
+    remove_references(ctx, &icon_owner_key(server_id));
     ctx.db.server().id().delete(server_id);
     Ok(())
 }

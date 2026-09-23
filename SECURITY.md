@@ -30,6 +30,9 @@ enforcement therefore matters directly to credential protection (finding E4).
 - The public JSON API has a 256 KiB request-body limit. Files never transit it.
 - Abuse-prone auth endpoints use an IP-partitioned fixed-window rate limiter;
   only the adjacent private/loopback proxy is trusted for forwarded headers.
+  Its currently shared, low per-IP budget can deny auth service to unrelated
+  users behind the same CGNAT, VPN, or corporate gateway; this availability
+  risk and the split-policy remediation are tracked as A11.
 - Application access tokens live for one hour and refresh tokens for seven
   days. A per-account token generation immediately invalidates older HTTP
   sessions after a credential change.
@@ -62,18 +65,31 @@ client bindings; changes to a UI permission do not replace a reducer check.
 MinIO must not be publicly browsable. `core-api` brokers access with presigned
 URLs:
 
-- a single object is limited to 500 MiB;
-- a user is limited to 2 GiB per UTC day;
-- upload requests reserve the declared bytes under a PostgreSQL row lock;
-- the exact `Content-Length` is signed and verified against the stored object;
-- unconfirmed grants expire after 15 minutes and a background sweeper deletes
-  their objects before releasing quota;
+- attachments default to a 500 MiB per-file maximum, configurable by an admin;
+  avatars/icons remain limited to 10 MiB and `image/*`;
+- the initial per-user upload-rate limit is 2 GiB per UTC day, configurable by
+  an admin independently of optional per-user and installation stored limits;
+- upload requests reserve the declared bytes under a PostgreSQL config-row
+  lock, preventing concurrent users from overbooking the installation limit;
+- the exact `Content-Length` is signed for a single PUT or each multipart part;
+  multipart completion checks every part and HEAD-verifies the assembled size;
+- single-PUT grants expire after 15 minutes; multipart sessions after two hours.
+  The sweeper deletes or aborts them before releasing quota, with MinIO's stale
+  multipart cleanup covering a crash before the upload ID reaches PostgreSQL;
+- confirmation retains a PostgreSQL registry row, while SpacetimeDB creates and
+  removes normalized object references atomically with the owning chat row;
+- the lifecycle collector adopts legacy MinIO inventory, then an admin-gated
+  reducer atomically claims only unreferenced keys; all reference writers reject
+  claimed keys, and a protected claim view must return its
+  authorization/readiness sentinel before deletion;
+- an unavailable dependency or stale credential fails closed and retains the
+  object and registry row for retry;
 - download grants are issued only after the caller's channel, DM, or own-object
   access is checked; batch requests are capped at 128 keys.
 
-Deletion of confirmed objects when their owning message or channel is removed
-is not yet complete; this residual lifecycle issue is tracked as D4 in
-`BUG_ANALYSIS.md`.
+The one-hour lifecycle grace period is intentional: a successful PUT can briefly
+precede the SpacetimeDB commit that binds it, but it can no longer become an
+unknown or permanent orphan.
 
 ### LiveKit is an ephemeral media authority
 
@@ -128,7 +144,7 @@ the architecture document.
 
 The remaining code findings are prioritized in
 [`BUG_ANALYSIS.md`](BUG_ANALYSIS.md). At this baseline there is no open S1;
-the only open S2 item is C7.
+the open S2 items are A11 and C7.
 
 ## Security review workflow
 

@@ -1,4 +1,5 @@
 using System.Net;
+using Amazon.S3;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using CoreApi;
@@ -94,6 +95,8 @@ builder.Services.AddSingleton<SpacetimeTokenService>();
 builder.Services.AddSingleton<LiveKitTokenService>();
 builder.Services.AddSingleton<StorageService>();
 builder.Services.AddHostedService<PendingUploadSweeper>();
+builder.Services.AddHostedService<VideoThumbnailWorker>();
+builder.Services.AddSingleton<StorageInventoryState>();
 
 // Email transport — SMTP for real delivery, log sender for local dev.
 if (options.EmailSenderKind == "smtp")
@@ -279,6 +282,19 @@ app.Use(async (context, next) =>
         await WriteError(
             context, HttpStatusCode.ServiceUnavailable,
             "The server could not send a required email. Please try again later or contact the administrator.");
+    }
+    catch (AmazonS3Exception ex) when (ex.ErrorCode == "XMinioStorageFull"
+        || (int)ex.StatusCode == 507)
+    {
+        app.Logger.LogWarning(ex, "Object storage full processing {Path}", context.Request.Path);
+        await WriteError(context, HttpStatusCode.ServiceUnavailable,
+            "Object storage is full. Please contact the instance administrator or retry after space is freed.");
+    }
+    catch (AmazonS3Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Object storage unavailable processing {Path}", context.Request.Path);
+        await WriteError(context, HttpStatusCode.ServiceUnavailable,
+            "Object storage is unavailable. Please try again shortly.");
     }
     catch (Exception ex)
     {

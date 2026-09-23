@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getSignedDownloadUrls } from '@/lib/uploads'
 import type { ChatMessageAttachment } from '@/types/attachments'
+import { getAttachmentKind, videoThumbnailKey } from './attachmentUtils'
 
 export type AttachmentResolution = {
   loading: boolean
@@ -41,7 +42,11 @@ export function useAttachmentResolver(attachments: ChatMessageAttachment[]) {
   // seeding or pruning state pass — the only setState happens when async
   // resolution completes.
   const attachmentKeys = useMemo(
-    () => [...new Set(attachments.map((attachment) => attachment.storageKey))],
+    () => [...new Set(attachments.flatMap((attachment) =>
+      getAttachmentKind(attachment.mimeType) === 'video'
+        ? [attachment.storageKey, videoThumbnailKey(attachment.storageKey)]
+        : [attachment.storageKey],
+    ))],
     [attachments],
   )
 

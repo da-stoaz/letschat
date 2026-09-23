@@ -251,6 +251,38 @@ export const SpaceCreatePolicy = __t.enum("SpaceCreatePolicy", {
 });
 export type SpaceCreatePolicy = __Infer<typeof SpaceCreatePolicy>;
 
+export const StorageCleanupBatch = __t.object("StorageCleanupBatch", {
+  requester: __t.identity(),
+  batchId: __t.string(),
+});
+export type StorageCleanupBatch = __Infer<typeof StorageCleanupBatch>;
+
+export const StorageDeletionClaim = __t.object("StorageDeletionClaim", {
+  storageKey: __t.string(),
+  claimedAt: __t.timestamp(),
+  batchId: __t.string(),
+});
+export type StorageDeletionClaim = __Infer<typeof StorageDeletionClaim>;
+
+export const StorageReference = __t.object("StorageReference", {
+  referenceKey: __t.string(),
+  ownerKey: __t.string(),
+  storageKey: __t.string(),
+});
+export type StorageReference = __Infer<typeof StorageReference>;
+
+export const StorageReferenceState = __t.object("StorageReferenceState", {
+  id: __t.u8(),
+  ready: __t.bool(),
+});
+export type StorageReferenceState = __Infer<typeof StorageReferenceState>;
+
+export const StorageRestoreFence = __t.object("StorageRestoreFence", {
+  id: __t.u8(),
+  lastRestoreAt: __t.timestamp(),
+});
+export type StorageRestoreFence = __Infer<typeof StorageRestoreFence>;
+
 export const SystemSettings = __t.object("SystemSettings", {
   id: __t.u8(),
   get spaceCreatePolicy() {

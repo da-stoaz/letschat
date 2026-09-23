@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using CoreApi.Data;
 using CoreApi.Services;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.JsonWebTokens;
 
@@ -297,15 +299,15 @@ public sealed class UploadAccessTests
         var client = factory.CreateClient();
         var (alice, _) = await RegisterAsync(client, "quotauser");
 
-        for (var requestNumber = 0; requestNumber < 4; requestNumber++)
+        for (var requestNumber = 0; requestNumber < 32; requestNumber++)
         {
             var accepted = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
             {
                 sessionToken = alice,
                 fileName = $"large-{requestNumber}.bin",
-                fileSize = 500L * 1024 * 1024,
+                fileSize = 64L * 1024 * 1024,
                 mimeType = "application/octet-stream",
-                scope = new { kind = "avatar" },
+                scope = new { kind = "channel", channelId = 1 },
             });
             Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
         }
@@ -314,12 +316,215 @@ public sealed class UploadAccessTests
         {
             sessionToken = alice,
             fileName = "one-too-many.bin",
-            fileSize = 500L * 1024 * 1024,
+            fileSize = 64L * 1024 * 1024,
             mimeType = "application/octet-stream",
-            scope = new { kind = "avatar" },
+            scope = new { kind = "channel", channelId = 1 },
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+    }
+
+    [Fact]
+    public async Task Configured_Daily_User_And_Instance_Limits_Count_Pending_And_Confirmed_Objects()
+    {
+        using var factory = new LetsChatWebApplicationFactory();
+        var client = factory.CreateClient();
+        var (alice, _) = await RegisterAsync(client, "storagealice");
+        var (bob, _) = await RegisterAsync(client, "storagebob");
+        factory.Services.GetRequiredService<StorageInventoryState>().MarkReady();
+        var config = factory.Services.GetRequiredService<SystemConfigService>();
+        await config.UpdateAsync(row =>
+        {
+            row.DailyUploadQuotaMiB = 10;
+            row.UserStorageLimitMiB = 12;
+            row.InstanceStorageLimitMiB = 20;
+        });
+
+        Task<HttpResponseMessage> Request(JsonElement token, int mib, string name) =>
+            LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+            {
+                sessionToken = token,
+                fileName = name,
+                fileSize = mib * UploadLimits.MiB,
+                mimeType = "application/octet-stream",
+            });
+
+        Assert.Equal(HttpStatusCode.OK, (await Request(alice, 6, "alice-first.bin")).StatusCode);
+        var daily = await Request(alice, 6, "alice-daily.bin");
+        Assert.Equal(HttpStatusCode.BadRequest, daily.StatusCode);
+        Assert.Contains("Daily upload quota", await daily.Content.ReadAsStringAsync());
+
+        await config.UpdateAsync(row => row.DailyUploadQuotaMiB = 30);
+        Assert.Equal(HttpStatusCode.OK, (await Request(alice, 6, "alice-second.bin")).StatusCode);
+        var user = await Request(alice, 1, "alice-stored.bin");
+        Assert.Equal(HttpStatusCode.BadRequest, user.StatusCode);
+        Assert.Contains("stored-file quota", await user.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, (await Request(bob, 7, "bob-first.bin")).StatusCode);
+        var instance = await Request(bob, 2, "bob-instance.bin");
+        Assert.Equal(HttpStatusCode.BadRequest, instance.StatusCode);
+        Assert.Contains("instance", await instance.Content.ReadAsStringAsync());
+
+        var usage = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/quota",
+            new { sessionToken = alice });
+        Assert.Equal(HttpStatusCode.OK, usage.StatusCode);
+        using var doc = JsonDocument.Parse(await usage.Content.ReadAsStringAsync());
+        Assert.Equal(12 * UploadLimits.MiB,
+            doc.RootElement.GetProperty("userStoredAndPendingBytes").GetInt64());
+        Assert.Equal(12 * UploadLimits.MiB,
+            doc.RootElement.GetProperty("dailyReservedBytes").GetInt64());
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var promoted = db.PendingUploads.Single(row => row.FileName == "alice-first.bin");
+        db.ConfirmedUploads.Add(new ConfirmedUpload
+        {
+            StorageKey = promoted.StorageKey, Username = promoted.Username,
+            FileName = promoted.FileName, FileSize = promoted.FileSize,
+            MimeType = promoted.MimeType, ConfirmedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        });
+        db.PendingUploads.Remove(promoted);
+        await db.SaveChangesAsync();
+        Assert.Equal(19 * UploadLimits.MiB, await StorageUsage.RetainedAndPendingAsync(db, null));
+
+        // A failed object deletion leaves the row charged; only successful
+        // MinIO deletion followed by registry removal releases the allowance.
+        db.ConfirmedUploads.Remove(db.ConfirmedUploads.Single());
+        await db.SaveChangesAsync();
+        Assert.Equal(HttpStatusCode.OK, (await Request(bob, 2, "bob-after-cleanup.bin")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Stored_Quota_Rejects_New_Reservations_Until_Inventory_Is_Complete()
+    {
+        using var factory = new LetsChatWebApplicationFactory();
+        var client = factory.CreateClient();
+        var (alice, _) = await RegisterAsync(client, "inventorystatus");
+        await factory.Services.GetRequiredService<SystemConfigService>()
+            .UpdateAsync(row => row.UserStorageLimitMiB = 10);
+
+        var response = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+        {
+            sessionToken = alice,
+            fileName = "test.bin",
+            fileSize = 1,
+            mimeType = "application/octet-stream",
+        });
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Contains("Storage usage is still being checked", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Admin_Limits_Appear_In_Discovery_And_Gate_New_Uploads()
+    {
+        using var factory = new LetsChatWebApplicationFactory();
+        var client = factory.CreateClient();
+        var (alice, _) = await RegisterAsync(client, "uploadlimits");
+        var config = factory.Services.GetRequiredService<SystemConfigService>();
+        await config.UpdateAsync(row =>
+        {
+            row.UploadPartSizeMiB = 8;
+            row.UploadMaxFileSizeMiB = 16;
+        });
+
+        using var discovery = JsonDocument.Parse(await client.GetStringAsync("/.well-known/letschat.json"));
+        Assert.Equal(8L * 1024 * 1024,
+            discovery.RootElement.GetProperty("uploadPartSizeBytes").GetInt64());
+        Assert.Equal(16L * 1024 * 1024,
+            discovery.RootElement.GetProperty("uploadMaxFileSizeBytes").GetInt64());
+
+        var oversized = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+        {
+            sessionToken = alice,
+            fileName = "too-large.bin",
+            fileSize = 17L * 1024 * 1024,
+            mimeType = "application/octet-stream",
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, oversized.StatusCode);
+
+        var oldClient = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+        {
+            sessionToken = alice,
+            fileName = "needs-multipart.bin",
+            fileSize = 9L * 1024 * 1024,
+            mimeType = "application/octet-stream",
+        });
+        Assert.Equal(HttpStatusCode.OK, oldClient.StatusCode);
+        using (var oldResponse = JsonDocument.Parse(await oldClient.Content.ReadAsStringAsync()))
+            Assert.Equal("single", oldResponse.RootElement.GetProperty("mode").GetString());
+
+        var small = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+        {
+            sessionToken = alice,
+            fileName = "small.bin",
+            fileSize = 8L * 1024 * 1024,
+            mimeType = "application/octet-stream",
+        });
+        Assert.Equal(HttpStatusCode.OK, small.StatusCode);
+    }
+
+    [Fact]
+    public async Task Avatar_Limit_Is_Enforced_By_The_Server()
+    {
+        using var factory = new LetsChatWebApplicationFactory();
+        var client = factory.CreateClient();
+        var (alice, _) = await RegisterAsync(client, "avatarowner");
+
+        var response = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+        {
+            sessionToken = alice,
+            fileName = "oversized.png",
+            fileSize = 10L * 1024 * 1024 + 1,
+            mimeType = "image/png",
+            scope = new { kind = "avatar" },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Storage_Deletion_Claims_Require_The_Admin_View_Sentinel()
+    {
+        using var spacetime = new SqlStub();
+        using var factory = new LetsChatWebApplicationFactory { SpacetimeTransport = spacetime };
+        var client = factory.CreateClient();
+        await RegisterAsync(client, "cleanupadmin");
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var admin = await users.FindByNameAsync("cleanupadmin");
+            Assert.NotNull(admin);
+            Assert.True((await users.AddToRoleAsync(admin, DbInitializer.AdminRole)).Succeeded);
+        }
+
+        var service = factory.Services.GetRequiredService<SpacetimeClient>();
+        var keys = new[] { "uploads/avatar/cleanupadmin/live.png" };
+
+        // A valid HTTP response from a non-admin token is deliberately empty.
+        // It must remain "unknown", never be interpreted as "delete all".
+        spacetime.Respond = _ => "[]";
+        Assert.Null(await service.ClaimUnreferencedStorageAsync(keys));
+
+        const string sentinel = "__letschat_cleanup_authorized__";
+        spacetime.Respond = _ => $"[[\"{sentinel}\"],[\"{keys[0]}\"]]";
+        var claimed = await service.ClaimUnreferencedStorageAsync(keys);
+        Assert.NotNull(claimed);
+        Assert.Contains(keys[0], claimed);
+        Assert.DoesNotContain(sentinel, claimed);
+        var claimCalls = spacetime.ReducerCalls
+            .Where(call => call.Path.EndsWith(
+                "/call/claim_unreferenced_storage", StringComparison.Ordinal))
+            .ToList();
+        Assert.Equal(2, claimCalls.Count);
+        var claimCall = claimCalls[^1];
+        using var claimArgs = JsonDocument.Parse(claimCall.Body);
+        Assert.Equal(32, claimArgs.RootElement[0].GetString()!.Length);
+        Assert.Equal(keys[0], claimArgs.RootElement[1][0].GetString());
+        Assert.Equal(spacetime.LastClaimBearer, spacetime.LastBearer);
+        Assert.Contains(spacetime.Queries,
+            query => query.Contains("storage_deletion_claims_for_cleanup", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -353,7 +558,9 @@ public sealed class UploadAccessTests
         public HttpStatusCode Status { get; init; } = HttpStatusCode.OK;
         public Func<string, string> Respond { get; set; } = _ => "[]";
         public List<string> Queries { get; } = [];
+        public List<(string Path, string Body)> ReducerCalls { get; } = [];
         public string? LastBearer { get; private set; }
+        public string? LastClaimBearer { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
@@ -365,6 +572,15 @@ public sealed class UploadAccessTests
             {
                 LastBearer = request.Headers.Authorization?.Parameter;
                 Queries.Add(sql);
+            }
+            else if (request.RequestUri.AbsolutePath.Contains("/call/", StringComparison.Ordinal))
+            {
+                ReducerCalls.Add((request.RequestUri.AbsolutePath, sql));
+                if (request.RequestUri.AbsolutePath.EndsWith(
+                    "/call/claim_unreferenced_storage", StringComparison.Ordinal))
+                {
+                    LastClaimBearer = request.Headers.Authorization?.Parameter;
+                }
             }
             return new HttpResponseMessage(Status)
             {

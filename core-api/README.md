@@ -90,6 +90,8 @@ important groups are:
 | `SPACETIME_*` | module URL, database name, and service credentials |
 | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET` | object storage credentials and bucket |
 | `MINIO_INTERNAL_ENDPOINT`, `MINIO_PUBLIC_ENDPOINT` | server-side and client-visible S3 endpoints |
+| `UPLOAD_PART_SIZE_MIB`, `UPLOAD_MAX_FILE_SIZE_MIB` | initial upload limits; later editable in `/admin/config` |
+| `DAILY_UPLOAD_QUOTA_MIB`, `USER_STORAGE_LIMIT_MIB`, `INSTANCE_STORAGE_LIMIT_MIB` | initial daily and retained-byte limits; stored limits use `0` for unlimited and all three are later editable in `/admin/config` |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | media server and grant signing |
 | `DISCOVERY_*` | values returned to clients by discovery |
 | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD`, `ADMIN_BOOTSTRAP_EMAIL` | optional first-run administrator |
@@ -101,16 +103,43 @@ start with known public development secrets or endpoints.
 
 ## Attachment guarantees
 
-Clients upload bytes directly to MinIO. `core-api` reserves the declared size
-against the user's daily quota before returning a presigned PUT, signs the exact
-`Content-Length`, verifies the resulting object on confirmation, and checks chat
+Clients upload bytes directly to MinIO as one signed PUT up to the configured
+part size or as numbered S3 multipart PUTs above it. `core-api` reserves the
+declared size against the user's daily quota before returning presigned URLs,
+signs each PUT's exact `Content-Length`, verifies the resulting object on
+confirmation, and checks chat
 scope again before minting a download URL. Expired unconfirmed objects are
 removed by `PendingUploadSweeper`; their quota stays reserved when storage
 deletion fails so a storage outage cannot reopen the quota.
 
-Limits are 500 MiB per object, 2 GiB per user per UTC day, 10 minutes for the
-PUT URL, 15 minutes to confirm, one hour for a download URL, and 128 keys per
-download batch.
+Confirmation promotes the pending row into a durable object registry.
+SpacetimeDB updates normalized references atomically with messages, DMs,
+avatars, and space icons. The collector rebuilds those derived references,
+adopts older MinIO objects, waits one hour, and asks an admin-only reducer to
+atomically claim keys that are still unreferenced. Reference writers reject
+claimed keys, so a key cannot become live between that decision and deletion.
+Core API trusts only claims returned with the protected view's
+authorization/readiness sentinel. Missing authorization or an unavailable
+dependency fails closed: the object and registry row remain for retry.
+
+Confirmed videos get a poster job. `VideoThumbnailWorker` runs one ffmpeg job at
+a time at below-normal priority and writes `{videoKey}.thumb.jpg`, which shares
+the video's read rule and is removed with it. Local development needs ffmpeg on
+`PATH` (or `FFMPEG_PATH`); without it thumbnails stay pending.
+
+Initial limits are 500 MiB per attachment and 64 MiB per multipart part;
+the five upload/quota `.env` values seed runtime-editable values in
+`/admin/config`. Avatars/icons remain limited to 10 MiB and `image/*`.
+The daily upload-rate limit starts at 2 GiB per user; stored-byte limits per
+user and per installation default to unlimited (`0`). Confirmed registry bytes
+and all pending reservations count until storage deletion succeeds; a full
+MinIO volume reports a separate storage-full error even when the configured
+instance limit is unlimited. Authenticated clients can read personal usage via
+`POST /uploads/quota`. Single PUT has a 10-minute URL and 15-minute
+confirmation window; multipart sessions last two hours and part URLs at most
+10 minutes. Download URLs last one hour, with at most 128 keys per download
+batch. Behind a Cloudflare Tunnel, multipart parts
+remain below the 100 MB Free/Pro request-body cap; see `DEPLOYMENT.md`.
 
 ## Legacy account import
 
