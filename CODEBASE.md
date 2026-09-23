@@ -124,6 +124,9 @@ by SpacetimeDB. This keeps PostgreSQL account data out of public chat views.
    between the cleanup decision and MinIO deletion. A protected claim view must
    return its authorization/readiness sentinel before Core API deletes anything.
    Failed storage deletion retains the registry row and claim for retry.
+5. Confirmed videos queue a poster job; `VideoThumbnailWorker` renders
+   `{videoKey}.thumb.jpg` with ffmpeg via range reads. Chat renders that poster
+   and mounts the `<video>` only on click.
 5. Download endpoints re-check channel or DM access before returning a
    short-lived URL.
 6. A background sweeper aborts expired multipart sessions or removes expired

@@ -21,6 +21,7 @@ public sealed class StorageService : IDisposable
     private readonly AmazonS3Client _presign;
     private readonly string _bucket;
     private readonly string _presignScheme;
+    private readonly bool _internalHttp;
 
     public StorageService(ServiceOptions options)
     {
@@ -29,6 +30,7 @@ public sealed class StorageService : IDisposable
         var credentials = new BasicAWSCredentials(options.MinioAccessKey, options.MinioSecretKey);
 
         _internal = BuildClient(credentials, options.MinioInternalEndpoint);
+        _internalHttp = options.MinioInternalEndpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
         _presign = BuildClient(credentials, options.MinioPublicEndpoint);
     }
 
@@ -141,6 +143,29 @@ public sealed class StorageService : IDisposable
             Verb = HttpVerb.GET,
             Expires = DateTime.UtcNow.AddSeconds(expiresInSeconds),
         }));
+
+    /// <summary>Presigned GET on the internal endpoint, for server-side readers such as ffmpeg.</summary>
+    public string PresignInternalGet(string storageKey, int expiresInSeconds) =>
+        _internal.GetPreSignedURL(new GetPreSignedUrlRequest
+        {
+            BucketName = _bucket,
+            Key = storageKey,
+            Verb = HttpVerb.GET,
+            Expires = DateTime.UtcNow.AddSeconds(expiresInSeconds),
+            Protocol = _internalHttp ? Protocol.HTTP : Protocol.HTTPS,
+        });
+
+    public async Task PutObjectAsync(string storageKey, byte[] body, string contentType, CancellationToken ct)
+    {
+        using var stream = new MemoryStream(body);
+        await _internal.PutObjectAsync(new PutObjectRequest
+        {
+            BucketName = _bucket,
+            Key = storageKey,
+            InputStream = stream,
+            ContentType = contentType,
+        }, ct);
+    }
 
     /// <summary>
     /// HEAD-checks an object via the internal endpoint and returns its real size,

@@ -56,4 +56,15 @@ public sealed class ConfirmedUpload
     public long FileSize { get; set; }
     public string MimeType { get; set; } = string.Empty;
     public long ConfirmedAt { get; set; }
+    /// <summary>Poster-frame job for videos; see <c>VideoThumbnailWorker</c>.</summary>
+    public ThumbnailState ThumbnailState { get; set; }
+    public int ThumbnailAttempts { get; set; }
+}
+
+public enum ThumbnailState
+{
+    None = 0,
+    Pending = 1,
+    Done = 2,
+    Failed = 3,
 }

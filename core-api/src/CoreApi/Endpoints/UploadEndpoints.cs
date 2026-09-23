@@ -370,6 +370,8 @@ public static class UploadEndpoints
             FileSize = actualSize.Value,
             MimeType = pending.MimeType,
             ConfirmedAt = UnixNow(),
+            ThumbnailState = pending.MimeType.StartsWith("video/", StringComparison.Ordinal)
+                ? ThumbnailState.Pending : ThumbnailState.None,
         });
         db.PendingUploads.Remove(pending);
         await db.SaveChangesAsync(ct);

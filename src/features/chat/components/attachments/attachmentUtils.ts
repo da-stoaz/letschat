@@ -7,6 +7,15 @@ export function getAttachmentKind(mimeType: string): AttachmentKind {
   return 'file'
 }
 
+/**
+ * core-api renders a poster for each video in the background and stores it
+ * next to the video (VideoThumbnailWorker.KeySuffix). Until it exists the
+ * signed URL simply 404s and the player shows its placeholder.
+ */
+export function videoThumbnailKey(storageKey: string): string {
+  return `${storageKey}.thumb.jpg`
+}
+
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
 

@@ -61,6 +61,8 @@ public sealed class ServiceOptions
     public long DailyUploadQuotaMiB { get; init; } = UploadLimits.DefaultDailyMiB;
     public long UserStorageLimitMiB { get; init; }
     public long InstanceStorageLimitMiB { get; init; }
+    /// <summary>ffmpeg binary for video poster frames; missing binary disables thumbnails.</summary>
+    public string FfmpegPath { get; init; } = "ffmpeg";
 
     public required string LiveKitApiKey { get; init; }
     public required string LiveKitApiSecret { get; init; }
@@ -203,6 +205,7 @@ public sealed class ServiceOptions
             DailyUploadQuotaMiB = GetInitialUploadLong("DAILY_UPLOAD_QUOTA_MIB", UploadLimits.DefaultDailyMiB),
             UserStorageLimitMiB = GetInitialUploadLong("USER_STORAGE_LIMIT_MIB", 0),
             InstanceStorageLimitMiB = GetInitialUploadLong("INSTANCE_STORAGE_LIMIT_MIB", 0),
+            FfmpegPath = Get("FFMPEG_PATH", "ffmpeg"),
 
             LiveKitApiKey = Get("LIVEKIT_API_KEY", "devkey"),
             LiveKitApiSecret = Get("LIVEKIT_API_SECRET", DevLiveKitApiSecret),

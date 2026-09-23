@@ -152,6 +152,7 @@ public sealed class PendingUploadSweeper(
             try
             {
                 await storage.DeleteObjectAsync(upload.StorageKey);
+                await storage.DeleteObjectAsync(upload.StorageKey + VideoThumbnailWorker.KeySuffix);
                 if (db.Database.IsRelational())
                 {
                     swept += await db.ConfirmedUploads
@@ -207,6 +208,11 @@ public sealed class PendingUploadSweeper(
             foreach (var item in page.Objects)
             {
                 var parsed = StorageKey.TryParse(item.StorageKey);
+                // Derived posters live and die with their video, never as uploads.
+                if (item.StorageKey.EndsWith(VideoThumbnailWorker.KeySuffix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
                 if (parsed is null || item.Size <= 0
                     || known.Contains(item.StorageKey) || pending.Contains(item.StorageKey))
                 {

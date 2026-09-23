@@ -536,6 +536,14 @@ retains the registry row for retry. `SPACETIMEDB_SERVICE_TOKEN` or a synchronize
 chat-domain admin is therefore required for cleanup, but an outage cannot make
 the collector guess and delete live data.
 
+Video posters are rendered by core-api in the background (`VideoThumbnailWorker`):
+one job at a time, below-normal priority, 60 s timeout, three attempts. ffmpeg
+reads the video through range requests (index plus a few frames, never the whole
+file) and stores `{videoKey}.thumb.jpg` next to it, which inherits the video's
+read rule and is deleted with it. The core-api image ships ffmpeg; outside the
+image set `FFMPEG_PATH` or install it on `PATH`. Without ffmpeg the worker logs a
+warning and videos show a play placeholder; jobs stay pending until it is available.
+
 Stop Core API during any destructive SpacetimeDB reset. Restore the chat-domain
 data and run the reference rebuild before starting it again; this prevents an
 in-flight deletion claim from outliving the SpacetimeDB tombstone table.

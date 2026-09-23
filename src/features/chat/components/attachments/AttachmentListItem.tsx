@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { DownloadIcon, ExternalLinkIcon, FileIcon, ImageIcon, Loader2Icon, MusicIcon, PlayIcon, VideoIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { downloadAttachment } from '@/lib/attachmentDownload'
 import type { ChatMessageAttachment } from '@/types/attachments'
 import { formatFileSize, getAttachmentKind } from './attachmentUtils'
+import { InlineVideo } from './InlineVideo'
 import type { AttachmentResolution } from './useAttachmentResolver'
 
 type AttachmentListItemProps = {
@@ -30,6 +31,12 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
   const cancelDownloadRef = useRef<(() => Promise<void>) | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [resumeAt, setResumeAt] = useState(0)
+  const stopVideo = useCallback((position: number) => {
+    setResumeAt(position)
+    setIsPlaying(false)
+  }, [])
+  const [posterMissing, setPosterMissing] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [downloadProgressFraction, setDownloadProgressFraction] = useState<number | null>(null)
   const kind = getAttachmentKind(attachment.mimeType)
@@ -59,7 +66,7 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
             </button>
           ) : kind === 'video' ? (
             isPlaying ? (
-              <video src={resolution.url ?? ''} autoPlay controls className="max-h-56 w-full bg-black" />
+              <InlineVideo url={resolution.url ?? ''} startAt={resumeAt} onStop={stopVideo} />
             ) : (
               // No <video> until asked: WebKit buffers media on render whatever
               // `preload` says, which pulled GBs per page load. Only the small
@@ -70,8 +77,13 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
                 className="relative flex h-56 w-full items-center justify-center bg-black focus:outline-none"
                 onClick={() => setIsPlaying(true)}
               >
-                {thumbnailUrl ? (
-                  <img src={thumbnailUrl} alt="" className="max-h-56 w-full object-contain" />
+                {thumbnailUrl && !posterMissing ? (
+                  <img
+                    src={thumbnailUrl}
+                    alt=""
+                    className="max-h-56 w-full object-contain"
+                    onError={() => setPosterMissing(true)}
+                  />
                 ) : null}
                 <span className="absolute flex size-14 items-center justify-center rounded-full bg-black/60 text-white">
                   <PlayIcon className="size-7 fill-current" />

@@ -182,6 +182,12 @@ namespace CoreApi.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<int>("ThumbnailAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ThumbnailState")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasMaxLength(64)

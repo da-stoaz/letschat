@@ -95,6 +95,7 @@ builder.Services.AddSingleton<SpacetimeTokenService>();
 builder.Services.AddSingleton<LiveKitTokenService>();
 builder.Services.AddSingleton<StorageService>();
 builder.Services.AddHostedService<PendingUploadSweeper>();
+builder.Services.AddHostedService<VideoThumbnailWorker>();
 builder.Services.AddSingleton<StorageInventoryState>();
 
 // Email transport — SMTP for real delivery, log sender for local dev.

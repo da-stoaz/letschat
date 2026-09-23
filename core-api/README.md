@@ -122,6 +122,11 @@ Core API trusts only claims returned with the protected view's
 authorization/readiness sentinel. Missing authorization or an unavailable
 dependency fails closed: the object and registry row remain for retry.
 
+Confirmed videos get a poster job. `VideoThumbnailWorker` runs one ffmpeg job at
+a time at below-normal priority and writes `{videoKey}.thumb.jpg`, which shares
+the video's read rule and is removed with it. Local development needs ffmpeg on
+`PATH` (or `FFMPEG_PATH`); without it thumbnails stay pending.
+
 Initial limits are 500 MiB per attachment and 64 MiB per multipart part;
 the five upload/quota `.env` values seed runtime-editable values in
 `/admin/config`. Avatars/icons remain limited to 10 MiB and `image/*`.
