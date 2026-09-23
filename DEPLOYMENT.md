@@ -474,6 +474,54 @@ the owner credential.
 | Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
 | Service domains | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | Used by `deploy/caddy/Caddyfile` (Caddy track) **and by the `web` container on both tracks** — `deploy/web/Caddyfile` builds the browser client's Content-Security-Policy from them. Left unset on the tunnel track the CSP is emitted with empty hosts; it is report-only, so nothing breaks, but the policy protects nothing |
 
+## Upload limits — and the Cloudflare Tunnel ceiling
+
+Attachments, profile pictures and space icons are uploaded as **one presigned
+`PUT` of the whole file** straight to `files.<domain>` (MinIO). There is no
+chunked / multipart upload and no resume — the proxy in front of MinIO sees the
+entire file as a single request body. What core-api enforces:
+
+| Limit | Value | Where |
+|-------|-------|-------|
+| Per file | 500 MiB | `MaxFileSize` in `UploadEndpoints.cs`, mirrored in the client |
+| Avatar / space icon | 10 MiB and `image/*` | enforced by core-api and mirrored in the client pickers |
+| Per user | 2 GiB **per UTC day** of *uploaded* bytes | `DailyQuota` in `UploadEndpoints.cs`, reserved at `/uploads/request` under a row lock |
+| Stored bytes per user | **no cap** | the daily quota resets at midnight UTC; nothing limits how much a user keeps in the bucket over time (per-user/space/instance storage quotas are planned in `.claude/plans/object-storage.md`) |
+
+Neither value is configurable via env yet.
+
+What the proxy adds on top:
+
+- **Caddy track** — `deploy/caddy/Caddyfile` sets no `request_body max_size`,
+  so the 500 MiB app limit is the effective one.
+- **Tunnel track** — every `files.<domain>` request is proxied by Cloudflare,
+  and Cloudflare caps the request body at **100 MB on Free and Pro** (200 MB
+  Business, up to 5 GB Enterprise). An upload above that never reaches MinIO:
+  Cloudflare answers `413` and the client shows
+  *"Storage upload failed (413)"*, even though the picker accepted the file.
+  There is no way around it on this track — tunnel hostnames are always
+  proxied, so a DNS-only (grey-cloud) `files` record is not an option.
+  **Downloads are not affected by this request-body cap**: files uploaded
+  elsewhere (or under 100 MB) can still be downloaded through the tunnel.
+  Multipart parts below the per-request cap are planned in
+  `.claude/plans/object-storage.md`.
+
+Confirmed objects are retained in PostgreSQL and referenced atomically by the
+SpacetimeDB rows that use them. The lifecycle collector waits one hour, rebuilds
+the reference table after upgrades/restores, and adopts pre-existing `uploads/`
+objects from MinIO. An admin-only reducer then atomically creates permanent
+deletion claims only for keys that have no reference; every reference-writing
+reducer rejects claimed keys. Core API deletes only claims returned by the
+protected view together with its authorization/readiness sentinel. If
+SpacetimeDB, MinIO, or the admin credential is unavailable, cleanup stops and
+retains the registry row for retry. `SPACETIMEDB_SERVICE_TOKEN` or a synchronized
+chat-domain admin is therefore required for cleanup, but an outage cannot make
+the collector guess and delete live data.
+
+Stop Core API during any destructive SpacetimeDB reset. Restore the chat-domain
+data and run the reference rebuild before starting it again; this prevents an
+in-flight deletion claim from outliving the SpacetimeDB tombstone table.
+
 ## Troubleshooting: file and profile-picture uploads fail silently
 
 **Symptom:** in production a profile picture or chat attachment never uploads.

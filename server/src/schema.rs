@@ -429,6 +429,56 @@ pub struct DirectMessage {
     pub deleted_by_recipient: bool,
 }
 
+/// Derived, authoritative links from chat-domain rows to MinIO objects.
+///
+/// The bytes and upload bookkeeping live in core-api/PostgreSQL; this table is
+/// updated in the same SpacetimeDB transaction as the message/profile/space it
+/// belongs to. The cleanup worker can therefore distinguish a live object from
+/// an abandoned confirmed upload without trusting a client callback.
+#[spacetimedb::table(
+    accessor = storage_reference,
+    index(accessor = by_owner_key, btree(columns = [owner_key])),
+    index(accessor = by_storage_key, btree(columns = [storage_key]))
+)]
+pub struct StorageReference {
+    #[primary_key]
+    pub reference_key: String,
+    pub owner_key: String,
+    pub storage_key: String,
+}
+
+/// Singleton proving the derived reference table has been rebuilt after the
+/// table was introduced or after a destructive module restore.
+#[spacetimedb::table(accessor = storage_reference_state)]
+pub struct StorageReferenceState {
+    #[primary_key]
+    pub id: u8,
+    pub ready: bool,
+}
+
+/// Permanent tombstone acquired atomically only while a storage key has no
+/// live reference. Reference reducers reject claimed keys, closing the race
+/// between garbage-collection lookup and MinIO deletion.
+#[spacetimedb::table(
+    accessor = storage_deletion_claim,
+    index(accessor = by_batch_id, btree(columns = [batch_id]))
+)]
+pub struct StorageDeletionClaim {
+    #[primary_key]
+    pub storage_key: String,
+    pub claimed_at: Timestamp,
+    pub batch_id: String,
+}
+
+/// Latest bounded cleanup batch for an admin identity. The protected claim
+/// view uses this to avoid materializing the permanent tombstone history.
+#[spacetimedb::table(accessor = storage_cleanup_batch)]
+pub struct StorageCleanupBatch {
+    #[primary_key]
+    pub requester: Identity,
+    pub batch_id: String,
+}
+
 #[spacetimedb::table(
     accessor = dm_voice_participant,
     index(accessor = by_room_and_user, btree(columns = [room_key, user_identity]))

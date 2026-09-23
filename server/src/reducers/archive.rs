@@ -2,6 +2,10 @@ use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::helpers::{raise_id_counter, require_account, require_system_admin};
 use crate::schema::*;
+use crate::storage_refs::{
+    avatar_owner_key, direct_message_owner_key, icon_owner_key, message_owner_key,
+    restore_message_references, restore_single_reference,
+};
 
 /// Singleton primary key for the `ArchiveService` row.
 const ARCHIVE_SERVICE_ID: u8 = 1;
@@ -88,6 +92,7 @@ pub fn archive_restore_message(ctx: &ReducerContext, rows: Vec<Message>) -> Resu
     let mut max_id = 0;
     for row in rows {
         max_id = max_id.max(row.id);
+        restore_message_references(ctx, message_owner_key(row.id), &row.content)?;
         if ctx.db.message().id().find(row.id).is_some() {
             ctx.db.message().id().update(row);
         } else {
@@ -110,6 +115,7 @@ pub fn archive_restore_direct_message(
     let mut max_id = 0;
     for row in rows {
         max_id = max_id.max(row.id);
+        restore_message_references(ctx, direct_message_owner_key(row.id), &row.content)?;
         if ctx.db.direct_message().id().find(row.id).is_some() {
             ctx.db.direct_message().id().update(row);
         } else {
@@ -181,8 +187,45 @@ macro_rules! archive_restore {
     };
 }
 
-archive_restore!(archive_restore_user, User, user, identity, byval);
-archive_restore!(archive_restore_server, Server, server, id, autoinc);
+#[spacetimedb::reducer]
+pub fn archive_restore_user(ctx: &ReducerContext, rows: Vec<User>) -> Result<(), String> {
+    if !is_archive_service(ctx, ctx.sender()) {
+        return Err("archive service identity only".into());
+    }
+    for row in rows {
+        restore_single_reference(
+            ctx,
+            avatar_owner_key(&row.username),
+            row.avatar_url.as_deref(),
+        )?;
+        if ctx.db.user().identity().find(row.identity).is_some() {
+            ctx.db.user().identity().update(row);
+        } else {
+            ctx.db.user().insert(row);
+        }
+    }
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn archive_restore_server(ctx: &ReducerContext, rows: Vec<Server>) -> Result<(), String> {
+    if !is_archive_service(ctx, ctx.sender()) {
+        return Err("archive service identity only".into());
+    }
+    let mut max_id = 0;
+    for row in rows {
+        max_id = max_id.max(row.id);
+        restore_single_reference(ctx, icon_owner_key(row.id), row.icon_url.as_deref())?;
+        if ctx.db.server().id().find(row.id).is_some() {
+            ctx.db.server().id().update(row);
+        } else {
+            ctx.db.server().insert(row);
+        }
+    }
+    raise_id_counter(ctx, "server", max_id);
+    Ok(())
+}
+
 archive_restore!(archive_restore_channel, Channel, channel, id, autoinc);
 archive_restore!(archive_restore_dm_server_invite, DmServerInvite, dm_server_invite, id, autoinc);
 archive_restore!(archive_restore_server_member, ServerMember, server_member, member_key, byref);

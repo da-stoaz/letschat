@@ -101,16 +101,31 @@ start with known public development secrets or endpoints.
 
 ## Attachment guarantees
 
-Clients upload bytes directly to MinIO. `core-api` reserves the declared size
-against the user's daily quota before returning a presigned PUT, signs the exact
+Clients upload bytes directly to MinIO as one `PUT` per file — there is no
+multipart/chunked upload. `core-api` reserves the declared size against the
+user's daily quota before returning a presigned PUT, signs the exact
 `Content-Length`, verifies the resulting object on confirmation, and checks chat
 scope again before minting a download URL. Expired unconfirmed objects are
 removed by `PendingUploadSweeper`; their quota stays reserved when storage
 deletion fails so a storage outage cannot reopen the quota.
 
-Limits are 500 MiB per object, 2 GiB per user per UTC day, 10 minutes for the
-PUT URL, 15 minutes to confirm, one hour for a download URL, and 128 keys per
-download batch.
+Confirmation promotes the pending row into a durable object registry.
+SpacetimeDB updates normalized references atomically with messages, DMs,
+avatars, and space icons. The collector rebuilds those derived references,
+adopts older MinIO objects, waits one hour, and asks an admin-only reducer to
+atomically claim keys that are still unreferenced. Reference writers reject
+claimed keys, so a key cannot become live between that decision and deletion.
+Core API trusts only claims returned with the protected view's
+authorization/readiness sentinel. Missing authorization or an unavailable
+dependency fails closed: the object and registry row remain for retry.
+
+Limits are 500 MiB per attachment, 10 MiB and `image/*` for avatars/icons,
+2 GiB per user per UTC day, 10 minutes for the PUT URL, 15 minutes to confirm,
+one hour for a download URL, and 128 keys per download batch. The daily quota
+only bounds the upload rate; there is no cap on
+the total bytes a user has stored. Behind a Cloudflare Tunnel the effective
+per-file limit is Cloudflare's request-body cap (100 MB on Free/Pro), see
+`DEPLOYMENT.md`.
 
 ## Legacy account import
 

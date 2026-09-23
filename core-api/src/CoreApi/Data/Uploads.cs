@@ -34,3 +34,18 @@ public sealed class UploadQuota
 
     public long BytesUploaded { get; set; }
 }
+
+/// <summary>
+/// A verified MinIO object. Rows survive confirmation so every object remains
+/// known until the chat domain references it or the lifecycle collector has
+/// successfully removed it from storage.
+/// </summary>
+public sealed class ConfirmedUpload
+{
+    public string StorageKey { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public long FileSize { get; set; }
+    public string MimeType { get; set; } = string.Empty;
+    public long ConfirmedAt { get; set; }
+}

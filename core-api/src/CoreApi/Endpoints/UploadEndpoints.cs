@@ -16,6 +16,7 @@ namespace CoreApi.Endpoints;
 public static class UploadEndpoints
 {
     private const long MaxFileSize = 500L * 1024 * 1024;       // 500 MB
+    private const long MaxProfileImageSize = 10L * 1024 * 1024; // 10 MiB
     private const long DailyQuota = 2L * 1024 * 1024 * 1024;   // 2 GB / user / day
     private const int PresignUploadSeconds = 600;              // 10 min to PUT
     private const int PresignDownloadSeconds = 3600;           // 1 h GET lifetime
@@ -60,6 +61,11 @@ public static class UploadEndpoints
             throw ApiException.BadRequest("file_name contains invalid characters.");
         }
 
+        if (fileName.Length > 255)
+        {
+            throw ApiException.BadRequest("file_name must be at most 255 characters.");
+        }
+
         if (payload.FileSize <= 0)
         {
             throw ApiException.BadRequest("file_size must be greater than 0.");
@@ -80,6 +86,18 @@ public static class UploadEndpoints
         if (BlockedMimePrefixes.Any(prefix => mimeType.StartsWith(prefix, StringComparison.Ordinal)))
         {
             throw ApiException.BadRequest("This file type is not allowed.");
+        }
+
+        if (payload.Scope?.Kind is "avatar" or "icon")
+        {
+            if (!mimeType.StartsWith("image/", StringComparison.Ordinal))
+            {
+                throw ApiException.BadRequest("Profile pictures and space icons must be images.");
+            }
+            if (payload.FileSize > MaxProfileImageSize)
+            {
+                throw ApiException.BadRequest("Profile pictures and space icons are limited to 10 MiB.");
+            }
         }
 
         var uploadId = Guid.NewGuid().ToString();
@@ -209,6 +227,15 @@ public static class UploadEndpoints
         }
 
         quota.BytesUploaded += actualSize;
+        db.ConfirmedUploads.Add(new ConfirmedUpload
+        {
+            StorageKey = pending.StorageKey,
+            Username = pending.Username,
+            FileName = pending.FileName,
+            FileSize = actualSize,
+            MimeType = pending.MimeType,
+            ConfirmedAt = UnixNow(),
+        });
         db.PendingUploads.Remove(pending);
         await db.SaveChangesAsync();
         if (transaction is not null)

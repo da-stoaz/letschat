@@ -6,12 +6,12 @@ use spacetimedb::{Identity, SpacetimeType, Timestamp, ViewContext};
 use crate::schema::{
     Ban, Block, Channel, DirectMessage, DmServerInvite, DmVoiceParticipant, Friend, FriendStatus,
     Invite, JoinRequest, Message, PinnedMessage, PresenceState, ReadState, Role, Server,
-    ServerMember, TypingState, User, VoiceParticipant, archive_service__view, ban__view,
-    block__view, channel__view,
-    direct_message__view, dm_server_invite__view, dm_voice_participant__view, friend__view,
-    invite__view, join_request__view, message__view, pinned_message__view, presence_state__view,
-    read_state__view, server__view, server_member__view, typing_state__view, user__view,
-    voice_participant__view,
+    ServerMember, StorageDeletionClaim, TypingState, User, VoiceParticipant, archive_service__view,
+    ban__view, block__view, channel__view, direct_message__view, dm_server_invite__view,
+    dm_voice_participant__view, friend__view, invite__view, join_request__view, message__view,
+    pinned_message__view, presence_state__view, read_state__view, server__view,
+    server_member__view, storage_cleanup_batch__view, storage_deletion_claim__view,
+    storage_reference_state__view, typing_state__view, user__view, voice_participant__view,
 };
 
 /// How many of the newest messages per channel — and per DM conversation — the
@@ -503,6 +503,50 @@ fn is_archive_service(ctx: &ViewContext) -> bool {
 /// Every row is present in every btree index, so this returns the whole table.
 fn all<T>() -> (Bound<T>, Bound<T>) {
     (Bound::Unbounded, Bound::Unbounded)
+}
+
+/// Claims acquired by `claim_unreferenced_storage`. The synthetic sentinel
+/// proves both authorization and reference readiness before core-api trusts an
+/// empty result.
+#[spacetimedb::view(accessor = storage_deletion_claims_for_cleanup, public)]
+pub fn storage_deletion_claims_for_cleanup(ctx: &ViewContext) -> Vec<StorageDeletionClaim> {
+    let is_admin = ctx
+        .db
+        .user()
+        .identity()
+        .find(ctx.sender())
+        .map(|user| user.is_admin)
+        .unwrap_or(false);
+    let references_ready = ctx
+        .db
+        .storage_reference_state()
+        .id()
+        .find(1u8)
+        .map(|state| state.ready)
+        .unwrap_or(false);
+    if !is_admin || !references_ready {
+        return Vec::new();
+    }
+    let Some(batch) = ctx
+        .db
+        .storage_cleanup_batch()
+        .requester()
+        .find(ctx.sender())
+    else {
+        return Vec::new();
+    };
+    let mut rows = vec![StorageDeletionClaim {
+        storage_key: "__letschat_cleanup_authorized__".into(),
+        claimed_at: Timestamp::UNIX_EPOCH,
+        batch_id: batch.batch_id.clone(),
+    }];
+    rows.extend(
+        ctx.db
+            .storage_deletion_claim()
+            .by_batch_id()
+            .filter(&batch.batch_id),
+    );
+    rows
 }
 
 #[spacetimedb::view(accessor = archive_users, public)]

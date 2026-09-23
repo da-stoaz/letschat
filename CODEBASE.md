@@ -106,17 +106,35 @@ by SpacetimeDB. This keeps PostgreSQL account data out of public chat views.
 
 ### Attachments
 
-1. `/uploads/request` validates ownership/scope, size, MIME metadata, and daily
-   quota while reserving the declared bytes in a locked PostgreSQL transaction.
+1. `/uploads/request` validates and encodes the requested scope, size, MIME
+   metadata, and daily quota while reserving the declared bytes in a locked
+   PostgreSQL transaction. The owning chat reducer validates that scope again
+   when the object is attached.
 2. The client uploads directly to MinIO using the signed method, object key,
-   expiry, and exact `Content-Length`.
-3. `/uploads/confirm` verifies the stored object and atomically converts the
-   reservation into confirmed quota.
-4. Download endpoints re-check channel or DM access before returning a
+   expiry, and exact `Content-Length` — as a **single `PUT` of the whole file**.
+   There is no multipart/chunked upload, so the proxy in front of MinIO sees the
+   full file as one request body (Cloudflare Tunnel caps that at 100 MB on
+   Free/Pro; see `DEPLOYMENT.md`, "Upload limits").
+3. `/uploads/confirm` verifies the stored object, atomically converts the
+   reservation into confirmed quota, and retains a confirmed-object registry
+   row. The object therefore never becomes unknown after confirmation.
+4. SpacetimeDB maintains normalized object references in the same transaction
+   as message, DM, avatar, or space-icon changes. A fail-closed collector adopts
+   legacy MinIO inventory, then an admin-only reducer atomically claims only
+   unreferenced keys. Reference creation rejects claimed keys, closing the race
+   between the cleanup decision and MinIO deletion. A protected claim view must
+   return its authorization/readiness sentinel before Core API deletes anything.
+   Failed storage deletion retains the registry row and claim for retry.
+5. Download endpoints re-check channel or DM access before returning a
    short-lived URL.
-5. A background sweeper removes expired, unconfirmed objects before releasing
-   their reservations. Confirmed-object lifecycle gaps are tracked in
-   `BUG_ANALYSIS.md`.
+6. A background sweeper removes expired, unconfirmed objects before releasing
+   their reservations.
+
+Limits: 500 MiB per attachment, 10 MiB per avatar/space icon, and 2 GiB of
+uploads per user per UTC day. The daily
+quota is an anti-abuse rate limit, not a storage quota — nothing caps the bytes
+a user keeps in the bucket over time. The next quota/multipart work is specified
+in `.claude/plans/object-storage.md`.
 
 ### Voice and video
 

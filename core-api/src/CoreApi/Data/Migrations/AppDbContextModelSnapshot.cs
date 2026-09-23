@@ -157,6 +157,40 @@ namespace CoreApi.Data.Migrations
                     b.ToTable("AuditLog");
                 });
 
+            modelBuilder.Entity("CoreApi.Data.ConfirmedUpload", b =>
+                {
+                    b.Property<string>("StorageKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<long>("ConfirmedAt")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("StorageKey");
+
+                    b.HasIndex("ConfirmedAt");
+
+                    b.ToTable("ConfirmedUploads");
+                });
+
             modelBuilder.Entity("CoreApi.Data.PendingUpload", b =>
                 {
                     b.Property<string>("Id")

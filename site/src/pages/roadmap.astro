@@ -135,8 +135,9 @@ const upcoming = [
     status: "Planned",
     effort: "Multi-week",
     goals: [
-      "Chunked/multipart MinIO uploads so large files aren't capped by the proxy body limit.",
-      "Per-space role & access management (Discord-style roles) plus per-space/instance storage quotas.",
+      "Build storage quotas on the shipped object registry and lifecycle cleanup — confirmed uploads can no longer become permanent orphans.",
+      "Chunked/multipart MinIO uploads so large files aren't capped by the proxy body limit (today: one PUT per file, 100 MB ceiling behind a Cloudflare Tunnel).",
+      "Per-space role & access management (Discord-style roles) plus per-user, per-space and instance storage quotas (today only a 2 GiB/user/UTC-day upload rate limit exists — stored bytes are uncapped).",
       "Drop the core-api↔SpacetimeDB admin-identity coupling; add operator-facing server logging.",
     ],
   },

@@ -65,18 +65,26 @@ client bindings; changes to a UI permission do not replace a reducer check.
 MinIO must not be publicly browsable. `core-api` brokers access with presigned
 URLs:
 
-- a single object is limited to 500 MiB;
+- an attachment is limited to 500 MiB; avatars/icons to 10 MiB and `image/*`;
 - a user is limited to 2 GiB per UTC day;
 - upload requests reserve the declared bytes under a PostgreSQL row lock;
 - the exact `Content-Length` is signed and verified against the stored object;
 - unconfirmed grants expire after 15 minutes and a background sweeper deletes
   their objects before releasing quota;
+- confirmation retains a PostgreSQL registry row, while SpacetimeDB creates and
+  removes normalized object references atomically with the owning chat row;
+- the lifecycle collector adopts legacy MinIO inventory, then an admin-gated
+  reducer atomically claims only unreferenced keys; all reference writers reject
+  claimed keys, and a protected claim view must return its
+  authorization/readiness sentinel before deletion;
+- an unavailable dependency or stale credential fails closed and retains the
+  object and registry row for retry;
 - download grants are issued only after the caller's channel, DM, or own-object
   access is checked; batch requests are capped at 128 keys.
 
-Deletion of confirmed objects when their owning message or channel is removed
-is not yet complete; this residual lifecycle issue is tracked as D4 in
-`BUG_ANALYSIS.md`.
+The one-hour lifecycle grace period is intentional: a successful PUT can briefly
+precede the SpacetimeDB commit that binds it, but it can no longer become an
+unknown or permanent orphan.
 
 ### LiveKit is an ephemeral media authority
 

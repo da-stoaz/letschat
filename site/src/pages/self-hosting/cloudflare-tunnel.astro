@@ -64,6 +64,16 @@ import { GITHUB_REPO } from "@/lib/site";
           your router (Step&nbsp;7). Skip that and text chat works perfectly — voice calls just connect with
           no sound.
         </Callout>
+
+        <Callout type="warning" title="The other exception — files over 100 MB">
+          Every upload is a <strong>single PUT of the whole file</strong> through the <code>files</code> hostname,
+          and Cloudflare caps proxied request bodies at <strong>100 MB</strong> on the Free and Pro plans
+          (200 MB Business, up to 5 GB Enterprise). Larger files are rejected with a <code>413</code> before they
+          ever reach your server, even though the app itself allows 500 MiB per file. Tunnel hostnames are
+          always proxied, so there is no DNS-only escape hatch for <code>files</code>. <strong>Downloads are not
+          affected by this request-body cap</strong>. If you need bigger uploads today, use the
+          <a href="/self-hosting/caddy">Caddy track</a>; chunked uploads are on the roadmap.
+        </Callout>
       </article>
 
       <!-- ── Browser vs desktop ────────────────────────────────────────── -->

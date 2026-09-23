@@ -57,7 +57,7 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [D1](#d1) | `TypingState` wird bei Verbindungsabbruch nie aufgeräumt | S3 | Modul |
 | [D2](#d2) | Präsenz bleibt nach Absturz dauerhaft „online" | S3 | Modul |
 | [D3](#d3) | `delete_server` lässt Read-States und DM-Invites verwaist zurück | S3 | Modul |
-| [D4](#d4) | Bestätigte Anhänge werden beim Löschen ihrer Nachricht/Channels nicht entfernt | S3 | Storage |
+| [D4](#d4) | ~~Bestätigte Anhänge werden beim Löschen ihrer Nachricht/Channels nicht entfernt~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [D5](#d5) | `rekey_identities` korrumpiert Daten bei verketteten Remaps | S3 | Modul |
 | [D6](#d6) | Stale Messages im Client-Store nach Hard-Delete | S4 | Client |
 | [E1](#e1) | ~~Stiller Fallback auf anonyme Identity bei Token-Ablehnung~~ · **✅ behoben (PR #90)** | ~~S3~~ | Client |
@@ -920,7 +920,7 @@ DM-Invite-Verweisen, die dauerhaft Platz belegen und im Archiv landen.
 ---
 
 <a id="d4"></a>
-## D4 — Bestätigte Anhänge überleben das Löschen ihrer Nachricht/Channels · **S3**
+## D4 — Bestätigte Anhänge überleben das Löschen ihrer Nachricht/Channels · ✅ **behoben**
 
 **Stellen:** Message-/Channel-Lösch-Reducer unter `server/src/reducers/`,
 Upload-Metadaten unter `core-api/src/CoreApi/Data/`
@@ -930,15 +930,33 @@ PR #83 hat zwei der drei ursprünglichen Ursachen geschlossen: Ein periodischer
 ihre DB-Reservierung entfernt. Scheitert die Storage-Löschung, bleiben Zeile und Quote
 für einen erneuten Versuch bestehen.
 
-Offen bleibt der Lebenszyklus **bestätigter** Anhänge. Wird eine Nachricht, ein Channel
-oder ein Space gelöscht, entfernen die SpacetimeDB-Reducer nur Chat-Zeilen. Sie kennen
-weder MinIO noch eine normalisierte Liste der in Nachrichten referenzierten
-Storage-Keys; `core-api` erhält deshalb kein Löschereignis und das Objekt bleibt.
+Der bestätigte Lebenszyklus ist jetzt geschlossen:
 
-**Auswirkung:** Normale Uploads sind durch Größen- und Tagesquote begrenzt, aber einmal
-bestätigte und später aus dem Chat gelöschte Objekte belegen dauerhaft Speicher. Die
-Behebung braucht eine explizite Attachment-Referenz oder einen verlässlichen
-Garbage-Collection-Abgleich zwischen SpacetimeDB und MinIO.
+- `/uploads/confirm` verschiebt die Reservierung in eine dauerhafte
+  `ConfirmedUploads`-Registry statt jede Buchführung zu verwerfen.
+- SpacetimeDB führt normalisierte `StorageReference`-Zeilen. Send/Edit/Delete von
+  Channel-Nachrichten und DMs sowie Avatar-/Icon-Wechsel aktualisieren sie in derselben
+  Transaktion wie die fachliche Zeile. Channel-/Space-Löschung und Archive-Restore sind
+  ebenfalls abgedeckt.
+- Vor dem ersten Cleanup baut der admin-gatete Reducer
+  `rebuild_storage_references` den gesamten Bestand neu auf.
+- Core API übernimmt vorhandene `uploads/`-Objekte aus dem MinIO-Inventar in die
+  Registry. Damit werden auch Objekte von vor der Migration und frühere Orphans
+  kontrolliert erfasst.
+- Nach einer Stunde Grace Period übergibt der Sweeper Kandidaten an
+  `claim_unreferenced_storage`. Der admin-gatete Reducer legt atomar nur dann einen
+  dauerhaften Lösch-Claim an, wenn keine Referenz existiert; alle Referenz-Writer
+  lehnen bereits geclaimte Keys ab. Damit gibt es kein Zeitfenster mehr, in dem
+  zwischen Referenzabfrage und MinIO-Löschung eine neue Live-Referenz entstehen
+  kann.
+- Core API löscht ausschließlich Claims aus einem geschützten View mit
+  Autorisierungs-/Ready-Sentinel. Erst nach erfolgreicher MinIO-Löschung fällt die
+  Registry-Zeile weg; Claim und Registry bleiben bei Fehlern retrybar und
+  fail-closed.
+
+Kurzzeitig ungebundene Bytes zwischen PUT und Message-/Profil-Commit sind in einem
+verteilten Flow unvermeidbar. Sie sind aber immer als Pending/Confirmed registriert und
+können nicht mehr zu unbekannten oder dauerhaften Orphans werden.
 
 ---
 
@@ -1295,15 +1313,14 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
-**Stand:** 19 von 44 Befunden sind erledigt; 25 bleiben offen. Darunter ist kein S1;
-mit A11 und C7 bleiben zwei S2. Behoben sind A1–A8, B1–B3, C1–C6, E1 und G1. D4
-bleibt als kleinerer Restbefund für bestätigte Anhänge offen.
+**Stand:** 20 von 44 Befunden sind erledigt; 24 bleiben offen. Darunter ist kein S1;
+mit A11 und C7 bleiben zwei S2. Behoben sind A1–A8, B1–B3, C1–C6, D4, E1 und G1.
 
 **Zuerst — Betriebsfähigkeit unter Last:** [A11](#a11) (gemeinsamer niedriger
 Auth-Bucket hinter CGNAT) und [C7](#c7) (breite Re-Syncs bei Mitglieder-Events).
 Die zuvor offenen Full-Table-Scans C5/C6 sind erledigt.
 
-**Danach — Lebenszyklus und Härtung:** [D4](#d4) (bestätigte Attachments),
-[A10](#a10) (LiveKit-Revokation), [E4](#e4) (CSP Enforcement) und die verbleibenden
-S3/S4-Punkte. Die aktuelle Abhängigkeitslage steht datiert in `SECURITY.md`; für den
-Live-Stand gilt GitHub Dependabot.
+**Danach — Lebenszyklus und Härtung:** [A10](#a10) (LiveKit-Revokation),
+[E4](#e4) (CSP Enforcement) und die verbleibenden S3/S4-Punkte. Die aktuelle
+Abhängigkeitslage steht datiert in `SECURITY.md`; für den Live-Stand gilt GitHub
+Dependabot.

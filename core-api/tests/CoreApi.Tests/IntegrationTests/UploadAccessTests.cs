@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using CoreApi.Data;
 using CoreApi.Services;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.JsonWebTokens;
 
@@ -305,7 +307,7 @@ public sealed class UploadAccessTests
                 fileName = $"large-{requestNumber}.bin",
                 fileSize = 500L * 1024 * 1024,
                 mimeType = "application/octet-stream",
-                scope = new { kind = "avatar" },
+                scope = new { kind = "channel", channelId = 1 },
             });
             Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
         }
@@ -316,10 +318,73 @@ public sealed class UploadAccessTests
             fileName = "one-too-many.bin",
             fileSize = 500L * 1024 * 1024,
             mimeType = "application/octet-stream",
-            scope = new { kind = "avatar" },
+            scope = new { kind = "channel", channelId = 1 },
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+    }
+
+    [Fact]
+    public async Task Avatar_Limit_Is_Enforced_By_The_Server()
+    {
+        using var factory = new LetsChatWebApplicationFactory();
+        var client = factory.CreateClient();
+        var (alice, _) = await RegisterAsync(client, "avatarowner");
+
+        var response = await LetsChatWebApplicationFactory.PostJsonAsync(client, "/uploads/request", new
+        {
+            sessionToken = alice,
+            fileName = "oversized.png",
+            fileSize = 10L * 1024 * 1024 + 1,
+            mimeType = "image/png",
+            scope = new { kind = "avatar" },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Storage_Deletion_Claims_Require_The_Admin_View_Sentinel()
+    {
+        using var spacetime = new SqlStub();
+        using var factory = new LetsChatWebApplicationFactory { SpacetimeTransport = spacetime };
+        var client = factory.CreateClient();
+        await RegisterAsync(client, "cleanupadmin");
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var admin = await users.FindByNameAsync("cleanupadmin");
+            Assert.NotNull(admin);
+            Assert.True((await users.AddToRoleAsync(admin, DbInitializer.AdminRole)).Succeeded);
+        }
+
+        var service = factory.Services.GetRequiredService<SpacetimeClient>();
+        var keys = new[] { "uploads/avatar/cleanupadmin/live.png" };
+
+        // A valid HTTP response from a non-admin token is deliberately empty.
+        // It must remain "unknown", never be interpreted as "delete all".
+        spacetime.Respond = _ => "[]";
+        Assert.Null(await service.ClaimUnreferencedStorageAsync(keys));
+
+        const string sentinel = "__letschat_cleanup_authorized__";
+        spacetime.Respond = _ => $"[[\"{sentinel}\"],[\"{keys[0]}\"]]";
+        var claimed = await service.ClaimUnreferencedStorageAsync(keys);
+        Assert.NotNull(claimed);
+        Assert.Contains(keys[0], claimed);
+        Assert.DoesNotContain(sentinel, claimed);
+        var claimCalls = spacetime.ReducerCalls
+            .Where(call => call.Path.EndsWith(
+                "/call/claim_unreferenced_storage", StringComparison.Ordinal))
+            .ToList();
+        Assert.Equal(2, claimCalls.Count);
+        var claimCall = claimCalls[^1];
+        using var claimArgs = JsonDocument.Parse(claimCall.Body);
+        Assert.Equal(32, claimArgs.RootElement[0].GetString()!.Length);
+        Assert.Equal(keys[0], claimArgs.RootElement[1][0].GetString());
+        Assert.Equal(spacetime.LastClaimBearer, spacetime.LastBearer);
+        Assert.Contains(spacetime.Queries,
+            query => query.Contains("storage_deletion_claims_for_cleanup", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -353,7 +418,9 @@ public sealed class UploadAccessTests
         public HttpStatusCode Status { get; init; } = HttpStatusCode.OK;
         public Func<string, string> Respond { get; set; } = _ => "[]";
         public List<string> Queries { get; } = [];
+        public List<(string Path, string Body)> ReducerCalls { get; } = [];
         public string? LastBearer { get; private set; }
+        public string? LastClaimBearer { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
@@ -365,6 +432,15 @@ public sealed class UploadAccessTests
             {
                 LastBearer = request.Headers.Authorization?.Parameter;
                 Queries.Add(sql);
+            }
+            else if (request.RequestUri.AbsolutePath.Contains("/call/", StringComparison.Ordinal))
+            {
+                ReducerCalls.Add((request.RequestUri.AbsolutePath, sql));
+                if (request.RequestUri.AbsolutePath.EndsWith(
+                    "/call/claim_unreferenced_storage", StringComparison.Ordinal))
+                {
+                    LastClaimBearer = request.Headers.Authorization?.Parameter;
+                }
             }
             return new HttpResponseMessage(Status)
             {

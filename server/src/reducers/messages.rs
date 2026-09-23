@@ -5,6 +5,9 @@ use crate::helpers::{
     require_mod_or_owner,
 };
 use crate::schema::*;
+use crate::storage_refs::{
+    AttachmentScope, message_owner_key, remove_references, sync_message_references,
+};
 
 #[spacetimedb::reducer]
 pub fn send_message(ctx: &ReducerContext, channel_id: u64, content: String) -> Result<(), String> {
@@ -33,7 +36,7 @@ pub fn send_message(ctx: &ReducerContext, channel_id: u64, content: String) -> R
         "message must be 1-4000 chars",
     )?;
 
-    ctx.db.message().insert(Message {
+    let message_row = ctx.db.message().insert(Message {
         id: next_id!(ctx, message, id),
         channel_id,
         sender_identity: ctx.sender(),
@@ -42,6 +45,13 @@ pub fn send_message(ctx: &ReducerContext, channel_id: u64, content: String) -> R
         edited_at: None,
         deleted: false,
     });
+    sync_message_references(
+        ctx,
+        message_owner_key(message_row.id),
+        &message_row.content,
+        ctx.sender(),
+        AttachmentScope::Channel(channel_id),
+    )?;
 
     Ok(())
 }
@@ -70,6 +80,13 @@ pub fn edit_message(
         "only sender can edit message",
     )?;
 
+    sync_message_references(
+        ctx,
+        message_owner_key(message_id),
+        &new_content,
+        ctx.sender(),
+        AttachmentScope::Channel(message_row.channel_id),
+    )?;
     message_row.content = new_content;
     message_row.edited_at = Some(ctx.timestamp);
     ctx.db.message().id().update(message_row);
@@ -96,6 +113,7 @@ pub fn delete_message(ctx: &ReducerContext, message_id: u64) -> Result<(), Strin
     message_row.content = "[message deleted]".to_string();
     message_row.edited_at = Some(ctx.timestamp);
     ctx.db.message().id().update(message_row);
+    remove_references(ctx, &message_owner_key(message_id));
 
     // Drop any pin for this message so the pins list never shows tombstones.
     if ctx.db.pinned_message().message_id().find(message_id).is_some() {

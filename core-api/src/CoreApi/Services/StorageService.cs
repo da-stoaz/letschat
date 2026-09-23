@@ -96,6 +96,25 @@ public sealed class StorageService : IDisposable
     public Task DeleteObjectAsync(string storageKey) =>
         _internal.DeleteObjectAsync(_bucket, storageKey);
 
+    /// <summary>One bounded page used to adopt objects created before lifecycle tracking existed.</summary>
+    public async Task<StorageObjectPage> ListObjectsPageAsync(
+        string? continuationToken, CancellationToken ct)
+    {
+        var response = await _internal.ListObjectsV2Async(new ListObjectsV2Request
+        {
+            BucketName = _bucket,
+            Prefix = "uploads/",
+            ContinuationToken = continuationToken,
+        }, ct);
+        var objects = (response.S3Objects ?? [])
+            .Select(item => new StoredObject(
+                item.Key,
+                item.Size ?? 0,
+                item.LastModified ?? DateTime.UtcNow))
+            .ToList();
+        return new StorageObjectPage(objects, response.NextContinuationToken);
+    }
+
     /// <summary>
     /// Rewrites the presigned URL's scheme to match the configured public
     /// endpoint. The SigV4 signature covers host, path, query and headers —
@@ -120,3 +139,6 @@ public sealed class StorageService : IDisposable
         _presign.Dispose();
     }
 }
+
+public sealed record StoredObject(string StorageKey, long Size, DateTime LastModifiedUtc);
+public sealed record StorageObjectPage(IReadOnlyList<StoredObject> Objects, string? NextContinuationToken);
