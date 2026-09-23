@@ -6,6 +6,7 @@ class FakeVideo {
   ended = false
   currentTime = 0
   loads = 0
+  plays = 0
   private listeners = new Map<string, Set<() => void>>()
   addEventListener(type: string, listener: () => void): void {
     if (!this.listeners.has(type)) this.listeners.set(type, new Set())
@@ -16,6 +17,10 @@ class FakeVideo {
   }
   emit(type: string): void {
     for (const listener of this.listeners.get(type) ?? []) listener()
+  }
+  play(): Promise<void> {
+    this.plays += 1
+    return Promise.resolve()
   }
   pause(): void {}
   removeAttribute(name: string): void {
@@ -51,6 +56,7 @@ describe('attachInlineVideo', () => {
     expect(video.src).toBe('')
     attach(video, 0, vi.fn())
     expect(video.src).toBe('https://storage.test/v.mp4')
+    expect(video.plays).toBe(2)
   })
 
   it('aborts the download on teardown by detaching the source', () => {

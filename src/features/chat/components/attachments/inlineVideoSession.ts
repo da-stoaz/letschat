@@ -30,6 +30,9 @@ export function attachInlineVideo(
   video.addEventListener('play', handlePlay)
   video.addEventListener('ended', stop)
   observer.observe(video)
+  // The player mounts on the user's play click, so it starts with sound. A
+  // blocked play() leaves the controls to the user; an aborted one is teardown.
+  video.play().catch(() => {})
   return () => {
     clearTimeout(pausedTimer)
     observer.disconnect()

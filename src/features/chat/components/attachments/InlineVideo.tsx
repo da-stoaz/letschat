@@ -21,5 +21,5 @@ export function InlineVideo({ url, startAt, onStop }: InlineVideoProps) {
     return video ? attachInlineVideo(video, url, startAt, onStop) : undefined
   }, [url, startAt, onStop])
 
-  return <video ref={videoRef} autoPlay controls className="max-h-56 w-full bg-black" />
+  return <video ref={videoRef} controls className="max-h-56 w-full bg-black" />
 }
