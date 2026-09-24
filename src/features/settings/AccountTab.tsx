@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CameraIcon, Loader2Icon, Trash2Icon } from 'lucide-react'
-import { reducers } from '../../lib/spacetimedb'
+import { CameraIcon, Loader2Icon, LogOutIcon, Trash2Icon } from 'lucide-react'
+import { reducers, signOut } from '../../lib/spacetimedb'
 import { authServiceAccount, type AccountDetails } from '../../lib/authService'
 import { uploadSingleFile } from '../../lib/uploads'
 import { useSelfStore } from '../../stores/selfStore'
+import { hostLabel, useServerConfigStore } from '../../stores/serverConfigStore'
 import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -12,6 +13,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { ChangePasswordDialog } from './ChangePasswordDialog'
 
 const MAX_AVATAR_SIZE_BYTES = 10 * 1024 * 1024
 
@@ -40,6 +43,7 @@ function AccountRow({ label, children }: { label: string; children: React.ReactN
 
 export function AccountTab() {
   const user = useSelfStore((s) => s.user)
+  const serverConfig = useServerConfigStore((s) => s.config)
 
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? '')
@@ -50,6 +54,7 @@ export function AccountTab() {
   // `null` while loading; the tab never blocks on this fetch — a failure just
   // degrades the read-only rows to what the SpacetimeDB user row already knows.
   const [accountError, setAccountError] = useState<string | null>(null)
+  const [isSigningOut, setIsSigningOut] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -119,6 +124,8 @@ export function AccountTab() {
   )
 
   const profileDisplayName = displayName.trim() || user?.displayName || user?.username || 'No display name'
+  const initials = profileDisplayName.slice(0, 2).toUpperCase()
+  const avatarSrc = avatarPreviewUrl ?? avatarUrl
   const isLoadingAccount = account === null && accountError === null
 
   return (
@@ -147,14 +154,31 @@ export function AccountTab() {
             }}
           >
             <div className="flex items-center gap-4 rounded-lg border border-border/70 bg-card/70 p-3">
-              <Avatar className="size-16 rounded-full">
-                {avatarPreviewUrl || avatarUrl ? (
-                  <AvatarImage src={avatarPreviewUrl ?? avatarUrl} alt={profileDisplayName} />
-                ) : null}
-                <AvatarFallback className="rounded-full bg-primary/10 text-lg">
-                  {profileDisplayName.slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
+              {avatarSrc ? (
+                <Dialog>
+                  <DialogTrigger
+                    className="shrink-0 cursor-zoom-in rounded-full"
+                    aria-label="View profile picture"
+                    render={<button type="button" />}
+                  >
+                    <Avatar className="size-16 rounded-full">
+                      <AvatarImage src={avatarSrc} alt={profileDisplayName} />
+                      <AvatarFallback className="rounded-full bg-primary/10 text-lg">{initials}</AvatarFallback>
+                    </Avatar>
+                  </DialogTrigger>
+                  <DialogContent className="w-auto sm:max-w-none">
+                    <DialogTitle className="sr-only">Profile picture</DialogTitle>
+                    <Avatar className="size-80 max-w-[80vw] max-h-[80vw] rounded-full">
+                      <AvatarImage src={avatarSrc} alt={profileDisplayName} />
+                      <AvatarFallback className="rounded-full bg-primary/10 text-5xl">{initials}</AvatarFallback>
+                    </Avatar>
+                  </DialogContent>
+                </Dialog>
+              ) : (
+                <Avatar className="size-16 rounded-full">
+                  <AvatarFallback className="rounded-full bg-primary/10 text-lg">{initials}</AvatarFallback>
+                </Avatar>
+              )}
 
               <input
                 ref={avatarInputRef}
@@ -185,7 +209,7 @@ export function AccountTab() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    disabled={isUploadingAvatar || (!avatarPreviewUrl && !avatarUrl)}
+                    disabled={isUploadingAvatar || !avatarSrc}
                     onClick={() => {
                       clearAvatarPreview()
                       setAvatarUrl('')
@@ -221,10 +245,13 @@ export function AccountTab() {
       <Card className="border-border/70 bg-muted/20">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Account</CardTitle>
-          <CardDescription>Your sign-in identity. Contact an admin to change these.</CardDescription>
+          <CardDescription>Your sign-in identity on this server. Contact its admin to change your username or email.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="divide-y divide-border/60 rounded-lg border border-border/70 bg-card/70 px-3">
+            <AccountRow label="Server">
+              <span className="truncate font-medium">{serverConfig ? hostLabel(serverConfig) : '—'}</span>
+            </AccountRow>
             <AccountRow label="Username">
               <Badge variant="secondary">{account ? `@${account.username}` : user ? `@${user.username}` : '—'}</Badge>
             </AccountRow>
@@ -264,7 +291,38 @@ export function AccountTab() {
                 <span className="text-muted-foreground">—</span>
               )}
             </AccountRow>
+            <AccountRow label="Password">
+              <ChangePasswordDialog />
+            </AccountRow>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/70 bg-muted/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Sign out</CardTitle>
+          <CardDescription>Disconnects this client and clears its saved session.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSigningOut}
+            onClick={async () => {
+              setIsSigningOut(true)
+              try {
+                await signOut()
+                window.location.assign('/auth')
+              } catch (caught) {
+                const message = caught instanceof Error ? caught.message : 'Could not sign out.'
+                toast.error(message)
+                setIsSigningOut(false)
+              }
+            }}
+          >
+            <LogOutIcon className="size-4" />
+            {isSigningOut ? 'Signing out…' : 'Sign out'}
+          </Button>
         </CardContent>
       </Card>
     </div>
