@@ -112,10 +112,9 @@ export function ParticipantMediaTile({
             playsInline
             muted
             aria-label={tileType === 'screen' ? `${displayName} screen share` : `${displayName} camera`}
-            className={cn(
-              'h-full w-full',
-              tileType === 'screen' ? 'object-contain bg-black' : 'object-cover',
-            )}
+            // Contain, never cover: the tile's shape follows the window, and cropping to
+            // it would show a different cutout than what is actually being transmitted.
+            className="h-full w-full bg-black object-contain"
           >
             {/* Live WebRTC video has no caption source; satisfies media-caption a11y rules. */}
             <track kind="captions" />
