@@ -185,6 +185,14 @@ services:
         condition: service_started
       minio:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "2", "http://127.0.0.1:8787/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      # Ignore early failures, but mark healthy on the first successful probe.
+      start_period: 10s
+      start_interval: 5s
     restart: unless-stopped
 
   # ── SpacetimeDB module init ──────────────────────────────────────────────────
@@ -262,6 +270,15 @@ services:
       - "44382:44382/udp"
     volumes:
       - ./livekit/config.prod.yaml:/etc/livekit.yaml:ro
+    healthcheck:
+      # The root endpoint checks node health without authentication. BusyBox
+      # wget is included in the upstream image; /rtc/validate requires auth.
+      test: ["CMD", "wget", "-q", "-T", "2", "-O", "/dev/null", "http://127.0.0.1:44380/"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+      start_interval: 5s
     restart: unless-stopped
 
   # ── MinIO (file storage) ─────────────────────────────────────────────────────

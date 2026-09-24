@@ -30,7 +30,14 @@ public sealed class SpacetimeClient(
 {
     private const string ClientName = "spacetimedb";
     internal const string StorageCleanupAuthorizationSentinel = "__letschat_cleanup_authorized__";
-    private bool _storageReferencesReady;
+    /// <summary>
+    /// Optimistic: the module's own <c>storage_reference_state</c> is the truth,
+    /// and <c>claim_unreferenced_storage</c> checks it atomically. Assuming "not
+    /// ready" here made every core-api start and every transient failure run a
+    /// full-history rebuild that blocks all SpacetimeDB writes (BUG_ANALYSIS C9);
+    /// now only the module saying "not ready" triggers one.
+    /// </summary>
+    private bool _storageReferencesReady = true;
 
     /// <summary>
     /// Builds the ordered list of credentials an admin reducer call may be signed
@@ -413,9 +420,13 @@ public sealed class SpacetimeClient(
         }
         catch (Exception ex)
         {
-            // Most often "storage references are not ready" after a module
-            // wipe or archive restore: re-run the rebuild gate next sweep.
-            _storageReferencesReady = false;
+            // "storage references are not ready" after an upgrade, a module wipe
+            // or an archive restore: re-run the rebuild gate next sweep. Any
+            // other failure just skips this sweep.
+            if (ex.Message.Contains("storage references are not ready", StringComparison.Ordinal))
+            {
+                _storageReferencesReady = false;
+            }
             logger.LogWarning(ex,
                 "SpacetimeDB could not claim unreferenced storage; no objects will be deleted.");
             return null;
@@ -441,7 +452,6 @@ public sealed class SpacetimeClient(
             using var response = await http.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
             {
-                _storageReferencesReady = false;
                 logger.LogWarning(
                     "SpacetimeDB storage-claim view returned {Status}; no objects will be deleted.",
                     (int)response.StatusCode);
@@ -451,7 +461,6 @@ public sealed class SpacetimeClient(
             var rows = await ReadSqlRowsAsync(response, ct);
             if (rows is null)
             {
-                _storageReferencesReady = false;
                 logger.LogWarning(
                     "SpacetimeDB storage-claim view returned malformed data; no objects will be deleted.");
                 return null;
@@ -507,6 +516,37 @@ public sealed class SpacetimeClient(
         {
             logger.LogWarning(ex,
                 "Could not rebuild SpacetimeDB storage references; no objects will be deleted.");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Asks the module to lift the indefinite cleanup fence its <c>init</c> sets
+    /// (BUG_ANALYSIS D7). The module decides: it releases only when no retained
+    /// object predates <c>init</c> — a fresh install — and refuses after a
+    /// <c>--delete-data</c> under existing attachments until the archive restore
+    /// replaces the fence. <c>true</c> once the fence is settled either way;
+    /// <c>false</c> means ask again next sweep.
+    /// </summary>
+    /// <param name="oldestObjectAtUnixSeconds">Oldest retained object, or <c>null</c> for none.</param>
+    public async Task<bool> ReleaseStorageInitFenceAsync(long? oldestObjectAtUnixSeconds, CancellationToken ct = default)
+    {
+        // Option<Timestamp>: a Timestamp is a one-field product of i64 micros.
+        object oldest = oldestObjectAtUnixSeconds is { } seconds
+            ? new Dictionary<string, object> { ["some"] = new[] { seconds * 1_000_000 } }
+            : new Dictionary<string, object> { ["none"] = Array.Empty<object>() };
+        try
+        {
+            await PostAdminReducerAsync("release_storage_init_fence", new List<object> { oldest }, ct);
+            return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Storage cleanup stays fenced after a database initialization; will retry.");
             return false;
         }
     }

@@ -47,15 +47,17 @@ public sealed record RegistrationStatusResponse(string Status);
 
 /// <summary>
 /// Set/change the password on an existing account, or create a fresh account.
-/// The existing-account path is gated on a valid <see cref="SessionToken"/>
-/// (the caller is already signed in) rather than a SpacetimeDB-identity match.
+/// The existing-account path requires a current (non-revoked) <see cref="SessionToken"/>
+/// for that account <em>and</em> its <see cref="CurrentPassword"/>, exactly like
+/// <c>/auth/change-password</c>.
 /// </summary>
 public sealed record LinkRequest(
     string Username,
     string DisplayName,
     string Password,
     SessionToken? SessionToken = null,
-    string? Email = null);
+    string? Email = null,
+    string? CurrentPassword = null);
 
 /// <summary>
 /// Changes the signed-in account's password, verifying <c>CurrentPassword</c>

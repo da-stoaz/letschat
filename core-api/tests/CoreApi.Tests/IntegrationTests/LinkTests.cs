@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using CoreApi.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -83,5 +84,73 @@ public sealed class LinkTests : IClassFixture<LetsChatWebApplicationFactory>
         // The account is created as Registered; it must not be signable-in until
         // the address is confirmed, exactly as a /auth/register account is not.
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    // ── Existing accounts (BUG_ANALYSIS A12) ────────────────────────────────
+
+    private static async Task<JsonElement> SessionOf(HttpResponseMessage response)
+    {
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var root = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        return (root.TryGetProperty("auth", out var auth) ? auth : root).GetProperty("sessionToken").Clone();
+    }
+
+    private static Task<HttpResponseMessage> ChangeViaLinkAsync(
+        HttpClient client, string username, JsonElement sessionToken, string? currentPassword, string newPassword) =>
+        LetsChatWebApplicationFactory.PostJsonAsync(
+            client, "/auth/link",
+            new { username, displayName = username, password = newPassword, sessionToken, currentPassword });
+
+    private static Task<HttpResponseMessage> LoginAsync(HttpClient client, string username, string password) =>
+        LetsChatWebApplicationFactory.PostJsonAsync(client, "/auth/login", new { username, password });
+
+    [Fact]
+    public async Task A_Revoked_Session_Cannot_Set_A_Password()
+    {
+        await ConfigureAsync(registrationOpen: true, requireEmailConfirmation: false);
+        var client = _factory.CreateClient();
+        var stolen = await SessionOf(await LinkAsync(client, "linkrevoked"));
+
+        // The owner changes the password, which revokes every existing session.
+        var change = await LetsChatWebApplicationFactory.PostJsonAsync(
+            client, "/auth/change-password",
+            new { sessionToken = stolen, currentPassword = Password, newPassword = "owner-new-secret-2" });
+        Assert.Equal(HttpStatusCode.NoContent, change.StatusCode);
+
+        var link = await ChangeViaLinkAsync(client, "linkrevoked", stolen, "owner-new-secret-2", "attacker-secret-3");
+        Assert.Equal(HttpStatusCode.Unauthorized, link.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(client, "linkrevoked", "attacker-secret-3")).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_Session_Alone_Cannot_Set_A_Password()
+    {
+        await ConfigureAsync(registrationOpen: true, requireEmailConfirmation: false);
+        var client = _factory.CreateClient();
+        var session = await SessionOf(await LinkAsync(client, "linknocurrent"));
+
+        Assert.Equal(
+            HttpStatusCode.Unauthorized,
+            (await ChangeViaLinkAsync(client, "linknocurrent", session, null, "attacker-secret-3")).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.BadRequest,
+            (await ChangeViaLinkAsync(client, "linknocurrent", session, "wrong-password-9", "attacker-secret-3")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await LoginAsync(client, "linknocurrent", Password)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Changing_A_Password_Revokes_Older_Sessions()
+    {
+        await ConfigureAsync(registrationOpen: true, requireEmailConfirmation: false);
+        var client = _factory.CreateClient();
+        var old = await SessionOf(await LinkAsync(client, "linkchange"));
+
+        var fresh = await SessionOf(await ChangeViaLinkAsync(client, "linkchange", old, Password, "owner-new-secret-2"));
+
+        var account = (JsonElement token) => LetsChatWebApplicationFactory.PostJsonAsync(
+            client, "/auth/account", new { sessionToken = token });
+        Assert.Equal(HttpStatusCode.Unauthorized, (await account(old)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await account(fresh)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await LoginAsync(client, "linkchange", "owner-new-secret-2")).StatusCode);
     }
 }

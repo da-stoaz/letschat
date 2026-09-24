@@ -2,6 +2,7 @@ use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::helpers::{assert_or_err, require_account, require_system_admin};
 use crate::schema::*;
+use crate::storage_refs::fence_fresh_database;
 
 /// Singleton primary key. `SystemSettings` is intentionally a 1-row table.
 const SETTINGS_ID: u8 = 1;
@@ -45,6 +46,10 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
             min_token_generation: 0,
         });
     }
+
+    // Also runs after `--delete-data`, when attachment cleanup must wait for
+    // the archive restore instead of trusting the now-empty tables.
+    fence_fresh_database(ctx);
 
     Ok(())
 }

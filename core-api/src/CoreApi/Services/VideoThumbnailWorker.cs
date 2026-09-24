@@ -106,6 +106,12 @@ public sealed class VideoThumbnailWorker(
         {
             using var process = Process.Start(Ffmpeg(
                 "-nostdin", "-v", "error", "-threads", "1",
+                // The file and its declared MIME type are the uploader's. Without
+                // a demuxer whitelist an HLS playlist named *.m3u8 makes ffmpeg
+                // fetch whatever URLs it lists from inside the Docker network
+                // (BUG_ANALYSIS A14); only real video containers are opened.
+                "-protocol_whitelist", "http,https,tcp,tls",
+                "-format_whitelist", "mov,matroska,avi,mpegts,ogg,flv",
                 "-ss", seek, "-i", url,
                 "-vf", $"thumbnail=12,scale='min({MaxWidth},iw)':-2",
                 "-frames:v", "1", "-q:v", "4", "-f", "image2", "-c:v", "mjpeg", "pipe:1"))!;

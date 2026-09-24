@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Deserialize;
-use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
+use spacetimedb::{Identity, ReducerContext, Table, TimeDuration, Timestamp};
 
 use crate::helpers::require_system_admin;
 use crate::schema::*;
@@ -116,6 +116,34 @@ fn unclaimed(ctx: &ReducerContext, keys: Vec<String>) -> Vec<String> {
 /// Called by the archive restore reducers: cleanup stops trusting the
 /// reference table until a rebuild runs after the restore has gone quiet.
 pub(crate) fn fence_archive_restore(ctx: &ReducerContext) {
+    set_fence(ctx, ctx.timestamp);
+}
+
+/// Called by `init`. A freshly initialized database looks exactly like one that
+/// `--delete-data` just wiped, and in the wipe case a rebuild over the empty
+/// tables would let the collector delete every attachment before the archive
+/// restore starts (BUG_ANALYSIS D7). So `init` fences indefinitely: the first
+/// restore batch replaces it with a normal quiet-period fence, and
+/// `release_storage_init_fence` lifts it when there is nothing to restore.
+///
+/// The fence sits `INIT_FENCE_OFFSET_MICROS` past the init time, which keeps it
+/// from ever expiring and still records when `init` ran.
+pub(crate) fn fence_fresh_database(ctx: &ReducerContext) {
+    set_fence(ctx, ctx.timestamp + TimeDuration::from_micros(INIT_FENCE_OFFSET_MICROS));
+}
+
+/// ~1000 years: unreachable as a quiet period, far from overflowing an i64.
+const INIT_FENCE_OFFSET_MICROS: i64 = 1000 * 365 * 24 * 3600 * 1_000_000;
+
+/// When `init` ran, if `fence` is the init fence. A restore fence is "now";
+/// only the init fence lies centuries ahead.
+fn init_time(ctx: &ReducerContext, fence: &StorageRestoreFence) -> Option<Timestamp> {
+    let micros = fence.last_restore_at.to_micros_since_unix_epoch();
+    (micros > ctx.timestamp.to_micros_since_unix_epoch() + INIT_FENCE_OFFSET_MICROS / 2)
+        .then(|| Timestamp::from_micros_since_unix_epoch(micros - INIT_FENCE_OFFSET_MICROS))
+}
+
+fn set_fence(ctx: &ReducerContext, last_restore_at: Timestamp) {
     if let Some(mut state) = ctx
         .db
         .storage_reference_state()
@@ -127,7 +155,7 @@ pub(crate) fn fence_archive_restore(ctx: &ReducerContext) {
     }
     let fence = StorageRestoreFence {
         id: REFERENCE_STATE_ID,
-        last_restore_at: ctx.timestamp,
+        last_restore_at,
     };
     if ctx
         .db
@@ -148,7 +176,11 @@ pub(crate) fn sync_avatar_reference(
     storage_key: Option<&str>,
 ) -> Result<(), String> {
     let keys = match storage_key.filter(|key| !key.is_empty()) {
-        Some(key) if is_avatar_key(key, username) || is_legacy_key(key, username) => {
+        // Scoped keys only: a legacy key skips the 10 MiB image-only limit that
+        // /uploads/request enforces for avatars (BUG_ANALYSIS A16). A legacy
+        // value already on the row survives, because update_profile only
+        // validates a changed avatar.
+        Some(key) if is_avatar_key(key, username) => {
             ensure_not_claimed(ctx, key)?;
             vec![key.to_string()]
         }
@@ -166,7 +198,9 @@ pub(crate) fn sync_icon_reference(
     storage_key: Option<&str>,
 ) -> Result<(), String> {
     let keys = match storage_key.filter(|key| !key.is_empty()) {
-        Some(key) if is_icon_key(key, server_id, uploader) || is_legacy_key(key, uploader) => {
+        // Scoped keys only, as for avatars; set_server_icon keeps an unchanged
+        // legacy icon.
+        Some(key) if is_icon_key(key, server_id, uploader) => {
             ensure_not_claimed(ctx, key)?;
             vec![key.to_string()]
         }
@@ -196,10 +230,15 @@ pub(crate) fn remove_references(ctx: &ReducerContext, owner_key: &str) {
 #[spacetimedb::reducer]
 pub fn rebuild_storage_references(ctx: &ReducerContext) -> Result<(), String> {
     require_system_admin(ctx, ctx.sender())?;
-    if let Some(fence) = ctx.db.storage_restore_fence().id().find(REFERENCE_STATE_ID)
-        && ctx.timestamp < fence.last_restore_at + TimeDuration::from_micros(RESTORE_QUIET_MICROS)
-    {
-        return Err("archive restore in progress; storage references not rebuilt yet".into());
+    if let Some(fence) = ctx.db.storage_restore_fence().id().find(REFERENCE_STATE_ID) {
+        if init_time(ctx, &fence).is_some() {
+            return Err("database was freshly initialized; restore the archive first, or call \
+                        release_storage_init_fence if there is nothing to restore"
+                .into());
+        }
+        if ctx.timestamp < fence.last_restore_at + TimeDuration::from_micros(RESTORE_QUIET_MICROS) {
+            return Err("archive restore in progress; storage references not rebuilt yet".into());
+        }
     }
 
     for row in ctx.db.storage_reference().iter().collect::<Vec<_>>() {
@@ -243,6 +282,35 @@ pub fn rebuild_storage_references(ctx: &ReducerContext) -> Result<(), String> {
     } else {
         ctx.db.storage_reference_state().insert(state);
     }
+    Ok(())
+}
+
+/// Lifts the indefinite fence `init` sets, and only that one — a quiet-period
+/// fence from a real restore stays. `Ok` means the fence is settled (lifted, or
+/// not an init fence); core-api retries until then.
+///
+/// `oldest_object_at` is core-api's oldest retained object, `None` for none.
+/// Objects older than `init` mean the database was wiped under existing
+/// attachments, which must wait for the archive restore; on a fresh install
+/// every object is newer. An operator starting over deliberately passes `None`.
+#[spacetimedb::reducer]
+pub fn release_storage_init_fence(
+    ctx: &ReducerContext,
+    oldest_object_at: Option<Timestamp>,
+) -> Result<(), String> {
+    require_system_admin(ctx, ctx.sender())?;
+    let Some(fence) = ctx.db.storage_restore_fence().id().find(REFERENCE_STATE_ID) else {
+        return Ok(());
+    };
+    let Some(initialized_at) = init_time(ctx, &fence) else {
+        return Ok(());
+    };
+    if oldest_object_at.is_some_and(|oldest| oldest < initialized_at) {
+        return Err("stored attachments predate this database; restore the archive, or \
+                    release the fence explicitly to let them be collected"
+            .into());
+    }
+    ctx.db.storage_restore_fence().id().delete(REFERENCE_STATE_ID);
     Ok(())
 }
 

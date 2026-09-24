@@ -20,6 +20,7 @@ public sealed class PendingUploadSweeper(
     private const long ConfirmedGraceSeconds = 3600;
     private const int BatchSize = 500;
     private bool _inventoryImported;
+    private bool _initFenceSettled;
     // Keyset cursor over ConfirmedUploads. Referenced objects keep their rows
     // forever, so always taking the oldest batch would re-check the same live
     // objects and never reach newer orphans once more than BatchSize exist.
@@ -109,6 +110,11 @@ public sealed class PendingUploadSweeper(
             await ImportExistingObjectsAsync(db, ct);
             _inventoryImported = true;
             inventory.MarkReady();
+        }
+        if (!_initFenceSettled)
+        {
+            var oldest = await db.ConfirmedUploads.MinAsync(upload => (long?)upload.ConfirmedAt, ct);
+            _initFenceSettled = await spacetime.ReleaseStorageInitFenceAsync(oldest, ct);
         }
         if (!await spacetime.EnsureStorageReferencesReadyAsync(ct))
         {

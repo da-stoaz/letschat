@@ -1,7 +1,9 @@
 # Bug-Analyse — produktionsrelevante Fehler
 
-> Erstellt: 2026-08-24 · Baseline zuletzt abgeglichen: 2026-09-15 (v1.0.14)
-> Ursprung: statische Code-Analyse auf Branch `claude/codebase-bug-analysis-otaq55`.
+> Erstellt: 2026-08-24 · Baseline zuletzt abgeglichen: 2026-09-24 (v1.1.1)
+> Ursprung: statische Code-Analyse auf Branch `claude/codebase-bug-analysis-otaq55`;
+> Review-Durchgang 2026-09-24 auf Branch `ui` (neue Befunde A12–A16, B10–B13, C9–C10,
+> D7, E6; Schwerpunkt Object-Storage aus PR #92).
 > Umfang: `server/` (SpacetimeDB-Modul), `core-api/` (.NET), `src/` (React-Client),
 > `deploy/`, `docker-compose.prod.*`, `spacetimedb/`.
 
@@ -37,15 +39,24 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A9](#a9) | Account-Enumeration über `/auth/register` | S3 | Auth |
 | [A10](#a10) | LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde | S3 | Voice |
 | [A11](#a11) | Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT | S2 | Auth |
+| [A12](#a12) | ~~`/auth/link` setzt Passwörter mit widerrufener Sitzung und ohne aktuelles Passwort~~ · **✅ behoben** | ~~S2~~ | Auth |
+| [A13](#a13) | Mitglieder sehen alle Invite-Tokens, DM-Invites sind nicht an den Empfänger gebunden | S3 | Modul |
+| [A14](#a14) | ffmpeg verarbeitet unvertrauenswürdige Dateien im core-api-Container · **SSRF behoben**, Isolation offen | ~~S2~~ S3 | Storage |
+| [A15](#a15) | ~~Uploader bestimmt den ausgelieferten Content-Type; PDF-Vorschau-iframe ohne Sandbox~~ · **✅ behoben** | ~~S3~~ | Storage |
+| [A16](#a16) | ~~Legacy-Keys umgehen die 10-MiB-/`image/*`-Grenze für Avatare und Icons~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [B1](#b1) | ~~`transfer_ownership` auf sich selbst sperrt den Owner dauerhaft aus~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B2](#b2) | ~~Owner kann sich selbst kicken/bannen → verwaister Space~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B3](#b3) | ~~`edit_direct_message` prüft weder Block noch Freundschaft~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B4](#b4) | `edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status | S3 | Modul |
 | [B5](#b5) | `update_profile`: `display_name`/`avatar_url` völlig unvalidiert | S3 | Modul |
-| [B6](#b6) | Avatar-/Icon-URLs erlauben Tracking über beliebige Fremdhosts | S3 | Modul |
+| [B6](#b6) | Avatar-/Icon-URLs erlauben Tracking über beliebige Fremdhosts · **teilweise behoben (PR #92)**: nur noch Altbestand | ~~S3~~ S4 | Modul |
 | [B7](#b7) | Invite-Token mit nur 8 Zeichen, kein Kollisionsschutz, kein Mengenlimit | S3 | Modul |
 | [B8](#b8) | `create_invite`: `expires_in_seconds` läuft in einen i64-Overflow | S4 | Modul |
-| [B9](#b9) | `avatar_url` lässt sich nie wieder entfernen | S4 | Modul |
+| [B9](#b9) | ~~`avatar_url` lässt sich nie wieder entfernen~~ · **✅ behoben (PR #92)** | ~~S4~~ | Modul |
+| [B10](#b10) | ~~Owner kann sich per `set_member_role` selbst degradieren → verwaister Space~~ · **✅ behoben** | ~~S2~~ | Modul |
+| [B11](#b11) | `ban_member` entfernt die Voice-Präsenz des Gebannten nicht | S3 | Modul |
+| [B12](#b12) | `send_dm_server_invite` ignoriert Blockierungen | S3 | Modul |
+| [B13](#b13) | `send_message` prüft die Channel-Art nicht; Timeout gilt nicht für Voice | S4 | Modul |
 | [C1](#c1) | ~~Jede eingehende Nachricht löst drei volle Durchläufe der Historie aus~~ · **✅ behoben (PR #73)** | ~~S1~~ | Client |
 | [C2](#c2) | ~~Initialer Sync ist O(N²) und läuft in den 5-Sekunden-Timeout~~ · **✅ behoben (PR #73)** | ~~S1~~ | Client |
 | [C3](#c3) | ~~`my_channel_messages` liefert die komplette Historie ohne Limit~~ · **✅ behoben (PR #77)** | ~~S1~~ | Views |
@@ -54,17 +65,21 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [C6](#c6) | ~~Lösch-Reducer scannen ganze Tabellen statt Indizes zu nutzen~~ · **✅ behoben (PR #90)** | ~~S2~~ | Modul |
 | [C7](#c7) | Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients | S2 | Client |
 | [C8](#c8) | `cleanup_stale_invites_internal` scannt bei jeder Invite-Operation | S3 | Modul |
+| [C9](#c9) | `rebuild_storage_references` scannt die gesamte Historie in einer Transaktion · **teilweise behoben**: läuft nur noch bei Bedarf | ~~S3~~ S4 | Storage |
+| [C10](#c10) | Weitere lineare Scans in häufig aufgerufenen Reducern | S4 | Modul |
 | [D1](#d1) | `TypingState` wird bei Verbindungsabbruch nie aufgeräumt | S3 | Modul |
 | [D2](#d2) | Präsenz bleibt nach Absturz dauerhaft „online" | S3 | Modul |
 | [D3](#d3) | `delete_server` lässt Read-States und DM-Invites verwaist zurück | S3 | Modul |
 | [D4](#d4) | ~~Bestätigte Anhänge werden beim Löschen ihrer Nachricht/Channels nicht entfernt~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [D5](#d5) | `rekey_identities` korrumpiert Daten bei verketteten Remaps | S3 | Modul |
 | [D6](#d6) | Stale Messages im Client-Store nach Hard-Delete | S4 | Client |
+| [D7](#d7) | ~~Storage-Collector löscht nach `--delete-data` Anhänge, bevor der Archiv-Restore beginnt~~ · **✅ behoben** | ~~S2~~ | Storage |
 | [E1](#e1) | ~~Stiller Fallback auf anonyme Identity bei Token-Ablehnung~~ · **✅ behoben (PR #90)** | ~~S3~~ | Client |
 | [E2](#e2) | Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben | S3 | Client |
 | [E3](#e3) | Discovery fällt bei nacktem Hostnamen auf `http://` zurück | S3 | Client |
 | [E4](#e4) | CSP wird nur im Report-Only-Modus ausgeliefert | S3 | Deploy |
 | [E5](#e5) | Download-URL-Cache wächst unbegrenzt | S4 | Client |
+| [E6](#e6) | ~~CSPs erlauben Inline-Video und PDF-Vorschau vom Files-Host nicht~~ · **✅ behoben** | ~~S3~~ | Client |
 | [F1](#f1) | Bool-Konfiguration schlägt bei unerwarteten Werten still fehl | S3 | Config |
 | [F2](#f2) | `SystemConfigService`-Cache ist prozesslokal | S4 | Config |
 | [F3](#f3) | `MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User | S4 | Config |
@@ -277,8 +292,13 @@ die Icon-Regel 200. Der `Option`-/`Identity`-Zeilenformat des `/sql`-Endpunkts
 „Nachricht lesbar“. Zwei Kanten: eine alte Datei eines Users, der inzwischen jeden
 gemeinsamen Space verlassen hat, lädt nicht mehr; und wer aus Space A gebannt wurde,
 aber mit dem Uploader noch Space B teilt, kann dessen alte Dateien aus A weiterhin
-abrufen. Beides endet mit dem Bestand an Legacy-Keys — jeder Upload seit dieser
-Änderung ist exakt gescopt. Ein alter Space-Icon, das ein Moderator (nicht der
+abrufen. Beides endet mit dem Bestand an Legacy-Keys — jeder Upload *des aktuellen
+Clients* seit dieser Änderung ist exakt gescopt. **Nachtrag 2026-09-24:** Der Server
+erzwingt das nicht: `/uploads/request` ohne `scope` erzeugt weiterhin einen neuen
+Legacy-Key, und das Modul akzeptiert Legacy-Keys für Nachrichten, Avatare und Icons
+(siehe [A16](#a16)). Außerdem genügt für „Uploader sichtbar" eine *ausstehende*
+Freundschaftsanfrage, die jeder per Username stellen kann; praktisch begrenzt das nur
+die GUID im Key. Ein alter Space-Icon, das ein Moderator (nicht der
 Owner) hochgeladen hat, zeigt Nicht-Mitgliedern auf Discover die Initialen; neu
 hochladen behebt es.
 
@@ -458,6 +478,238 @@ loopbackgebundenen Port und einen SSH-Tunnel erreichbar.
 
 ---
 
+<a id="a12"></a>
+## A12 — `/auth/link` setzt Passwörter mit widerrufener Sitzung und ohne aktuelles Passwort · ✅ **behoben**
+
+**Behoben auf Branch `bug-security-fixes`.** Der Zweig für bestehende Accounts folgt
+jetzt denselben Regeln wie `/auth/change-password`: `ResolveAccountAsync` (Generation
+und Status), Pflichtfeld `currentPassword` (neu und optional in `LinkRequest`, also
+additiv), `ChangePasswordAsync` statt Remove/Add, danach `RevokeTokensAsync`; die
+Antwort trägt die neue Generation. Drei neue Fälle in `LinkTests.cs`: widerrufene
+Sitzung → 401, Sitzung ohne bzw. mit falschem aktuellem Passwort → 401/400,
+erfolgreicher Wechsel widerruft die alte Sitzung. Ein Altclient, der `/auth/link`
+ohne `currentPassword` zum Passwortwechsel nutzt, bekommt jetzt 401 — der aktuelle
+Client ruft den Pfad nicht auf. Die ursprüngliche Analyse:
+
+**Stelle:** `core-api/src/CoreApi/Endpoints/AuthEndpoints.cs:146-192` (Zweig für
+bestehende Accounts)
+
+Der Zweig für einen *bestehenden* Account ersetzt das Passwort, sobald ein
+Session-Token für denselben Username vorliegt:
+
+```csharp
+var caller = request.SessionToken is null ? null : await tokens.ValidateAsync(request.SessionToken);
+if (caller is null || !string.Equals(caller, username, StringComparison.Ordinal)) throw …;
+…
+await users.RemovePasswordAsync(existing);
+await users.AddPasswordAsync(existing, request.Password);
+```
+
+Drei Lücken:
+
+1. **`ValidateAsync` statt `RequireAccountAsync`.** Geprüft werden nur Signatur,
+   Laufzeit und `token_use` — **nicht** die Token-Generation aus [A4](#a4) und nicht
+   der Account-Status. Ein Access-Token, das ein Passwortwechsel oder -Reset gerade
+   widerrufen hat, funktioniert hier für den Rest seiner Stunde weiter.
+2. **Kein aktuelles Passwort.** Der Doc-Kommentar von `ChangePassword` (`:363-371`)
+   benennt genau das als Grund für den separaten Endpunkt — der unsichere Pfad ist
+   aber geblieben.
+3. **Keine Revokation und falsche Reihenfolge.** Nach dem Setzen wird weder
+   `RevokeTokensAsync` aufgerufen noch vorher `EnsureSignInAllowed` geprüft; ein
+   gesperrter Account ändert sein Passwort also erfolgreich und bekommt erst danach
+   einen 401.
+
+**Auswirkung:** Genau der Fall, für den A4 gebaut wurde, kippt. Ein Angreifer mit
+einem gestohlenen Access-Token (z. B. via XSS aus dem `localStorage`, siehe [E4](#e4))
+wartet, bis das Opfer sein Passwort zurücksetzt, ruft dann `/auth/link` mit dem
+bereits widerrufenen Token auf, setzt sein eigenes Passwort und meldet sich regulär an
+— eine dauerhafte Übernahme aus einer Stunde Token-Laufzeit.
+
+**Verifiziert** (2026-09-24, temporärer xUnit-Test gegen `WebApplicationFactory`, nicht
+eingecheckt): Registrieren → `change-password` (widerruft) → `/auth/account` mit dem
+alten Token = 401 → `/auth/link` mit demselben Token = 200 → Login mit dem neuen
+Angreifer-Passwort = 200.
+
+**Richtung für einen Fix:** Der Client ruft `authServiceLink` nirgends mehr auf
+(`src/lib/authService.ts:281` ist toter Export). Den Zweig für bestehende Accounts
+auf `RequireAccountAsync` plus Pflicht-`currentPassword` umstellen — oder ihn mit
+einem 401 ablehnen und auf `/auth/change-password` verweisen; der Endpunkt selbst
+bleibt für die API-Kompatibilität bestehen.
+
+---
+
+<a id="a13"></a>
+## A13 — Mitglieder sehen alle Invite-Tokens, DM-Invites sind nicht an den Empfänger gebunden · **S3**
+
+**Stellen:** `server/src/views.rs:341-349` (`my_invites`),
+`server/src/reducers/invites.rs:234-302` (`send_dm_server_invite`), `:114-192`
+(`use_invite`)
+
+`my_invites` liefert **jedem Mitglied** alle Invites seiner Spaces — auch unter
+`InvitePolicy::ModeratorsOnly`, auch von Moderatoren erstellte, und auch die
+Einmal-Tokens, die `send_dm_server_invite` für einen bestimmten Empfänger anlegt.
+Dieses DM-Token wird mit `allowed_usernames: Vec::new()` gespeichert; `use_invite`
+kennt also keinen Bezug zum vorgesehenen Empfänger.
+
+**Auswirkung:** `ModeratorsOnly` beschränkt, wer Invites *erzeugt*, aber nicht, wer
+sie *weitergibt*: Jedes einfache Mitglied liest die Tokens per `/sql`/Subscription aus
+und reicht sie an Außenstehende weiter. Ein DM-Invite an Nutzer B kann von jedem
+Dritten eingelöst werden, der das Token kennt; B sieht danach nur noch einen
+verbrauchten Invite.
+
+Verwandt: Invites überleben sowohl einen Wechsel von `Everyone` auf `ModeratorsOnly`
+als auch Kick/Ban ihres Erstellers — ein unter offener Policy erzeugter
+Mitglieder-Invite bleibt nach dem Umschalten gültig.
+
+**Verifiziert** (2026-09-24, temporärer Test gegen `letschattest`): Mitglied liest
+unter `ModeratorsOnly` den Owner-Invite aus `my_invites`, ein Außenstehender tritt
+damit bei; ein Dritter löst das DM-Invite-Token eines anderen Empfängers ein.
+
+**Richtung für einen Fix:** `my_invites` für einfache Mitglieder auf selbst erstellte
+Invites beschränken (Moderatoren sehen alle); DM-Invites mit
+`allowed_usernames = [empfänger]` anlegen oder `use_invite` gegen die
+`dm_server_invite`-Zeile prüfen lassen.
+
+---
+
+<a id="a14"></a>
+## A14 — ffmpeg verarbeitet unvertrauenswürdige Dateien im core-api-Container · **SSRF behoben** · S3
+
+**Teilweise behoben auf Branch `bug-security-fixes`.** Die SSRF war reproduzierbar:
+eine Playlist mit Endung `.m3u8` und deklariertem `video/mp4` ließ ffmpeg (lokal 8.1)
+die gelistete URL abrufen; ohne die Endung verweigert neueres ffmpeg die Erkennung,
+die Endung wählt aber der Uploader. ffmpeg läuft jetzt mit
+`-protocol_whitelist http,https,tcp,tls -format_whitelist mov,matroska,avi,mpegts,ogg,flv`.
+`VideoThumbnailSmokeTests` lädt zusätzlich eine solche Playlist hoch und prüft mit
+einem lokalen Listener, dass keine Verbindung ankommt; ohne die Whitelist schlägt der
+Test fehl (und hing dabei ~3 Minuten — der Queue-DoS aus Punkt 3 gleich mit). mp4 und
+webm rendern weiter.
+
+**Offen (S3):** Punkt 2 und der Rest von Punkt 3 — ffmpeg läuft weiter als root im
+Container mit allen Secrets, und die Job-Warteschlange ist nicht pro Uploader
+begrenzt. Das ist eine Deploy-Änderung (eigener Worker-Container bzw. `USER` im
+Image mit Blick auf Volume-Rechte). Die ursprüngliche Analyse:
+
+**Stellen:** `core-api/src/CoreApi/Services/VideoThumbnailWorker.cs:65-145`,
+`core-api/Dockerfile` (statisches `mwader/static-ffmpeg:7.1`),
+`Endpoints/UploadEndpoints.cs:373` (Job-Auswahl über `MimeType.StartsWith("video/")`)
+
+Jede bestätigte Datei, deren **vom Client deklarierter** MIME-Typ mit `video/` beginnt,
+wird von ffmpeg im core-api-Prozess-Container geöffnet: `ffmpeg -ss … -i <presigned
+interne URL>` ohne `-f`, ohne `-format_whitelist` und ohne `-protocol_whitelist`.
+ffmpeg wählt den Demuxer also nach Inhalt.
+
+Drei Folgen:
+
+1. **SSRF.** Eine als `video/mp4` hochgeladene HLS-Playlist (`#EXTM3U`) lässt den
+   HLS-Demuxer die darin genannten `http(s)`-URLs abrufen — aus dem Docker-Netz heraus,
+   also gegen `spacetimedb:3000`, `minio`, LiveKit oder andere interne Dienste. Blind
+   (die Antwort wird als Medium dekodiert), aber GET-Seiteneffekte und Port-Scans
+   sind möglich.
+2. **Parser-Angriffsfläche im wertvollsten Container.** core-api hält den
+   OIDC-Signierschlüssel (damit ließe sich jede Identity inklusive Admins fälschen),
+   die PostgreSQL-, MinIO- und LiveKit-Secrets und den SpacetimeDB-Service-Token. Das
+   ASP.NET-Basisimage läuft ohne `USER`-Anweisung als root; ffmpeg erbt das. Eine
+   Speicherfehler-Lücke in einem der vielen Demuxer/Decoder wird damit zur vollständigen
+   Instanzübernahme.
+3. **Queue-DoS.** Die Jobs laufen seriell, älteste zuerst; ein Job kann
+   2 × 60 s (zwei Seek-Versuche) × 3 Attempts blockieren. Eine Playlist, die auf
+   einen langsam antwortenden Host zeigt, hält die Warteschlange pro Datei ~6 Minuten
+   auf; ein paar hundert Kleinstdateien innerhalb der Tagesquote legen die Poster aller
+   Nutzer tagelang still.
+
+Statische Analyse, nicht gegen den Stack reproduziert.
+
+**Richtung für einen Fix:** ffmpeg mit `-protocol_whitelist http,https,tcp,tls` **und**
+`-format_whitelist mov,mp4,m4a,matroska,webm,avi` (kein `hls`, `concat`, `playlist`)
+aufrufen; mittelfristig in einen eigenen, secret-losen, nicht-root Worker-Container
+ohne Zugang zum internen Netz auslagern. Den Job pro Uploader begrenzen.
+
+---
+
+<a id="a15"></a>
+## A15 — Uploader bestimmt den ausgelieferten Content-Type; PDF-Vorschau-iframe ohne Sandbox · ✅ **behoben**
+
+**Behoben auf Branch `bug-security-fixes`**, an der Auslieferung statt am Upload:
+`StorageService.PresignGetAsync` überschreibt den gespeicherten Typ. Endungen, die der
+Client inline darstellt (Bilder, Video, Audio, PDF), bekommen per
+`response-content-type` ihren kanonischen Typ; alles andere wird per
+`response-content-disposition: attachment` heruntergeladen. `<img>`/`<video>`
+ignorieren die Disposition, Vorschauen bleiben also intakt. Eine HTML-Datei namens
+`rechnung.pdf` kommt damit als `application/pdf` an, `seite.html` als Download.
+Eine `sandbox` am PDF-iframe bleibt bewusst weg: Chrome rendert PDFs in
+sandboxed iframes nicht, und nach der Typ-Überschreibung ist dort nur noch ein PDF
+möglich. Die Content-Type-Signatur beim PUT ist damit entbehrlich (alte Clients
+bleiben kompatibel). Damit Vorschau und Auslieferung dieselbe Regel verwenden
+(Codex-Review), entscheidet der Client „PDF-Vorschau" jetzt am `.pdf`-Storage-Key
+statt an Absender-MIME oder Dateiname, und `/uploads/request` gibt einem Upload ohne
+Endung die Endung seines deklarierten Inline-Typs (ein PDF namens `dokument` wird
+zu `….pdf` und bleibt vorschaubar; ausgeliefert wird es ohnehin als
+`application/pdf`). Ältere endungslose PDFs zeigen jetzt „Open" statt „Preview".
+Abgesichert durch `DownloadContentTypeSmokeTests` gegen echtes MinIO und
+`StorageInlineTypeTests`. Die ursprüngliche Analyse:
+
+**Stellen:** `core-api/src/CoreApi/Services/StorageService.cs:55-66`
+(`PresignPutAsync`), `:138-145` (`PresignGetAsync`),
+`src/features/chat/components/attachments/AttachmentPdfLightbox.tsx:61-67`,
+`AttachmentListItem.tsx:21-28`, `:124-134`
+
+- Die Presigned-PUT-URL signiert `Content-Length`, aber **nicht** `Content-Type`. Der
+  Uploader sendet beim PUT jeden Typ, etwa `text/html` oder `image/svg+xml`, und MinIO
+  speichert ihn. Der geprüfte `mime_type` aus `/uploads/request` (inklusive der
+  Sperrliste aus [A5](#a5)) ist davon völlig entkoppelt.
+- `PresignGetAsync` setzt weder `response-content-type` noch
+  `response-content-disposition: attachment`. Ausgeliefert wird also der Typ des
+  Uploaders, inline.
+- Die Vorschau entscheidet „PDF" anhand der Anhang-Metadaten in der Nachricht (vom
+  Absender geschrieben) oder der Endung `.pdf` und lädt die URL in ein
+  `<iframe>` **ohne `sandbox`**. „Open" öffnet andere Typen per `window.open`.
+
+**Auswirkung:** Eine HTML-Datei namens `rechnung.pdf` läuft beim Klick auf „Preview"
+als Skript im Files-Origin — bildschirmfüllend im App-Dialog, also ideal für eine
+gefälschte „Sitzung abgelaufen, bitte anmelden"-Maske. Über „Open" bzw. die
+presigned URL (eine Stunde gültig, beliebig neu ausstellbar) entsteht eine
+Phishing-Seite unter der eigenen `files.`-Domain. Auf App-Tokens kommt das Skript
+nicht direkt heran, weil der Files-Host ein eigener Origin ist.
+
+**Richtung für einen Fix:** `Content-Type` in die PUT-Signatur aufnehmen (oder beim
+Confirm per Copy-in-place überschreiben) und beim GET `response-content-disposition`
+bzw. für aktive Typen `attachment` erzwingen; das Vorschau-iframe mit `sandbox`
+ausstatten.
+
+---
+
+<a id="a16"></a>
+## A16 — Legacy-Keys umgehen die 10-MiB-/`image/*`-Grenze für Avatare und Icons · ✅ **behoben**
+
+**Behoben auf Branch `bug-security-fixes`.** `sync_avatar_reference` und
+`sync_icon_reference` akzeptieren nur noch gescopte Keys. Bestehende Legacy-Werte
+bleiben gültig: `update_profile` prüft schon nur einen geänderten Avatar, und
+`set_server_icon` tut das jetzt ebenso (vorher prüfte es bei jedem Aufruf, sodass
+auch ein neuer Owner das Icon seines Vorgängers nicht erneut speichern konnte).
+Regressionstest in `storage-lifecycle.test.ts`. Die ursprüngliche Analyse:
+
+**Stellen:** `core-api/src/CoreApi/Endpoints/UploadEndpoints.cs:90-100`,
+`Services/StorageKey.cs:73-79`, `server/src/storage_refs.rs:145-178`, `:430-438`
+
+Die Bild- und Größenprüfung greift nur, wenn der Request `scope.kind` `avatar` oder
+`icon` angibt. Ohne `scope` erzeugt `StorageKey.Build` einen Legacy-Key
+(`uploads/{yyyy}/{MM}/{dd}/{uploader}/…`), begrenzt nur durch das allgemeine
+Dateilimit (Default 500 MiB) und ohne Typprüfung. `sync_avatar_reference` und
+`sync_icon_reference` akzeptieren aber ausdrücklich `is_legacy_key(key, uploader)`.
+
+**Auswirkung:** Ein Nutzer setzt eine 500-MiB-Datei beliebigen Typs als Avatar bzw.
+Space-Icon. Jeder Client, der ihn in Mitgliederlisten, Nachrichten oder (beim Icon)
+auf Discover darstellt, lädt die Datei über `<img>` vollständig herunter — ein
+Bandbreiten- und Speicher-DoS gegen Betrachter, getragen vom eigenen MinIO.
+
+**Richtung für einen Fix:** Für Avatar/Icon im Modul nur noch die gescopten Keys
+zulassen (Legacy-Werte, die bereits in einer Zeile stehen, bleiben über die
+„unverändert"-Ausnahme in `update_profile` gültig); serverseitig `scope` für neue
+Uploads verlangen.
+
+---
+
 # B — SpacetimeDB-Modul: Logik und Berechtigungen
 
 <a id="b1"></a>
@@ -539,6 +791,17 @@ Entfreunden nicht mehr möglich ist; Löschen bleibt unberührt.
    der Reducer verlässt sich also auf eine reine Client-Prüfung. In der Datenbank und
    im Archiv steht danach wieder der neue Inhalt.
 
+**Nachtrag 2026-09-24:** Seit PR #92 legt `edit_message` über
+`sync_message_references` auch Storage-Referenzen an. Ein Edit auf eine gelöschte
+Nachricht (`deleted = true`) hängt damit wieder Anhänge an eine Zeile, die
+`delete_message` gerade von ihren Referenzen befreit hat; `rebuild_storage_references`
+überspringt gelöschte Nachrichten und würde sie beim nächsten Rebuild wieder
+verwerfen — die beiden Pfade widersprechen sich.
+
+**Verifiziert** (2026-09-24, temporärer Test gegen `letschattest`): Edit nach
+Moderator-Löschung und Edit nach Kick werden beide angenommen; die Zeile trägt danach
+`deleted = true` mit neuem Inhalt.
+
 ---
 
 <a id="b5"></a>
@@ -576,7 +839,19 @@ mit `.chars().count()` richtig; die übrigen Stellen sind inkonsistent.
 ---
 
 <a id="b6"></a>
-## B6 — Avatar- und Icon-URLs erlauben Tracking über beliebige Fremdhosts · **S3**
+## B6 — Avatar- und Icon-URLs erlauben Tracking über beliebige Fremdhosts · **teilweise behoben** · S4
+
+**Stand 2026-09-24:** PR #92 hat den Schreibpfad geschlossen. `update_profile`
+(`server/src/reducers/users.rs:88-97`) prüft einen *geänderten* Avatar über
+`sync_avatar_reference`, `set_server_icon` (`servers.rs:276-313`) jeden Icon-Wert über
+`sync_icon_reference` — beide lassen nur eigene Storage-Keys zu, eine externe URL wird
+abgewiesen. Offen bleibt der **Altbestand**: Zeilen, die vor PR #92 eine Fremd-URL
+gespeichert haben, behalten sie (der Avatar bewusst, solange er unverändert bleibt),
+und `AvatarImage` (`src/components/ui/avatar.tsx:51-58`) reicht jeden
+Nicht-`uploads/`-Wert weiterhin direkt als `src` durch. Eine einmalige Bereinigung
+der Altwerte (Modul-Migration, die Nicht-`uploads/`-Werte auf `None` setzt) plus ein
+Client, der nur Storage-Keys rendert, schließt den Befund. Die ursprüngliche Analyse
+folgt unverändert.
 
 **Stellen:** `server/src/reducers/users.rs:67-69`, `servers.rs:267-294`,
 `src/features/settings/AccountTab.tsx:135`, alle `<AvatarImage src={…} />`-Stellen
@@ -654,7 +929,13 @@ begrenzt auf 1 s bis 28 Tage.
 ---
 
 <a id="b9"></a>
-## B9 — `avatar_url` lässt sich nie wieder entfernen · **S4**
+## B9 — `avatar_url` lässt sich nie wieder entfernen · ✅ **behoben**
+
+**Behoben nebenbei durch PR #92** (Object-Storage). `update_profile` akzeptiert jetzt
+einen leeren String als Entfernen: `sync_avatar_reference` filtert `""` zu „kein
+Key", räumt die Referenz ab, und die Zeile speichert `Some("")`, das der Client
+(`AvatarImage`, `AccountTab.tsx:145`) als „kein Avatar" behandelt. Nur statisch
+geprüft; es gibt dafür noch keinen Regressionstest. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/users.rs:67-69`
 
@@ -669,6 +950,92 @@ if avatar_url.is_some() {
 
 `set_server_icon` (`servers.rs:267-294`) löst dasselbe Problem korrekt: Ein leerer
 String wird zu `None` normalisiert und entfernt das Icon.
+
+---
+
+<a id="b10"></a>
+## B10 — Owner kann sich per `set_member_role` selbst degradieren · ✅ **behoben**
+
+**Behoben auf Branch `bug-security-fixes`.** `set_member_role` weist ein Ziel mit
+Rolle `Owner` ab („use transfer_ownership …"); weil nur der Owner den Reducer aufrufen
+darf, ist das genau der Selbstbezug. Regressionstest in
+`member-permissions.test.ts`. Die ursprüngliche Analyse:
+
+**Stelle:** `server/src/reducers/member_management.rs:181-205`
+
+Dieselbe Lücke wie [B1](#b1)/[B2](#b2), im dritten Reducer, der eine Rolle verändert.
+`set_member_role` verbietet nur `new_role == Owner`, prüft aber weder
+`target_identity != ctx.sender()` noch, ob das Ziel der Owner ist. Ein Owner, der sich
+selbst auf `Moderator` oder `Member` setzt, verliert jede owner-gegatete Aktion
+einschließlich `transfer_ownership` und `delete_server`; `Server.owner_identity` zeigt
+weiter auf ihn, aber `require_owner` liest nur `ServerMember.role`. Da die Rolle nun
+nicht mehr `Owner` ist, lässt ihn `leave_server` auch gehen — der Space ist dauerhaft
+verwaist.
+
+**Verifiziert** (2026-09-24, temporärer Test gegen `letschattest`):
+`set_member_role(server, owner, moderator)` wird angenommen, danach scheitert
+`rename_server` mit `owner permission required`.
+
+**Richtung für einen Fix:** In `set_member_role` ein Ziel mit Rolle `Owner`
+ablehnen („use transfer_ownership"). Das deckt Selbstbezug mit ab, weil nur der Owner
+den Reducer aufrufen darf.
+
+---
+
+<a id="b11"></a>
+## B11 — `ban_member` entfernt die Voice-Präsenz des Gebannten nicht · **S3**
+
+**Stelle:** `server/src/reducers/member_management.rs:78-106` (vgl. `kick_member`
+`:46-76`)
+
+`kick_member` löscht die `VoiceParticipant`-Zeilen des Ziels in allen Channels des
+Space, `ban_member` löscht nur `ServerMember`. Der Gebannte bleibt bis zum Ende seiner
+Verbindung als Teilnehmer im Voice-Channel sichtbar, belegt einen der 15 Plätze
+(`voice.rs:28`), und sein laufender LiveKit-Raum bleibt ohnehin bestehen
+([A10](#a10)). Neue LiveKit-Tokens bekommt er nicht mehr: `my_voice_participants`
+zeigt ihm als Nicht-Mitglied die eigene Zeile nicht, das Gate in
+`HasVoicePresenceAsync` verweigert also korrekt.
+
+Statisch geprüft; ein Test braucht eine WebSocket-Verbindung, weil HTTP-Joins die
+Zeile beim Verbindungsende sofort verlieren.
+
+**Richtung für einen Fix:** Die Voice-Bereinigung aus `kick_member` in einen
+gemeinsamen Helper ziehen und in beiden Reducern aufrufen.
+
+---
+
+<a id="b12"></a>
+## B12 — `send_dm_server_invite` ignoriert Blockierungen · **S3**
+
+**Stelle:** `server/src/reducers/invites.rs:234-302`
+
+Der Reducer prüft Invite-Recht, Existenz, Mitgliedschaft und Bann des Empfängers, aber
+weder `has_block_either_direction` noch eine Freundschaft. Die Zeile erscheint über
+`my_dm_server_invites` beim Empfänger und macht den Absender zusätzlich in dessen
+`my_visible_users` sichtbar (`views.rs:443-449`).
+
+**Auswirkung:** Blockieren beendet nicht jeden Kontakt. Ein blockierter Nutzer legt
+beliebig viele Spaces an (Default-Policy `Anyone`) und schickt aus jedem einen
+DM-Invite — ein Belästigungskanal, den das Opfer nicht schließen kann. Dieselbe
+Parität, die [B3](#b3) für `edit_direct_message` hergestellt hat, fehlt hier.
+
+**Verifiziert** (2026-09-24, temporärer Test gegen `letschattest`): Opfer blockiert,
+der Blockierte sendet danach erfolgreich einen DM-Invite, das Opfer sieht die Zeile.
+
+---
+
+<a id="b13"></a>
+## B13 — `send_message` prüft die Channel-Art nicht; Timeout gilt nicht für Voice · **S4**
+
+**Stellen:** `server/src/reducers/messages.rs:12-57`,
+`server/src/reducers/voice.rs:8-62`
+
+- `send_message` akzeptiert jeden Channel, auch `ChannelKind::Voice`. Der Client zeigt
+  dort keinen Text an, die Zeilen landen aber in `message`, werden an alle Mitglieder
+  repliziert, archiviert und belegen das 200er-Fenster ([C3](#c3)) des Channels.
+  **Verifiziert** gegen `letschattest`.
+- `join_voice_channel` prüft `timeout_until` nicht. Ein Mitglied im Timeout darf nicht
+  schreiben, aber im Voice-Channel sprechen und seinen Bildschirm teilen.
 
 ---
 
@@ -846,6 +1213,59 @@ das intern aufgerufene `use_invite`), im Fehlerfall dreimal (`:340`).
 **Nebenbefund (S4):** Die Rollback-Logik in `respond_dm_server_invite` (`:333-341`) ist
 funktionslos. Ein Reducer, der `Err` zurückgibt, macht in SpacetimeDB die gesamte
 Transaktion rückgängig — auch die Rollback-Schreibvorgänge selbst.
+
+---
+
+<a id="c9"></a>
+## C9 — `rebuild_storage_references` scannt die gesamte Historie in einer Transaktion · **teilweise behoben** · S4
+
+**Teilweise behoben auf Branch `bug-security-fixes`.** core-api startet optimistisch
+(`_storageReferencesReady = true`) und setzt das Flag nur noch zurück, wenn das Modul
+selbst „storage references are not ready" meldet oder der View seinen Sentinel
+weglässt — nicht mehr bei Transport- oder HTTP-Fehlern. Der Rebuild läuft damit nur
+noch nach einem Upgrade, Wipe oder Restore, nicht bei jedem Start. Korrektheit
+hängt daran nicht: `claim_unreferenced_storage` prüft den Ready-Zustand im Modul
+atomar. **Offen:** Wenn er läuft, ist der Rebuild weiterhin ein einzelner
+Full-Scan-Reducer. Die ursprüngliche Analyse:
+
+**Stellen:** `server/src/storage_refs.rs:196-247`,
+`core-api/src/CoreApi/Services/SpacetimeClient.cs:418`, `:444`, `:454`, `:490-513`,
+`Services/PendingUploadSweeper.cs:113`
+
+Der Rebuild löscht jede `storage_reference`-Zeile und iteriert danach vollständig über
+`message`, `direct_message`, `user` und `server` — inklusive Base64-/JSON-Parsing jeder
+Nachricht mit Anhang-Marker — in **einem** Reducer. core-api ruft ihn nicht nur nach
+Upgrades auf: `_storageReferencesReady` ist prozesslokal und startet auf `false`, also
+läuft der Rebuild bei **jedem core-api-Start**, und jeder fehlgeschlagene Claim oder
+View-Read setzt das Flag zurück, sodass der nächste Sweep eine Minute später erneut
+rebuildet.
+
+**Auswirkung:** SpacetimeDB serialisiert alle Schreibvorgänge. Auf einer Instanz mit
+großer Historie blockiert jeder Rebuild alle Reducer (Nachrichten, Presence, Typing)
+für seine gesamte Laufzeit; überschreitet er das Reducer-Zeitbudget, scheitert er
+jede Minute erneut — Cleanup steht dann still (fail-closed, kein Datenverlust), aber
+die Last bleibt. Ein kurzer SpacetimeDB-Schluckauf während eines Claims reicht als
+Auslöser.
+
+**Richtung für einen Fix:** Den Ready-Zustand im Modul (`storage_reference_state`)
+als Wahrheit behandeln und nur rebuilden, wenn *er* `false` ist, statt bei jedem
+Transportfehler; den Rebuild seitenweise über mehrere Reducer-Aufrufe verteilen.
+
+---
+
+<a id="c10"></a>
+## C10 — Weitere lineare Scans in häufig aufgerufenen Reducern · **S4**
+
+Nachtrag zu [C5](#c5)/[C6](#c6); dieselbe Klasse, jeweils mit vorhandenem
+Punkt-Lookup als Alternative:
+
+| Stelle | Scan | Aufruf-Frequenz |
+|---|---|---|
+| `mark_channel_read` (`read_state.rs:37-42`) | alle Mitglieder des Space statt `has_member_role` | bei jedem gelesenen Channel |
+| `set_server_discovery` (`servers.rs:149-161`) | gesamte `server`-Tabelle | selten |
+| `send_dm_server_invite` (`invites.rs:261-265`) | gesamte `dm_server_invite`-Tabelle statt `by_recipient` | pro DM-Invite |
+| `use_invite` (`invites.rs:175-183`) | gesamte `dm_server_invite`-Tabelle | pro erschöpftem Invite |
+| `set_user_admin` (`system.rs:197-202`) | gesamte `user`-Tabelle | selten |
 
 ---
 
@@ -1034,6 +1454,66 @@ beidseitig gelöscht wurden (`direct_messages.rs:89-90` löscht dann hart).
 
 ---
 
+<a id="d7"></a>
+## D7 — Storage-Collector löscht nach `--delete-data` Anhänge, bevor der Archiv-Restore beginnt · ✅ **behoben**
+
+**Behoben auf Branch `bug-security-fixes`.** `init` setzt jetzt einen unbefristeten
+Fence (`fence_fresh_database`: Init-Zeitpunkt plus ~1000 Jahre, sodass er nie abläuft
+und trotzdem festhält, wann `init` lief). Der erste Restore-Batch ersetzt ihn durch
+den normalen 10-Minuten-Fence. Der neue, admin-gegatete Reducer
+`release_storage_init_fence(oldest_object_at)` hebt ausschließlich diesen Init-Fence
+auf, und nur wenn kein gespeichertes Objekt älter als `init` ist: Auf einer frischen
+Installation sind alle Objekte jünger, nach einem Wipe unter bestehenden Anhängen
+nicht. core-api übergibt sein ältestes `ConfirmedUploads.ConfirmedAt` und fragt jeden
+Sweep erneut, bis das Modul „erledigt" meldet (gelöst, oder kein Init-Fence) — ein
+fehlgeschlagener erster Versuch, nach dem schon Uploads eintreffen, blockiert damit
+nicht mehr dauerhaft (Codex-Review). Upgrades bestehender Instanzen sind nicht
+betroffen, weil `init` dort nicht läuft. `DEPLOYMENT.md` beschreibt den Ablauf und
+die manuelle Freigabe mit `'{"none":[]}'`. Regressionstests:
+`storage-lifecycle.test.ts` auf einer eigens frisch publizierten Datenbank (Rebuild
+verweigert, Freigabe mit älterem Objekt verweigert, mit jüngerem erlaubt) und
+`InitFenceRetrySmokeTests` für die Wiederholung im Sweeper. Die ursprüngliche
+Analyse:
+
+**Stellen:** `server/src/storage_refs.rs:118-143` (`fence_archive_restore`),
+`:196-203` (Fence-Prüfung im Rebuild), `server/src/reducers/system.rs:16-50`
+(`init`), `core-api/src/CoreApi/Services/PendingUploadSweeper.cs:105-147`,
+`Services/SpacetimeClient.cs:414-424`, `DEPLOYMENT.md:222`
+
+Der Fence aus Commit `d3be15b` schützt nur das Fenster **während** eines Restores:
+Er wird vom ersten `archive_restore_*`-Batch gesetzt und liegt selbst in einer
+Modul-Tabelle. Der dokumentierte Ablauf ist aber „drain → `--delete-data` → Rebuild
+aus Postgres", und zwischen Wipe und erstem Restore-Batch gibt es **keinen** Fence:
+
+1. `--delete-data` leert alle Tabellen, `init` legt den Module-Owner als Admin wieder
+   an. `SPACETIMEDB_SERVICE_TOKEN` ist laut Anleitung genau dieser Publisher-Token, ist
+   also sofort wieder Admin.
+2. Nächster Sweep (≤ 1 min): `claim_unreferenced_storage` scheitert („not ready", die
+   State-Zeile fehlt) → core-api setzt `_storageReferencesReady = false`.
+3. Übernächster Sweep: `rebuild_storage_references` läuft auf der **leeren** Datenbank
+   durch (kein Fence vorhanden), setzt `ready = true`.
+4. Direkt danach werden bis zu 500 `ConfirmedUploads` älter als eine Stunde geclaimt —
+   ohne Nachrichten gibt es keine Referenzen — und aus MinIO **und** der Registry
+   gelöscht. Das wiederholt sich jede Minute, bis der erste Restore-Batch den Fence
+   setzt.
+
+Der anschließende Restore stellt die Nachrichten wieder her, `unclaimed()` verwirft
+dabei aber die Referenzen auf bereits geclaimte Keys; die Anhänge sind endgültig weg.
+Bei einem Operator, der zwischen Publish und `ARCHIVE_REBUILD=1` zehn Minuten
+Schema-Checks macht, sind das bis zu ~4 000 Dateien.
+
+Statische Analyse; Modul- und core-api-Hälfte einzeln gelesen, die Kette nicht
+gegen den Stack reproduziert. „drain" ist in `DEPLOYMENT.md` nicht definiert —
+wer core-api vorher stoppt, ist nicht betroffen, das steht aber nirgends.
+
+**Richtung für einen Fix:** `init` setzt einen Fence, der **nicht** von allein
+abläuft, sondern erst durch eine explizite Admin-Aktion nach abgeschlossenem Restore
+aufgehoben wird (oder: `rebuild_storage_references` verweigert, solange ein
+„frisch initialisiert"-Flag gesetzt ist). Zusätzlich in `DEPLOYMENT.md` „core-api vor
+`--delete-data` stoppen" als Schritt aufnehmen.
+
+---
+
 # E — Client und Deployment
 
 <a id="e1"></a>
@@ -1055,7 +1535,16 @@ nie ohne Token weiterverbunden wird und beide Credentials samt State bereinigt w
 <a id="e2"></a>
 ## E2 — Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben · **S3**
 
-**Stellen:** `src/lib/spacetimedb/connection.ts:358-361`, `:443-456`, `:459-478`
+**Stellen:** `src/lib/spacetimedb/connection.ts:375-472` (`connect`), `:475-494`
+(`disconnect`)
+
+**Stand 2026-09-24:** Punkt 2 unten ist erledigt — `disconnect()` löscht inzwischen
+einen anstehenden `reconnectTimer`, ein Reconnect kann also nicht mehr *nach* dem
+Abmelden feuern. Punkt 1 besteht unverändert: Die laufende `connectPromise` wird nur
+vergessen, nicht abgebrochen; nach ihrem Ende ruft `connect()` weiterhin
+`startHeartbeat()` (`:462`), und eine noch in `connectWithUri` hängende Verbindung
+kann nach der Abmeldung einen aktiven Socket hinterlassen. Die Zeilenangaben im Code
+unten sind vom Stand 2026-08.
 
 ```ts
 export async function connect(): Promise<void> {
@@ -1137,7 +1626,10 @@ bedeutet damit eine langfristige Account-Übernahme.
 
 Zusätzlich blockiert die CSP in ihrer aktuellen Form externe Avatar-URLs, die das
 Produkt heute erlaubt ([B6](#b6)) — die Umstellung würde ohne vorherige Änderung an
-`update_profile` sichtbare Regressionen erzeugen.
+`update_profile` sichtbare Regressionen erzeugen. **Nachtrag 2026-09-24:** Der
+Schreibpfad ist inzwischen zu (B6 teilweise behoben), aber `media-src` und das
+fehlende `frame-src` würden beim Scharfschalten Inline-Video und PDF-Vorschau
+brechen, siehe [E6](#e6).
 
 ---
 
@@ -1156,6 +1648,42 @@ aufgerufen wird (`src/lib/spacetimedb/auth.ts:31`).
 
 **Auswirkung:** In einer lang laufenden Desktop-Sitzung mit vielen Anhängen wächst die
 Map monoton. `inflightDownloadRequests` (`:19`) hat dieselbe Struktur.
+
+---
+
+<a id="e6"></a>
+## E6 — CSPs erlauben Inline-Video und PDF-Vorschau vom Files-Host nicht · ✅ **behoben**
+
+**Behoben auf Branch `bug-security-fixes`.** Desktop-CSP: `media-src … https:` und
+`frame-src https:` (der Desktop-Client verbindet sich mit beliebigen Instanzen, wie
+bei `img-src`). Web-CSP: `media-src` und `frame-src` um `https://{$FILES_DOMAIN}`
+ergänzt. Ob ein Release-Bundle vorher tatsächlich blockierte, wurde nicht
+verifiziert; die Änderung ist in beiden Fällen korrekt. Die ursprüngliche Analyse:
+
+**Stellen:** `src-tauri/tauri.conf.json:25`, `deploy/web/Caddyfile` (CSP),
+`src/features/chat/components/attachments/inlineVideoSession.ts:17`,
+`AttachmentPdfLightbox.tsx:61-67`
+
+Beide Features aus PR #92 laden die presigned MinIO-URL direkt: das Video per
+`video.src = url`, das PDF per `<iframe src={url}>`. Beide CSPs lassen das nicht zu:
+
+| CSP | Video (`media-src`) | PDF (`frame-src` → `default-src`) |
+|---|---|---|
+| Desktop (Tauri, **erzwungen**) | `'self' blob:` — `https:` fehlt | `'self'` — Files-Host fehlt |
+| Web (Report-Only, [E4](#e4)) | `'self' blob:` — Files-Host fehlt | `'none'` |
+
+`img-src` erlaubt den Files-Host bzw. `https:`, deshalb funktionieren Bilder und
+Video-Poster.
+
+**Auswirkung (vermutet):** In einem **Release-Build** der Desktop-App bleiben
+Inline-Videos schwarz und die PDF-Vorschau leer. Im Tauri-Dev-Modus
+(`devUrl`) injiziert Tauri die CSP nicht, im Web greift nur Report-Only — genau die
+beiden Umgebungen, in denen das Feature vermutlich getestet wurde. Nicht in einem
+gebauten Bundle verifiziert; bitte dort gegenprüfen.
+
+**Richtung für einen Fix:** Den Files-Host (bzw. `https:` in der Desktop-CSP) in
+`media-src` und `frame-src` aufnehmen — zusammen mit dem `sandbox`-Attribut aus
+[A15](#a15), damit die Lockerung nicht ein beliebiges HTML-Dokument einbettet.
 
 ---
 
@@ -1288,6 +1816,8 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
   `eval`. Nachrichten werden als Text gerendert, es gibt keine Linkifizierung. Anhänge
   öffnen über `window.open(url, '_blank', 'noopener,noreferrer')`
   (`src/features/chat/components/attachments/AttachmentListItem.tsx:18`).
+  *Einschränkung seit PR #92:* Die PDF-Vorschau bettet fremde Inhalte in ein iframe
+  ohne `sandbox` ein, siehe [A15](#a15).
 - **Admin-Panel-Autorisierung.** Alle Razor-Seiten unter `Pages/Admin/` tragen
   `[Authorize(Roles = AdminRole)]`, nur `Login` ist `[AllowAnonymous]` und prüft dort
   Rolle *und* `AccountStatus`. Der Listener-Guard in `Program.cs:169-189` trennt die
@@ -1313,14 +1843,18 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
-**Stand:** 20 von 44 Befunden sind erledigt; 24 bleiben offen. Darunter ist kein S1;
-mit A11 und C7 bleiben zwei S2. Behoben sind A1–A8, B1–B3, C1–C6, D4, E1 und G1.
+**Stand 2026-09-24 (nach Branch `bug-security-fixes`):** 27 von 57 Befunden sind
+erledigt; 30 bleiben offen. Darunter ist kein S1; offen sind noch zwei S2: A11 und C7.
+Behoben sind A1–A8, A12, A15, A16, B1–B3, B9, B10, C1–C6, D4, D7, E1, E6 und G1;
+teilweise behoben sind A14 (SSRF zu, Isolation offen), B6 und C9.
 
-**Zuerst — Betriebsfähigkeit unter Last:** [A11](#a11) (gemeinsamer niedriger
+**Als Nächstes — Rest der Object-Storage-Härtung:** [A14](#a14) (ffmpeg in einen
+eigenen, secret-losen Container) und [C9](#c9) (Rebuild seitenweise).
+
+**Dann — Betriebsfähigkeit unter Last:** [A11](#a11) (gemeinsamer niedriger
 Auth-Bucket hinter CGNAT) und [C7](#c7) (breite Re-Syncs bei Mitglieder-Events).
-Die zuvor offenen Full-Table-Scans C5/C6 sind erledigt.
 
 **Danach — Lebenszyklus und Härtung:** [A10](#a10) (LiveKit-Revokation),
-[E4](#e4) (CSP Enforcement) und die verbleibenden S3/S4-Punkte. Die aktuelle
-Abhängigkeitslage steht datiert in `SECURITY.md`; für den Live-Stand gilt GitHub
-Dependabot.
+[A13](#a13)/[B12](#b12) (Invite-Weitergabe, Block-Parität), [E4](#e4) (CSP
+Enforcement) und die verbleibenden S3/S4-Punkte. Die aktuelle Abhängigkeitslage steht
+datiert in `SECURITY.md`; für den Live-Stand gilt GitHub Dependabot.

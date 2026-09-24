@@ -30,6 +30,20 @@ Topology overlays:
 - Cloudflare Tunnel: `docker-compose.prod.tunnel.yml`
 - Caddy reverse proxy: `docker-compose.prod.caddy.yml`
 
+Core API and LiveKit report Docker health status in `docker compose ps` using
+HTTP probes (`/health` on port 8787 and `/` on port 44380, respectively).
+Both check every 5 seconds, including during the 10-second startup grace period;
+the first success marks the container healthy immediately and ends the grace
+period early. Once the grace period ends, three consecutive failures mark it
+unhealthy (probe runtime adds to the interval). Later successful probes restore
+healthy status. `start_interval`
+requires Docker Engine 25+ and Compose 2.20.2+.
+
+These probes check API responsiveness and LiveKit node health, not dependency
+health or end-to-end media delivery. Docker does not restart a container just
+because it is unhealthy. Use a newly built/released Core API image with this
+Compose configuration: the probe requires the included `curl` executable.
+
 > **Already run a reverse proxy / `cloudflared` natively on the host?** Use
 > **neither overlay** — run the base stack alone (`docker compose -f
 > docker-compose.prod.base.yml up -d`) and point your existing proxy/connector
@@ -304,6 +318,21 @@ docker compose -f docker-compose.prod.base.yml run --rm \
 It reloads every durable table verbatim (explicit primary keys and timestamps)
 and exits. Take a Postgres backup first — this is the copy you are restoring
 from, and it is the only one.
+
+Attachment cleanup is paused from the moment `--delete-data` runs: the module's
+`init` fences the storage collector so it cannot mistake the empty tables for
+unreferenced files. The first restore batch turns that into a normal 10-minute
+quiet period, after which cleanup resumes on its own. If you wiped the database
+deliberately and are **not** restoring, lift the fence as an instance admin once
+you have accepted that old attachments become collectable:
+
+```bash
+spacetime call letschat release_storage_init_fence '{"none":[]}'
+```
+
+A brand-new instance needs nothing: core-api lifts the fence itself, because none
+of its stored files predates the database. After a wipe under existing files the
+module refuses that automatic release until the restore runs.
 
 Rebuild reducers raise the module-managed `IdCounter` values past every restored
 auto-increment id, so new rows cannot collide with restored rows. Instances

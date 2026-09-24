@@ -87,6 +87,7 @@ import PinMessageReducer from "./pin_message_reducer";
 import RebuildStorageReferencesReducer from "./rebuild_storage_references_reducer";
 import RegisterUserReducer from "./register_user_reducer";
 import RekeyIdentitiesReducer from "./rekey_identities_reducer";
+import ReleaseStorageInitFenceReducer from "./release_storage_init_fence_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
 import RemoveTimeoutReducer from "./remove_timeout_reducer";
 import RenameServerReducer from "./rename_server_reducer";
@@ -484,6 +485,7 @@ const reducersSchema = __reducers(
   __reducerSchema("rebuild_storage_references", RebuildStorageReferencesReducer),
   __reducerSchema("register_user", RegisterUserReducer),
   __reducerSchema("rekey_identities", RekeyIdentitiesReducer),
+  __reducerSchema("release_storage_init_fence", ReleaseStorageInitFenceReducer),
   __reducerSchema("remove_friend", RemoveFriendReducer),
   __reducerSchema("remove_timeout", RemoveTimeoutReducer),
   __reducerSchema("rename_server", RenameServerReducer),

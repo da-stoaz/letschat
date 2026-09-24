@@ -20,11 +20,11 @@ function openUrl(url: string): void {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
+// Keyed on the storage key, not the sender-written MIME type or file name:
+// core-api serves only `.pdf` keys as inline application/pdf and forces every
+// other key to download, which an iframe preview cannot show.
 function isPdfAttachment(attachment: ChatMessageAttachment): boolean {
-  return (
-    attachment.mimeType.toLowerCase() === 'application/pdf' ||
-    attachment.fileName.toLowerCase().endsWith('.pdf')
-  )
+  return attachment.storageKey.toLowerCase().endsWith('.pdf')
 }
 
 export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRetry, onOpenImage, onOpenPdf }: AttachmentListItemProps) {

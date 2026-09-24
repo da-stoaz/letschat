@@ -149,7 +149,8 @@ public static class AuthEndpoints
         TokenService tokens,
         SpacetimeTokenService spacetime,
         SystemConfigService config,
-        AccountEmailService accountEmail)
+        AccountEmailService accountEmail,
+        AccountAccessService access)
     {
         var username = Validation.NormalizeUsername(request.Username);
         Validation.ValidateUsername(username);
@@ -159,36 +160,32 @@ public static class AuthEndpoints
         var existing = await users.FindByNameAsync(username);
         if (existing is not null)
         {
-            // Set/change password on an existing account. The identity is derived
-            // and permanent, so it can no longer stand in for "is signed in" —
-            // require a valid session token for this same account instead.
-            var caller = request.SessionToken is null ? null : await tokens.ValidateAsync(request.SessionToken);
-            if (caller is null || !string.Equals(caller, username, StringComparison.Ordinal))
+            // Changing an existing account's password obeys the same rules as
+            // /auth/change-password (BUG_ANALYSIS A12). A bare signature check let
+            // a session that a reset had already revoked set a new password, and
+            // without the current password a stolen hour-long access token became
+            // a permanent takeover.
+            var caller = await tokens.ResolveAccountAsync(request.SessionToken, users);
+            if (caller is null || caller.Id != existing.Id)
             {
                 throw ApiException.Unauthorized("Sign in before changing this account's password.");
+            }
+            if (string.IsNullOrEmpty(request.CurrentPassword))
+            {
+                throw ApiException.Unauthorized("Your current password is required to change it.");
+            }
+
+            var changed = await users.ChangePasswordAsync(existing, request.CurrentPassword, request.Password);
+            if (!changed.Succeeded)
+            {
+                throw TranslateIdentityFailure(changed);
             }
 
             existing.DisplayName = displayName;
             existing.UpdatedAtUtc = DateTime.UtcNow;
-
-            var passwordReset = await users.RemovePasswordAsync(existing);
-            if (passwordReset.Succeeded)
-            {
-                passwordReset = await users.AddPasswordAsync(existing, request.Password);
-            }
-
-            if (!passwordReset.Succeeded)
-            {
-                throw TranslateIdentityFailure(passwordReset);
-            }
-
-            var update = await users.UpdateAsync(existing);
-            if (!update.Succeeded)
-            {
-                throw TranslateIdentityFailure(update);
-            }
-
-            EnsureSignInAllowed(existing);
+            // Persists the display name with the generation bump; every older
+            // session dies, and the response below carries the new generation.
+            await access.RevokeTokensAsync(existing);
             return BuildAuthResponse(existing, await users.GetRolesAsync(existing), tokens, spacetime);
         }
 

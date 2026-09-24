@@ -198,6 +198,12 @@ pub fn set_member_role(
         .member_key()
         .find(member_key(server_id, target_identity))
         .ok_or_else(|| "target is not a member".to_string())?;
+    // Only the owner gets here, so an Owner target is the caller demoting
+    // themselves — the space would be left with no owner (BUG_ANALYSIS B10).
+    assert_or_err(
+        member_row.role != Role::Owner,
+        "use transfer_ownership to hand over the owner role",
+    )?;
 
     member_row.role = new_role;
     ctx.db.server_member().member_key().update(member_row);

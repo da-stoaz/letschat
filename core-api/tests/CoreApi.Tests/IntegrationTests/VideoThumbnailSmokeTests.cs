@@ -13,9 +13,21 @@ public sealed class VideoThumbnailSmokeTests
 {
     private const string VideoKey = "uploads/ch/1/thumbuser/video.mp4";
     private const string BrokenKey = "uploads/ch/1/thumbuser/broken.mp4";
+    private const string PlaylistKey = "uploads/ch/1/thumbuser/evil.m3u8";
 
     [Fact]
     public async Task Worker_Renders_A_Poster_Next_To_The_Video_And_Gives_Up_On_Undecodable_Files()
+    {
+        // An HLS playlist declared as a video must not make ffmpeg fetch the URLs
+        // it lists (BUG_ANALYSIS A14): the listener would see a connection.
+        using var ssrfTarget = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        ssrfTarget.Start();
+        var ssrfPort = ((System.Net.IPEndPoint)ssrfTarget.LocalEndpoint).Port;
+        await RunWorkerScenario(ssrfPort);
+        Assert.False(ssrfTarget.Pending(), "ffmpeg followed a URL from an uploaded playlist");
+    }
+
+    private static async Task RunWorkerScenario(int ssrfPort)
     {
         var endpoint = Environment.GetEnvironmentVariable("LETSCHAT_TEST_MINIO_ENDPOINT");
         if (string.IsNullOrEmpty(endpoint) || !FfmpegInstalled()) return;
@@ -49,16 +61,23 @@ public sealed class VideoThumbnailSmokeTests
             RunFfmpeg($"-v error -f lavfi -i testsrc=duration=3:size=1280x720:rate=25 -c:v libx264 -pix_fmt yuv420p {video}");
             await admin.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = VideoKey, FilePath = video });
             await admin.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = BrokenKey, ContentBody = "not a video" });
+            await admin.PutObjectAsync(new PutObjectRequest
+            {
+                BucketName = bucket,
+                Key = PlaylistKey,
+                ContentBody = $"#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nhttp://127.0.0.1:{ssrfPort}/probe.ts\n#EXT-X-ENDLIST\n",
+            });
             using (var scope = factory.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 db.ConfirmedUploads.Add(Row(VideoKey, 1));
                 db.ConfirmedUploads.Add(Row(BrokenKey, 2));
+                db.ConfirmedUploads.Add(Row(PlaylistKey, 3));
                 await db.SaveChangesAsync();
             }
 
             var worker = factory.Services.GetServices<IHostedService>().OfType<VideoThumbnailWorker>().Single();
-            for (var i = 0; i < 4; i++) await worker.RunOnceAsync(CancellationToken.None);
+            for (var i = 0; i < 7; i++) await worker.RunOnceAsync(CancellationToken.None);
 
             using var poster = await admin.GetObjectAsync(bucket, VideoKey + VideoThumbnailWorker.KeySuffix);
             Assert.Equal("image/jpeg", poster.Headers.ContentType);
@@ -71,6 +90,7 @@ public sealed class VideoThumbnailSmokeTests
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 Assert.Equal(ThumbnailState.Done, db.ConfirmedUploads.Single(row => row.StorageKey == VideoKey).ThumbnailState);
                 Assert.Equal(ThumbnailState.Failed, db.ConfirmedUploads.Single(row => row.StorageKey == BrokenKey).ThumbnailState);
+                Assert.Equal(ThumbnailState.Failed, db.ConfirmedUploads.Single(row => row.StorageKey == PlaylistKey).ThumbnailState);
             }
             Assert.False(await worker.RunOnceAsync(CancellationToken.None));
         }
