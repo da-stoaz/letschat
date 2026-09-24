@@ -2,7 +2,7 @@ use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{
     assert_or_err, has_member_role, is_banned, is_system_admin, member_key, next_id,
-    require_account, require_member_role, require_owner, require_system_admin, voice_key,
+    remove_member_traces, require_account, require_member_role, require_owner, require_system_admin,
 };
 use crate::schema::*;
 use crate::storage_refs::{icon_owner_key, remove_references, sync_icon_reference};
@@ -369,6 +369,18 @@ pub fn delete_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String>
         delete_channel_with_dependencies(ctx, channel_id);
     }
 
+    // No server_id index on this table; a space is deleted rarely enough.
+    let dm_invites: Vec<u64> = ctx
+        .db
+        .dm_server_invite()
+        .iter()
+        .filter(|invite| invite.server_id == server_id)
+        .map(|invite| invite.id)
+        .collect();
+    for id in dm_invites {
+        ctx.db.dm_server_invite().id().delete(id);
+    }
+
     remove_references(ctx, &icon_owner_key(server_id));
     ctx.db.server().id().delete(server_id);
     Ok(())
@@ -387,21 +399,7 @@ pub fn leave_server(ctx: &ReducerContext, server_id: u64) -> Result<(), String> 
         .server_member()
         .member_key()
         .delete(member_key(server_id, ctx.sender()));
-
-    let channel_ids: Vec<u64> = ctx
-        .db
-        .channel()
-        .server_id()
-        .filter(server_id)
-        .map(|c| c.id)
-        .collect();
-
-    for channel_id in channel_ids {
-        ctx.db
-            .voice_participant()
-            .voice_key()
-            .delete(voice_key(channel_id, ctx.sender()));
-    }
+    remove_member_traces(ctx, server_id, ctx.sender());
 
     Ok(())
 }

@@ -133,6 +133,18 @@ pub(super) fn delete_channel_with_dependencies(ctx: &ReducerContext, channel_id:
         ctx.db.pinned_message().pin_id().delete(pin_id);
     }
 
+    // Read cursors of a deleted channel point nowhere (BUG_ANALYSIS D3).
+    let read_keys: Vec<String> = ctx
+        .db
+        .read_state()
+        .by_scope()
+        .filter(&format!("channel:{channel_id}"))
+        .map(|row| row.read_key)
+        .collect();
+    for key in read_keys {
+        ctx.db.read_state().read_key().delete(key);
+    }
+
     ctx.db.channel().id().delete(channel_id);
 }
 

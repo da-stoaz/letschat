@@ -1,8 +1,8 @@
 use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
 
 use crate::helpers::{
-    assert_or_err, ban_key, member_key, remove_voice_presence, require_account, require_member_role,
-    require_mod_or_owner, require_owner,
+    assert_or_err, ban_key, member_key, remove_member_traces, remove_voice_presence, require_account,
+    require_member_role, require_mod_or_owner, require_owner,
 };
 use crate::schema::*;
 
@@ -56,7 +56,7 @@ pub fn kick_member(
         .server_member()
         .member_key()
         .delete(member_key(server_id, target_identity));
-    remove_voice_presence(ctx, server_id, target_identity);
+    remove_member_traces(ctx, server_id, target_identity);
 
     Ok(())
 }
@@ -89,7 +89,7 @@ pub fn ban_member(
         .delete(member_key(server_id, target_identity));
     // kick_member always did this; a banned user stayed a visible voice
     // participant holding a slot until they disconnected (BUG_ANALYSIS B11).
-    remove_voice_presence(ctx, server_id, target_identity);
+    remove_member_traces(ctx, server_id, target_identity);
 
     Ok(())
 }

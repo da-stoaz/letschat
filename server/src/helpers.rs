@@ -332,6 +332,37 @@ pub(crate) fn require_not_timed_out(ctx: &ReducerContext, member: &ServerMember)
     }
 }
 
+/// Everything a departing member leaves behind in a space besides the
+/// membership row itself: voice presence, per-channel read cursors and a join
+/// request (BUG_ANALYSIS D3). For leave, kick and ban.
+pub(crate) fn remove_member_traces(ctx: &ReducerContext, server_id: u64, user_identity: Identity) {
+    remove_voice_presence(ctx, server_id, user_identity);
+    for channel in ctx.db.channel().server_id().filter(server_id) {
+        ctx.db
+            .read_state()
+            .read_key()
+            .delete(format!("channel:{}:{user_identity}", channel.id));
+    }
+    ctx.db
+        .join_request()
+        .request_key()
+        .delete(join_request_key(server_id, user_identity));
+}
+
+pub(crate) const MAX_DISPLAY_NAME_CHARS: usize = 100;
+
+/// A display name as shown to every co-member (BUG_ANALYSIS B5): trimmed,
+/// without control characters, 1–100 characters.
+pub(crate) fn validate_display_name(name: &str) -> Result<String, String> {
+    let trimmed = name.trim();
+    assert_or_err(
+        (1..=MAX_DISPLAY_NAME_CHARS).contains(&trimmed.chars().count())
+            && !trimmed.chars().any(char::is_control),
+        "display name must be 1-100 characters without control characters",
+    )?;
+    Ok(trimmed.to_string())
+}
+
 /// Drops a user's voice presence in every channel of a space — for anything
 /// that removes or silences them there (kick, ban, timeout).
 pub(crate) fn remove_voice_presence(ctx: &ReducerContext, server_id: u64, user_identity: Identity) {

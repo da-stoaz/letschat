@@ -287,6 +287,12 @@ export function syncMessages(conn: DbConnection): void {
   }
 
   const store = useMessagesStore.getState()
+  // A channel whose last message was hard-deleted (or that was deleted
+  // outright) drops out of the view entirely; without this its old rows
+  // stayed in the store (BUG_ANALYSIS D6).
+  for (const channelId of Object.keys(store.messagesByChannel).map(Number)) {
+    if (!grouped.has(channelId)) store.setChannelMessages(channelId, [])
+  }
   for (const [channelId, rows] of grouped.entries()) {
     rows.sort((a, b) => a.sentAt.localeCompare(b.sentAt))
     store.setChannelMessages(channelId, rows)
@@ -368,6 +374,11 @@ export function syncDirectMessages(conn: DbConnection): void {
   }
 
   const store = useDmStore.getState()
+  // Same as syncMessages: a thread whose messages both sides deleted is gone
+  // from the view and must not keep its old rows (BUG_ANALYSIS D6).
+  for (const partner of Object.keys(store.conversations)) {
+    if (!grouped.has(partner)) store.setConversation(partner, [])
+  }
   for (const [partner, rows] of grouped.entries()) {
     rows.sort((a, b) => a.sentAt.localeCompare(b.sentAt))
     store.setConversation(partner, rows)

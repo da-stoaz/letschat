@@ -33,17 +33,12 @@ describe('typing scope authorization', () => {
   it('allows accepted friends to set and clear DM typing state', async () => {
     const scope = dmScope(owner, member)
 
-    await owner.call('set_typing_state', [scope, true])
-    const active = await member.sql(
-      `SELECT scope_key FROM my_typing_states WHERE scope_key = '${scope}'`,
-    )
-    expect(active.rows).toHaveLength(1)
-
-    await owner.call('set_typing_state', [scope, false])
-    const cleared = await member.sql(
-      `SELECT scope_key FROM my_typing_states WHERE scope_key = '${scope}'`,
-    )
-    expect(cleared.rows).toHaveLength(0)
+    // Only the authorization is observable over HTTP: typing rows are swept
+    // with their connection (BUG_ANALYSIS D1), and an HTTP call's connection
+    // ends with the call. The row's lifetime is covered over a WebSocket in
+    // voice-lifecycle.test.ts.
+    await expect(owner.call('set_typing_state', [scope, true])).resolves.toBeUndefined()
+    await expect(owner.call('set_typing_state', [scope, false])).resolves.toBeUndefined()
   })
 
   it('rejects DM typing state for users who are not friends', async () => {

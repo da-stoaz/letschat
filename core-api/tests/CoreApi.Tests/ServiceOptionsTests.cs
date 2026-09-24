@@ -135,4 +135,25 @@ public sealed class ServiceOptionsTests
         Assert.Contains("MINIO_PUBLIC_ENDPOINT", only);
         Assert.Contains("points at this machine", only);
     }
+
+    [Theory]
+    [InlineData("REQUIRE_EMAIL_CONFIRMATION", "enabled")]
+    [InlineData("SMTP_USE_STARTTLS", "ture")]
+    [InlineData("RATE_LIMIT_PERMIT", "ten")]
+    public void Unrecognised_Values_Refuse_To_Start_Instead_Of_Falling_Back(string key, string value)
+    {
+        // BUG_ANALYSIS F1: these used to read as false / the default, silently.
+        var error = Assert.Throws<InvalidOperationException>(
+            () => ServiceOptions.FromConfiguration(Config(new() { [key] = value })));
+        Assert.Contains(key, error.Message);
+    }
+
+    [Theory]
+    [InlineData("on", true)]
+    [InlineData(" True ", true)]
+    [InlineData("off", false)]
+    [InlineData("0", false)]
+    public void Common_Boolean_Spellings_Are_Accepted(string value, bool expected) =>
+        Assert.Equal(expected, ServiceOptions.FromConfiguration(
+            Config(new() { ["REQUIRE_EMAIL_CONFIRMATION"] = value })).RequireEmailConfirmation);
 }

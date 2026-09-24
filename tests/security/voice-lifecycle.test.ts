@@ -154,4 +154,32 @@ describe('voice presence — connection lifecycle', () => {
       memberConn.disconnect()
     }
   })
+
+  // BUG_ANALYSIS D1/D2: typing rows and "online" only went away through an
+  // orderly client action, so a killed app left both behind forever.
+  it('a dying connection clears its typing rows and, if it was the last, presence', async () => {
+    const typer = await makeUser('vlife_t')
+    const serverId = Number(
+      (await owner.sql(`SELECT server_id FROM my_channels WHERE id = ${voiceChannelId}`)).rows[0].server_id,
+    )
+    await makeOpenJoinable(owner, serverId)
+    await typer.call('join_discoverable_server', [serverId])
+    const textId = Number(
+      (await typer.sql("SELECT id FROM my_channels WHERE name = 'general'")).rows[0].id,
+    )
+    const typingRows = () =>
+      ownerSql(`SELECT typing_key FROM typing_state WHERE user_identity = 0x${typer.identity}`)
+        .split('\n')
+        .filter((line) => /^\s*"/.test(line)).length
+    const online = () =>
+      /true/.test(ownerSql(`SELECT online FROM presence_state WHERE identity = 0x${typer.identity}`))
+
+    const typerConn = await connect(typer.token)
+    typerConn.reducers.touchPresence({})
+    typerConn.reducers.setTypingState({ scopeKey: `channel:${textId}`, isTyping: true })
+    expect(await until(() => typingRows() === 1 && online())).toBe(true)
+
+    typerConn.disconnect()
+    expect(await until(() => typingRows() === 0 && !online())).toBe(true)
+  })
 })

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table};
 
@@ -38,6 +38,20 @@ pub fn rekey_identities(ctx: &ReducerContext, pairs: Vec<IdentityRemap>) -> Resu
     let map: HashMap<Identity, Identity> = pairs.iter().map(|p| (p.old, p.new)).collect();
     if map.is_empty() {
         return Ok(());
+    }
+    // Every loop below reads a snapshot taken before its own writes, which is
+    // only sound for a one-step, one-to-one remap. With `A→B, B→C` the B pass
+    // overwrote A's data under B with B's stale snapshot and A was lost
+    // (BUG_ANALYSIS D5); two olds onto one new collide the same way. Refuse
+    // both up front instead of corrupting data silently.
+    let mut targets = HashSet::new();
+    for pair in pairs.iter().filter(|pair| pair.old != pair.new) {
+        if map.contains_key(&pair.new) && map[&pair.new] != pair.new {
+            return Err("identity remap chains are not supported".into());
+        }
+        if !targets.insert(pair.new) {
+            return Err("two identities remap onto the same target".into());
+        }
     }
     // Lower-case hex forms, for the one place identities live inside a string
     // rather than a column: read-state DM scope keys ("dm:{a}:{b}").
@@ -129,6 +143,9 @@ pub fn rekey_identities(ctx: &ReducerContext, pairs: Vec<IdentityRemap>) -> Resu
         let mut n = row;
         n.user_identity = uid;
         n.member_key = member_key(n.server_id, uid);
+        // A row already under the new key (e.g. from a post-migration login)
+        // would panic the insert and abort the migration; the old row wins.
+        ctx.db.server_member().member_key().delete(&n.member_key);
         ctx.db.server_member().insert(n);
     }
     for row in ctx.db.ban().iter().collect::<Vec<_>>() {
@@ -142,6 +159,9 @@ pub fn rekey_identities(ctx: &ReducerContext, pairs: Vec<IdentityRemap>) -> Resu
         n.user_identity = uid;
         n.banned_by = by;
         n.ban_key = ban_key(n.server_id, uid);
+        // A row already under the new key (e.g. from a post-migration login)
+        // would panic the insert and abort the migration; the old row wins.
+        ctx.db.ban().ban_key().delete(&n.ban_key);
         ctx.db.ban().insert(n);
     }
     for row in ctx.db.join_request().iter().collect::<Vec<_>>() {
@@ -153,6 +173,9 @@ pub fn rekey_identities(ctx: &ReducerContext, pairs: Vec<IdentityRemap>) -> Resu
         let mut n = row;
         n.user_identity = uid;
         n.request_key = join_request_key(n.server_id, uid);
+        // A row already under the new key (e.g. from a post-migration login)
+        // would panic the insert and abort the migration; the old row wins.
+        ctx.db.join_request().request_key().delete(&n.request_key);
         ctx.db.join_request().insert(n);
     }
     for row in ctx.db.friend().iter().collect::<Vec<_>>() {
@@ -169,6 +192,9 @@ pub fn rekey_identities(ctx: &ReducerContext, pairs: Vec<IdentityRemap>) -> Resu
         n.user_b = y;
         n.requested_by = req;
         n.pair_key = friend_pair_key(a, b);
+        // A row already under the new key (e.g. from a post-migration login)
+        // would panic the insert and abort the migration; the old row wins.
+        ctx.db.friend().pair_key().delete(&n.pair_key);
         ctx.db.friend().insert(n);
     }
     for row in ctx.db.block().iter().collect::<Vec<_>>() {
@@ -182,6 +208,9 @@ pub fn rekey_identities(ctx: &ReducerContext, pairs: Vec<IdentityRemap>) -> Resu
         n.blocker = blocker;
         n.blocked = blocked;
         n.block_key = block_key(blocker, blocked);
+        // A row already under the new key (e.g. from a post-migration login)
+        // would panic the insert and abort the migration; the old row wins.
+        ctx.db.block().block_key().delete(&n.block_key);
         ctx.db.block().insert(n);
     }
     for row in ctx.db.read_state().iter().collect::<Vec<_>>() {
@@ -195,6 +224,9 @@ pub fn rekey_identities(ctx: &ReducerContext, pairs: Vec<IdentityRemap>) -> Resu
         n.user_identity = uid;
         n.read_key = format!("{scope}:{uid}");
         n.scope_key = scope;
+        // A row already under the new key (e.g. from a post-migration login)
+        // would panic the insert and abort the migration; the old row wins.
+        ctx.db.read_state().read_key().delete(&n.read_key);
         ctx.db.read_state().insert(n);
     }
 

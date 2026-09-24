@@ -55,6 +55,12 @@ export const ChannelKind = __t.enum("ChannelKind", {
 });
 export type ChannelKind = __Infer<typeof ChannelKind>;
 
+export const ClientConnection = __t.object("ClientConnection", {
+  connectionId: __t.connectionId(),
+  identity: __t.identity(),
+});
+export type ClientConnection = __Infer<typeof ClientConnection>;
+
 export const DirectMessage = __t.object("DirectMessage", {
   id: __t.u64(),
   senderIdentity: __t.identity(),

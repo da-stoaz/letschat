@@ -162,15 +162,23 @@ public sealed class ServiceOptions
         string? GetOptional(string key) =>
             config[key] is { Length: > 0 } value ? value.Trim() : null;
 
+        // A set but unrecognised value refuses to start. It used to read as
+        // false (or the default), so REQUIRE_EMAIL_CONFIRMATION=on silently
+        // turned confirmation off (BUG_ANALYSIS F1).
         bool GetBool(string key, bool fallback) =>
-            config[key] is { Length: > 0 } value
-                ? value.Trim().ToLowerInvariant() is "true" or "1" or "yes"
-                : fallback;
+            config[key] is not { Length: > 0 } value ? fallback
+                : value.Trim().ToLowerInvariant() switch
+                {
+                    "true" or "1" or "yes" or "on" => true,
+                    "false" or "0" or "no" or "off" => false,
+                    _ => throw new InvalidOperationException(
+                        $"{key} must be true or false, got '{value}'."),
+                };
 
         int GetInt(string key, int fallback) =>
-            config[key] is { Length: > 0 } value && int.TryParse(value, out var parsed)
-                ? parsed
-                : fallback;
+            config[key] is not { Length: > 0 } value ? fallback
+                : int.TryParse(value.Trim(), out var parsed) ? parsed
+                : throw new InvalidOperationException($"{key} must be a whole number, got '{value}'.");
 
         // New upload fields are seeded only once. An invalid initial value is
         // rejected during seeding, but .env no longer controls an existing row.
