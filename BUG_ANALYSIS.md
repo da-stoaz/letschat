@@ -37,11 +37,11 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A7](#a7) | ~~Kein Account-Lockout, keine Passwort-Längenobergrenze → Argon2-DoS~~ · **✅ behoben (PR #84)** | ~~S2~~ | Auth |
 | [A8](#a8) | ~~Erstregistrierung wird automatisch Instanz-Admin (Land-Grab)~~ · **✅ behoben (PR #88)** | ~~S2~~ | Auth |
 | [A9](#a9) | ~~Account-Enumeration über `/auth/register`~~ · **✅ behoben** | ~~S3~~ | Auth |
-| [A10](#a10) | LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde | S3 | Voice |
+| [A10](#a10) | ~~LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde~~ · **✅ behoben** | ~~S3~~ | Voice |
 | [A11](#a11) | ~~Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT~~ · **✅ behoben** | ~~S2~~ | Auth |
 | [A12](#a12) | ~~`/auth/link` setzt Passwörter mit widerrufener Sitzung und ohne aktuelles Passwort~~ · **✅ behoben** | ~~S2~~ | Auth |
 | [A13](#a13) | ~~Mitglieder sehen alle Invite-Tokens, DM-Invites sind nicht an den Empfänger gebunden~~ · **✅ behoben** | ~~S3~~ | Modul |
-| [A14](#a14) | ffmpeg verarbeitet unvertrauenswürdige Dateien im core-api-Container · **SSRF behoben**, Isolation offen | ~~S2~~ S3 | Storage |
+| [A14](#a14) | ~~ffmpeg verarbeitet unvertrauenswürdige Dateien im core-api-Container~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [A15](#a15) | ~~Uploader bestimmt den ausgelieferten Content-Type; PDF-Vorschau-iframe ohne Sandbox~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [A16](#a16) | ~~Legacy-Keys umgehen die 10-MiB-/`image/*`-Grenze für Avatare und Icons~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [B1](#b1) | ~~`transfer_ownership` auf sich selbst sperrt den Owner dauerhaft aus~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
@@ -65,7 +65,7 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [C6](#c6) | ~~Lösch-Reducer scannen ganze Tabellen statt Indizes zu nutzen~~ · **✅ behoben (PR #90)** | ~~S2~~ | Modul |
 | [C7](#c7) | ~~Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients~~ · **✅ behoben** | ~~S2~~ | Client |
 | [C8](#c8) | ~~`cleanup_stale_invites_internal` scannt bei jeder Invite-Operation~~ · **✅ behoben** | ~~S3~~ | Modul |
-| [C9](#c9) | `rebuild_storage_references` scannt die gesamte Historie in einer Transaktion · **teilweise behoben**: läuft nur noch bei Bedarf | ~~S3~~ S4 | Storage |
+| [C9](#c9) | ~~`rebuild_storage_references` scannt die gesamte Historie in einer Transaktion~~ · **akzeptiert** | ~~S4~~ | Storage |
 | [C10](#c10) | ~~Weitere lineare Scans in häufig aufgerufenen Reducern~~ · **✅ behoben** | ~~S4~~ | Modul |
 | [D1](#d1) | ~~`TypingState` wird bei Verbindungsabbruch nie aufgeräumt~~ · **✅ behoben** | ~~S3~~ | Modul |
 | [D2](#d2) | ~~Präsenz bleibt nach Absturz dauerhaft „online"~~ · **✅ behoben** | ~~S3~~ | Modul |
@@ -77,11 +77,11 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [E1](#e1) | ~~Stiller Fallback auf anonyme Identity bei Token-Ablehnung~~ · **✅ behoben (PR #90)** | ~~S3~~ | Client |
 | [E2](#e2) | ~~Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben~~ · **✅ behoben** | ~~S3~~ | Client |
 | [E3](#e3) | ~~Discovery fällt bei nacktem Hostnamen auf `http://` zurück~~ · **✅ behoben** | ~~S3~~ | Client |
-| [E4](#e4) | CSP wird nur im Report-Only-Modus ausgeliefert | S3 | Deploy |
+| [E4](#e4) | ~~CSP wird nur im Report-Only-Modus ausgeliefert~~ · **✅ behoben** | ~~S3~~ | Deploy |
 | [E5](#e5) | ~~Download-URL-Cache wächst unbegrenzt~~ · **✅ behoben** | ~~S4~~ | Client |
 | [E6](#e6) | ~~CSPs erlauben Inline-Video und PDF-Vorschau vom Files-Host nicht~~ · **✅ behoben** | ~~S3~~ | Client |
 | [F1](#f1) | ~~Bool-Konfiguration schlägt bei unerwarteten Werten still fehl~~ · **✅ behoben** | ~~S3~~ | Config |
-| [F2](#f2) | `SystemConfigService`-Cache ist prozesslokal | S4 | Config |
+| [F2](#f2) | ~~`SystemConfigService`-Cache ist prozesslokal~~ · **akzeptiert** | ~~S4~~ | Config |
 | [F3](#f3) | ~~`MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User~~ · **✅ behoben** | ~~S4~~ | Config |
 | [F4](#f4) | ~~GitHub-Timeout in `/downloads/{os}` wird zu einem 500~~ · **✅ behoben** | ~~S4~~ | API |
 | [G1](#g1) | ~~`CODEBASE.md` beschreibt einen überholten Stand~~ · **✅ behoben (Baseline 2026-09-15)** | ~~S4~~ | Doku |
@@ -413,7 +413,20 @@ existiert und unbestätigt ist.
 ---
 
 <a id="a10"></a>
-## A10 — LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde · **S3**
+## A10 — LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Der neue `LiveKitVoiceReconciler` vergleicht alle 20 s jeden LiveKit-Raum mit der
+Voice-Präsenz im Modul und entfernt Teilnehmer, die zwei Runden in Folge keine
+haben — Kick, Ban, Timeout (entfernt die Präsenz seit B11/B13) oder Austritt. Die
+Präsenz entsteht vor dem Token, ein Teilnehmer ohne sie ist also entfernt worden; die
+zwei Runden fangen einen kurzen SpacetimeDB-Reconnect ab, und ein unerreichbares Modul
+setzt die Runde aus. Server-Tokens für LiveKits Room-API sind raumgebunden (gegen den
+Dev-LiveKit geprüft: `ListParticipants`/`RemoveParticipant` verlangen `room`); ein
+Teilnehmer, der zwischen Auflisten und Entfernen geht (404), bricht die Runde nicht ab.
+Neue interne Adresse `LIVEKIT_INTERNAL_URL`, in der Compose-Datei fest
+`http://livekit:44380` (wie `MINIO_INTERNAL_ENDPOINT`), keine Betreiber-Einstellung.
+Tests in `LiveKitVoiceReconcilerTests` (zwei Runden, nie mit Präsenz, nie bei
+unerreichbarem Modul). Die ursprüngliche Analyse:
 
 **Stellen:** `core-api/src/CoreApi/Services/LiveKitTokenService.cs:119-145`,
 `Endpoints/LiveKitEndpoints.cs:250-293`
@@ -603,7 +616,17 @@ Invites beschränken (Moderatoren sehen alle); DM-Invites mit
 ---
 
 <a id="a14"></a>
-## A14 — ffmpeg verarbeitet unvertrauenswürdige Dateien im core-api-Container · **SSRF behoben** · S3
+## A14 — ffmpeg verarbeitet unvertrauenswürdige Dateien im core-api-Container · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Der Rest: ffmpeg bekommt eine leere Umgebung (vorher erbte es jedes
+core-api-Secret) und läuft im Image über `setpriv` als `nobody` — damit liest es auch
+nicht `/proc/…/environ` von core-api. Im gebauten Image geprüft: Poster wird als uid
+65534 gerendert, keine Umgebungsvariable kommt an. Die Warteschlange nimmt frische Jobs
+vor Wiederholungen, und ein Job hat 30 s Gesamtbudget über beide Seek-Versuche statt
+60 s pro Versuch. `FfmpegEnvironmentTests` schlägt ohne das Leeren der Umgebung fehl.
+**Bewusst belassen:** ffmpeg hat weiter Netzzugang (die Protokoll-/Demuxer-Whitelist
+schließt die SSRF) und läuft im core-api-Container; ein eigener Worker-Container wäre
+die nächste Stufe. Die ursprüngliche Analyse:
 
 **Teilweise behoben auf Branch `bug-security-fixes`.** Die SSRF war reproduzierbar:
 eine Playlist mit Endung `.m3u8` und deklariertem `video/mp4` ließ ffmpeg (lokal 8.1)
@@ -1304,7 +1327,13 @@ Transaktion rückgängig — auch die Rollback-Schreibvorgänge selbst.
 ---
 
 <a id="c9"></a>
-## C9 — `rebuild_storage_references` scannt die gesamte Historie in einer Transaktion · **teilweise behoben** · S4
+## C9 — `rebuild_storage_references` scannt die gesamte Historie in einer Transaktion · **akzeptiert**
+
+**Akzeptiert (Branch `fix/security-batch-2`).** Seit dem ersten Teil läuft der Rebuild nur
+noch, wenn das Modul selbst „nicht bereit" meldet — nach Upgrade, Wipe oder Restore, also
+in einem Wartungsfenster, in dem eine Schreibpause hinnehmbar ist. Seitenweises Aufteilen
+bleibt als `ponytail:`-Notiz am Reducer, falls es je das Zeitbudget sprengt. Die
+ursprüngliche Analyse und der Zwischenstand:
 
 **Teilweise behoben auf Branch `bug-security-fixes`.** core-api startet optimistisch
 (`_storageReferencesReady = true`) und setzt das Flag nur noch zurück, wenn das Modul
@@ -1736,7 +1765,18 @@ sein, mit einem expliziten Opt-in für lokale Entwicklung.
 ---
 
 <a id="e4"></a>
-## E4 — CSP wird nur im Report-Only-Modus ausgeliefert · **S3**
+## E4 — CSP wird nur im Report-Only-Modus ausgeliefert · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Der Header ist jetzt `Content-Security-Policy`. Vorher in headless Chrome mit
+genau dieser Policy gegen den Dev-Stack geprüft (Dev-Hosts statt der Domain-Platzhalter):
+Anmeldung über das echte Formular, SpacetimeDB-Sync, Nachrichten, ein Bild aus MinIO und
+ein LiveKit-Voice-Call (Teilnehmer ACTIVE mit Audiospur) — null Verstöße. **Dabei
+gefunden:** Die bisherige Policy hätte die Web-App beim Scharfschalten komplett
+gebrochen. Das SpacetimeDB-SDK holt vor dem WebSocket
+`https://{CHAT}/v1/identity/websocket-token`, `connect-src` erlaubte aber nur
+`wss://{CHAT}`; `https://{$CHAT_DOMAIN}` ist ergänzt. Die vier Domain-Variablen sind
+damit auf beiden Tracks Pflicht (`DEPLOYMENT.md`, `SECURITY.md` und die
+Breaking-Changes-Seite der Website sagen das). Die ursprüngliche Analyse:
 
 **Stelle:** `deploy/web/Caddyfile`
 
@@ -1862,7 +1902,12 @@ nicht `LIVEKIT_API_KEY` (Default `devkey`) und nicht `ADMIN_BOOTSTRAP_PASSWORD`.
 ---
 
 <a id="f2"></a>
-## F2 — `SystemConfigService`-Cache ist prozesslokal · **S4**
+## F2 — `SystemConfigService`-Cache ist prozesslokal · **akzeptiert**
+
+**Akzeptiert (Branch `fix/security-batch-2`).** Die ausgelieferte Topologie hat genau
+eine core-api-Instanz; der Cache ist dort korrekt. Die Upgrade-Richtung (Reload per
+Timer oder Postgres-NOTIFY) steht als `ponytail:`-Notiz am Feld. Die ursprüngliche
+Analyse:
 
 **Stelle:** `core-api/src/CoreApi/Services/SystemConfigService.cs:260`, `:283-294`
 
@@ -1993,13 +2038,7 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
-**Stand 2026-09-24 (nach Branch `fix/security-batch-2`):** 52 von 57 Befunden sind
-erledigt; 5 bleiben offen: A10 (LiveKit-Revokation), E4 (CSP-Enforcement), F2
-(prozesslokaler Config-Cache, nur bei mehreren Replikaten relevant) sowie die teilweise
-behobenen A14 (ffmpeg-Isolation) und C9 (Rebuild seitenweise). Kein offener Befund ist
-S1 oder S2.
-
-**Als Nächstes:** [A10](#a10) braucht eine Entscheidung — ein serverseitiger Abgleich,
-der LiveKit-Teilnehmer ohne Voice-Präsenz entfernt, plus eine neue interne
-LiveKit-URL. [E4](#e4) braucht einen Browser-Test des gebauten Web-Clients vor dem
-Scharfschalten. [A14](#a14) ist eine Deploy-Änderung (eigener Worker-Container).
+**Stand 2026-09-24 (nach Branch `fix/security-batch-2`):** Alle 57 Befunde sind bearbeitet:
+55 behoben, 2 bewusst akzeptiert (C9 und F2, jeweils mit `ponytail:`-Notiz im Code und
+Begründung oben). Offene Rest-Kanten, dokumentiert in den Einträgen: A9 ohne
+E-Mail-Bestätigung, A14 ohne eigenen Worker-Container, A6 für Legacy-Keys.
