@@ -101,6 +101,10 @@ public static class UploadEndpoints
 
         var uploadId = Guid.NewGuid().ToString();
         var extension = Path.GetExtension(fileName).TrimStart('.');
+        if (extension.Length == 0)
+        {
+            extension = StorageService.InlineExtension(mimeType) ?? string.Empty;
+        }
         // The key is the access rule (StorageKey): whoever may read this object
         // later is decided from the scope baked in here.
         var storageKey = StorageKey.Build(

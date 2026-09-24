@@ -306,7 +306,11 @@ pub fn set_server_icon(
         .find(ctx.sender())
         .ok_or_else(|| "user not found".to_string())?
         .username;
-    sync_icon_reference(ctx, server_id, &uploader, normalized_icon_url.as_deref())?;
+    // Like update_profile: only a change is validated, so re-saving an icon set
+    // before scoped keys existed (or by a previous owner) never fails.
+    if normalized_icon_url != server_row.icon_url {
+        sync_icon_reference(ctx, server_id, &uploader, normalized_icon_url.as_deref())?;
+    }
     server_row.icon_url = normalized_icon_url;
     ctx.db.server().id().update(server_row);
     Ok(())

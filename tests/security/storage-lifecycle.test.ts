@@ -1,6 +1,9 @@
+import { execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
+  BASE,
+  DB,
   createChannel,
   createServer,
   makeAdmin,
@@ -142,6 +145,18 @@ describe('object-storage reference lifecycle', () => {
     )
   })
 
+  it('accepts only scoped keys for new avatars and icons (A16)', async () => {
+    // A legacy key is not size- or type-limited at upload time, so it could
+    // put a 500 MiB non-image in front of everyone who renders the avatar.
+    const legacy = `uploads/2026/09/24/${owner.username}/huge.bin`
+    await expect(owner.call('update_profile', [none, some(legacy)])).rejects.toThrow(
+      'avatar storage key does not belong to this account',
+    )
+    await expect(owner.call('set_server_icon', [serverId, some(legacy)])).rejects.toThrow(
+      'space icon storage key does not belong to this space',
+    )
+  })
+
   it('removes references when a channel or its whole space is deleted', async () => {
     const cascadeServerId = await createServer(owner)
     const removedChannelId = await createChannel(owner, cascadeServerId)
@@ -213,4 +228,39 @@ describe('object-storage reference lifecycle', () => {
     expect(revokedView.error).toBeNull()
     expect(revokedView.rows).toHaveLength(0)
   })
+})
+
+// BUG_ANALYSIS D7: `--delete-data` re-runs `init` on empty tables. A rebuild
+// right then would find no references and let the collector delete every
+// attachment before the archive restore starts, so `init` fences until a
+// restore batch or an explicit release. Needs its own freshly published
+// database, because earlier files have already replaced the shared one's fence.
+describe('fresh database storage fence', () => {
+  const freshDb = `${DB}fence`
+  const asOwner = (...args: string[]) =>
+    execFileSync('spacetime', ['call', '-s', BASE, freshDb, ...args], {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+  it('refuses a rebuild until the init fence is released', () => {
+    execFileSync(
+      'spacetime',
+      ['publish', '--server', BASE, freshDb, '--module-path', 'server', '--delete-data', '--yes'],
+      { stdio: 'ignore' },
+    )
+    try {
+      expect(() => asOwner('rebuild_storage_references')).toThrow(/freshly initialized/)
+      // Objects older than `init` mean a wipe under live attachments: stay fenced.
+      const hourAgoMicros = (Date.now() - 3_600_000) * 1000
+      expect(() => asOwner('release_storage_init_fence', JSON.stringify({ some: [hourAgoMicros] })))
+        .toThrow(/predate this database/)
+      expect(() => asOwner('rebuild_storage_references')).toThrow(/freshly initialized/)
+      // Only objects uploaded since `init`: a fresh install, nothing to lose.
+      asOwner('release_storage_init_fence', JSON.stringify({ some: [Date.now() * 1000] }))
+      expect(() => asOwner('rebuild_storage_references')).not.toThrow()
+    } finally {
+      execFileSync('spacetime', ['delete', '-s', BASE, freshDb, '--yes'], { stdio: 'ignore' })
+    }
+  }, 120_000)
 })

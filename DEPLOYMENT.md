@@ -319,6 +319,21 @@ It reloads every durable table verbatim (explicit primary keys and timestamps)
 and exits. Take a Postgres backup first — this is the copy you are restoring
 from, and it is the only one.
 
+Attachment cleanup is paused from the moment `--delete-data` runs: the module's
+`init` fences the storage collector so it cannot mistake the empty tables for
+unreferenced files. The first restore batch turns that into a normal 10-minute
+quiet period, after which cleanup resumes on its own. If you wiped the database
+deliberately and are **not** restoring, lift the fence as an instance admin once
+you have accepted that old attachments become collectable:
+
+```bash
+spacetime call letschat release_storage_init_fence '{"none":[]}'
+```
+
+A brand-new instance needs nothing: core-api lifts the fence itself, because none
+of its stored files predates the database. After a wipe under existing files the
+module refuses that automatic release until the restore runs.
+
 Rebuild reducers raise the module-managed `IdCounter` values past every restored
 auto-increment id, so new rows cannot collide with restored rows. Instances
 rebuilt before those counters existed can repair them idempotently with

@@ -35,6 +35,16 @@ describe('self-targeting cannot orphan a space', () => {
     await expect(owner.call('rename_server', [serverId, uniqueName('ok')])).resolves.toBeUndefined()
   })
 
+  it('refuses an owner demoting themselves (B10)', async () => {
+    const owner = await makeUser('selfdemote')
+    const serverId = await createServer(owner)
+
+    await expect(
+      owner.call('set_member_role', [serverId, owner.idArg, variant('moderator')]),
+    ).rejects.toThrow(/use transfer_ownership/)
+    await expect(owner.call('rename_server', [serverId, uniqueName('ok')])).resolves.toBeUndefined()
+  })
+
   it('refuses an owner banning themselves', async () => {
     const owner = await makeUser('selfban')
     const serverId = await createServer(owner)

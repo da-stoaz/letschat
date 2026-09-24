@@ -134,15 +134,68 @@ public sealed class StorageService : IDisposable
         }
     }
 
-    /// <summary>Short-lived presigned GET URL for displaying/downloading a file.</summary>
-    public async Task<string> PresignGetAsync(string storageKey, int expiresInSeconds) =>
-        ForceScheme(await _presign.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+    /// <summary>
+    /// Short-lived presigned GET URL for displaying/downloading a file.
+    ///
+    /// <para>
+    /// The stored Content-Type is whatever the uploader sent with the PUT, so it
+    /// is never served as-is (BUG_ANALYSIS A15): an HTML file named
+    /// <c>invoice.pdf</c> must not run as a page on the files domain. Extensions
+    /// the client renders inline get their canonical type; everything else is
+    /// forced to download. <c>&lt;img&gt;</c> and <c>&lt;video&gt;</c> ignore the
+    /// disposition, so previews keep working either way.
+    /// </para>
+    /// </summary>
+    public async Task<string> PresignGetAsync(string storageKey, int expiresInSeconds)
+    {
+        var request = new GetPreSignedUrlRequest
         {
             BucketName = _bucket,
             Key = storageKey,
             Verb = HttpVerb.GET,
             Expires = DateTime.UtcNow.AddSeconds(expiresInSeconds),
-        }));
+        };
+        if (InlineContentType(storageKey) is { } contentType)
+        {
+            request.ResponseHeaderOverrides.ContentType = contentType;
+        }
+        else
+        {
+            request.ResponseHeaderOverrides.ContentDisposition = "attachment";
+        }
+        return ForceScheme(await _presign.GetPreSignedURLAsync(request));
+    }
+
+    /// <summary>
+    /// Extensions served inline, with the type they are served as. The PDF
+    /// preview (an iframe, the one view a download disposition breaks) keys off
+    /// the same <c>.pdf</c> extension in the client, never the declared MIME type.
+    /// </summary>
+    private static readonly (string Extension, string ContentType)[] InlineTypes =
+    [
+        ("jpg", "image/jpeg"), ("jpeg", "image/jpeg"), ("png", "image/png"), ("gif", "image/gif"),
+        ("webp", "image/webp"), ("avif", "image/avif"), ("bmp", "image/bmp"),
+        ("mp4", "video/mp4"), ("m4v", "video/mp4"), ("mov", "video/quicktime"), ("webm", "video/webm"),
+        ("mkv", "video/x-matroska"), ("ogv", "video/ogg"),
+        ("mp3", "audio/mpeg"), ("m4a", "audio/mp4"), ("wav", "audio/wav"), ("flac", "audio/flac"),
+        ("ogg", "audio/ogg"), ("oga", "audio/ogg"), ("opus", "audio/ogg"),
+        ("pdf", "application/pdf"),
+    ];
+
+    /// <summary>Canonical type for a key whose extension is safe to render inline, else <c>null</c>.</summary>
+    internal static string? InlineContentType(string storageKey)
+    {
+        var extension = Path.GetExtension(storageKey).TrimStart('.').ToLowerInvariant();
+        return InlineTypes.FirstOrDefault(entry => entry.Extension == extension).ContentType;
+    }
+
+    /// <summary>
+    /// Extension for an upload whose file name has none, from its declared type,
+    /// so an extensionless PDF still previews. Safe to take from the client: the
+    /// download is served as the canonical type whatever the bytes are.
+    /// </summary>
+    internal static string? InlineExtension(string mimeType) =>
+        InlineTypes.FirstOrDefault(entry => entry.ContentType == mimeType).Extension;
 
     /// <summary>Presigned GET on the internal endpoint, for server-side readers such as ffmpeg.</summary>
     public string PresignInternalGet(string storageKey, int expiresInSeconds) =>
