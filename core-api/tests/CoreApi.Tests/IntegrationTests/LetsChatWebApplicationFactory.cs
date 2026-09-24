@@ -62,6 +62,9 @@ public sealed class LetsChatWebApplicationFactory : WebApplicationFactory<Progra
     /// <c>/livekit/token</c>'s room-authorization query) without a live module.
     /// </summary>
     public HttpMessageHandler? SpacetimeTransport { get; init; }
+
+    /// <summary>Optional stub transport for LiveKit's room API (the voice reconciler).</summary>
+    public HttpMessageHandler? LiveKitTransport { get; init; }
     public string? MinioEndpoint { get; init; }
     public string? MinioBucket { get; init; }
     public string? MinioAccessKey { get; init; }
@@ -101,6 +104,8 @@ public sealed class LetsChatWebApplicationFactory : WebApplicationFactory<Progra
                 ["DISCOVERY_SPACETIMEDB_URI"] = "ws://localhost:4300",
                 ["DISCOVERY_AUTH_URL"] = "http://localhost:8787",
                 ["DISCOVERY_LIVEKIT_URL"] = "ws://localhost:7880",
+                // Never the developer's real LiveKit on :7880.
+                ["LIVEKIT_INTERNAL_URL"] = "http://livekit.test",
                 ["DISCOVERY_DATABASE"] = "letschat-test",
                 ["REQUIRE_EMAIL_CONFIRMATION"] = "false",
                 ["REQUIRE_ADMIN_APPROVAL"] = "false",
@@ -177,6 +182,11 @@ public sealed class LetsChatWebApplicationFactory : WebApplicationFactory<Progra
                 // keeps Program.cs's timeout/header setup and only swaps transport.
                 services.AddHttpClient("spacetimedb")
                     .ConfigurePrimaryHttpMessageHandler(() => SpacetimeTransport);
+            }
+            if (LiveKitTransport is not null)
+            {
+                services.AddHttpClient("livekit")
+                    .ConfigurePrimaryHttpMessageHandler(() => LiveKitTransport);
             }
         });
     }

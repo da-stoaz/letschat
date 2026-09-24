@@ -19,8 +19,9 @@ key, role, or claimed file metadata merely because the client supplied it.
 
 Application and SpacetimeDB tokens are currently persisted in webview
 `localStorage`, including desktop builds; they are not protected by an OS
-keychain. Preventing script injection and moving CSP from report-only to
-enforcement therefore matters directly to credential protection (finding E4).
+keychain. Preventing script injection therefore matters directly to credential
+protection: the hosted web client ships an enforced CSP (no `'unsafe-inline'`
+scripts, `connect-src` limited to the instance's own services).
 
 ### `core-api` is the identity authority
 
@@ -97,8 +98,10 @@ unknown or permanent orphan.
 
 `core-api` mints a LiveKit token only when the requested identity matches the
 session account and SpacetimeDB confirms current presence in that room. Tokens
-expire after one hour. Immediate token revocation following kick/ban is still
-open as A10 in `BUG_ANALYSIS.md`.
+expire after one hour, but a removal does not wait for that: every 20 seconds
+core-api compares each LiveKit room with the module's voice presence and removes
+participants who have had none for two consecutive rounds (kick, ban, timeout,
+leave). An unreachable module pauses the comparison instead of removing anyone.
 
 ### Administration is a separate listener
 

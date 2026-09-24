@@ -28,7 +28,9 @@ public sealed class VideoThumbnailWorker(
     private const int MaxAttempts = 3;
     private const int MaxWidth = 640;
     private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan JobTimeout = TimeSpan.FromSeconds(60);
+    /// <summary>Shared by both seek attempts, so one file can hold the queue for at most this long.</summary>
+    private static readonly TimeSpan JobTimeout = TimeSpan.FromSeconds(30);
+    private const string SetprivPath = "/usr/bin/setpriv";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -66,9 +68,12 @@ public sealed class VideoThumbnailWorker(
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        // Fresh jobs before retries: a file that failed once (or hung until the
+        // timeout) waits behind everything new instead of blocking it (A14).
         var job = await db.ConfirmedUploads
             .Where(upload => upload.ThumbnailState == ThumbnailState.Pending)
-            .OrderBy(upload => upload.ConfirmedAt)
+            .OrderBy(upload => upload.ThumbnailAttempts)
+            .ThenBy(upload => upload.ConfirmedAt)
             .FirstOrDefaultAsync(ct);
         if (job is null)
         {
@@ -101,6 +106,8 @@ public sealed class VideoThumbnailWorker(
 
     private async Task<byte[]?> RenderAsync(string url, CancellationToken ct)
     {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(JobTimeout);
         // A second in skips black lead-ins; clips shorter than that retry at 0.
         foreach (var seek in new[] { "1", "0" })
         {
@@ -124,8 +131,6 @@ public sealed class VideoThumbnailWorker(
                 // Best-effort: priority changes can be denied in some containers.
             }
 
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(JobTimeout);
             using var output = new MemoryStream();
             var errors = process.StandardError.ReadToEndAsync(timeout.Token);
             try
@@ -165,14 +170,31 @@ public sealed class VideoThumbnailWorker(
         }
     }
 
+    /// <summary>
+    /// ffmpeg parses uploader-controlled files, so it gets as little as possible
+    /// to lose (BUG_ANALYSIS A14): an empty environment — it used to inherit
+    /// every core-api secret — and, when core-api runs as root in the image, the
+    /// <c>nobody</c> user via <c>setpriv</c>, which also keeps it out of
+    /// core-api's <c>/proc/…/environ</c>. On a dev machine it runs directly.
+    /// </summary>
     private ProcessStartInfo Ffmpeg(params string[] arguments)
     {
-        var info = new ProcessStartInfo(options.FfmpegPath)
+        var sandbox = Environment.IsPrivilegedProcess && File.Exists(SetprivPath);
+        var info = new ProcessStartInfo(sandbox ? SetprivPath : options.FfmpegPath)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
         };
+        info.Environment.Clear();
+        info.Environment["PATH"] = "/usr/local/bin:/usr/bin:/bin";
+        if (sandbox)
+        {
+            foreach (var flag in new[] { "--reuid=nobody", "--regid=nogroup", "--clear-groups", "--no-new-privs", options.FfmpegPath })
+            {
+                info.ArgumentList.Add(flag);
+            }
+        }
         foreach (var argument in arguments) info.ArgumentList.Add(argument);
         return info;
     }

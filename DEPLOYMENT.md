@@ -501,7 +501,7 @@ the owner credential.
 | MinIO CORS | `MINIO_CORS_ALLOW_ORIGIN` | Keep `*`. Gates the presigned **upload** PUT as well as downloads, and the desktop app's origin is `tauri://localhost` / `http://tauri.localhost` — pinning to `https://app.<domain>` alone silently blocks every desktop upload at the CORS preflight |
 | Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_DATABASE` | Served by core-api at `/.well-known/letschat.json`. The three URLs are handed to clients verbatim; they default to `localhost`, so core-api refuses to start in Production if any is left on a loopback address |
 | Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
-| Service domains | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | Used by `deploy/caddy/Caddyfile` (Caddy track) **and by the `web` container on both tracks** — `deploy/web/Caddyfile` builds the browser client's Content-Security-Policy from them. Left unset on the tunnel track the CSP is emitted with empty hosts; it is report-only, so nothing breaks, but the policy protects nothing |
+| Service domains | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | Used by `deploy/caddy/Caddyfile` (Caddy track) **and by the `web` container on both tracks** — `deploy/web/Caddyfile` builds the browser client's Content-Security-Policy from them. **Required on both tracks:** the CSP is enforced, so with any of them unset the browser client cannot reach that service and stops working |
 
 ## Upload limits and multipart transfers
 

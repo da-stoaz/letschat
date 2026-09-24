@@ -70,6 +70,13 @@ public sealed class ServiceOptions
     public required string DiscoverySpacetimeDbUri { get; init; }
     public required string DiscoveryAuthUrl { get; init; }
     public required string DiscoveryLiveKitUrl { get; init; }
+
+    /// <summary>
+    /// LiveKit's HTTP API as core-api reaches it (not the public signalling URL):
+    /// <see cref="Services.LiveKitVoiceReconciler"/> removes participants who lost
+    /// voice presence through it. Compose sets <c>http://livekit:44380</c>.
+    /// </summary>
+    public string LiveKitInternalUrl { get; init; } = "http://127.0.0.1:7880";
     public required string DiscoveryDatabase { get; init; }
 
     /// <summary>Optional bootstrap admin — created on startup if both are set.</summary>
@@ -221,6 +228,7 @@ public sealed class ServiceOptions
             DiscoverySpacetimeDbUri = Get("DISCOVERY_SPACETIMEDB_URI", "ws://localhost:4300"),
             DiscoveryAuthUrl = Get("DISCOVERY_AUTH_URL", "http://localhost:8787"),
             DiscoveryLiveKitUrl = Get("DISCOVERY_LIVEKIT_URL", "ws://localhost:7880"),
+            LiveKitInternalUrl = Get("LIVEKIT_INTERNAL_URL", "http://127.0.0.1:7880"),
             DiscoveryDatabase = Get("DISCOVERY_DATABASE", "letschat"),
 
             BootstrapAdminUsername = GetOptional("ADMIN_BOOTSTRAP_USERNAME"),

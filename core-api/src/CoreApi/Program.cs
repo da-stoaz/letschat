@@ -96,6 +96,9 @@ builder.Services.AddSingleton<LiveKitTokenService>();
 builder.Services.AddSingleton<StorageService>();
 builder.Services.AddHostedService<PendingUploadSweeper>();
 builder.Services.AddHostedService<VideoThumbnailWorker>();
+builder.Services.AddHostedService<LiveKitVoiceReconciler>();
+builder.Services.AddHttpClient(LiveKitVoiceReconciler.HttpClientName, client =>
+    client.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton<StorageInventoryState>();
 
 // Email transport — SMTP for real delivery, log sender for local dev.

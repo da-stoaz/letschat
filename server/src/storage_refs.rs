@@ -227,6 +227,11 @@ pub(crate) fn remove_references(ctx: &ReducerContext, owner_key: &str) {
 /// Rebuilds the derived table from live authoritative rows. Core-api calls this
 /// before its collector trusts an empty reference result, covering additive
 /// upgrades, a core-api/module rolling-deploy window, and destructive restores.
+///
+/// ponytail: one transaction over every message and DM (BUG_ANALYSIS C9). It
+/// runs only when the module reports references not ready — after an upgrade,
+/// a wipe or a restore, i.e. during maintenance — so a pause of the writer
+/// there is acceptable. Split it into cursor pages if it ever outgrows that.
 #[spacetimedb::reducer]
 pub fn rebuild_storage_references(ctx: &ReducerContext) -> Result<(), String> {
     require_system_admin(ctx, ctx.sender())?;
