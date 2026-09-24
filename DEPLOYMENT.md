@@ -30,6 +30,20 @@ Topology overlays:
 - Cloudflare Tunnel: `docker-compose.prod.tunnel.yml`
 - Caddy reverse proxy: `docker-compose.prod.caddy.yml`
 
+Core API and LiveKit report Docker health status in `docker compose ps` using
+HTTP probes (`/health` on port 8787 and `/` on port 44380, respectively).
+Both check every 5 seconds, including during the 10-second startup grace period;
+the first success marks the container healthy immediately and ends the grace
+period early. Once the grace period ends, three consecutive failures mark it
+unhealthy (probe runtime adds to the interval). Later successful probes restore
+healthy status. `start_interval`
+requires Docker Engine 25+ and Compose 2.20.2+.
+
+These probes check API responsiveness and LiveKit node health, not dependency
+health or end-to-end media delivery. Docker does not restart a container just
+because it is unhealthy. Use a newly built/released Core API image with this
+Compose configuration: the probe requires the included `curl` executable.
+
 > **Already run a reverse proxy / `cloudflared` natively on the host?** Use
 > **neither overlay** — run the base stack alone (`docker compose -f
 > docker-compose.prod.base.yml up -d`) and point your existing proxy/connector
