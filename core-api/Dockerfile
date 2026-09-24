@@ -23,9 +23,6 @@ RUN dotnet publish -a $TARGETARCH src/CoreApi/CoreApi.csproj -c Release -o /app 
 # ─────────────────────────────────────────────────────────────────────────────
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
-# Used by the production Compose HTTP healthcheck.
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
 # ffmpeg renders video posters (VideoThumbnailWorker). A static multi-arch
 # build: Ubuntu's ffmpeg package would add ~700 MB of shared libraries.
 COPY --from=mwader/static-ffmpeg:7.1 /ffmpeg /usr/local/bin/ffmpeg
