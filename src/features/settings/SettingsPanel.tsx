@@ -1,6 +1,5 @@
-import { BellIcon, ServerIcon, ShieldCheckIcon, UserRoundIcon } from 'lucide-react'
+import { BellIcon, ServerIcon, UserRoundIcon } from 'lucide-react'
 import { AccountTab } from './AccountTab'
-import { SecurityTab } from './SecurityTab'
 import { ConnectionTab } from './ConnectionTab'
 import { NotificationsTab } from './NotificationsTab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -11,7 +10,7 @@ export function SettingsPanel() {
       <header className="space-y-1">
         <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">
-          Manage your account, secure access, inspect the server connection, and control notifications.
+          Manage your account, inspect the server connection, and control notifications.
         </p>
       </header>
 
@@ -20,10 +19,6 @@ export function SettingsPanel() {
           <TabsTrigger value="account" className="flex-1 min-w-0">
             <UserRoundIcon className="size-3.5" />
             Account
-          </TabsTrigger>
-          <TabsTrigger value="security" className="flex-1 min-w-0">
-            <ShieldCheckIcon className="size-3.5" />
-            Security
           </TabsTrigger>
           <TabsTrigger value="connection" className="flex-1 min-w-0">
             <ServerIcon className="size-3.5" />
@@ -37,10 +32,6 @@ export function SettingsPanel() {
 
         <TabsContent value="account">
           <AccountTab />
-        </TabsContent>
-
-        <TabsContent value="security">
-          <SecurityTab />
         </TabsContent>
 
         <TabsContent value="connection">

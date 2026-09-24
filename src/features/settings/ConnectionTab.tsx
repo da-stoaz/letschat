@@ -67,13 +67,82 @@ export function ConnectionTab() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <ServerIcon className="size-4 shrink-0 text-muted-foreground" />
-            <p className="truncate text-sm font-medium">{hostLabel(config)}</p>
+            <p className="truncate text-lg font-medium">{hostLabel(config)}</p>
           </div>
           <Badge variant={status === 'connected' ? 'secondary' : 'outline'} className="shrink-0">
             {STATUS_LABELS[status]}
           </Badge>
         </div>
-        <p className="text-xs text-muted-foreground">The LetsChat server this app is signed in to.</p>
+        <p className="text-xs text-muted-foreground">The LetsChat server domain this app is signed in to.</p>
+
+        {/* Native disclosure — nobody needs these until something is broken, and
+          then they are the first thing an operator asks for. */}
+        <details className="group rounded-lg border border-border/70 bg-muted/20 [&_summary::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 p-3 text-xs text-muted-foreground hover:text-foreground">
+            <ChevronRightIcon className="size-3.5 transition-transform group-open:rotate-90" />
+            Technical details
+          </summary>
+          <div className="space-y-1.5 px-3 pb-3 font-mono text-xs text-muted-foreground">
+            <DetailRow label="SpacetimeDB" value={config.spacetimedbUri} />
+            <DetailRow label="Auth" value={config.authServiceUrl} />
+            <DetailRow label="LiveKit" value={config.livekitUrl} />
+            <DetailRow label="Database" value={config.spacetimedbDatabase} />
+            {identity ? (
+              <div className="space-y-0.5 pt-1">
+                <span className="text-primary">Identity</span>
+                <p className="break-all">{identity}</p>
+              </div>
+            ) : null}
+          </div>
+        </details>
+
+        {/* Hosted web is locked to its own instance — changing server would clear
+          the config and strand the locked-instance bootstrap, so it is hidden. */}
+        {!isHostedWebBuild() && (
+          <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Connect to a different server</p>
+              <p className="text-xs text-muted-foreground">Signs you out of this one. Your account here is untouched.</p>
+            </div>
+
+            {otherHosts.length > 0 ? (
+              <div className="space-y-1.5">
+                {otherHosts.map((host) => (
+                  <Button
+                    key={host.authServiceUrl}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => {
+                      setConfig(host)
+                      // Full reload so bootstrap re-runs against the new host —
+                      // simpler and more reliable than tearing the live
+                      // connection down and rebuilding it in place.
+                      window.location.assign('/auth')
+                    }}
+                  >
+                    <ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{hostLabel(host)}</span>
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                clearConfig()
+                navigate('/setup')
+              }}
+            >
+              <PlugZapIcon className="size-3.5" />
+              {otherHosts.length > 0 ? 'Add another server' : 'Change server'}
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3">
@@ -101,74 +170,9 @@ export function ConnectionTab() {
         ) : null}
       </div>
 
-      {/* Hosted web is locked to its own instance — changing server would clear
-          the config and strand the locked-instance bootstrap, so it is hidden. */}
-      {!isHostedWebBuild() && (
-        <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3">
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Connect to a different server</p>
-            <p className="text-xs text-muted-foreground">Signs you out of this one. Your account here is untouched.</p>
-          </div>
 
-          {otherHosts.length > 0 ? (
-            <div className="space-y-1.5">
-              {otherHosts.map((host) => (
-                <Button
-                  key={host.authServiceUrl}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start"
-                  onClick={() => {
-                    setConfig(host)
-                    // Full reload so bootstrap re-runs against the new host —
-                    // simpler and more reliable than tearing the live
-                    // connection down and rebuilding it in place.
-                    window.location.assign('/auth')
-                  }}
-                >
-                  <ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{hostLabel(host)}</span>
-                </Button>
-              ))}
-            </div>
-          ) : null}
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              clearConfig()
-              navigate('/setup')
-            }}
-          >
-            <PlugZapIcon className="size-3.5" />
-            {otherHosts.length > 0 ? 'Add another server' : 'Change server'}
-          </Button>
-        </div>
-      )}
 
-      {/* Native disclosure — nobody needs these until something is broken, and
-          then they are the first thing an operator asks for. */}
-      <details className="group rounded-lg border border-border/70 bg-muted/20 [&_summary::-webkit-details-marker]:hidden">
-        <summary className="flex cursor-pointer list-none items-center gap-1.5 p-3 text-xs text-muted-foreground hover:text-foreground">
-          <ChevronRightIcon className="size-3.5 transition-transform group-open:rotate-90" />
-          Technical details
-        </summary>
-        <div className="space-y-1.5 px-3 pb-3 font-mono text-xs text-muted-foreground">
-          <DetailRow label="SpacetimeDB" value={config.spacetimedbUri} />
-          <DetailRow label="Auth" value={config.authServiceUrl} />
-          <DetailRow label="LiveKit" value={config.livekitUrl} />
-          <DetailRow label="Database" value={config.spacetimedbDatabase} />
-          {identity ? (
-            <div className="space-y-0.5 pt-1">
-              <span className="text-primary">Identity</span>
-              <p className="break-all">{identity}</p>
-            </div>
-          ) : null}
-        </div>
-      </details>
     </div>
   )
 }
