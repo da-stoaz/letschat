@@ -30,6 +30,14 @@ Topology overlays:
 - Cloudflare Tunnel: `docker-compose.prod.tunnel.yml`
 - Caddy reverse proxy: `docker-compose.prod.caddy.yml`
 
+Core API and LiveKit expose Docker health status in `docker compose ps`:
+Core API probes `/health` on port 8787; LiveKit probes `/` on port 44380.
+Core API's probe checks HTTP responsiveness, not dependency health; LiveKit's
+probe checks node health, not end-to-end media delivery. An `unhealthy` status
+does not trigger `restart: unless-stopped` (that policy handles process exits).
+After updating, use a newly built/released Core API image: its probe requires
+the `curl` executable included in the image.
+
 > **Already run a reverse proxy / `cloudflared` natively on the host?** Use
 > **neither overlay** — run the base stack alone (`docker compose -f
 > docker-compose.prod.base.yml up -d`) and point your existing proxy/connector
