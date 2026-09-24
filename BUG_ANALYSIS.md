@@ -36,7 +36,7 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A6](#a6) | ~~Presigned Download-URLs ohne Zugriffsprüfung auf den Storage-Key~~ · **✅ behoben (PR #83)** | ~~S2~~ | Storage |
 | [A7](#a7) | ~~Kein Account-Lockout, keine Passwort-Längenobergrenze → Argon2-DoS~~ · **✅ behoben (PR #84)** | ~~S2~~ | Auth |
 | [A8](#a8) | ~~Erstregistrierung wird automatisch Instanz-Admin (Land-Grab)~~ · **✅ behoben (PR #88)** | ~~S2~~ | Auth |
-| [A9](#a9) | Account-Enumeration über `/auth/register` | S3 | Auth |
+| [A9](#a9) | ~~Account-Enumeration über `/auth/register`~~ · **✅ behoben** | ~~S3~~ | Auth |
 | [A10](#a10) | LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde | S3 | Voice |
 | [A11](#a11) | ~~Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT~~ · **✅ behoben** | ~~S2~~ | Auth |
 | [A12](#a12) | ~~`/auth/link` setzt Passwörter mit widerrufener Sitzung und ohne aktuelles Passwort~~ · **✅ behoben** | ~~S2~~ | Auth |
@@ -49,7 +49,7 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [B3](#b3) | ~~`edit_direct_message` prüft weder Block noch Freundschaft~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B4](#b4) | ~~`edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status~~ · **✅ behoben** | ~~S3~~ | Modul |
 | [B5](#b5) | ~~`update_profile`: `display_name`/`avatar_url` völlig unvalidiert~~ · **✅ behoben** | ~~S3~~ | Modul |
-| [B6](#b6) | Avatar-/Icon-URLs erlauben Tracking über beliebige Fremdhosts · **teilweise behoben (PR #92)**: nur noch Altbestand | ~~S3~~ S4 | Modul |
+| [B6](#b6) | ~~Avatar-/Icon-URLs erlauben Tracking über beliebige Fremdhosts~~ · **✅ behoben** | ~~S4~~ | Modul |
 | [B7](#b7) | ~~Invite-Token mit nur 8 Zeichen, kein Kollisionsschutz, kein Mengenlimit~~ · **✅ behoben** | ~~S3~~ | Modul |
 | [B8](#b8) | ~~`create_invite`: `expires_in_seconds` läuft in einen i64-Overflow~~ · **✅ behoben** | ~~S4~~ | Modul |
 | [B9](#b9) | ~~`avatar_url` lässt sich nie wieder entfernen~~ · **✅ behoben (PR #92)** | ~~S4~~ | Modul |
@@ -75,14 +75,14 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [D6](#d6) | ~~Stale Messages im Client-Store nach Hard-Delete~~ · **✅ behoben** | ~~S4~~ | Client |
 | [D7](#d7) | ~~Storage-Collector löscht nach `--delete-data` Anhänge, bevor der Archiv-Restore beginnt~~ · **✅ behoben** | ~~S2~~ | Storage |
 | [E1](#e1) | ~~Stiller Fallback auf anonyme Identity bei Token-Ablehnung~~ · **✅ behoben (PR #90)** | ~~S3~~ | Client |
-| [E2](#e2) | Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben | S3 | Client |
+| [E2](#e2) | ~~Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben~~ · **✅ behoben** | ~~S3~~ | Client |
 | [E3](#e3) | ~~Discovery fällt bei nacktem Hostnamen auf `http://` zurück~~ · **✅ behoben** | ~~S3~~ | Client |
 | [E4](#e4) | CSP wird nur im Report-Only-Modus ausgeliefert | S3 | Deploy |
 | [E5](#e5) | ~~Download-URL-Cache wächst unbegrenzt~~ · **✅ behoben** | ~~S4~~ | Client |
 | [E6](#e6) | ~~CSPs erlauben Inline-Video und PDF-Vorschau vom Files-Host nicht~~ · **✅ behoben** | ~~S3~~ | Client |
 | [F1](#f1) | ~~Bool-Konfiguration schlägt bei unerwarteten Werten still fehl~~ · **✅ behoben** | ~~S3~~ | Config |
 | [F2](#f2) | `SystemConfigService`-Cache ist prozesslokal | S4 | Config |
-| [F3](#f3) | `MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User | S4 | Config |
+| [F3](#f3) | ~~`MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User~~ · **✅ behoben** | ~~S4~~ | Config |
 | [F4](#f4) | ~~GitHub-Timeout in `/downloads/{os}` wird zu einem 500~~ · **✅ behoben** | ~~S4~~ | API |
 | [G1](#g1) | ~~`CODEBASE.md` beschreibt einen überholten Stand~~ · **✅ behoben (Baseline 2026-09-15)** | ~~S4~~ | Doku |
 
@@ -377,7 +377,18 @@ User als auch einen expliziten Grant, dessen Ziel sich erst danach registriert.
 ---
 
 <a id="a9"></a>
-## A9 — Account-Enumeration über `/auth/register` · **S3**
+## A9 — Account-Enumeration über `/auth/register` · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Mit E-Mail-Bestätigung (Produktions-Default) antworten `/auth/register` und
+`/auth/link` auf eine bereits registrierte Adresse genau wie auf eine neue: Status
+`pending_email_verification` mit zufälliger Identity bzw. derselbe 401 wie ein
+unbestätigtes Konto. Das Passwort wird trotzdem gehasht, damit die Antwortzeit nicht
+verrät, welcher Pfad lief. Der Besitzer bekommt stattdessen die Mail „You already have a
+LetsChat account" (gedeckelt über `MailSendLimiter`). Resend und Forgot-Password
+verschlucken Zustellfehler und antworten generisch (Nebenbefund). **Bewusst offen:**
+Ohne E-Mail-Bestätigung gibt die Registrierung sofort eine Sitzung aus — das lässt sich
+nicht vortäuschen, dort bleibt das 409. Usernames sind ohnehin im Chat sichtbar und
+bleiben abfragbar. Tests in `AccountEnumerationTests`. Die ursprüngliche Analyse:
 
 **Stelle:** `core-api/src/CoreApi/Endpoints/AuthEndpoints.cs:74-83`
 
@@ -870,7 +881,13 @@ mit `.chars().count()` richtig; die übrigen Stellen sind inkonsistent.
 ---
 
 <a id="b6"></a>
-## B6 — Avatar- und Icon-URLs erlauben Tracking über beliebige Fremdhosts · **teilweise behoben** · S4
+## B6 — Avatar- und Icon-URLs erlauben Tracking über beliebige Fremdhosts · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Der Rest: `AvatarImage` rendert nur noch eigene Storage-Keys sowie
+lokale `blob:`/`data:`-Vorschauen, keine entfernten URLs mehr. Alt-Einträge mit
+Fremd-URL bleiben in der Datenbank, werden aber nicht mehr geladen und zeigen Initialen.
+Nur statisch geprüft (kein DOM-Test-Setup im Projekt). Die ursprüngliche Analyse und der
+Zwischenstand:
 
 **Stand 2026-09-24:** PR #92 hat den Schreibpfad geschlossen. `update_profile`
 (`server/src/reducers/users.rs:88-97`) prüft einen *geänderten* Avatar über
@@ -1634,7 +1651,15 @@ nie ohne Token weiterverbunden wird und beide Credentials samt State bereinigt w
 ---
 
 <a id="e2"></a>
-## E2 — Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben · **S3**
+## E2 — Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Beide Teile. `disconnect()` erhöht eine Generation; ein `connect()`
+aus einer älteren Generation probiert keinen weiteren URI-Kandidaten und keinen
+Kompressions-Fallback mehr, startet keinen Heartbeat und meldet keinen Fehler. Der Fall
+war schlimmer als ursprünglich beschrieben: `disconnect()` riss den noch im Aufbau
+befindlichen Socket ab, `connect()` ging daraufhin zum *nächsten* Kandidaten (bzw. im Web
+zum Fallback ohne Kompression) und öffnete nach der Abmeldung einen neuen. Unit-Test in
+`connection.test.ts`, der gegen den alten Code fehlschlägt. Die ursprüngliche Analyse:
 
 **Stellen:** `src/lib/spacetimedb/connection.ts:375-472` (`connect`), `:475-494`
 (`disconnect`)
@@ -1860,7 +1885,13 @@ Start aus. Bei parallel startenden Replikaten laufen EF-Migrationen gleichzeitig
 ---
 
 <a id="f3"></a>
-## F3 — `MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User · **S4**
+## F3 — `MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Die Migration liest bei jedem Start nur noch zwei Spalten ohne
+Change-Tracking und lädt vollständige Zeilen nur für Konten, die tatsächlich angepasst
+werden müssen (normalerweise keine). Ein Flag wäre eine Schema-Migration für einen
+Blake3-Hash pro Konto gewesen. Test in `LegacyIdentityMigrationTests`. Die ursprüngliche
+Analyse:
 
 **Stelle:** `core-api/src/CoreApi/DbInitializer.cs:139`
 
@@ -1962,11 +1993,13 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
-**Stand 2026-09-24 (nach Branch `fix/security-batch-2`):** 48 von 57 Befunden sind
-erledigt; 9 bleiben offen: A9, A10, E2, E4, F2, F3 sowie die teilweise behobenen A14
-(Isolation), B6 (Altbestand) und C9 (Rebuild seitenweise). Kein offener Befund ist S1
-oder S2.
+**Stand 2026-09-24 (nach Branch `fix/security-batch-2`):** 52 von 57 Befunden sind
+erledigt; 5 bleiben offen: A10 (LiveKit-Revokation), E4 (CSP-Enforcement), F2
+(prozesslokaler Config-Cache, nur bei mehreren Replikaten relevant) sowie die teilweise
+behobenen A14 (ffmpeg-Isolation) und C9 (Rebuild seitenweise). Kein offener Befund ist
+S1 oder S2.
 
-**Als Nächstes:** [A10](#a10) (LiveKit-Revokation), [E4](#e4) (CSP-Enforcement, braucht
-einen Browser-Test), [E2](#e2) und [A9](#a9); danach die Rest-Punkte von A14, C9 und B6. Die aktuelle Abhängigkeitslage steht
-datiert in `SECURITY.md`; für den Live-Stand gilt GitHub Dependabot.
+**Als Nächstes:** [A10](#a10) braucht eine Entscheidung — ein serverseitiger Abgleich,
+der LiveKit-Teilnehmer ohne Voice-Präsenz entfernt, plus eine neue interne
+LiveKit-URL. [E4](#e4) braucht einen Browser-Test des gebauten Web-Clients vor dem
+Scharfschalten. [A14](#a14) ist eine Deploy-Änderung (eigener Worker-Container).
