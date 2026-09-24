@@ -61,8 +61,7 @@ import { GITHUB_REPO } from "@/lib/site";
         <Callout type="warning" title="The one exception — voice media">
           The live voice/video audio itself is real-time UDP and <strong>cannot</strong> travel through the
           tunnel. That single kind of traffic reaches your server directly, on two ports you forward on
-          your router (Step&nbsp;7). Skip that and text chat works perfectly — voice calls just connect with
-          no sound.
+          your router (Step 7). Skip that and text chat works perfectly. Just voice calls won't deliver any sound.
         </Callout>
 
         <Callout type="note" title="Large file uploads use multipart">
@@ -83,7 +82,7 @@ import { GITHUB_REPO } from "@/lib/site";
         <ul class="list-disc pl-5 guide-prose space-y-1.5">
           <li>
             <strong>Desktop app</strong> (macOS / Windows / Linux) — users paste your
-            <code>auth.yourdomain.com</code> address into the "pick a server" screen and it auto-discovers the rest.
+            <code class="ml-1">auth.yourdomain.com</code> address into the "pick a server" screen and it auto-discovers the rest.
           </li>
           <li>
             <strong>Browser</strong> — the stack includes a hosted web client at <code>app.yourdomain.com</code>.
