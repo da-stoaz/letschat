@@ -2,27 +2,97 @@
 @model IndexModel
 @{
     ViewData["Title"] = "Dashboard";
+    var peak = Math.Max(1, Model.Signups.Max(d => d.Count));
+    var signups = Model.Signups.Sum(d => d.Count);
 }
 
-<h1 class="page-title">Dashboard</h1>
-<p class="page-sub">Overview of LetsChat accounts.</p>
-
-<div class="stat-grid">
-    <div class="stat"><div class="value">@Model.Total</div><div class="label">Total accounts</div></div>
-    <div class="stat"><div class="value">@Model.Active</div><div class="label">Active</div></div>
-    <div class="stat"><div class="value">@Model.PendingApproval</div><div class="label">Pending approval</div></div>
-    <div class="stat"><div class="value">@Model.Unconfirmed</div><div class="label">Email unconfirmed</div></div>
-    <div class="stat"><div class="value">@Model.Disabled</div><div class="label">Disabled</div></div>
-    <div class="stat"><div class="value">@Model.Rejected</div><div class="label">Rejected</div></div>
-    <div class="stat"><div class="value">@Model.Admins</div><div class="label">Administrators</div></div>
+<div class="dashboard-heading">
+    <div><h1 class="page-title">Instance overview</h1><p class="page-sub">Accounts, storage, and administration · Updated @Model.UpdatedAt.ToString("HH:mm") UTC</p></div>
+    <a class="btn btn-primary" href="/admin/users/create">Create user</a>
 </div>
 
-<div class="card">
-    <h2>Quick actions</h2>
-    <div class="btn-row">
-        <a class="btn btn-primary" href="/admin/pending">Review pending (@Model.PendingApproval)</a>
-        <a class="btn" href="/admin/users">Manage users</a>
-        <a class="btn" href="/admin/config">System configuration</a>
-        <a class="btn" href="/admin/audit">Audit log</a>
-    </div>
+<div class="stat-grid dashboard-stats">
+    <a class="stat" href="/admin/users"><div class="label">Total accounts</div><div class="value">@Model.Total.ToString("N0")</div><div class="small muted">@Model.Accounts.GetValueOrDefault(AccountStatus.Active) active · @Model.Admins administrators</div></a>
+    <a class="stat" href="/admin/pending"><div class="label">Awaiting approval</div><div class="value">@Model.PendingApproval</div><div class="small muted">@(Model.PendingApproval > 0 ? "Review access requests →" : "No requests to review")</div></a>
+    <div class="stat"><div class="label">New accounts · 14 days</div><div class="value">@signups.ToString("N0")</div><div class="small muted">@Model.Signups.Last().Count created today (UTC)</div></div>
+    <a class="stat" href="/admin/config"><div class="label">Stored files</div><div class="value">@(Model.InventoryReady ? IndexModel.Bytes(Model.StoredBytes) : "—")</div><div class="small muted">@(Model.InventoryReady ? $"{Model.StoredFiles:N0} files · {Model.PendingUploads:N0} pending uploads" : "Storage inventory is syncing")</div></a>
 </div>
+
+<div class="dashboard-columns">
+    <section class="card">
+        <div class="dashboard-section-heading"><h2>Account growth</h2><span class="muted small">Daily signups · UTC</span></div>
+        <div class="signup-chart" role="group" aria-label="@($"{signups} new accounts over the last 14 days. Daily counts follow.")">
+            @foreach (var day in Model.Signups)
+            {
+                <div class="signup-column" role="img" aria-label="@day.Date.ToString("MMM d"): @day.Count accounts" title="@day.Date.ToString("MMM d"): @day.Count accounts">
+                    <span class="small">@day.Count</span>
+                    <div class="signup-track"><div class="signup-bar" style="height: @(IndexModel.Percent(day.Count * 100m / peak))%"></div></div>
+                    <span class="signup-date">@day.Date.ToString("dd")</span>
+                </div>
+            }
+        </div>
+        <div class="dashboard-section-heading small muted"><span>@Model.Signups.First().Date.ToString("MMM d")</span><span>@Model.Signups.Last().Date.ToString("MMM d")</span></div>
+        @if (signups == 0) { <p class="small muted">No accounts created in this period.</p> }
+    </section>
+    <section class="card">
+        <div class="dashboard-section-heading"><h2>Account breakdown</h2><a href="/admin/users" class="small">Manage users →</a></div>
+        @foreach (var status in new[] { AccountStatus.Active, AccountStatus.EmailVerified, AccountStatus.Registered, AccountStatus.Disabled, AccountStatus.Rejected })
+        {
+            var count = Model.Accounts.GetValueOrDefault(status);
+            var (css, label) = AdminViewHelpers.StatusBadge(status);
+            <div class="account-breakdown"><span>@label</span><div class="breakdown-track" aria-hidden="true"><div class="@css" style="width: @(IndexModel.Percent(Model.Total == 0 ? 0 : count * 100m / Model.Total))%"></div></div><strong>@count</strong></div>
+        }
+        <p class="small muted">Active means approved to sign in, not currently online.</p>
+    </section>
+    <section class="card">
+        <div class="dashboard-section-heading"><h2>Storage &amp; uploads</h2><a href="/admin/config" class="small">Edit limits →</a></div>
+        @if (!Model.InventoryReady)
+        {
+            <p class="muted">Storage inventory is syncing. Usage will be available once the scan completes.</p>
+        }
+        else
+        {
+            <div class="storage-total">@IndexModel.Bytes(Model.StoredBytes + Model.ReservedBytes) <span class="small muted">stored + reserved</span></div>
+            @if (Model.Settings.InstanceStorageLimitMiB > 0)
+            {
+                <progress class="storage-meter" max="100" value="@IndexModel.Percent(Model.StoragePercent)" aria-label="Instance storage quota used"></progress>
+                <p class="small muted">@Model.StoragePercent.ToString("0.#")% of @IndexModel.Bytes(Model.Settings.InstanceStorageLimitMiB * 1048576) quota used</p>
+                @if (Model.StoragePercent >= 90) { <p class="storage-warning">Storage quota is nearly full or exceeded. Review limits before new uploads are blocked.</p> }
+            }
+            else { <p class="small muted">No instance storage quota configured.</p> }
+            <dl class="dashboard-settings"><dt>Confirmed files</dt><dd>@Model.StoredFiles.ToString("N0") · @IndexModel.Bytes(Model.StoredBytes)</dd><dt>Pending reservations</dt><dd>@Model.PendingUploads.ToString("N0") · @IndexModel.Bytes(Model.ReservedBytes)</dd></dl>
+        }
+        <p class="small muted">Tracked uploads only; excludes database and other disk usage.</p>
+    </section>
+    <section class="card">
+        <div class="dashboard-section-heading"><h2>Access &amp; registration</h2><a href="/admin/config" class="small">Configure →</a></div>
+        <dl class="dashboard-settings">
+            <dt>Registration</dt><dd>@(Model.Settings.RegistrationOpen ? "Open" : "Closed")</dd>
+            <dt>Email confirmation</dt><dd>@(Model.Settings.RequireEmailConfirmation ? "Required" : "Not required")</dd>
+            <dt>Admin approval</dt><dd>@(Model.Settings.RequireAdminApproval ? "Required" : "Not required")</dd>
+        </dl>
+        @if (Model.PendingApproval == 0) { <p class="muted small">You're caught up. No accounts are waiting for approval.</p> }
+        else
+        {
+            <h3 class="dashboard-subheading">Oldest requests</h3>
+            @foreach (var user in Model.PendingUsers)
+            {
+                <div class="pending-user"><a href="/admin/users/@user.Id">@user.UserName</a><span class="muted small">Joined @user.CreatedAtUtc.ToString("MMM d, yyyy")</span></div>
+            }
+            <a class="btn btn-sm" href="/admin/pending">Review all @Model.PendingApproval requests →</a>
+        }
+    </section>
+</div>
+<section class="card">
+    <div class="dashboard-section-heading"><h2>Recent administrative activity</h2><a href="/admin/audit" class="small">View audit log →</a></div>
+    @if (Model.RecentActivity.Count == 0) { <p class="muted">No administrative actions recorded yet.</p> }
+    else
+    {
+        <div class="table-wrap"><table class="table"><thead><tr><th>Action</th><th>Actor</th><th>Target</th><th>When (UTC)</th></tr></thead><tbody>
+        @foreach (var entry in Model.RecentActivity)
+        {
+            <tr><td><code>@entry.Action</code></td><td>@entry.Actor</td><td>@entry.TargetType@(string.IsNullOrEmpty(entry.TargetId) ? "" : $" · {entry.TargetId}")</td><td class="muted">@entry.TimestampUtc.ToString("MMM d, HH:mm")</td></tr>
+        }
+        </tbody></table></div>
+    }
+</section>
