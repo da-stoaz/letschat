@@ -48,10 +48,10 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [B2](#b2) | ~~Owner kann sich selbst kicken/bannen → verwaister Space~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B3](#b3) | ~~`edit_direct_message` prüft weder Block noch Freundschaft~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B4](#b4) | ~~`edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status~~ · **✅ behoben** | ~~S3~~ | Modul |
-| [B5](#b5) | `update_profile`: `display_name`/`avatar_url` völlig unvalidiert | S3 | Modul |
+| [B5](#b5) | ~~`update_profile`: `display_name`/`avatar_url` völlig unvalidiert~~ · **✅ behoben** | ~~S3~~ | Modul |
 | [B6](#b6) | Avatar-/Icon-URLs erlauben Tracking über beliebige Fremdhosts · **teilweise behoben (PR #92)**: nur noch Altbestand | ~~S3~~ S4 | Modul |
-| [B7](#b7) | Invite-Token mit nur 8 Zeichen, kein Kollisionsschutz, kein Mengenlimit | S3 | Modul |
-| [B8](#b8) | `create_invite`: `expires_in_seconds` läuft in einen i64-Overflow | S4 | Modul |
+| [B7](#b7) | ~~Invite-Token mit nur 8 Zeichen, kein Kollisionsschutz, kein Mengenlimit~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [B8](#b8) | ~~`create_invite`: `expires_in_seconds` läuft in einen i64-Overflow~~ · **✅ behoben** | ~~S4~~ | Modul |
 | [B9](#b9) | ~~`avatar_url` lässt sich nie wieder entfernen~~ · **✅ behoben (PR #92)** | ~~S4~~ | Modul |
 | [B10](#b10) | ~~Owner kann sich per `set_member_role` selbst degradieren → verwaister Space~~ · **✅ behoben** | ~~S2~~ | Modul |
 | [B11](#b11) | ~~`ban_member` entfernt die Voice-Präsenz des Gebannten nicht~~ · **✅ behoben** | ~~S3~~ | Modul |
@@ -64,26 +64,26 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [C5](#c5) | ~~Typing-Indikator macht pro Tastenanschlag einen Full-Table-Scan~~ · **✅ behoben (PR #90)** | ~~S2~~ | Modul |
 | [C6](#c6) | ~~Lösch-Reducer scannen ganze Tabellen statt Indizes zu nutzen~~ · **✅ behoben (PR #90)** | ~~S2~~ | Modul |
 | [C7](#c7) | ~~Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients~~ · **✅ behoben** | ~~S2~~ | Client |
-| [C8](#c8) | `cleanup_stale_invites_internal` scannt bei jeder Invite-Operation | S3 | Modul |
+| [C8](#c8) | ~~`cleanup_stale_invites_internal` scannt bei jeder Invite-Operation~~ · **✅ behoben** | ~~S3~~ | Modul |
 | [C9](#c9) | `rebuild_storage_references` scannt die gesamte Historie in einer Transaktion · **teilweise behoben**: läuft nur noch bei Bedarf | ~~S3~~ S4 | Storage |
-| [C10](#c10) | Weitere lineare Scans in häufig aufgerufenen Reducern | S4 | Modul |
-| [D1](#d1) | `TypingState` wird bei Verbindungsabbruch nie aufgeräumt | S3 | Modul |
-| [D2](#d2) | Präsenz bleibt nach Absturz dauerhaft „online" | S3 | Modul |
-| [D3](#d3) | `delete_server` lässt Read-States und DM-Invites verwaist zurück | S3 | Modul |
+| [C10](#c10) | ~~Weitere lineare Scans in häufig aufgerufenen Reducern~~ · **✅ behoben** | ~~S4~~ | Modul |
+| [D1](#d1) | ~~`TypingState` wird bei Verbindungsabbruch nie aufgeräumt~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [D2](#d2) | ~~Präsenz bleibt nach Absturz dauerhaft „online"~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [D3](#d3) | ~~`delete_server` lässt Read-States und DM-Invites verwaist zurück~~ · **✅ behoben** | ~~S3~~ | Modul |
 | [D4](#d4) | ~~Bestätigte Anhänge werden beim Löschen ihrer Nachricht/Channels nicht entfernt~~ · **✅ behoben** | ~~S3~~ | Storage |
-| [D5](#d5) | `rekey_identities` korrumpiert Daten bei verketteten Remaps | S3 | Modul |
-| [D6](#d6) | Stale Messages im Client-Store nach Hard-Delete | S4 | Client |
+| [D5](#d5) | ~~`rekey_identities` korrumpiert Daten bei verketteten Remaps~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [D6](#d6) | ~~Stale Messages im Client-Store nach Hard-Delete~~ · **✅ behoben** | ~~S4~~ | Client |
 | [D7](#d7) | ~~Storage-Collector löscht nach `--delete-data` Anhänge, bevor der Archiv-Restore beginnt~~ · **✅ behoben** | ~~S2~~ | Storage |
 | [E1](#e1) | ~~Stiller Fallback auf anonyme Identity bei Token-Ablehnung~~ · **✅ behoben (PR #90)** | ~~S3~~ | Client |
 | [E2](#e2) | Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben | S3 | Client |
-| [E3](#e3) | Discovery fällt bei nacktem Hostnamen auf `http://` zurück | S3 | Client |
+| [E3](#e3) | ~~Discovery fällt bei nacktem Hostnamen auf `http://` zurück~~ · **✅ behoben** | ~~S3~~ | Client |
 | [E4](#e4) | CSP wird nur im Report-Only-Modus ausgeliefert | S3 | Deploy |
-| [E5](#e5) | Download-URL-Cache wächst unbegrenzt | S4 | Client |
+| [E5](#e5) | ~~Download-URL-Cache wächst unbegrenzt~~ · **✅ behoben** | ~~S4~~ | Client |
 | [E6](#e6) | ~~CSPs erlauben Inline-Video und PDF-Vorschau vom Files-Host nicht~~ · **✅ behoben** | ~~S3~~ | Client |
-| [F1](#f1) | Bool-Konfiguration schlägt bei unerwarteten Werten still fehl | S3 | Config |
+| [F1](#f1) | ~~Bool-Konfiguration schlägt bei unerwarteten Werten still fehl~~ · **✅ behoben** | ~~S3~~ | Config |
 | [F2](#f2) | `SystemConfigService`-Cache ist prozesslokal | S4 | Config |
 | [F3](#f3) | `MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User | S4 | Config |
-| [F4](#f4) | GitHub-Timeout in `/downloads/{os}` wird zu einem 500 | S4 | API |
+| [F4](#f4) | ~~GitHub-Timeout in `/downloads/{os}` wird zu einem 500~~ · **✅ behoben** | ~~S4~~ | API |
 | [G1](#g1) | ~~`CODEBASE.md` beschreibt einen überholten Stand~~ · **✅ behoben (Baseline 2026-09-15)** | ~~S4~~ | Doku |
 
 ---
@@ -829,7 +829,14 @@ Moderator-Löschung und Edit nach Kick werden beide angenommen; die Zeile trägt
 ---
 
 <a id="b5"></a>
-## B5 — `update_profile`: `display_name` und `avatar_url` völlig unvalidiert · **S3**
+## B5 — `update_profile`: `display_name` und `avatar_url` völlig unvalidiert · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `validate_display_name` (getrimmt, 1–100 Zeichen, keine Steuerzeichen) gilt
+in `update_profile`. `register_user` kürzt statt abzulehnen, weil core-api längere
+Namen akzeptiert und ein bestehendes Konto sonst nicht mehr in den Chat käme. Der
+Nebenbefund (Byte- statt Zeichenlänge bei Nachrichten) bleibt bewusst: die 4000 Bytes
+sind eine Speichergrenze, in die auch der Anhang-Marker zählt. Test in
+`module-hygiene.test.ts`. Die ursprüngliche Analyse:
 
 **Stellen:** `server/src/reducers/users.rs:52-73`, `:7-49` (`register_user`)
 
@@ -903,7 +910,12 @@ Keys/URLs aus dem eigenen MinIO zulassen.
 ---
 
 <a id="b7"></a>
-## B7 — Invite-Token mit nur 8 Zeichen, kein Kollisionsschutz, kein Mengenlimit · **S3**
+## B7 — Invite-Token mit nur 8 Zeichen, kein Kollisionsschutz, kein Mengenlimit · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Tokens haben 16 Zeichen (62¹⁶ ≈ 5·10²⁸) und werden bei einer
+Kollision neu erzeugt statt den Reducer über den Primärschlüssel panicken zu lassen.
+Pro Space sind höchstens 200 aktive Invites erlaubt, eine Whitelist hat höchstens 50
+Einträge. Test in `module-hygiene.test.ts`. Die ursprüngliche Analyse:
 
 **Stellen:** `server/src/reducers/invites.rs:80-85`, `:100-108`, `:266-284`
 
@@ -927,7 +939,10 @@ Drei Punkte:
 ---
 
 <a id="b8"></a>
-## B8 — `create_invite`: `expires_in_seconds` läuft in einen i64-Overflow · **S4**
+## B8 — `create_invite`: `expires_in_seconds` läuft in einen i64-Overflow · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `expires_in_seconds` muss zwischen 1 Sekunde und 365 Tagen liegen;
+`None` bleibt „nie". Test in `module-hygiene.test.ts`. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/invites.rs:87-92`
 
@@ -1244,7 +1259,14 @@ Discover-Store auch bei Clients, die die Discover-Seite nicht geöffnet haben.
 ---
 
 <a id="c8"></a>
-## C8 — `cleanup_stale_invites_internal` scannt bei jeder Invite-Operation · **S3**
+## C8 — `cleanup_stale_invites_internal` scannt bei jeder Invite-Operation · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Keine Invite-Operation scannt mehr alle Invites der Instanz:
+`create_invite` und `send_dm_server_invite` räumen nur den eigenen Space über den
+`server_id`-Index auf, `use_invite` sucht DM-Zeilen über `by_recipient`, und die
+Doppel-/Dreifach-Aufrufe in `respond_dm_server_invite` samt der wirkungslosen
+Rollback-Logik (Nebenbefund) sind entfernt. Der globale Durchlauf bleibt nur in
+`cleanup_expired_invites`. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/invites.rs:22-55`
 
@@ -1302,7 +1324,12 @@ Transportfehler; den Rebuild seitenweise über mehrere Reducer-Aufrufe verteilen
 ---
 
 <a id="c10"></a>
-## C10 — Weitere lineare Scans in häufig aufgerufenen Reducern · **S4**
+## C10 — Weitere lineare Scans in häufig aufgerufenen Reducern · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Die häufigen Pfade sind umgestellt: `mark_channel_read` nutzt
+`has_member_role`, `send_dm_server_invite` und `use_invite` den `by_recipient`-Index.
+`set_server_discovery` und `set_user_admin` scannen weiterhin — beide laufen selten und
+über Admin- bzw. Owner-Aktionen. Die ursprüngliche Analyse:
 
 Nachtrag zu [C5](#c5)/[C6](#c6); dieselbe Klasse, jeweils mit vorhandenem
 Punkt-Lookup als Alternative:
@@ -1320,7 +1347,12 @@ Punkt-Lookup als Alternative:
 # D — Datenkonsistenz und Leaks
 
 <a id="d1"></a>
-## D1 — `TypingState` wird bei Verbindungsabbruch nie aufgeräumt · **S3**
+## D1 — `TypingState` wird bei Verbindungsabbruch nie aufgeräumt · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `client_disconnected` löscht die `TypingState`-Zeilen der Identity
+über den `by_user`-Index. Ein weiteres offenes Fenster setzt sie beim nächsten
+Tastenanschlag neu. WebSocket-Test in `voice-lifecycle.test.ts`; der HTTP-basierte
+Typing-Test prüft deshalb nur noch die Autorisierung. Die ursprüngliche Analyse:
 
 **Stellen:** `server/src/reducers/presence.rs:100-130`,
 `server/src/reducers/voice.rs:69-98`
@@ -1342,7 +1374,13 @@ iteriert.
 ---
 
 <a id="d2"></a>
-## D2 — Präsenz bleibt nach Absturz dauerhaft „online" · **S3**
+## D2 — Präsenz bleibt nach Absturz dauerhaft „online" · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Eine neue private Tabelle `client_connection` (additiv) wird in
+`client_connected` gefüllt und in `client_disconnected` geleert. Ist die letzte
+Verbindung einer Identity weg, geht ihre Präsenz auf offline. Verbindungen von vor dem
+Update haben keine Zeile; der Heartbeat eines noch offenen Clients stellt „online"
+innerhalb von 25 s wieder her. WebSocket-Test in `voice-lifecycle.test.ts`. Die ursprüngliche Analyse:
 
 **Stellen:** `server/src/reducers/presence.rs:94-98`,
 `server/src/reducers/voice.rs:69-98`, `src/lib/spacetimedb/connection.ts:468-473`
@@ -1363,7 +1401,12 @@ derselben Identity aktiv sind).
 ---
 
 <a id="d3"></a>
-## D3 — `delete_server` lässt Read-States und DM-Invites verwaist zurück · **S3**
+## D3 — `delete_server` lässt Read-States und DM-Invites verwaist zurück · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `delete_channel_with_dependencies` löscht die Read-States des
+Channels, `delete_server` zusätzlich seine DM-Invites. Leave, Kick und Ban räumen über
+`remove_member_traces` Voice-Präsenz, Read-States und eine Join-Anfrage des Nutzers ab.
+Test in `module-hygiene.test.ts`. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/servers.rs:297-379`
 
@@ -1429,7 +1472,13 @@ können nicht mehr zu unbekannten oder dauerhaften Orphans werden.
 ---
 
 <a id="d5"></a>
-## D5 — `rekey_identities` korrumpiert Daten bei verketteten Remaps · **S3**
+## D5 — `rekey_identities` korrumpiert Daten bei verketteten Remaps · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `rekey_identities` lehnt Ketten (`A→B, B→C`) und mehrere Quellen
+auf dasselbe Ziel ab, bevor etwas geschrieben wird. In den Tabellen mit
+zusammengesetztem Schlüssel gewinnt die alte Zeile gegen eine bereits vorhandene unter
+dem neuen Schlüssel, statt den Insert panicken zu lassen. Test in
+`module-hygiene.test.ts`. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/rekey.rs:51-66`
 
@@ -1478,7 +1527,11 @@ und andernfalls mit einer klaren Fehlermeldung abbrechen.
 ---
 
 <a id="d6"></a>
-## D6 — Stale Messages im Client-Store nach Hard-Delete · **S4**
+## D6 — Stale Messages im Client-Store nach Hard-Delete · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `syncMessages` und `syncDirectMessages` setzen bekannte Channels
+bzw. Konversationen ohne Zeilen in der View explizit leer. Nur statisch und über
+Build/Lint geprüft. Die ursprüngliche Analyse:
 
 **Stellen:** `src/lib/spacetimedb/sync.ts:284-299`, `:361-377`
 
@@ -1626,7 +1679,12 @@ Verbindung nach der Abmeldung wieder aufbauen.
 ---
 
 <a id="e3"></a>
-## E3 — Discovery fällt bei nacktem Hostnamen auf `http://` zurück · **S3**
+## E3 — Discovery fällt bei nacktem Hostnamen auf `http://` zurück · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Ein nackter öffentlicher Host wird zu `https://`; `localhost`,
+Loopback, `.local` und private Netze behalten `http://`. Liefert ein https-Server
+Klartext-Endpunkte (`http://`, `ws://`), bricht die Discovery ab. Unit-Tests in
+`src/lib/discovery.test.ts`. Die ursprüngliche Analyse:
 
 **Stelle:** `src/lib/discovery.ts:12-15`
 
@@ -1682,7 +1740,10 @@ brechen, siehe [E6](#e6).
 ---
 
 <a id="e5"></a>
-## E5 — Download-URL-Cache wächst unbegrenzt · **S4**
+## E5 — Download-URL-Cache wächst unbegrenzt · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Abgelaufene Einträge fliegen bei jedem neuen Batch aus dem Cache.
+`inflightDownloadRequests` war nie ein Leck (wird im `finally` geleert). Die ursprüngliche Analyse:
 
 **Stelle:** `src/lib/downloadUrls.ts:18`
 
@@ -1738,7 +1799,13 @@ gebauten Bundle verifiziert; bitte dort gegenprüfen.
 # F — Konfiguration und Betrieb
 
 <a id="f1"></a>
-## F1 — Bool-Konfiguration schlägt bei unerwarteten Werten still fehl · **S3**
+## F1 — Bool-Konfiguration schlägt bei unerwarteten Werten still fehl · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Ein gesetzter, aber unbekannter Wert verhindert den Start mit klarer
+Meldung statt still auf `false` bzw. den Default zu fallen; akzeptiert werden
+true/false, 1/0, yes/no, on/off. Tests in `ServiceOptionsTests`. Der Nebenbefund zu
+`MINIO_ACCESS_KEY`/`LIVEKIT_API_KEY` bleibt: das sind Kennungen, die zugehörigen
+Secrets werden bereits geprüft. Die ursprüngliche Analyse:
 
 **Stelle:** `core-api/src/CoreApi/Configuration/ServiceOptions.cs:156-159`
 
@@ -1812,7 +1879,11 @@ auf einen einzelnen Lesezugriff reduzieren.
 ---
 
 <a id="f4"></a>
-## F4 — GitHub-Timeout in `/downloads/{os}` wird zu einem 500 · **S4**
+## F4 — GitHub-Timeout in `/downloads/{os}` wird zu einem 500 · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Timeout (`TaskCanceledException`) und unerwartete Antwort
+(`JsonException`) liefern jetzt die freundliche 404. Ohne eigenen Test — der Pfad ist
+im Testhost hinter `IsDevBuild` nicht erreichbar. Die ursprüngliche Analyse:
 
 **Stellen:** `core-api/src/CoreApi/Endpoints/DownloadEndpoints.cs:83-97`,
 `Program.cs:112-117`
@@ -1891,14 +1962,11 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
-**Stand 2026-09-24 (nach Branch `fix/security-batch-2`):** 34 von 57 Befunden sind
-erledigt; 23 bleiben offen. Offen ist kein S1 und kein S2 mehr. Behoben sind A1–A8,
-A11–A13, A15, A16, B1–B4, B9–B13, C1–C7, D4, D7, E1, E6 und G1; teilweise behoben
-sind A14 (SSRF zu, Isolation offen), B6 und C9.
+**Stand 2026-09-24 (nach Branch `fix/security-batch-2`):** 48 von 57 Befunden sind
+erledigt; 9 bleiben offen: A9, A10, E2, E4, F2, F3 sowie die teilweise behobenen A14
+(Isolation), B6 (Altbestand) und C9 (Rebuild seitenweise). Kein offener Befund ist S1
+oder S2.
 
-**Als Nächstes — Rest der Object-Storage-Härtung:** [A14](#a14) (ffmpeg in einen
-eigenen, secret-losen Container) und [C9](#c9) (Rebuild seitenweise).
-
-**Danach — Lebenszyklus und Härtung:** [A10](#a10) (LiveKit-Revokation), [E4](#e4) (CSP
-Enforcement) und die verbleibenden S3/S4-Punkte. Die aktuelle Abhängigkeitslage steht
+**Als Nächstes:** [A10](#a10) (LiveKit-Revokation), [E4](#e4) (CSP-Enforcement, braucht
+einen Browser-Test), [E2](#e2) und [A9](#a9); danach die Rest-Punkte von A14, C9 und B6. Die aktuelle Abhängigkeitslage steht
 datiert in `SECURITY.md`; für den Live-Stand gilt GitHub Dependabot.
