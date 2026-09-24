@@ -67,7 +67,9 @@ public static class AuthEndpoints
         TokenService tokens,
         SpacetimeTokenService spacetime,
         SystemConfigService config,
-        AccountEmailService accountEmail)
+        AccountEmailService accountEmail,
+        MailSendLimiter mailLimit,
+        ILoggerFactory loggerFactory)
     {
         if (!config.Current.RegistrationOpen)
         {
@@ -88,9 +90,19 @@ public static class AuthEndpoints
             throw ApiException.Conflict("Username already exists.");
         }
 
-        if (await users.FindByEmailAsync(email) is not null)
+        if (await users.FindByEmailAsync(email) is { } owner)
         {
-            throw ApiException.Conflict("Email address is already registered.");
+            if (!requiresConfirmation)
+            {
+                // Instant activation hands out a session, which cannot be faked.
+                throw ApiException.Conflict("Email address is already registered.");
+            }
+            await NotifyExistingAccountAsync(owner, request.Password, users, accountEmail, mailLimit, loggerFactory);
+            // Indistinguishable from a real sign-up: the identity is random, so the
+            // confirm-email poll simply never advances (BUG_ANALYSIS A9).
+            return new RegisterResponse(
+                "pending_email_verification", Auth: null, Email: email,
+                Identity: spacetime.ComputeIdentityHex(Guid.NewGuid().ToString()));
         }
 
         var user = new ApplicationUser
@@ -153,6 +165,35 @@ public static class AuthEndpoints
         user.SpacetimeIdentityNorm = Validation.NormalizeIdentity(identity);
     }
 
+    /// <summary>
+    /// A sign-up for an address that already has an account answers like a fresh
+    /// one, so registration no longer tells a stranger who is registered
+    /// (BUG_ANALYSIS A9); the owner is told by mail instead. The password is
+    /// hashed and discarded so both paths cost about the same.
+    /// </summary>
+    private static async Task NotifyExistingAccountAsync(
+        ApplicationUser owner,
+        string password,
+        UserManager<ApplicationUser> users,
+        AccountEmailService accountEmail,
+        MailSendLimiter mailLimit,
+        ILoggerFactory loggerFactory)
+    {
+        _ = users.PasswordHasher.HashPassword(owner, password);
+        if (!mailLimit.TryAcquire(owner.Id))
+        {
+            return;
+        }
+        try
+        {
+            await accountEmail.SendExistingAccountNoticeAsync(owner);
+        }
+        catch (EmailDeliveryException ex)
+        {
+            loggerFactory.CreateLogger("CoreApi.Auth").LogWarning(ex, "Could not send an existing-account notice.");
+        }
+    }
+
     private static async Task<AuthResponse> Link(
         LinkRequest request,
         UserManager<ApplicationUser> users,
@@ -160,7 +201,9 @@ public static class AuthEndpoints
         SpacetimeTokenService spacetime,
         SystemConfigService config,
         AccountEmailService accountEmail,
-        AccountAccessService access)
+        AccountAccessService access,
+        MailSendLimiter mailLimit,
+        ILoggerFactory loggerFactory)
     {
         var username = Validation.NormalizeUsername(request.Username);
         Validation.ValidateUsername(username);
@@ -210,9 +253,15 @@ public static class AuthEndpoints
 
         var requiresConfirmation = config.Current.RequireEmailConfirmation;
         var email = Validation.NormalizeEmail(request.Email);
-        if (await users.FindByEmailAsync(email) is not null)
+        if (await users.FindByEmailAsync(email) is { } owner)
         {
-            throw ApiException.Conflict("Email address is already registered.");
+            if (!requiresConfirmation)
+            {
+                throw ApiException.Conflict("Email address is already registered.");
+            }
+            // Same answer as a fresh, unconfirmed account below (BUG_ANALYSIS A9).
+            await NotifyExistingAccountAsync(owner, request.Password, users, accountEmail, mailLimit, loggerFactory);
+            throw ApiException.Unauthorized("Please confirm your email address before signing in.");
         }
 
         var user = new ApplicationUser
@@ -533,7 +582,8 @@ public static class AuthEndpoints
         ResendConfirmationRequest request,
         UserManager<ApplicationUser> users,
         AccountEmailService accountEmail,
-        MailSendLimiter mailLimit)
+        MailSendLimiter mailLimit,
+        ILoggerFactory loggerFactory)
     {
         // Look the account up by whichever identifier was supplied: email (the
         // post-registration screen) or username (the blocked-login screen).
@@ -549,7 +599,16 @@ public static class AuthEndpoints
 
         if (user is { Status: AccountStatus.Registered, EmailConfirmed: false } && mailLimit.TryAcquire(user.Id))
         {
-            await accountEmail.SendConfirmationEmailAsync(user);
+            // A 503 here, where a missing account answers 200, told a stranger
+            // the account exists and is unconfirmed (BUG_ANALYSIS A9).
+            try
+            {
+                await accountEmail.SendConfirmationEmailAsync(user);
+            }
+            catch (EmailDeliveryException ex)
+            {
+                loggerFactory.CreateLogger("CoreApi.Auth").LogWarning(ex, "Could not resend a confirmation email.");
+            }
         }
 
         // Generic response — never reveal whether an account exists.
@@ -569,7 +628,8 @@ public static class AuthEndpoints
         ForgotPasswordRequest request,
         UserManager<ApplicationUser> users,
         AccountEmailService accountEmail,
-        MailSendLimiter mailLimit)
+        MailSendLimiter mailLimit,
+        ILoggerFactory loggerFactory)
     {
         var email = Validation.NormalizeEmail(request.Email);
         var user = await users.FindByEmailAsync(email);
@@ -579,7 +639,14 @@ public static class AuthEndpoints
         // EnsureSignInAllowed still gates login afterwards.
         if (user is { EmailConfirmed: true } && mailLimit.TryAcquire(user.Id))
         {
-            await accountEmail.SendPasswordResetEmailAsync(user);
+            try
+            {
+                await accountEmail.SendPasswordResetEmailAsync(user);
+            }
+            catch (EmailDeliveryException ex)
+            {
+                loggerFactory.CreateLogger("CoreApi.Auth").LogWarning(ex, "Could not send a password-reset email.");
+            }
         }
 
         return Results.Json(new

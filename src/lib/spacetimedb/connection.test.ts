@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   unsubscribe: vi.fn(),
   clearStoredAuthSessionToken: vi.fn(),
   tokens: [] as Array<string | undefined>,
+  uri: 'wss://chat.example',
+  rejectToken: true,
   connectionState: {
     status: 'disconnected',
     errorMessage: null as string | null,
@@ -20,6 +22,7 @@ vi.mock('../../generated', () => ({
   DbConnection: {
     builder: () => {
       let onConnectError: ((ctx: unknown, error: Error) => void) | undefined
+      let onDisconnect: (() => void) | undefined
       const builder = {
         withUri: vi.fn(() => builder),
         withDatabaseName: vi.fn(() => builder),
@@ -30,18 +33,26 @@ vi.mock('../../generated', () => ({
           return builder
         }),
         onConnect: vi.fn(() => builder),
-        onDisconnect: vi.fn(() => builder),
+        onDisconnect: vi.fn((callback: () => void) => {
+          onDisconnect = callback
+          return builder
+        }),
         onConnectError: vi.fn((callback: (ctx: unknown, error: Error) => void) => {
           onConnectError = callback
           return builder
         }),
         build: vi.fn(() => {
           mocks.build()
-          queueMicrotask(() => onConnectError?.({}, new Error('Failed to verify token: Unauthorized')))
+          if (mocks.rejectToken) {
+            queueMicrotask(() => onConnectError?.({}, new Error('Failed to verify token: Unauthorized')))
+          }
           return {
             isActive: false,
             reducers: {},
-            disconnect: mocks.disconnect,
+            disconnect: () => {
+              mocks.disconnect()
+              onDisconnect?.()
+            },
             subscriptionBuilder: () => {
               const subscription = {
                 onApplied: vi.fn(() => subscription),
@@ -103,7 +114,7 @@ vi.mock('../../stores/serverConfigStore', () => ({
   useServerConfigStore: {
     getState: () => ({
       config: {
-        spacetimedbUri: 'wss://chat.example',
+        spacetimedbUri: mocks.uri,
         spacetimedbDatabase: 'letschat',
       },
     }),
@@ -118,7 +129,7 @@ vi.stubGlobal('localStorage', {
   clear: () => storage.clear(),
 })
 
-const { connect, REAUTHENTICATION_REQUIRED_MESSAGE } = await import('./connection')
+const { connect, disconnect, REAUTHENTICATION_REQUIRED_MESSAGE } = await import('./connection')
 
 describe('rejected stored SpacetimeDB token', () => {
   beforeEach(() => {
@@ -150,5 +161,28 @@ describe('rejected stored SpacetimeDB token', () => {
       identity: null,
       synced: false,
     })
+  })
+})
+
+// BUG_ANALYSIS E2: tearing down the socket that is still being built rejected
+// that attempt, and connect() went on to the next URI candidate — opening a
+// fresh connection after the user had signed out.
+describe('signing out while connecting', () => {
+  beforeEach(() => {
+    storage.clear()
+    localStorage.setItem('spacetimedb.auth_token', 'account-token')
+    mocks.uri = 'ws://localhost:4300' // loopback: several candidates to fall through
+    mocks.rejectToken = false
+    mocks.connectionState.status = 'disconnected'
+    vi.clearAllMocks()
+  })
+
+  it('abandons the attempt instead of opening another socket', async () => {
+    const pending = connect()
+    disconnect()
+
+    await expect(pending).resolves.toBeUndefined()
+    expect(mocks.build).toHaveBeenCalledOnce()
+    expect(mocks.connectionState.status).toBe('disconnected')
   })
 })

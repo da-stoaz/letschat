@@ -71,6 +71,29 @@ public static class EmailTemplates
         return (subject, body);
     }
 
+    public static (string Subject, string HtmlBody) ExistingAccount(string displayName, string username)
+    {
+        const string subject = "You already have a LetsChat account";
+        var body = Layout(
+            "You already have an account",
+            $"""
+             <p style="margin:0 0 16px 0;">Hi {Escape(displayName)},</p>
+             <p style="margin:0 0 8px 0;">
+               Someone just tried to create a LetsChat account with this email
+               address, but it already belongs to your account
+               <strong>@{Escape(username)}</strong>.
+             </p>
+             <p style="margin:0;">
+               If that was you, simply sign in — or use "Forgot password" in the
+               app if you no longer know your password.
+             </p>
+             <p style="margin:24px 0 0 0;font-size:13px;color:#6b7280;">
+               Wasn't you? You can safely ignore this email — nothing has changed.
+             </p>
+             """);
+        return (subject, body);
+    }
+
     public static (string Subject, string HtmlBody) AccountApproved(string displayName)
     {
         const string subject = "Your LetsChat account has been approved";
