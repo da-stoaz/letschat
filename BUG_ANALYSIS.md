@@ -38,32 +38,32 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A8](#a8) | ~~Erstregistrierung wird automatisch Instanz-Admin (Land-Grab)~~ · **✅ behoben (PR #88)** | ~~S2~~ | Auth |
 | [A9](#a9) | Account-Enumeration über `/auth/register` | S3 | Auth |
 | [A10](#a10) | LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde | S3 | Voice |
-| [A11](#a11) | Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT | S2 | Auth |
+| [A11](#a11) | ~~Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT~~ · **✅ behoben** | ~~S2~~ | Auth |
 | [A12](#a12) | ~~`/auth/link` setzt Passwörter mit widerrufener Sitzung und ohne aktuelles Passwort~~ · **✅ behoben** | ~~S2~~ | Auth |
-| [A13](#a13) | Mitglieder sehen alle Invite-Tokens, DM-Invites sind nicht an den Empfänger gebunden | S3 | Modul |
+| [A13](#a13) | ~~Mitglieder sehen alle Invite-Tokens, DM-Invites sind nicht an den Empfänger gebunden~~ · **✅ behoben** | ~~S3~~ | Modul |
 | [A14](#a14) | ffmpeg verarbeitet unvertrauenswürdige Dateien im core-api-Container · **SSRF behoben**, Isolation offen | ~~S2~~ S3 | Storage |
 | [A15](#a15) | ~~Uploader bestimmt den ausgelieferten Content-Type; PDF-Vorschau-iframe ohne Sandbox~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [A16](#a16) | ~~Legacy-Keys umgehen die 10-MiB-/`image/*`-Grenze für Avatare und Icons~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [B1](#b1) | ~~`transfer_ownership` auf sich selbst sperrt den Owner dauerhaft aus~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B2](#b2) | ~~Owner kann sich selbst kicken/bannen → verwaister Space~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B3](#b3) | ~~`edit_direct_message` prüft weder Block noch Freundschaft~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
-| [B4](#b4) | `edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status | S3 | Modul |
+| [B4](#b4) | ~~`edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status~~ · **✅ behoben** | ~~S3~~ | Modul |
 | [B5](#b5) | `update_profile`: `display_name`/`avatar_url` völlig unvalidiert | S3 | Modul |
 | [B6](#b6) | Avatar-/Icon-URLs erlauben Tracking über beliebige Fremdhosts · **teilweise behoben (PR #92)**: nur noch Altbestand | ~~S3~~ S4 | Modul |
 | [B7](#b7) | Invite-Token mit nur 8 Zeichen, kein Kollisionsschutz, kein Mengenlimit | S3 | Modul |
 | [B8](#b8) | `create_invite`: `expires_in_seconds` läuft in einen i64-Overflow | S4 | Modul |
 | [B9](#b9) | ~~`avatar_url` lässt sich nie wieder entfernen~~ · **✅ behoben (PR #92)** | ~~S4~~ | Modul |
 | [B10](#b10) | ~~Owner kann sich per `set_member_role` selbst degradieren → verwaister Space~~ · **✅ behoben** | ~~S2~~ | Modul |
-| [B11](#b11) | `ban_member` entfernt die Voice-Präsenz des Gebannten nicht | S3 | Modul |
-| [B12](#b12) | `send_dm_server_invite` ignoriert Blockierungen | S3 | Modul |
-| [B13](#b13) | `send_message` prüft die Channel-Art nicht; Timeout gilt nicht für Voice | S4 | Modul |
+| [B11](#b11) | ~~`ban_member` entfernt die Voice-Präsenz des Gebannten nicht~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [B12](#b12) | ~~`send_dm_server_invite` ignoriert Blockierungen~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [B13](#b13) | ~~`send_message` prüft die Channel-Art nicht; Timeout gilt nicht für Voice~~ · **✅ behoben** | ~~S4~~ | Modul |
 | [C1](#c1) | ~~Jede eingehende Nachricht löst drei volle Durchläufe der Historie aus~~ · **✅ behoben (PR #73)** | ~~S1~~ | Client |
 | [C2](#c2) | ~~Initialer Sync ist O(N²) und läuft in den 5-Sekunden-Timeout~~ · **✅ behoben (PR #73)** | ~~S1~~ | Client |
 | [C3](#c3) | ~~`my_channel_messages` liefert die komplette Historie ohne Limit~~ · **✅ behoben (PR #77)** | ~~S1~~ | Views |
 | [C4](#c4) | ~~`my_server_members` gibt alle Mitglieder aller Discover-Spaces preis~~ · **✅ behoben (PR #89)** | ~~S2~~ | Views |
 | [C5](#c5) | ~~Typing-Indikator macht pro Tastenanschlag einen Full-Table-Scan~~ · **✅ behoben (PR #90)** | ~~S2~~ | Modul |
 | [C6](#c6) | ~~Lösch-Reducer scannen ganze Tabellen statt Indizes zu nutzen~~ · **✅ behoben (PR #90)** | ~~S2~~ | Modul |
-| [C7](#c7) | Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients | S2 | Client |
+| [C7](#c7) | ~~Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients~~ · **✅ behoben** | ~~S2~~ | Client |
 | [C8](#c8) | `cleanup_stale_invites_internal` scannt bei jeder Invite-Operation | S3 | Modul |
 | [C9](#c9) | `rebuild_storage_references` scannt die gesamte Historie in einer Transaktion · **teilweise behoben**: läuft nur noch bei Bedarf | ~~S3~~ S4 | Storage |
 | [C10](#c10) | Weitere lineare Scans in häufig aufgerufenen Reducern | S4 | Modul |
@@ -431,7 +431,19 @@ ein serverseitiger `RemoveParticipant`-Aufruf an die LiveKit-API bei Kick/Ban/Le
 ---
 
 <a id="a11"></a>
-## A11 — Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT · **S2**
+## A11 — Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Umgesetzt wie unten geplant: vier getrennte Per-IP-Policies
+(`auth-login`, `auth-register` inklusive `/auth/link`, `auth-email` für Resend und
+Forgot-Password, `auth-password` für Change- und Reset-Password). Login bekommt das
+Zehnfache des konfigurierten Werts (`LoginRateLimitMultiplier`), weil der
+Account-Lockout das Raten pro Konto bereits begrenzt. Zusätzlich deckelt
+`MailSendLimiter` Bestätigungs- und Reset-Mails auf drei pro Account und Stunde; darüber
+antwortet der Endpunkt weiter generisch. Keine neue Konfiguration, der Admin-Hinweis und
+die `.env`-Beispiele beschreiben die neue Aufteilung. `AuthRateLimitTests`: viele
+Anmeldungen hinter einer Adresse nach ausgeschöpftem Registrierungs- und Mail-Budget
+bleiben 200, Username-Spraying erreicht 429, und der Mail-Deckel greift ohne
+Statusunterschied. Die ursprüngliche Analyse:
 
 **Stellen:** `core-api/src/CoreApi/Program.cs:179-205`,
 `core-api/src/CoreApi/Endpoints/AuthEndpoints.cs:22-48`
@@ -539,7 +551,14 @@ bleibt für die API-Kompatibilität bestehen.
 ---
 
 <a id="a13"></a>
-## A13 — Mitglieder sehen alle Invite-Tokens, DM-Invites sind nicht an den Empfänger gebunden · **S3**
+## A13 — Mitglieder sehen alle Invite-Tokens, DM-Invites sind nicht an den Empfänger gebunden · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `my_invites` zeigt einfachen Mitgliedern nur noch eigene Invites, Moderatoren
+weiterhin alle. DM-Invites werden mit `allowed_usernames = [empfänger]` angelegt.
+`use_invite` prüft außerdem, dass der Ersteller den Invite *jetzt noch* ausstellen
+dürfte — damit sterben Invites mit Kick, Ban, Austritt, Degradierung oder dem Wechsel auf
+`ModeratorsOnly`. Bereits bestehende, ungebundene DM-Invites bleiben bis zu ihrem Ablauf
+(7 Tage) ungebunden. Tests in `posting-and-invites.test.ts`. Die ursprüngliche Analyse:
 
 **Stellen:** `server/src/views.rs:341-349` (`my_invites`),
 `server/src/reducers/invites.rs:234-302` (`send_dm_server_invite`), `:114-192`
@@ -771,7 +790,12 @@ Entfreunden nicht mehr möglich ist; Löschen bleibt unberührt.
 ---
 
 <a id="b4"></a>
-## B4 — `edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status · **S3**
+## B4 — `edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `send_message` und `edit_message` teilen sich `require_can_post` (Text-Channel,
+Mitgliedschaft, `moderator_only`, Timeout); `edit_message` weist zusätzlich gelöschte
+Nachrichten ab. Damit entstehen auch keine Storage-Referenzen an gelöschten Nachrichten
+mehr. Tests in `posting-and-invites.test.ts`. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/messages.rs:48-75`
 
@@ -983,7 +1007,11 @@ den Reducer aufrufen darf.
 ---
 
 <a id="b11"></a>
-## B11 — `ban_member` entfernt die Voice-Präsenz des Gebannten nicht · **S3**
+## B11 — `ban_member` entfernt die Voice-Präsenz des Gebannten nicht · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Kick, Ban und Timeout rufen den gemeinsamen Helper `remove_voice_presence`.
+WebSocket-Test in `voice-lifecycle.test.ts`, der gegen das alte Modul fehlschlägt.
+Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/member_management.rs:78-106` (vgl. `kick_member`
 `:46-76`)
@@ -1005,7 +1033,11 @@ gemeinsamen Helper ziehen und in beiden Reducern aufrufen.
 ---
 
 <a id="b12"></a>
-## B12 — `send_dm_server_invite` ignoriert Blockierungen · **S3**
+## B12 — `send_dm_server_invite` ignoriert Blockierungen · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `send_dm_server_invite` prüft `has_block_either_direction` wie
+`send_direct_message`. Eine Freundschaft wird bewusst nicht verlangt. Test in
+`posting-and-invites.test.ts`. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/invites.rs:234-302`
 
@@ -1025,7 +1057,12 @@ der Blockierte sendet danach erfolgreich einen DM-Invite, das Opfer sieht die Ze
 ---
 
 <a id="b13"></a>
-## B13 — `send_message` prüft die Channel-Art nicht; Timeout gilt nicht für Voice · **S4**
+## B13 — `send_message` prüft die Channel-Art nicht; Timeout gilt nicht für Voice · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `require_can_post` verlangt einen Text- oder Announcement-Channel;
+`join_voice_channel` weist ein Mitglied im Timeout ab, und `timeout_member` entfernt es
+sofort aus dem Voice-Channel. Tests in `posting-and-invites.test.ts`. Die ursprüngliche
+Analyse:
 
 **Stellen:** `server/src/reducers/messages.rs:12-57`,
 `server/src/reducers/voice.rs:8-62`
@@ -1171,7 +1208,18 @@ Verbindung entfernt und dass beim Löschen eines Space dessen Pins mit verschwin
 ---
 
 <a id="c7"></a>
-## C7 — Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients · **S2**
+## C7 — Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `watchLiveTables` unterscheidet jetzt: Ändert sich die *eigene*
+Mitgliedschaft, laufen weiterhin alle sechs Space-Stores neu (alle filtern danach). Tritt
+ein anderes Mitglied bei, aus, oder ändert sich seine Rolle, läuft nur `syncMembers`.
+`my_servers`-Events bauen nur Servers und Discover neu.
+
+**Nebenbefund dabei, mitbehoben:** `my_join_requests` hatte gar keinen Live-Handler.
+Neue Beitrittsanfragen erreichten Moderatoren und eine Ablehnung den Anfragenden nur,
+wenn zufällig ein anderes Mitglieder-Event den breiten Re-Sync auslöste. Drei neue
+Unit-Tests in `events.test.ts`. Nicht im laufenden Client durchgeklickt. Die ursprüngliche
+Analyse:
 
 **Stellen:** `watchLiveTables` in `src/lib/spacetimedb/events.ts` und
 `syncServerScopedState` in `src/lib/spacetimedb/sync.ts`
@@ -1843,18 +1891,14 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
-**Stand 2026-09-24 (nach Branch `bug-security-fixes`):** 27 von 57 Befunden sind
-erledigt; 30 bleiben offen. Darunter ist kein S1; offen sind noch zwei S2: A11 und C7.
-Behoben sind A1–A8, A12, A15, A16, B1–B3, B9, B10, C1–C6, D4, D7, E1, E6 und G1;
-teilweise behoben sind A14 (SSRF zu, Isolation offen), B6 und C9.
+**Stand 2026-09-24 (nach Branch `fix/security-batch-2`):** 34 von 57 Befunden sind
+erledigt; 23 bleiben offen. Offen ist kein S1 und kein S2 mehr. Behoben sind A1–A8,
+A11–A13, A15, A16, B1–B4, B9–B13, C1–C7, D4, D7, E1, E6 und G1; teilweise behoben
+sind A14 (SSRF zu, Isolation offen), B6 und C9.
 
 **Als Nächstes — Rest der Object-Storage-Härtung:** [A14](#a14) (ffmpeg in einen
 eigenen, secret-losen Container) und [C9](#c9) (Rebuild seitenweise).
 
-**Dann — Betriebsfähigkeit unter Last:** [A11](#a11) (gemeinsamer niedriger
-Auth-Bucket hinter CGNAT) und [C7](#c7) (breite Re-Syncs bei Mitglieder-Events).
-
-**Danach — Lebenszyklus und Härtung:** [A10](#a10) (LiveKit-Revokation),
-[A13](#a13)/[B12](#b12) (Invite-Weitergabe, Block-Parität), [E4](#e4) (CSP
+**Danach — Lebenszyklus und Härtung:** [A10](#a10) (LiveKit-Revokation), [E4](#e4) (CSP
 Enforcement) und die verbleibenden S3/S4-Punkte. Die aktuelle Abhängigkeitslage steht
 datiert in `SECURITY.md`; für den Live-Stand gilt GitHub Dependabot.
