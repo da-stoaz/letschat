@@ -28,11 +28,13 @@ enforcement therefore matters directly to credential protection (finding E4).
 - Passwords are Argon2id hashes and inputs are limited to 8–128 characters.
 - Five failed sign-in attempts lock an account for five minutes.
 - The public JSON API has a 256 KiB request-body limit. Files never transit it.
-- Abuse-prone auth endpoints use an IP-partitioned fixed-window rate limiter;
-  only the adjacent private/loopback proxy is trusted for forwarded headers.
-  Its currently shared, low per-IP budget can deny auth service to unrelated
-  users behind the same CGNAT, VPN, or corporate gateway; this availability
-  risk and the split-policy remediation are tracked as A11.
+- Abuse-prone auth endpoints use IP-partitioned fixed-window rate limiters,
+  one budget each for registration, email actions, and password actions, so
+  flooding one flow cannot lock another. Sign-in gets ten times the budget,
+  because the per-account lockout already stops guessing and many people can
+  share one CGNAT or VPN address. Confirmation and reset mails are also capped
+  at three per account per hour. Only the adjacent private/loopback proxy is
+  trusted for forwarded headers.
 - Application access tokens live for one hour and refresh tokens for seven
   days. A per-account token generation immediately invalidates older HTTP
   sessions after a credential change.
@@ -143,8 +145,8 @@ for package versions and remediation status; do not copy that changing list into
 the architecture document.
 
 The remaining code findings are prioritized in
-[`BUG_ANALYSIS.md`](BUG_ANALYSIS.md). At this baseline there is no open S1;
-the open S2 items are A11 and C7.
+[`BUG_ANALYSIS.md`](BUG_ANALYSIS.md). As of 2026-09-24 there is no open S1 or S2
+finding.
 
 ## Security review workflow
 

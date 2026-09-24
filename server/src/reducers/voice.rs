@@ -1,7 +1,7 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err, find_channel, require_account, require_member_role, voice_key,
+    assert_or_err, find_channel, member_key, require_account, require_not_timed_out, voice_key,
 };
 use crate::schema::*;
 
@@ -14,10 +14,17 @@ pub fn join_voice_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), S
         "not a voice channel",
     )?;
 
-    let role = require_member_role(ctx, channel_row.server_id, ctx.sender())?;
+    let member = ctx
+        .db
+        .server_member()
+        .member_key()
+        .find(member_key(channel_row.server_id, ctx.sender()))
+        .ok_or_else(|| "not a server member".to_string())?;
     if channel_row.moderator_only {
-        assert_or_err(role != Role::Member, "channel is moderator-only")?;
+        assert_or_err(member.role != Role::Member, "channel is moderator-only")?;
     }
+    // A timeout silences text; it has to silence voice too (BUG_ANALYSIS B13).
+    require_not_timed_out(ctx, &member)?;
 
     let participant_count = ctx
         .db

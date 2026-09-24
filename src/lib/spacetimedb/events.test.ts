@@ -27,6 +27,9 @@ vi.mock('./sync', () => ({
   syncInvites: vi.fn(),
   syncDmServerInvites: vi.fn(),
   syncServerScopedState: vi.fn(),
+  syncServers: vi.fn(),
+  syncMembers: vi.fn(),
+  syncJoinRequests: vi.fn(),
   syncChannels: vi.fn(),
   syncMessages: vi.fn(),
   syncPins: vi.fn(),
@@ -40,8 +43,9 @@ vi.mock('./mappers', () => ({
   mapDirectMessage: vi.fn((row: unknown) => row),
   mapMessage: vi.fn((row: unknown) => row),
   mapDmServerInvite: vi.fn(() => ({ id: 1, senderIdentity: 's', recipientIdentity: 'r' })),
+  mapServerMember: vi.fn((row: { userIdentity: string }) => row),
   normalizeIdentity: vi.fn((v: string) => v),
-  sameIdentity: vi.fn(() => false),
+  sameIdentity: vi.fn((a: string, b: string) => a === b),
 }))
 
 vi.mock('../notifications', () => ({
@@ -50,7 +54,15 @@ vi.mock('../notifications', () => ({
 }))
 
 import { cancelPendingRefreshes, watchLiveTables } from './events'
-import { recomputeUnreadStateFromReadCursors, syncMessages, syncPresenceStates } from './sync'
+import {
+  recomputeUnreadStateFromReadCursors,
+  syncJoinRequests,
+  syncMembers,
+  syncMessages,
+  syncPresenceStates,
+  syncServerScopedState,
+} from './sync'
+import { useConnectionStore } from '../../stores/connectionStore'
 import type { DbConnection } from '../../generated'
 
 /** Callbacks the watcher registered, keyed by `<table>.<event>`. */
@@ -154,5 +166,42 @@ describe('watchLiveTables', () => {
     vi.runAllTimers()
 
     expect(syncMessages).not.toHaveBeenCalled()
+  })
+
+  // BUG_ANALYSIS C7: someone else's membership change used to rebuild all six
+  // space-scoped stores on every connected member of the space.
+  it('rebuilds only the member list when someone else joins, leaves or changes role', () => {
+    useConnectionStore.setState({ identity: 'me' })
+    const { conn, handlers } = fakeConnection()
+    watchLiveTables(conn, () => true)
+
+    handlers.get('my_server_members.insert')!({}, { userIdentity: 'someone' })
+    handlers.get('my_server_members.update')!({}, { userIdentity: 'someone' }, { userIdentity: 'someone' })
+    handlers.get('my_server_members.delete')!({}, { userIdentity: 'someone' })
+    vi.runAllTimers()
+
+    expect(syncMembers).toHaveBeenCalledTimes(1)
+    expect(syncServerScopedState).not.toHaveBeenCalled()
+  })
+
+  it('re-syncs every space-scoped store when the caller\'s own membership changes', () => {
+    useConnectionStore.setState({ identity: 'me' })
+    const { conn, handlers } = fakeConnection()
+    watchLiveTables(conn, () => true)
+
+    handlers.get('my_server_members.insert')!({}, { userIdentity: 'me' })
+    vi.runAllTimers()
+
+    expect(syncServerScopedState).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes join requests when one arrives', () => {
+    const { conn, handlers } = fakeConnection()
+    watchLiveTables(conn, () => true)
+
+    handlers.get('my_join_requests.insert')!({}, {})
+    vi.runAllTimers()
+
+    expect(syncJoinRequests).toHaveBeenCalledTimes(1)
   })
 })

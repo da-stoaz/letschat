@@ -1,8 +1,8 @@
 use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
 
 use crate::helpers::{
-    assert_or_err, ban_key, member_key, require_account, require_member_role, require_mod_or_owner,
-    require_owner, voice_key,
+    assert_or_err, ban_key, member_key, remove_voice_presence, require_account, require_member_role,
+    require_mod_or_owner, require_owner,
 };
 use crate::schema::*;
 
@@ -56,21 +56,7 @@ pub fn kick_member(
         .server_member()
         .member_key()
         .delete(member_key(server_id, target_identity));
-
-    let channel_ids: Vec<u64> = ctx
-        .db
-        .channel()
-        .server_id()
-        .filter(server_id)
-        .map(|c| c.id)
-        .collect();
-
-    for channel_id in channel_ids {
-        ctx.db
-            .voice_participant()
-            .voice_key()
-            .delete(voice_key(channel_id, target_identity));
-    }
+    remove_voice_presence(ctx, server_id, target_identity);
 
     Ok(())
 }
@@ -101,6 +87,9 @@ pub fn ban_member(
         .server_member()
         .member_key()
         .delete(member_key(server_id, target_identity));
+    // kick_member always did this; a banned user stayed a visible voice
+    // participant holding a slot until they disconnected (BUG_ANALYSIS B11).
+    remove_voice_presence(ctx, server_id, target_identity);
 
     Ok(())
 }
@@ -153,6 +142,7 @@ pub fn timeout_member(
     member_row.timeout_until =
         Some(ctx.timestamp + TimeDuration::from_micros((duration_seconds as i64) * 1_000_000));
     ctx.db.server_member().member_key().update(member_row);
+    remove_voice_presence(ctx, server_id, target_identity);
     Ok(())
 }
 

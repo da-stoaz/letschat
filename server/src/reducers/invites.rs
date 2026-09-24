@@ -2,8 +2,8 @@ use spacetimedb::rand::{Rng, distributions::Alphanumeric};
 use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
 
 use crate::helpers::{
-    assert_or_err, has_member_role, is_banned, member_key, next_id, require_account,
-    require_invite_permission, require_member_role,
+    assert_or_err, has_block_either_direction, has_member_role, is_banned, member_key, next_id,
+    require_account, require_invite_permission, require_member_role,
 };
 use crate::schema::*;
 
@@ -132,6 +132,11 @@ pub fn use_invite(ctx: &ReducerContext, token: String) -> Result<(), String> {
         !is_banned(ctx, invite_row.server_id, ctx.sender()),
         "you are banned",
     )?;
+    // An invite is only as good as its creator's current right to invite: it
+    // dies with a kick, ban, leave, demotion or a switch to ModeratorsOnly
+    // (BUG_ANALYSIS A13), instead of outliving all of them.
+    require_invite_permission(ctx, invite_row.server_id, invite_row.created_by)
+        .map_err(|_| "this invite is no longer valid".to_string())?;
     assert_or_err(
         has_member_role(ctx, invite_row.server_id, ctx.sender()).is_none(),
         "already a member",
@@ -244,11 +249,20 @@ pub fn send_dm_server_invite(
         ctx.db.server().id().find(server_id).is_some(),
         "server not found",
     )?;
-    assert_or_err(
-        ctx.db.user().identity().find(recipient_identity).is_some(),
-        "recipient not found",
-    )?;
+    let recipient_username = ctx
+        .db
+        .user()
+        .identity()
+        .find(recipient_identity)
+        .ok_or_else(|| "recipient not found".to_string())?
+        .username;
     assert_or_err(ctx.sender() != recipient_identity, "cannot invite yourself")?;
+    // Same parity as send_direct_message: blocking has to end this channel too
+    // (BUG_ANALYSIS B12).
+    assert_or_err(
+        !has_block_either_direction(ctx, ctx.sender(), recipient_identity),
+        "blocked relationship exists",
+    )?;
     assert_or_err(
         has_member_role(ctx, server_id, recipient_identity).is_none(),
         "user is already a member",
@@ -285,7 +299,9 @@ pub fn send_dm_server_invite(
         expires_at: expiry,
         max_uses: Some(1),
         use_count: 0,
-        allowed_usernames: Vec::new(),
+        // Bound to its recipient: every member can read invite tokens, and an
+        // unbound one worked for whoever it was forwarded to (BUG_ANALYSIS A13).
+        allowed_usernames: vec![recipient_username],
     });
 
     ctx.db.dm_server_invite().insert(DmServerInvite {

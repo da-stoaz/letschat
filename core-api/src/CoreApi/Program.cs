@@ -180,23 +180,34 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 // ── Rate limiting ────────────────────────────────────────────────────────────
-// Per-IP fixed window on abuse-prone auth endpoints (register / login / resend).
-// Limits come from the runtime SystemConfig; new windows pick up edits.
-// Partitioning is only meaningful because UseForwardedHeaders runs first.
+// Per-IP fixed windows on abuse-prone auth endpoints, one budget per purpose so
+// flooding one flow never locks another (BUG_ANALYSIS A11). Limits come from the
+// runtime SystemConfig. Partitioning is only meaningful because
+// UseForwardedHeaders runs first.
+builder.Services.AddSingleton<MailSendLimiter>();
 builder.Services.AddRateLimiter(rateLimiter =>
 {
-    rateLimiter.AddPolicy(AuthEndpoints.RateLimitPolicy, httpContext =>
-    {
-        var config = httpContext.RequestServices.GetRequiredService<SystemConfigService>().Current;
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = config.RateLimitPermitLimit,
-                Window = TimeSpan.FromSeconds(config.RateLimitWindowSeconds),
-                QueueLimit = 0,
-            });
-    });
+    void AddPerIpPolicy(string policy, int multiplier) =>
+        rateLimiter.AddPolicy(policy, httpContext =>
+        {
+            var config = httpContext.RequestServices.GetRequiredService<SystemConfigService>().Current;
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = config.RateLimitPermitLimit * multiplier,
+                    Window = TimeSpan.FromSeconds(config.RateLimitWindowSeconds),
+                    QueueLimit = 0,
+                });
+        });
+
+    // Sign-in is what many people behind one CGNAT or VPN address do at once,
+    // and the per-account lockout already stops guessing; the IP budget here
+    // only has to catch broad username spraying.
+    AddPerIpPolicy(AuthEndpoints.LoginRateLimitPolicy, AuthEndpoints.LoginRateLimitMultiplier);
+    AddPerIpPolicy(AuthEndpoints.RegisterRateLimitPolicy, 1);
+    AddPerIpPolicy(AuthEndpoints.EmailRateLimitPolicy, 1);
+    AddPerIpPolicy(AuthEndpoints.PasswordRateLimitPolicy, 1);
 
     rateLimiter.OnRejected = async (context, cancellationToken) =>
     {

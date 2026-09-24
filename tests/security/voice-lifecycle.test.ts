@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll, beforeAll } from 'vitest'
 import { DbConnection } from '../../src/generated'
-import { BASE, DB, createServer, makeUser, ownerSql, type TestUser } from './harness'
+import { BASE, DB, createServer, makeOpenJoinable, makeUser, none, ownerSql, type TestUser } from './harness'
 
 // Voice presence is connection-scoped: rows record the SpacetimeDB connection
 // that claimed them, and the module's `client_disconnected` lifecycle reducer
@@ -132,5 +132,26 @@ describe('voice presence — connection lifecycle', () => {
     }
 
     expect(await until(() => voiceRowCount(secondVoiceChannelId) === 0)).toBe(true)
+  })
+
+  // BUG_ANALYSIS B11: kick removed the target's voice presence, ban did not, so
+  // a banned user stayed a visible participant holding a slot.
+  it('a ban removes the banned member from voice', async () => {
+    const member = await makeUser('vban_m')
+    const serverId = Number(
+      (await owner.sql(`SELECT server_id FROM my_channels WHERE id = ${voiceChannelId}`)).rows[0].server_id,
+    )
+    await makeOpenJoinable(owner, serverId)
+    await member.call('join_discoverable_server', [serverId])
+    const memberConn = await connect(member.token)
+    try {
+      memberConn.reducers.joinVoiceChannel({ channelId: BigInt(voiceChannelId) })
+      expect(await until(() => voiceRowCount(voiceChannelId) === 1)).toBe(true)
+
+      await owner.call('ban_member', [serverId, member.idArg, none])
+      expect(voiceRowCount(voiceChannelId)).toBe(0)
+    } finally {
+      memberConn.disconnect()
+    }
   })
 })

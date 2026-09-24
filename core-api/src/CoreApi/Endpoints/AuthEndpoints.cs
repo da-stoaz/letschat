@@ -16,35 +16,45 @@ namespace CoreApi.Endpoints;
 /// </summary>
 public static class AuthEndpoints
 {
-    /// <summary>Rate-limiting policy applied to abuse-prone auth endpoints.</summary>
-    public const string RateLimitPolicy = "auth";
+    /// <summary>
+    /// Per-IP rate-limit policies, one per purpose (BUG_ANALYSIS A11). They used to
+    /// share one bucket, so a few requests of any kind from a shared address
+    /// locked everyone behind it out of every auth flow.
+    /// </summary>
+    public const string LoginRateLimitPolicy = "auth-login";
+    public const string RegisterRateLimitPolicy = "auth-register";
+    public const string EmailRateLimitPolicy = "auth-email";
+    public const string PasswordRateLimitPolicy = "auth-password";
+
+    /// <summary>Sign-in budget as a multiple of the configured per-IP limit.</summary>
+    public const int LoginRateLimitMultiplier = 10;
 
     public static void MapAuthEndpoints(this IEndpointRouteBuilder routes)
     {
-        routes.MapPost("/auth/register", Register).RequireRateLimiting(RateLimitPolicy);
-        routes.MapPost("/auth/login", Login).RequireRateLimiting(RateLimitPolicy);
+        routes.MapPost("/auth/register", Register).RequireRateLimiting(RegisterRateLimitPolicy);
+        routes.MapPost("/auth/login", Login).RequireRateLimiting(LoginRateLimitPolicy);
         routes.MapPost("/auth/resend-confirmation", ResendConfirmation)
-            .RequireRateLimiting(RateLimitPolicy);
+            .RequireRateLimiting(EmailRateLimitPolicy);
 
         // Password reset. forgot-password mails the link; reset-password is the
         // browser-facing GET form + POST submit the email link opens.
         routes.MapPost("/auth/forgot-password", ForgotPassword)
-            .RequireRateLimiting(RateLimitPolicy);
+            .RequireRateLimiting(EmailRateLimitPolicy);
         routes.MapGet("/auth/reset-password", ResetPasswordForm);
         routes.MapPost("/auth/reset-password", ResetPassword)
-            .RequireRateLimiting(RateLimitPolicy);
+            .RequireRateLimiting(PasswordRateLimitPolicy);
 
         // Not rate-limited — the client polls this from the "confirm email" screen.
         routes.MapPost("/auth/registration-status", RegistrationStatus);
 
         // Creates accounts and sets passwords — rate-limit it like /auth/register.
-        routes.MapPost("/auth/link", Link).RequireRateLimiting(RateLimitPolicy);
+        routes.MapPost("/auth/link", Link).RequireRateLimiting(RegisterRateLimitPolicy);
         routes.MapPost("/auth/verify", Verify);
         routes.MapPost("/auth/account", Account);
 
         // Verifies the current password, so it is guessable — rate-limit it.
         routes.MapPost("/auth/change-password", ChangePassword)
-            .RequireRateLimiting(RateLimitPolicy);
+            .RequireRateLimiting(PasswordRateLimitPolicy);
         routes.MapPost("/auth/renew-session", RenewSession);
 
         // Hit from the email link in a browser — returns an HTML page.
@@ -522,7 +532,8 @@ public static class AuthEndpoints
     private static async Task<IResult> ResendConfirmation(
         ResendConfirmationRequest request,
         UserManager<ApplicationUser> users,
-        AccountEmailService accountEmail)
+        AccountEmailService accountEmail,
+        MailSendLimiter mailLimit)
     {
         // Look the account up by whichever identifier was supplied: email (the
         // post-registration screen) or username (the blocked-login screen).
@@ -536,7 +547,7 @@ public static class AuthEndpoints
             user = await users.FindByNameAsync(Validation.NormalizeUsername(request.Username));
         }
 
-        if (user is { Status: AccountStatus.Registered, EmailConfirmed: false })
+        if (user is { Status: AccountStatus.Registered, EmailConfirmed: false } && mailLimit.TryAcquire(user.Id))
         {
             await accountEmail.SendConfirmationEmailAsync(user);
         }
@@ -557,7 +568,8 @@ public static class AuthEndpoints
     private static async Task<IResult> ForgotPassword(
         ForgotPasswordRequest request,
         UserManager<ApplicationUser> users,
-        AccountEmailService accountEmail)
+        AccountEmailService accountEmail,
+        MailSendLimiter mailLimit)
     {
         var email = Validation.NormalizeEmail(request.Email);
         var user = await users.FindByEmailAsync(email);
@@ -565,7 +577,7 @@ public static class AuthEndpoints
         // Only confirmed accounts can reset — an unconfirmed one has no proven
         // owner of the inbox yet. Resetting never grants sign-in on its own;
         // EnsureSignInAllowed still gates login afterwards.
-        if (user is { EmailConfirmed: true })
+        if (user is { EmailConfirmed: true } && mailLimit.TryAcquire(user.Id))
         {
             await accountEmail.SendPasswordResetEmailAsync(user);
         }

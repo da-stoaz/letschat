@@ -305,6 +305,51 @@ macro_rules! next_id {
 }
 pub(crate) use next_id;
 
+/// What writing into a channel requires, for sending and editing alike
+/// (BUG_ANALYSIS B4, B13): a text channel, current membership, a moderator role
+/// where the channel demands one, and no running timeout.
+pub(crate) fn require_can_post(ctx: &ReducerContext, channel: &Channel) -> Result<(), String> {
+    assert_or_err(
+        matches!(channel.kind, ChannelKind::Text | ChannelKind::Announcement),
+        "not a text channel",
+    )?;
+    let member = ctx
+        .db
+        .server_member()
+        .member_key()
+        .find(member_key(channel.server_id, ctx.sender()))
+        .ok_or_else(|| "not a server member".to_string())?;
+    if channel.moderator_only {
+        assert_or_err(member.role != Role::Member, "channel is moderator-only")?;
+    }
+    require_not_timed_out(ctx, &member)
+}
+
+pub(crate) fn require_not_timed_out(ctx: &ReducerContext, member: &ServerMember) -> Result<(), String> {
+    match member.timeout_until {
+        Some(until) => assert_or_err(ctx.timestamp > until, "you are timed out"),
+        None => Ok(()),
+    }
+}
+
+/// Drops a user's voice presence in every channel of a space — for anything
+/// that removes or silences them there (kick, ban, timeout).
+pub(crate) fn remove_voice_presence(ctx: &ReducerContext, server_id: u64, user_identity: Identity) {
+    let channel_ids: Vec<u64> = ctx
+        .db
+        .channel()
+        .server_id()
+        .filter(server_id)
+        .map(|c| c.id)
+        .collect();
+    for channel_id in channel_ids {
+        ctx.db
+            .voice_participant()
+            .voice_key()
+            .delete(voice_key(channel_id, user_identity));
+    }
+}
+
 pub(crate) fn find_channel(ctx: &ReducerContext, channel_id: u64) -> Result<Channel, String> {
     ctx.db
         .channel()

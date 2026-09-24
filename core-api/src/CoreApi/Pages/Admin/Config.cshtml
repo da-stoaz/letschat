@@ -73,7 +73,7 @@
 
     <div class="card">
         <h2>Rate limiting</h2>
-        <p class="hint" style="margin-top:0">Per-IP limit on register / login / resend requests.</p>
+        <p class="hint" style="margin-top:0">Per-IP limit, counted separately for registration, email, and password requests. Sign-in allows 10× this, since failed passwords already lock the account.</p>
         <div class="field">
             <label for="rlp">Requests allowed per window</label>
             <input class="input" type="number" min="1" id="rlp" name="RateLimitPermitLimit" value="@Model.RateLimitPermitLimit">
