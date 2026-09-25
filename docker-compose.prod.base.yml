@@ -337,22 +337,24 @@ services:
     restart: "no"
 
   # ── Web client (hosted browser SPA) ──────────────────────────────────────────
-  # Builds the React/Vite bundle with this deployment's connect URL baked in
-  # (VITE_WEB_CONNECT_URL) so a browser visiting app.<domain> auto-discovers the
-  # instance and skips the desktop "pick a server" setup. Self-contained static
+  # Serves the React/Vite bundle and tells it this deployment's connect URL
+  # (VITE_WEB_CONNECT_URL, written into /config.js at start) so a browser
+  # visiting app.<domain> auto-discovers the instance and skips the desktop
+  # "pick a server" setup. Self-contained static
   # file server (no SSR runtime to crash) — reached by service name `web:80`
   # from Caddy or the Cloudflare Tunnel. Loopback-only host port for debugging.
   web:
-    build:
-      context: .
-      dockerfile: deploy/web/Dockerfile
-      args:
-        VITE_WEB_CONNECT_URL: "${VITE_WEB_CONNECT_URL}"
-        VITE_WEB_WS_COMPRESSION: "${VITE_WEB_WS_COMPRESSION:-gzip}"
+    # Pre-built by GitHub Actions like every other image; nothing is compiled on
+    # the server. The instance settings below are applied at container start.
+    image: ghcr.io/da-stoaz/letschat-web:${LETSCHAT_VERSION:-latest}
     container_name: letschat-web
-    # Service domains for the Content-Security-Policy in deploy/web/Caddyfile.
-    # Same values the edge proxy uses; Caddy reads them as `{$VAR}` at startup.
     environment:
+      # The instance the browser client locks onto (written into /config.js).
+      # Changing it needs a restart of this container, not a rebuild.
+      VITE_WEB_CONNECT_URL: "${VITE_WEB_CONNECT_URL:-}"
+      VITE_WEB_WS_COMPRESSION: "${VITE_WEB_WS_COMPRESSION:-gzip}"
+      # Service hostnames for the Content-Security-Policy in deploy/web/Caddyfile
+      # — same values the edge proxy uses. Required; checked at start.
       AUTH_DOMAIN: "${AUTH_DOMAIN}"
       CHAT_DOMAIN: "${CHAT_DOMAIN}"
       FILES_DOMAIN: "${FILES_DOMAIN}"

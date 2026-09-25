@@ -6,6 +6,7 @@ import { clearStoredAuthSessionToken } from '../authService'
 import { useConnectionStore, type ConnectionStatus } from '../../stores/connectionStore'
 import { useServerConfigStore } from '../../stores/serverConfigStore'
 import { isDesktopTauriRuntime } from '../tauri'
+import { WEB_WS_COMPRESSION } from '../runtimeConfig'
 
 export type SpacetimeDBClient = {
   connection: DbConnection | null
@@ -63,7 +64,7 @@ const RECONNECT_MAX_DELAY_MS = 30_000
 // failed and we auto-downgraded this session.
 function pickCompression(): 'gzip' | 'none' {
   if (isDesktopTauriRuntime()) return 'none'
-  if (import.meta.env.VITE_WEB_WS_COMPRESSION === 'none') return 'none'
+  if (WEB_WS_COMPRESSION === 'none') return 'none'
   return webCompressionDowngraded ? 'none' : 'gzip'
 }
 

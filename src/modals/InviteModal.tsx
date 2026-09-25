@@ -9,6 +9,7 @@ import { useUsersStore } from '../stores/usersStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useServerRole } from '../hooks/useServerRole'
 import { canInviteUsers } from '../lib/permissions'
+import { isHostedWebBuild } from '../lib/tauri'
 import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -31,7 +32,11 @@ import type { Invite } from '../types/domain'
 
 const EMPTY: never[] = []
 
-const APP_BASE_URL = (import.meta.env.VITE_APP_BASE_URL as string | undefined) ?? 'http://localhost:1420'
+// The hosted web client serves /invite/:token itself, so its own origin is the
+// right base; it used to fall back to the desktop dev URL on every instance.
+const APP_BASE_URL = isHostedWebBuild()
+  ? window.location.origin
+  : ((import.meta.env.VITE_APP_BASE_URL as string | undefined) ?? 'http://localhost:1420')
 
 const EXPIRY_OPTIONS = [
   { label: '30 minutes', value: 30 * 60 },

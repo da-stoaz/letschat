@@ -91,9 +91,8 @@ import { GITHUB_REPO } from "@/lib/site";
           </li>
         </ul>
         <p class="guide-prose">
-          The browser client is baked at build time with <em>your</em> server address
-          (<code>VITE_WEB_CONNECT_URL</code>), so it's locked to this one instance and skips the setup
-          screen entirely. Hosting it is optional — leave <code>app</code> out and the desktop app still works.
+          The browser client reads <em>your</em> server address (<code>VITE_WEB_CONNECT_URL</code>) when its
+          container starts, so it's locked to this one instance and skips the setup screen entirely. Hosting it is optional — leave <code>app</code> out and the desktop app still works.
           This guide sets up both; the browser-only bits are clearly marked.
         </p>
       </article>
@@ -119,7 +118,7 @@ import { GITHUB_REPO } from "@/lib/site";
         <ul class="list-disc pl-5 guide-prose space-y-1.5">
           <li>A domain whose DNS is managed by Cloudflare (free plan is fine).</li>
           <li>Cloudflare <strong>Zero Trust</strong> enabled on your account (free).</li>
-          <li>An Ubuntu server with Docker Engine 25+ and the Compose plugin 2.20.2+ (the health checks need them), plus <code>git</code>.</li>
+          <li>An Ubuntu server with Docker Engine 25+ and the Compose plugin 2.20.2+ (the health checks need them).</li>
           <li>Admin access to your home router (for the two voice ports in Step 7).</li>
         </ul>
         <p class="guide-prose">
@@ -153,19 +152,24 @@ import { GITHUB_REPO } from "@/lib/site";
 
       <!-- ── Step 2 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-7 space-y-4">
-        <div class="step-head"><span class="step-num">2</span><h2 class="text-2xl font-semibold tracking-tight">Get the files</h2></div>
-        <p class="guide-prose">On the server:</p>
-        <CodeBlock label="terminal" code={`git clone --depth 1 https://github.com/${GITHUB_REPO}.git letschat
-cd letschat
+        <div class="step-head"><span class="step-num">2</span><h2 class="text-2xl font-semibold tracking-tight">Download the files</h2></div>
+        <p class="guide-prose">On the server, in a fresh folder:</p>
+        <CodeBlock label="terminal" code={`mkdir letschat && cd letschat
+
+# the stack + the cloudflared connector overlay
+wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
+wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.tunnel.yml
+
+# the LiveKit config
+mkdir livekit
+wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml
 
 # your settings file
-cp .env.production.tunnel.example .env`} />
+wget -O .env https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.tunnel.example`} />
         <Callout type="note">
-          Clone the repository rather than downloading single files: the browser client is compiled from
-          source in the <code>web</code> container on first start (it bakes in your server address), and that
-          build needs the source next to the compose files. Everything else is a pre-built image — no
-          Rust or .NET toolchain on the server. To upgrade later, <code>git pull</code> first so you also get the
-          current compose files.
+          Every service — the browser client included — is a pre-built image that GitHub Actions publishes
+          with each release. Nothing is compiled on your server. To upgrade later, download the two compose
+          files again (they change with releases) and pull.
         </Callout>
       </article>
 
@@ -242,7 +246,7 @@ LIVEKIT_DOMAIN=lk.example.com`} />
           Want people to use LetsChat from a browser at <code>app.example.com</code>? Set these three.
           Skip them and only the desktop app is served — everything else is unaffected.
         </p>
-        <CodeBlock label=".env" code={`# Browser client — baked into the bundle at build time, so it auto-connects
+        <CodeBlock label=".env" code={`# Browser client — read when the web container starts, so it auto-connects
 # to THIS instance. Point it at auth.<domain>, which serves discovery.
 VITE_WEB_CONNECT_URL=https://auth.example.com
 
@@ -319,10 +323,9 @@ app.example.com    ->  http://web:80               # browser client (omit if not
           database is healthy — no manual <code>spacetime publish</code>. Watch it finish with:
         </p>
         <CodeBlock label="terminal" code={`docker logs -f letschat-module-init`} />
-        <Callout type="note" title="First start is slower">
-          If you're hosting the browser client, the <code>web</code> container compiles the React bundle on
-          first build — give it a couple of minutes. Changed <code>VITE_WEB_CONNECT_URL</code> later? Rebuild it
-          with <code>docker compose … build web && docker compose … up -d web</code>.
+        <Callout type="note" title="Changing the browser client's address">
+          Changed <code>VITE_WEB_CONNECT_URL</code> later? Recreate just that container:
+          <code>docker compose … up -d web</code>. No rebuild — the address is applied at start.
         </Callout>
 
         <h3 class="text-lg font-medium pt-3">Give core-api the module owner's key — required, before anyone signs in</h3>

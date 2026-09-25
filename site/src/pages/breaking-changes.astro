@@ -5,6 +5,16 @@ import SiteFooter from "@/components/SiteFooter.astro";
 
 const changes = [
   {
+    version: "v1.2.1",
+    date: "September 2026",
+    items: [
+      "The browser client is now a pre-built image (ghcr.io/da-stoaz/letschat-web) published by GitHub Actions with every release, like core-api, the module and the archive worker. Nothing is compiled on the server any more.",
+      "VITE_WEB_CONNECT_URL and VITE_WEB_WS_COMPRESSION are read when the web container starts instead of being baked into the bundle, so changing them needs docker compose … up -d web, not a rebuild. The container refuses to start if the URL is not an http(s):// address or the compression is not gzip or none.",
+      "Invite links created in the browser client now point at the instance's own web address instead of a desktop development URL.",
+    ],
+    migration: "Download the new docker-compose.prod.base.yml: its web service now pulls an image instead of building from source. Your .env keeps working unchanged. If you kept a customised compose file, replace the web service's build: block with image: ghcr.io/da-stoaz/letschat-web:${LETSCHAT_VERSION:-latest} and pass VITE_WEB_CONNECT_URL and VITE_WEB_WS_COMPRESSION as environment variables.",
+  },
+  {
     version: "v1.2.0",
     date: "September 2026",
     items: [

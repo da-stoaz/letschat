@@ -39,7 +39,7 @@ import { GITHUB_REPO } from "@/lib/site";
       <article class="step-card rounded-xl p-7 space-y-4">
         <h2 class="text-2xl font-semibold tracking-tight">Requirements (read first)</h2>
         <ul class="list-disc pl-5 guide-prose space-y-1.5">
-          <li>Ubuntu host with Docker Engine 25+ and the Compose plugin 2.20.2+ (the health checks need them), plus <code>git</code>.</li>
+          <li>Ubuntu host with Docker Engine 25+ and the Compose plugin 2.20.2+ (the health checks need them).</li>
           <li>Cloudflare DNS records set to your host public IP (DNS-only mode for ACME issuance).</li>
           <li>A routable public IPv4, <strong>not</strong> CGNAT. This track exposes the host directly, so CGNAT breaks everything, not just voice. Step 2 shows how to check.</li>
           <li>Router/firewall forwards to the host's LAN IP: <code>80/tcp</code> + <code>443/tcp</code> (Caddy TLS/HTTP) and <code>44382/udp</code> + <code>44381/tcp</code> (LiveKit media). All a manual router step.</li>
@@ -66,16 +66,26 @@ import { GITHUB_REPO } from "@/lib/site";
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 0: Get the files</h2>
-        <CodeBlock label="terminal" code={`git clone --depth 1 https://github.com/${GITHUB_REPO}.git letschat
-cd letschat`} />
-        <p class="guide-prose text-sm">Clone rather than downloading single files: the browser client compiles itself from source in the <code>web</code> container on first start, and that build needs the source next to the compose files. Everything else is a pre-built image — no Rust or .NET toolchain on the server. To upgrade later, <code>git pull</code> first so you also get the current compose files.</p>
+        <h2 class="text-2xl font-semibold tracking-tight">Step 0: Get shared files</h2>
+        <p class="guide-prose">Download the shared base compose file and LiveKit config:</p>
+        <CodeBlock label="terminal" code={`mkdir letschat && cd letschat
+
+wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
+
+mkdir livekit
+wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml`} />
+        <p class="guide-prose text-sm">Every service — the browser client included — is a pre-built image that GitHub Actions publishes with each release. Nothing is compiled on your server. To upgrade later, download the compose files again (they change with releases) and pull.</p>
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 1: Create your settings file</h2>
+        <h2 class="text-2xl font-semibold tracking-tight">Step 1: Download Path B files</h2>
         <p class="guide-prose">Inside the <code>letschat</code> directory:</p>
-        <CodeBlock label="terminal" code={`cp .env.production.caddy.example .env`} />
+        <CodeBlock label="terminal" code={`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.caddy.yml
+
+wget -O .env https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.caddy.example
+
+mkdir -p deploy/caddy
+wget -O deploy/caddy/Caddyfile https://raw.githubusercontent.com/${GITHUB_REPO}/main/deploy/caddy/Caddyfile`} />
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
@@ -175,7 +185,7 @@ EMAIL_FROM_ADDRESS=no-reply@example.com`} />
           For the browser client at <code>app.example.com</code>, also set these. Skip them (and the
           <code>APP_DOMAIN</code> above) to serve the desktop app only.
         </p>
-        <CodeBlock label=".env" code={`# Baked into the browser bundle at build time so it auto-connects to THIS
+        <CodeBlock label=".env" code={`# Read when the web container starts, so it auto-connects to THIS
 # instance. Point at auth.<domain>, which serves the discovery document.
 VITE_WEB_CONNECT_URL=https://auth.example.com
 
@@ -213,9 +223,8 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
         <p class="guide-prose"><code>module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
         <CodeBlock label="terminal" code={`docker logs letschat-module-init`} />
         <Callout type="note">
-          Hosting the browser client? The <code>web</code> container builds the React bundle on first start —
-          give it a couple of minutes. If you change <code>VITE_WEB_CONNECT_URL</code> later, rebuild with
-          <code>docker compose … build web && docker compose … up -d web</code>.
+          Hosting the browser client? If you change <code>VITE_WEB_CONNECT_URL</code> later, recreate just that
+          container with <code>docker compose … up -d web</code> — no rebuild, the address is applied at start.
         </Callout>
 
         <h3 class="text-lg font-medium pt-3">Give core-api the module owner's key — required, before anyone signs in</h3>
