@@ -1,3 +1,9 @@
+# Own Compose project. Without it the project is named after the directory —
+# `letschat`, the same as docker-compose.prod.base.yml — and both files define
+# spacetimedb/postgres/minio/livekit, so bringing up one stack silently
+# replaced the other's containers.
+name: letschat-dev
+
 services:
 
   # ── SpacetimeDB ─────────────────────────────────────────────────────────────
@@ -101,7 +107,9 @@ services:
 
   # ── MinIO ────────────────────────────────────────────────────────────────────
   minio:
-    image: minio/minio:latest
+    # Same server image as prod (see docker-compose.prod.base.yml): MinIO's own
+    # images were deleted from Docker Hub.
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
     container_name: letschat-dev-minio
     command: server /data --console-address ":9001"
     ports:
@@ -118,7 +126,7 @@ services:
 
   # ── MinIO bucket init ─────────────────────────────────────────────────────────
   minio-init:
-    image: minio/mc:latest
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     container_name: letschat-dev-minio-init
     depends_on:
       - minio
@@ -132,8 +140,14 @@ services:
       "
     restart: "no"
 
+# Explicit names keep the volumes created while this file still ran under the
+# `letschat` project, so moving to `letschat-dev` loses no local data.
 volumes:
   spacetimedb_dev_home:
+    name: letschat_spacetimedb_dev_home
   minio_dev_data:
+    name: letschat_minio_dev_data
   postgres_dev_data:
+    name: letschat_postgres_dev_data
   archive_worker_dev_data:
+    name: letschat_archive_worker_dev_data

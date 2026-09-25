@@ -23,6 +23,11 @@ public sealed class ServiceOptions
     // it is guarded like a secret — prod MUST override it (see FindInsecureDefaults).
     internal const string DevSpacetimeOidcIssuer = "http://host.docker.internal:8787";
 
+    // Every secret in the shipped .env.production.*.example templates starts
+    // with this. The templates are as public as the dev defaults above, so a
+    // placeholder left in place is just as forgeable.
+    internal const string TemplatePlaceholderPrefix = "change-me";
+
     public required string ConnectionString { get; init; }
 
     /// <summary>
@@ -70,6 +75,13 @@ public sealed class ServiceOptions
     public required string DiscoverySpacetimeDbUri { get; init; }
     public required string DiscoveryAuthUrl { get; init; }
     public required string DiscoveryLiveKitUrl { get; init; }
+
+    /// <summary>
+    /// Public URL of this instance's hosted web client (e.g. <c>https://app.example.com</c>).
+    /// Optional; advertised in discovery so the desktop app can build invite links
+    /// that open in a browser. Unset means the instance hosts no web client.
+    /// </summary>
+    public string? DiscoveryWebUrl { get; init; }
 
     /// <summary>
     /// LiveKit's HTTP API as core-api reaches it (not the public signalling URL):
@@ -228,6 +240,7 @@ public sealed class ServiceOptions
             DiscoverySpacetimeDbUri = Get("DISCOVERY_SPACETIMEDB_URI", "ws://localhost:4300"),
             DiscoveryAuthUrl = Get("DISCOVERY_AUTH_URL", "http://localhost:8787"),
             DiscoveryLiveKitUrl = Get("DISCOVERY_LIVEKIT_URL", "ws://localhost:7880"),
+            DiscoveryWebUrl = GetOptional("DISCOVERY_WEB_URL")?.TrimEnd('/'),
             LiveKitInternalUrl = Get("LIVEKIT_INTERNAL_URL", "http://127.0.0.1:7880"),
             DiscoveryDatabase = Get("DISCOVERY_DATABASE", "letschat"),
 
@@ -281,6 +294,26 @@ public sealed class ServiceOptions
         Check("LIVEKIT_API_SECRET", LiveKitApiSecret, DevLiveKitApiSecret);
         Check("MINIO_SECRET_KEY", MinioSecretKey, DevMinioSecretKey);
 
+        void CheckPlaceholder(string envVar, string? value)
+        {
+            if (value?.StartsWith(TemplatePlaceholderPrefix, StringComparison.OrdinalIgnoreCase) == true)
+            {
+                issues.Add(envVar);
+            }
+        }
+
+        CheckPlaceholder("AUTH_JWT_SECRET", JwtSecret);
+        CheckPlaceholder("LIVEKIT_API_SECRET", LiveKitApiSecret);
+        CheckPlaceholder("MINIO_ACCESS_KEY", MinioAccessKey);
+        CheckPlaceholder("MINIO_SECRET_KEY", MinioSecretKey);
+        CheckPlaceholder("ADMIN_BOOTSTRAP_PASSWORD", BootstrapAdminPassword);
+        CheckPlaceholder("SPACETIME_OIDC_PRIVATE_KEY", SpacetimeOidcPrivateKey);
+        // Compose builds both connection strings from POSTGRES_PASSWORD.
+        if (ConnectionString.Contains($"Password={TemplatePlaceholderPrefix}", StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add("POSTGRES_PASSWORD");
+        }
+
         // The issuer is permanent and identity-defining — a prod deployment left
         // on the dev default would derive host.docker.internal identities and, if
         // ever corrected, silently orphan every account. Force an explicit value.
@@ -297,7 +330,7 @@ public sealed class ServiceOptions
 
     /// <summary>
     /// Returns problems with the endpoints handed to CLIENTS — the presigned-URL
-    /// host and the three addresses in `/.well-known/letschat.json`. Every one of
+    /// host and the addresses in `/.well-known/letschat.json`. Every one of
     /// them defaults to something only this machine can reach, so leaving one
     /// unset in production is silent: the service starts, logs nothing, and every
     /// client fails on an address it cannot resolve. Uploads and avatars die with
@@ -334,6 +367,10 @@ public sealed class ServiceOptions
         CheckNotLoopback("DISCOVERY_AUTH_URL", DiscoveryAuthUrl);
         CheckNotLoopback("DISCOVERY_SPACETIMEDB_URI", DiscoverySpacetimeDbUri);
         CheckNotLoopback("DISCOVERY_LIVEKIT_URL", DiscoveryLiveKitUrl);
+        if (DiscoveryWebUrl is not null)
+        {
+            CheckNotLoopback("DISCOVERY_WEB_URL", DiscoveryWebUrl);
+        }
 
         return issues;
 

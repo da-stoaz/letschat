@@ -23,7 +23,7 @@ COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
 COPY --chmod=755 deploy/web/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY --from=build /app/dist /srv
 EXPOSE 80
-# Checks the *_DOMAIN values and writes /srv/config.js (see the script).
+# Derives the CSP origins from the public URLs and writes /srv/config.js.
 # Setting ENTRYPOINT resets the base image's CMD, so it is restated here.
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

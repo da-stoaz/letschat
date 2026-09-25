@@ -54,7 +54,9 @@ bun run core-api:dev
 
 Development configuration comes from
 `src/CoreApi/appsettings.Development.json`. The public API listens on
-`127.0.0.1:8787` and the admin UI on `127.0.0.1:8788`. EF Core migrations for
+`0.0.0.0:8787` (the SpacetimeDB container must reach its OIDC metadata) and the
+admin UI on `127.0.0.1:8788`. Root `.env` files are not read: that file holds
+production-stack settings for `docker compose`. EF Core migrations for
 the configured databases run on startup.
 
 Run checks with:

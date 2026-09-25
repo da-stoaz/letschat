@@ -9,9 +9,12 @@ services:
   # LiveKit's *signalling* (WebSocket, 44380) IS tunnelled via the lk.<domain>
   # ingress above, so it inherits Cloudflare TLS — set DISCOVERY_LIVEKIT_URL to
   # wss://lk.<domain>. LiveKit *media* (SRTP) cannot ride the tunnel: keep
-  # 44381/tcp+udp and 44382/udp forwarded straight to the host. Media stays
-  # DTLS-SRTP encrypted regardless; tunnelling signalling closes the plaintext
-  # SDP/ICE/token channel an active MITM would otherwise use.
+  # 44382/udp (primary) and 44381/tcp (fallback) forwarded straight to the
+  # host. Media stays DTLS-SRTP encrypted regardless; tunnelling signalling
+  # closes the plaintext SDP/ICE/token channel an active MITM would otherwise use.
+  #
+  # Caddy answers /sql on chat.<domain> with 403; a tunnel cannot. Add the
+  # equivalent Cloudflare WAF custom rule (DEPLOYMENT.md → "Cloudflare Tunnel").
   # The core-api admin panel on port 8788 must NOT be added to the tunnel —
   # reach it via SSH port-forward from an operator workstation.
   cloudflared:
@@ -24,5 +27,6 @@ services:
       - core-api
       - spacetimedb
       - minio
+      - livekit
       - web
     restart: unless-stopped

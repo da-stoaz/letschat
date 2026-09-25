@@ -237,12 +237,17 @@ DISCOVERY_LIVEKIT_URL=wss://lk.example.com`} />
           Want people to use LetsChat from a browser at <code>app.example.com</code>? It connects to
           <code>DISCOVERY_AUTH_URL</code> on its own; add the <code>app</code> route in Step 5, and optionally:
         </p>
-        <CodeBlock label=".env" code={`# Let the browser fetch presigned download URLs from MinIO. Pin to the web
-# origin (or "*" to allow any).
-MINIO_CORS_ALLOW_ORIGIN=https://app.example.com
+        <CodeBlock label=".env" code={`# Where desktop-app invite links point; without it the desktop app offers
+# no shareable links.
+DISCOVERY_WEB_URL=https://app.example.com
 
 # DB WebSocket compression in the browser: "gzip" (default) or "none".
 VITE_WEB_WS_COMPRESSION=gzip`} />
+        <p class="guide-prose text-sm">
+          Leave <code>MINIO_CORS_ALLOW_ORIGIN=*</code> as the example file has it. Narrowing it to
+          <code>https://app.example.com</code> blocks every upload from the desktop app, whose origin is
+          <code>tauri://localhost</code> / <code>http://tauri.localhost</code>.
+        </p>
 
         <h3 class="text-lg font-medium pt-3">Email</h3>
         <p class="guide-prose">
@@ -268,11 +273,8 @@ EMAIL_FROM_ADDRESS=you@gmail.com`} />
 
       <!-- ── Step 4 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-7 space-y-4">
-        <div class="step-head"><span class="step-num">4</span><h2 class="text-2xl font-semibold tracking-tight">Set the LiveKit secret</h2></div>
-        <p class="guide-prose">Open <code>livekit/config.prod.yaml</code> and paste the same secret you put in <code>.env</code>:</p>
-        <CodeBlock label="livekit/config.prod.yaml" code={`keys:
-  letschat-prod: <paste LIVEKIT_API_SECRET here>`} />
-        <p class="guide-prose text-sm">Leave the rest of the file (ports, <code>use_external_ip: true</code>) as-is.</p>
+        <div class="step-head"><span class="step-num">4</span><h2 class="text-2xl font-semibold tracking-tight">LiveKit — nothing to edit</h2></div>
+        <p class="guide-prose">Compose hands <code>LIVEKIT_API_KEY</code> and <code>LIVEKIT_API_SECRET</code> from your <code>.env</code> to LiveKit and core-api alike, so they cannot disagree. <code>livekit/config.prod.yaml</code> holds no keys; leave it as downloaded (ports, <code>use_external_ip: true</code>).</p>
       </article>
 
       <!-- ── Step 5 ────────────────────────────────────────────────────── -->
@@ -293,6 +295,13 @@ app.example.com    ->  http://web:80               # browser client (omit if not
           <code>app</code> serves static files, so it needs no WebSocket toggle. Cloudflare creates the DNS
           records for you automatically. There is no separate <code>connect</code> subdomain — <code>auth</code> is the
           discovery entrypoint.
+        </Callout>
+        <Callout type="tip" title="Block the raw /sql endpoint at the edge">
+          The Caddy setup answers SpacetimeDB's <code>/sql</code> HTTP endpoint on <code>chat</code> with 403; a
+          tunnel forwards it. Add the same block in Cloudflare under <strong>Security → WAF → Custom rules</strong>
+          (Free plan included) with the expression
+          <code>(http.host eq "chat.example.com" and ends_with(http.request.uri.path, "/sql"))</code> and action
+          <strong>Block</strong>. It is defence in depth — the sensitive tables are private anyway.
         </Callout>
       </article>
 

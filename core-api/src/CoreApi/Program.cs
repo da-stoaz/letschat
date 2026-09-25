@@ -363,7 +363,7 @@ static void EnsureProductionConfigIsSafe(WebApplication app)
     {
         throw new InvalidOperationException(
             $"Refusing to start in the '{app.Environment.EnvironmentName}' environment: " +
-            $"these secrets are still set to their public dev defaults: {string.Join(", ", insecureDefaults)}. " +
+            $"these secrets are still set to a public dev default or an example-file `change-me` placeholder: {string.Join(", ", insecureDefaults)}. " +
             "Set strong random values (e.g. `openssl rand -base64 32`) before deploying.");
     }
 
@@ -374,7 +374,8 @@ static void EnsureProductionConfigIsSafe(WebApplication app)
     // exploitable in any non-dev environment, but "the address clients are given
     // must be reachable by them" is a statement about a real deployment — the
     // integration-test host is a loopback host by construction, and the shipped
-    // compose files set no ASPNETCORE_ENVIRONMENT, so they land on Production.
+    // compose file defaults ASPNETCORE_ENVIRONMENT to Production (Staging is the
+    // documented escape hatch for a local smoke test on loopback URLs).
     if (!app.Environment.IsProduction())
     {
         return;

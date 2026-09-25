@@ -85,6 +85,16 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [F3](#f3) | ~~`MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User~~ · **✅ behoben** | ~~S4~~ | Config |
 | [F4](#f4) | ~~GitHub-Timeout in `/downloads/{os}` wird zu einem 500~~ · **✅ behoben** | ~~S4~~ | API |
 | [G1](#g1) | ~~`CODEBASE.md` beschreibt einen überholten Stand~~ · **✅ behoben (Baseline 2026-09-15)** | ~~S4~~ | Doku |
+| [H1](#h1) | ~~Platzhalter-Secrets der `.env`-Vorlagen passieren den Start-Guard~~ · **✅ behoben (Branch `fix/config-audit`)** | ~~S1~~ | Konfiguration |
+| [H2](#h2) | ~~`minio/minio` und `minio/mc` von Docker Hub gelöscht — Neuinstallation scheitert beim Pull~~ · **✅ behoben (Branch `fix/config-audit`)** | ~~S1~~ | Deployment |
+| [H3](#h3) | ~~Modul-Publisher-Image nutzt SpacetimeDB-CLI 2.5.0 gegen Server 2.10.1~~ · **✅ behoben (Branch `fix/config-audit`)** | ~~S2~~ | Deployment |
+| [H4](#h4) | ~~Einladungslinks der Desktop-App zeigen auf `http://localhost:1420`~~ · **✅ behoben (Branch `fix/config-audit`)** | ~~S2~~ | Client |
+| [H5](#h5) | ~~Dev- und Prod-Compose teilen das Compose-Projekt `letschat`~~ · **✅ behoben (Branch `fix/config-audit`)** | ~~S3~~ | Dev-Umgebung |
+| [H6](#h6) | ~~`core-api:dev:lan` lädt die Prod-`.env` in das Dev-core-api~~ · **✅ behoben (Branch `fix/config-audit`)** | ~~S3~~ | Dev-Umgebung |
+| [H7](#h7) | ~~LiveKit-Schlüssel doppelt gepflegt; LiveKit in Prod ungepinnt (`:latest`)~~ · **✅ behoben (Branch `fix/config-audit`)** | ~~S3~~ | Deployment |
+| [H8](#h8) | ~~Web-CSP erzwingt `https://`/`wss://` — Plain-HTTP-Deployments blockiert~~ · **✅ behoben (Branch `fix/config-audit`)** | ~~S3~~ | Deployment |
+| [H9](#h9) | ~~Guides empfehlen `MINIO_CORS_ALLOW_ORIGIN=https://app.<domain>` (blockiert Desktop-Uploads)~~ · **✅ behoben (Branch `fix/config-audit`)** | ~~S3~~ | Doku |
+| [H10](#h10) | ~~Kleinere Konfigurationsfehler (tote Vorlage, Modulname, `/sql` im Tunnel, Bind, …)~~ · **✅ behoben (Branch `fix/config-audit`)** | ~~S4~~ | Konfiguration |
 
 ---
 
@@ -2004,6 +2014,110 @@ entfernt.
 Zusätzlich trennen `README.md`, `SECURITY.md` und dieses Register ihre Rollen klar:
 Architektur beschreibt den Ist-Zustand, `SECURITY.md` die einzuhaltenden
 Vertrauensgrenzen und diese Datei die offenen bzw. verifizierten Befunde.
+
+---
+
+<a id="h1"></a>
+## H1 — Platzhalter-Secrets der `.env`-Vorlagen passieren den Start-Guard · ✅ **behoben**
+
+Konfigurations-Audit 2026-09-25. `FindInsecureDefaults` verglich nur mit den
+Dev-Defaults. Die Platzhalter der Vorlagen (`AUTH_JWT_SECRET=change-me-…` usw.) sind
+genauso öffentlich; ein vergessener Wert ließ core-api starten und jeder konnte
+HS256-Sessions samt Rollen fälschen. Jetzt wird jeder Wert mit Präfix `change-me`
+abgelehnt (`AUTH_JWT_SECRET`, `LIVEKIT_API_SECRET`, `MINIO_ACCESS_KEY`,
+`MINIO_SECRET_KEY`, `ADMIN_BOOTSTRAP_PASSWORD`, `SPACETIME_OIDC_PRIVATE_KEY`,
+`POSTGRES_PASSWORD` im Connection-String). Test:
+`ServiceOptionsTests.FindInsecureDefaults_FlagsEverySecretLeftAtItsTemplatePlaceholder`.
+
+<a id="h2"></a>
+## H2 — `minio/minio` und `minio/mc` von Docker Hub gelöscht · ✅ **behoben**
+
+Beide Repositories liefern 404; `docker compose pull` einer Neuinstallation (und
+`services:up` auf einem frischen Rechner) scheiterte. Ersetzt durch `pgsty/silo` und
+`pgsty/mc` (gepflegter MinIO-Fork, gleiches Datenformat, gleiche `MINIO_*`-Variablen,
+Entrypoint übersetzt `server …`), fest gepinnt. Verifiziert gegen eine Kopie des
+Dev-Volumes: 5,1 GiB / 24 Objekte lesbar, CORS-Preflight für `tauri://localhost`
+204, `mc mb --ignore-existing` ok.
+
+<a id="h3"></a>
+## H3 — Modul-Publisher-Image nutzt SpacetimeDB-CLI 2.5.0 gegen Server 2.10.1 · ✅ **behoben**
+
+`server/Dockerfile.module` war beim Bump auf 2.10.1 (c04d89e) zurückgeblieben —
+dieselbe Regression wie vor 5dfeef0. Jetzt `v2.10.1`; der neue CI-Job
+`image-lockstep` (`version-check.yml`) vergleicht Server-Image (prod/dev),
+CLI-Image, `server/Cargo.lock` und `bun.lock` sowie die in Dev und Prod gepinnten
+LiveKit-/Silo-/mc-Images und schlägt bei Abweichung fehl (mit absichtlichem Versatz
+geprüft).
+
+<a id="h4"></a>
+## H4 — Einladungslinks der Desktop-App zeigen auf `http://localhost:1420` · ✅ **behoben**
+
+`VITE_APP_BASE_URL` war nirgends gesetzt, der Fallback galt in jedem Release. Neu:
+optionales `DISCOVERY_WEB_URL`, ausgeliefert als `web` in
+`/.well-known/letschat.json` (additiv). Die Desktop-App baut Links darauf; ohne
+Web-Client bietet sie keine Links an statt kaputter. `VITE_APP_BASE_URL` entfällt.
+
+<a id="h5"></a>
+## H5 — Dev- und Prod-Compose teilen das Compose-Projekt `letschat` · ✅ **behoben**
+
+Ohne `name:` gilt der Ordnername; beide Dateien definieren
+`spacetimedb`/`postgres`/`minio`/`livekit`, also ersetzte jedes `up` die Container
+des anderen Stacks (lokal bereits geschehen). `docker-compose.dev.yml` heißt jetzt
+`letschat-dev`, die Volumes behalten per explizitem `name:` ihre bisherigen Namen.
+Prod bleibt unverändert, weil dort der Projektname die Volume-Namen
+(`module_init_home`!) bestimmt.
+
+<a id="h6"></a>
+## H6 — `core-api:dev:lan` lädt die Prod-`.env` in das Dev-core-api · ✅ **behoben**
+
+Bun lädt `.env` automatisch in `.ts`-Skripte; `scripts/core-api-lan.ts` reicht
+`process.env` an dotnet weiter, und Umgebungsvariablen schlagen
+`appsettings.Development.json` (falscher LiveKit-Key, MinIO-Zugang,
+`SPACETIMEDB_HTTP_URL=http://spacetimedb:3000`). Jetzt `bun --no-env-file`.
+
+<a id="h7"></a>
+## H7 — LiveKit-Schlüssel doppelt gepflegt; LiveKit in Prod ungepinnt · ✅ **behoben**
+
+Key/Secret standen in `.env` **und** in `livekit/config.prod.yaml` (Vorlage:
+`letschat-prod` vs. Datei: `your-api-key-here`). Compose übergibt jetzt
+`LIVEKIT_KEYS` aus `.env`; verifiziert, dass es einen `keys:`-Block der Datei ersetzt
+(Env-Key 200, Datei-Key 401). Prod läuft auf `v1.13.5` wie Dev statt `:latest`.
+
+<a id="h8"></a>
+## H8 — Web-CSP erzwingt `https://`/`wss://` · ✅ **behoben**
+
+`entrypoint.sh` verwarf das Schema, die CSP setzte `https://` davor — ein
+Plain-HTTP-Deployment (von `ServiceOptions` ausdrücklich erlaubt) blockierte jede
+Verbindung. Die Origins behalten jetzt das Schema der URL; die `*_DOMAIN`-Overrides
+im Web-Container entfallen (sie konnten nur widersprechen). Im echten
+Caddy-Container geprüft: TLS-Policy byte-identisch zu vorher, LAN-Policy mit
+`http://`/`ws://`.
+
+<a id="h9"></a>
+## H9 — Guides empfehlen `MINIO_CORS_ALLOW_ORIGIN=https://app.<domain>` · ✅ **behoben**
+
+Beide Self-Hosting-Guides und die Troubleshooting-Tabelle rieten zu genau der
+Einschränkung, die laut `DEPLOYMENT.md` jeden Desktop-Upload blockiert. Korrigiert
+auf `*`.
+
+<a id="h10"></a>
+## H10 — Kleinere Konfigurationsfehler · ✅ **behoben**
+
+- `.env.development.example` las niemand (4 tote `VITE_*`, core-api liest keine
+  `.env`) — gelöscht; `.gitignore` erfasst jetzt jede `.env.*`-Variante.
+- `SPACETIMEDB_MODULE_NAME`/`DISCOVERY_DATABASE` waren editierbar, module-init und
+  archive-worker aber fest auf `letschat` — jetzt überall fest.
+- Tunnel-Track: kein `/sql`-Block wie bei Caddy — WAF-Regel dokumentiert; Kommentar
+  „44381/tcp+udp“ korrigiert; `cloudflared` wartet auf `livekit`.
+- `AUTH_BIND=127.0.0.1` in `appsettings.Development.json` (SpacetimeDB in Docker
+  erreicht das OIDC-Metadokument unter Linux nicht) — jetzt `0.0.0.0` dort statt nur
+  im npm-Skript; `launchSettings.json` öffnete einen toten Port.
+- `livekit/docker-compose.yml` (ungenutzt, `:latest`, Containername kollidiert mit
+  Prod) gelöscht; `LETSCHAT_VERSION`-Kommentar nannte ein nicht existierendes
+  Migrator-Image.
+- Lokaler Smoke-Test der Prod-Compose auf Loopback-URLs war unmöglich (Guard) —
+  `ASPNETCORE_ENVIRONMENT` wird durchgereicht (Default `Production`, `Staging`
+  überspringt nur die Erreichbarkeitsprüfung).
 
 ---
 

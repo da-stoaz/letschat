@@ -89,6 +89,11 @@ services:
       - "127.0.0.1:8787:8787"
       - "127.0.0.1:48788:8788"
     environment:
+      # Production unless .env says otherwise. `Staging` exists for a local
+      # smoke test of this compose file on loopback URLs: it skips only the
+      # "clients cannot reach this endpoint" check, never the secret checks.
+      # Never use `Development` here — it disables the secret checks.
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Production}"
       AUTH_BIND: "0.0.0.0:8787"
       ADMIN_BIND: "0.0.0.0:8788"
       AUTH_DATABASE_URL: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-auth};Username=${POSTGRES_USER:-letschat};Password=${POSTGRES_PASSWORD}"
@@ -102,7 +107,9 @@ services:
       # deploy — it silently breaks voice authorization, instance-admin
       # propagation, the trusted-issuer pin and the identity migration.
       SPACETIMEDB_HTTP_URL: "${SPACETIMEDB_HTTP_URL:-http://spacetimedb:3000}"
-      SPACETIMEDB_MODULE_NAME: "${SPACETIMEDB_MODULE_NAME:-letschat}"
+      # Fixed, like module-init's publish target and the archive-worker: the
+      # module only ever exists under this name.
+      SPACETIMEDB_MODULE_NAME: "letschat"
       # Required before exposing a fresh deployment; see "Promoting core-api as
       # a SpacetimeDB admin" in DEPLOYMENT.md. Left empty here so upgrades of an
       # existing stack do not fail before the operator has migrated its .env.
@@ -155,7 +162,10 @@ services:
       DISCOVERY_SPACETIMEDB_URI: "${DISCOVERY_SPACETIMEDB_URI}"
       DISCOVERY_AUTH_URL: "${DISCOVERY_AUTH_URL}"
       DISCOVERY_LIVEKIT_URL: "${DISCOVERY_LIVEKIT_URL}"
-      DISCOVERY_DATABASE: "${DISCOVERY_DATABASE}"
+      DISCOVERY_DATABASE: "letschat"
+      # The hosted web client (web service below). The desktop app builds invite
+      # links on it; unset = no shareable links from the desktop app.
+      DISCOVERY_WEB_URL: "${DISCOVERY_WEB_URL:-}"
 
       # Optional version overrides — by default both fall back to the
       # backend's compiled version (see /.well-known/letschat.json).
@@ -247,10 +257,8 @@ services:
         condition: service_healthy
     environment:
       SPACETIMEDB_URI: "ws://spacetimedb:3000"
-      # Hardcoded to match the name module-init publishes under, NOT
-      # DISCOVERY_DATABASE — that one is operator-editable and advertised to
-      # clients, so keying off it would let the worker drift to a module that
-      # doesn't exist.
+      # Hardcoded to match the name module-init publishes under (as are
+      # core-api's SPACETIMEDB_MODULE_NAME and DISCOVERY_DATABASE).
       SPACETIMEDB_MODULE_NAME: "letschat"
       ARCHIVE_DATABASE_URL: "Host=postgres;Port=5432;Database=${ARCHIVE_DB:-archive};Username=${POSTGRES_USER:-letschat};Password=${POSTGRES_PASSWORD}"
       ARCHIVE_WORKER_TOKEN_FILE: /data/archive-worker.token
@@ -264,9 +272,16 @@ services:
   # Media MUST stay publicly reachable and router-forwarded: 44382/udp (primary,
   # udp_port) and 44381/tcp (fallback, tcp_port) — see livekit/config.prod.yaml.
   livekit:
-    image: livekit/livekit-server:latest
+    # Pinned, NOT :latest — the same version the dev stack runs. A host-cached
+    # :latest is whatever was pulled first (older builds break browser ICE, see
+    # docker-compose.dev.yml), and LETSCHAT_VERSION cannot roll it back.
+    image: livekit/livekit-server:v1.13.5
     container_name: letschat-livekit
     command: --config /etc/livekit.yaml
+    environment:
+      # The API key pair, from the same .env values core-api signs voice tokens
+      # with, so the two can never disagree. Replaces any `keys:` in the file.
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
     ports:
       - "127.0.0.1:44380:44380"
       - "44381:44381"
@@ -289,7 +304,12 @@ services:
   # presigned URLs on the files.<domain> proxy route, not this host port; a host
   # proxy uses 127.0.0.1:44390. 44391 (admin console) must never be public.
   minio:
-    image: minio/minio:latest
+    # MinIO's own images are gone (deleted from Docker Hub in 2026; upstream
+    # stopped community releases). Silo is Pigsty's maintained fork of the same
+    # server: same on-disk format, same MINIO_* settings, and its entrypoint
+    # still accepts `server …` — existing minio_data volumes are used as-is.
+    # Pinned so an upgrade is a deliberate edit, like LETSCHAT_VERSION.
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
     container_name: letschat-minio
     command: server /data --address ":44390" --console-address ":44391"
     ports:
@@ -319,7 +339,7 @@ services:
   # ── MinIO bucket init ────────────────────────────────────────────────────────
   # Runs once on startup and ensures the letschat-files bucket exists.
   minio-init:
-    image: minio/mc:latest
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     container_name: letschat-minio-init
     depends_on:
       - minio
@@ -338,7 +358,7 @@ services:
 
   # ── Web client (hosted browser SPA) ──────────────────────────────────────────
   # Serves the React/Vite bundle and tells it this deployment's connect URL
-  # (VITE_WEB_CONNECT_URL, written into /config.js at start) so a browser
+  # (DISCOVERY_AUTH_URL, written into /config.js at start) so a browser
   # visiting app.<domain> auto-discovers the instance and skips the desktop
   # "pick a server" setup. Self-contained static
   # file server (no SSR runtime to crash) — reached by service name `web:80`
@@ -351,18 +371,15 @@ services:
     environment:
       # The same public URLs core-api advertises. The container derives the
       # browser client's connect URL (DISCOVERY_AUTH_URL) and the
-      # Content-Security-Policy hosts from them; nothing is entered twice.
+      # Content-Security-Policy origins (scheme included) from them; nothing is
+      # entered twice, so nothing can disagree.
       DISCOVERY_AUTH_URL: "${DISCOVERY_AUTH_URL}"
       DISCOVERY_SPACETIMEDB_URI: "${DISCOVERY_SPACETIMEDB_URI}"
       DISCOVERY_LIVEKIT_URL: "${DISCOVERY_LIVEKIT_URL}"
       MINIO_PUBLIC_ENDPOINT: "${MINIO_PUBLIC_ENDPOINT}"
       VITE_WEB_WS_COMPRESSION: "${VITE_WEB_WS_COMPRESSION:-gzip}"
-      # Optional overrides; empty means "derive from the URLs above".
+      # Optional override; empty means DISCOVERY_AUTH_URL.
       VITE_WEB_CONNECT_URL: "${VITE_WEB_CONNECT_URL:-}"
-      AUTH_DOMAIN: "${AUTH_DOMAIN:-}"
-      CHAT_DOMAIN: "${CHAT_DOMAIN:-}"
-      FILES_DOMAIN: "${FILES_DOMAIN:-}"
-      LIVEKIT_DOMAIN: "${LIVEKIT_DOMAIN:-}"
     ports:
       - "127.0.0.1:44310:80"
     restart: unless-stopped

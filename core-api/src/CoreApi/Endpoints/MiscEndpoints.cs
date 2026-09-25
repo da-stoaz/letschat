@@ -34,6 +34,7 @@ public static class MiscEndpoints
                 config.Current.UploadMaxFileSizeMiB * UploadLimits.MiB,
                 config.Current.DailyUploadQuotaMiB * UploadLimits.MiB,
                 config.Current.UserStorageLimitMiB * UploadLimits.MiB,
-                config.Current.InstanceStorageLimitMiB * UploadLimits.MiB));
+                config.Current.InstanceStorageLimitMiB * UploadLimits.MiB,
+                options.DiscoveryWebUrl));
     }
 }

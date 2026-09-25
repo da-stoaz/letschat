@@ -35,7 +35,7 @@ public sealed class StartupSecretGuardTests
 
         Assert.NotNull(error);
         var chain = AllMessages(error!);
-        Assert.Contains("dev defaults", chain);
+        Assert.Contains("public dev default", chain);
         Assert.Contains("LIVEKIT_API_SECRET", chain);
     }
 

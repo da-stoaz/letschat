@@ -7,10 +7,10 @@
 	encode zstd gzip
 
 	# ── Security headers ────────────────────────────────────────────────────────
-	# The CSP is DERIVED FROM THIS INSTANCE'S SERVICE DOMAINS — the same env vars
-	# the edge reverse-proxy uses (AUTH_DOMAIN, CHAT_DOMAIN, LIVEKIT_DOMAIN,
-	# FILES_DOMAIN), injected into this container via docker-compose. Caddy fills
-	# `{$VAR}` from the container environment at startup.
+	# The CSP is DERIVED FROM THIS INSTANCE'S PUBLIC URLS — DISCOVERY_AUTH_URL,
+	# DISCOVERY_SPACETIMEDB_URI, DISCOVERY_LIVEKIT_URL and MINIO_PUBLIC_ENDPOINT.
+	# entrypoint.sh turns each into {$<SERVICE>_HTTP} / {$<SERVICE>_WS} origins with
+	# the URL's own TLS-ness, and Caddy fills `{$VAR}` from the environment.
 	#
 	# ENFORCED (BUG_ANALYSIS E4). Verified in headless Chrome against the dev stack
 	# with this exact policy: sign-in, SpacetimeDB sync, messages, a MinIO image
@@ -20,8 +20,8 @@
 	# lever — session tokens live in localStorage; `connect-src` limited to your
 	# own services is the anti-exfil lever.
 	#
-	# `https://{$CHAT_DOMAIN}` next to `wss://` is REQUIRED: the SpacetimeDB SDK
-	# fetches /v1/identity/websocket-token over HTTPS before opening the socket.
+	# {$CHAT_HTTP} next to {$CHAT_WS} is REQUIRED: the SpacetimeDB SDK fetches
+	# /v1/identity/websocket-token over HTTP(S) before opening the socket.
 	#
 	# 'unsafe-eval' is REQUIRED, not optional: the SpacetimeDB SDK generates its
 	# BSATN row deserializers at runtime with `Function("reader", ...)` (see
@@ -30,7 +30,7 @@
 	# Krisp WASM (supersedes 'wasm-unsafe-eval'). We still withhold 'unsafe-inline',
 	# so injected inline <script> / event-handler XSS stays blocked.
 	header {
-		Content-Security-Policy "default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://{$FILES_DOMAIN}; font-src 'self' data:; media-src 'self' blob: https://{$FILES_DOMAIN}; frame-src https://{$FILES_DOMAIN}; worker-src 'self' blob:; connect-src 'self' https://{$AUTH_DOMAIN} https://{$CHAT_DOMAIN} wss://{$CHAT_DOMAIN} https://{$LIVEKIT_DOMAIN} wss://{$LIVEKIT_DOMAIN} https://{$FILES_DOMAIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		Content-Security-Policy "default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: {$FILES_HTTP}; font-src 'self' data:; media-src 'self' blob: {$FILES_HTTP}; frame-src {$FILES_HTTP}; worker-src 'self' blob:; connect-src 'self' {$AUTH_HTTP} {$CHAT_HTTP} {$CHAT_WS} {$LIVEKIT_HTTP} {$LIVEKIT_WS} {$FILES_HTTP}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		X-Frame-Options "DENY"

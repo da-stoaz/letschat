@@ -1,6 +1,7 @@
-# Pin to the same line as the SpacetimeDB server image (docker-compose.prod.base.yml).
+# Pin to the same version as the SpacetimeDB server image (docker-compose.prod.base.yml);
+# the "spacetimedb-lockstep" job in .github/workflows/version-check.yml enforces it.
 # An unpinned `:latest` lets the bundled `spacetime` CLI drift ahead of the server,
 # which both breaks the publish wire-protocol and silently changes `spacetime publish`
 # argument grammar (the wasm is now passed via --bin-path, not as a positional).
-FROM clockworklabs/spacetime:v2.5.0
+FROM clockworklabs/spacetime:v2.10.1
 COPY target/wasm32-unknown-unknown/release/letschat_server.wasm /module/letschat_server.wasm

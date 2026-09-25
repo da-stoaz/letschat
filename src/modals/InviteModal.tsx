@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import { reducers } from '../lib/spacetimedb'
 import { useInvitesStore } from '../stores/invitesStore'
@@ -10,6 +11,8 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useServerRole } from '../hooks/useServerRole'
 import { canInviteUsers } from '../lib/permissions'
 import { isHostedWebBuild } from '../lib/tauri'
+import { fetchWellKnown } from '../lib/discovery'
+import { useServerConfigStore } from '../stores/serverConfigStore'
 import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -32,11 +35,25 @@ import type { Invite } from '../types/domain'
 
 const EMPTY: never[] = []
 
-// The hosted web client serves /invite/:token itself, so its own origin is the
-// right base; it used to fall back to the desktop dev URL on every instance.
-const APP_BASE_URL = isHostedWebBuild()
-  ? window.location.origin
-  : ((import.meta.env.VITE_APP_BASE_URL as string | undefined) ?? 'http://localhost:1420')
+/**
+ * Where invite links point. The hosted web client serves /invite/:token itself,
+ * so its own origin is right. Anywhere else (desktop) the link must open this
+ * instance's web client, which core-api advertises in discovery. Null when the
+ * instance hosts none: no URL would work, so no link is offered.
+ */
+function useInviteBaseUrl(): string | null {
+  const hosted = isHostedWebBuild()
+  const authUrl = useServerConfigStore((s) => s.config?.authServiceUrl)
+  const { data } = useQuery({
+    queryKey: ['well-known', authUrl],
+    queryFn: () => fetchWellKnown(authUrl!),
+    enabled: !hosted && !!authUrl,
+    staleTime: Infinity,
+  })
+  if (hosted) return window.location.origin
+  const web = data?.web?.replace(/\/+$/, '')
+  return web && /^https?:\/\//.test(web) ? web : null
+}
 
 const EXPIRY_OPTIONS = [
   { label: '30 minutes', value: 30 * 60 },
@@ -49,9 +66,6 @@ const EXPIRY_OPTIONS = [
   { label: '30 days', value: 30 * 24 * 60 * 60 },
   { label: 'Never', value: undefined as number | undefined },
 ] as const
-function inviteUrl(token: string): string {
-  return `${APP_BASE_URL}/invite/${token}`
-}
 
 /** Subscribes to a ticking timestamp so render stays pure (no Date.now() in JSX). */
 function useNow(intervalMs = 30_000): number {
@@ -92,13 +106,15 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
 
 interface InviteCardProps {
   invite: Invite
+  /** Null when the instance has no web client to open the link in. */
+  baseUrl: string | null
   now: number
   onDelete: (token: string) => void
 }
 
-function InviteCard({ invite, now, onDelete }: InviteCardProps) {
+function InviteCard({ invite, baseUrl, now, onDelete }: InviteCardProps) {
   const [showQr, setShowQr] = useState(false)
-  const url = inviteUrl(invite.token)
+  const url = baseUrl ? `${baseUrl}/invite/${invite.token}` : null
   const expired = new Date(invite.expiresAt).getTime() <= now
 
   return (
@@ -110,17 +126,21 @@ function InviteCard({ invite, now, onDelete }: InviteCardProps) {
           {expired && <Badge variant="destructive" className="text-[10px] py-0">Expired</Badge>}
         </div>
         <div className="ml-auto flex items-center gap-1 shrink-0">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            onClick={() => setShowQr((v) => !v)}
-            title="Toggle QR code"
-          >
-            <QrCodeIcon className="size-3.5" />
-          </Button>
-          <CopyButton text={url} label="Link" />
+          {url && (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => setShowQr((v) => !v)}
+                title="Toggle QR code"
+              >
+                <QrCodeIcon className="size-3.5" />
+              </Button>
+              <CopyButton text={url} label="Link" />
+            </>
+          )}
           <Button
             type="button"
             variant="ghost"
@@ -146,7 +166,7 @@ function InviteCard({ invite, now, onDelete }: InviteCardProps) {
         )}
       </div>
 
-      {showQr && (
+      {url && showQr && (
         <div className="flex flex-col items-center gap-2 pt-1 pb-1">
           <div className="rounded-lg bg-white p-3">
             <QRCodeSVG value={url} size={160} />
@@ -169,6 +189,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [activeTab, setActiveTab] = useState<InviteTab>('people')
+  const inviteBaseUrl = useInviteBaseUrl()
   const invites = useInvitesStore((s) => s.invitesByServer[serverId] ?? EMPTY)
   const server = useServersStore((s) => s.servers.find((sv) => sv.id === serverId) ?? null)
   const role = useServerRole(serverId)
@@ -571,7 +592,11 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
           <TabsContent value="links" className="flex-none">
             <div className="flex flex-col gap-3 pt-4">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">Manage shareable links for this space.</p>
+                <p className="text-xs text-muted-foreground">
+                  {inviteBaseUrl
+                    ? 'Manage shareable links for this space.'
+                    : 'This server has no web client, so links cannot be opened. Invite people directly instead.'}
+                </p>
                 <Button
                   type="button"
                   variant="outline"
@@ -591,6 +616,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                       <InviteCard
                         key={inv.token}
                         invite={inv}
+                        baseUrl={inviteBaseUrl}
                         now={now}
                         onDelete={handleDelete}
                       />

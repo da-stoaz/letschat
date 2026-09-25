@@ -61,6 +61,16 @@ cp .env.production.tunnel.example .env
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
 ```
 
+Caddy answers SpacetimeDB's raw `/sql` HTTP endpoint on `chat.<domain>` with
+403; a tunnel forwards it. Add the same block at the Cloudflare edge — Security
+→ WAF → Custom rules, available on the Free plan:
+
+- Expression: `(http.host eq "chat.example.com" and ends_with(http.request.uri.path, "/sql"))`
+- Action: **Block**
+
+It is defence in depth: the sensitive tables are private in the module anyway,
+and core-api reaches `/sql` over the Docker network, not through the tunnel.
+
 ### Caddy track
 
 ```bash
@@ -75,6 +85,13 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml config >/tmp/letschat-caddy-config.yml
 ```
 
+Smoke-testing the production compose on one machine, with loopback URLs
+(`http://localhost:8787`, `ws://localhost:44300`, `ws://localhost:44380`,
+`http://localhost:44390`)? Set `ASPNETCORE_ENVIRONMENT=Staging` in `.env`:
+core-api otherwise refuses to hand clients loopback addresses. Staging keeps
+every secret check. The dev stack (`docker-compose.dev.yml`) is its own Compose
+project (`letschat-dev`), so both can run side by side.
+
 ## Hosted web client (`app.<domain>`)
 
 The `web` service serves the React/Vite bundle as static files, so users can
@@ -88,14 +105,22 @@ like every other service; nothing is compiled on the server. It is
 setup screen. Desktop builds are unaffected (the var is unset there).
 
 The container takes everything it needs from the URLs core-api already
-advertises — `DISCOVERY_AUTH_URL` as the connect address, and the hosts of all
-four public URLs for its Content-Security-Policy — so nothing is entered twice.
-`VITE_WEB_CONNECT_URL` and `AUTH_DOMAIN`/`CHAT_DOMAIN`/`FILES_DOMAIN`/
-`LIVEKIT_DOMAIN` still work as overrides.
+advertises — `DISCOVERY_AUTH_URL` as the connect address, and the origins of all
+four public URLs for its Content-Security-Policy — so nothing is entered twice
+and nothing can disagree. Each origin keeps its URL's scheme: `https://` +
+`wss://` normally, `http://` + `ws://` for a plain-http LAN deployment (a CSP
+`https://` source never matches `http://`). `VITE_WEB_CONNECT_URL` remains an
+optional override of the connect address; the `*_DOMAIN` values are no longer
+read by the web container (Caddy still uses them as its virtual hosts).
 
 Other env (see the `.env.production.*.example` files):
 
-- `APP_DOMAIN=app.example.com` — Caddy hostname (Caddy track only).
+- `DISCOVERY_WEB_URL=https://app.example.com` — advertised as `web` in
+  `/.well-known/letschat.json`. The desktop app builds shareable invite links on
+  it; without it the desktop app offers no invite links (direct invites still
+  work).
+- `APP_DOMAIN=app.example.com` — Caddy hostname (Caddy track only); the host of
+  `DISCOVERY_WEB_URL`.
 - `VITE_WEB_WS_COMPRESSION=gzip` — DB WebSocket compression in browsers
   (`gzip` default, or `none`). The client auto-downgrades to `none` if a gzip
   socket fails to establish, so this never strands a user.
@@ -174,7 +199,9 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.ym
 
 Rolling back is the same two commands with the previous version. Every release
 publishes immutable `:<version>` and `:sha-<commit>` tags, so a pinned
-deployment can always go back to a known-good image.
+deployment can always go back to a known-good image. The third-party images
+(SpacetimeDB, LiveKit, the MinIO-compatible Silo server, Postgres) are pinned in
+the compose file itself, so downloading it is what moves them.
 
 > **⚠️ Never delete the `module_init_home` volume.** `spacetime login` mints a
 > **new** identity every time it runs, and only the identity that created a
@@ -188,8 +215,10 @@ deployment can always go back to a known-good image.
 >
 > and `restart: on-failure` turns that into a crash loop. The identity cannot be
 > recovered — a non-owner cannot `publish`, `rename`, or even `delete` the
-> database. Recovery means publishing under a **new** database name, pointing
-> `DISCOVERY_DATABASE` / `SPACETIMEDB_MODULE_NAME` at it, and rebuilding the
+> database. Recovery means publishing under a **new** database name, replacing
+> the fixed `letschat` name in `docker-compose.prod.base.yml` (module-init's
+> publish target, core-api's `SPACETIMEDB_MODULE_NAME` and `DISCOVERY_DATABASE`,
+> the archive-worker's `SPACETIMEDB_MODULE_NAME`), and rebuilding the
 > data from the cold archive (see *Cold archive*), which is one more reason to
 > confirm the archive worker is actually replicating.
 >
@@ -501,7 +530,9 @@ the owner credential.
 | Area | Key env / file | Notes |
 |---|---|---|
 | Auth backend | `AUTH_JWT_SECRET` | Required. Signs the client session tokens (HS256) |
-| SpacetimeDB HTTP | `SPACETIMEDB_HTTP_URL`, `SPACETIMEDB_MODULE_NAME` | Where core-api reaches the module for reducer and `/sql` calls. Wired in compose to `http://spacetimedb:3000`; the code default (`localhost:4300`) is for host-run dev only and is wrong inside a container. See "Voice fails" below |
+| SpacetimeDB HTTP | `SPACETIMEDB_HTTP_URL` | Where core-api reaches the module for reducer and `/sql` calls. Wired in compose to `http://spacetimedb:3000`; the code default (`localhost:4300`) is for host-run dev only and is wrong inside a container. See "Voice fails" below. The module name is fixed to `letschat` in compose for every service |
+| Secrets, generally | every `change-me…` value | core-api refuses to start while any secret (`AUTH_JWT_SECRET`, `LIVEKIT_API_SECRET`, `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY`, `POSTGRES_PASSWORD`, `ADMIN_BOOTSTRAP_PASSWORD`, `SPACETIME_OIDC_PRIVATE_KEY`) still holds the example file's placeholder — those values are public |
+| Environment | `ASPNETCORE_ENVIRONMENT` | Leave unset (`Production`). `Staging` only for a local smoke test on loopback URLs: it skips the client-reachability check, not the secret checks. Never `Development` |
 | SpacetimeDB identity | `SPACETIME_OIDC_PRIVATE_KEY` | **Required.** Signs the SpacetimeDB access token (RS256); supply a base64-encoded PEM. Generate once — replacing it forces every user to sign in again. `SPACETIME_OIDC_ISSUER` is fixed in compose and must never change (see below) |
 | PostgreSQL | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Only the password is mandatory; defaults are `letschat` / `auth` |
 | Cold archive | `ARCHIVE_DB` | Database name for the durable mirror, default `archive` (same Postgres instance as auth). Wired in compose for both `core-api` and `archive-worker`; needs a one-time identity registration — see "Cold archive" above |
@@ -510,10 +541,10 @@ the owner credential.
 | Email | `EMAIL_SENDER`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_STARTTLS`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME` | `EMAIL_SENDER=smtp` for real delivery; `log` only in dev |
 | Rate limiting | `RATE_LIMIT_PERMIT`, `RATE_LIMIT_WINDOW_SECONDS` | Per-IP fixed window, separate budgets for registration, email, and password actions; sign-in allows 10× |
 | Client versions | `RECOMMENDED_CLIENT_VERSION`, `MIN_CLIENT_VERSION` | Optional; default to backend's compiled version |
-| LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `livekit/config.prod.yaml` | Keys must match exactly |
-| MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT` | Public endpoint is baked into every presigned upload/download URL — it must be the address **clients** use (`https://files.<domain>`), not the internal one. Left unset it silently falls back to `MINIO_INTERNAL_ENDPOINT`, so core-api refuses to start in Production rather than hand every client a URL it cannot reach |
+| LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Compose passes the pair to LiveKit as `LIVEKIT_KEYS` and to core-api, so they cannot disagree. `LIVEKIT_KEYS` replaces any `keys:` block still in `livekit/config.prod.yaml` |
+| MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT` | Served by `pgsty/silo`, Pigsty's maintained MinIO fork — MinIO's own images were deleted from Docker Hub. Same data format and `MINIO_*` settings, so an existing `minio_data` volume is used as-is. Public endpoint is baked into every presigned upload/download URL — it must be the address **clients** use (`https://files.<domain>`), not the internal one. Left unset it silently falls back to `MINIO_INTERNAL_ENDPOINT`, so core-api refuses to start in Production rather than hand every client a URL it cannot reach |
 | MinIO CORS | `MINIO_CORS_ALLOW_ORIGIN` | Keep `*`. Gates the presigned **upload** PUT as well as downloads, and the desktop app's origin is `tauri://localhost` / `http://tauri.localhost` — pinning to `https://app.<domain>` alone silently blocks every desktop upload at the CORS preflight |
-| Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_DATABASE` | Served by core-api at `/.well-known/letschat.json`. The three URLs are handed to clients verbatim; they default to `localhost`, so core-api refuses to start in Production if any is left on a loopback address |
+| Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_WEB_URL` | Served by core-api at `/.well-known/letschat.json`. The URLs are handed to clients verbatim; the first three default to `localhost`, so core-api refuses to start in Production if any is left on a loopback address. `DISCOVERY_WEB_URL` is optional (desktop invite links) and checked the same way when set. `database` is always `letschat` |
 | Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
 | Service domains | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | **Caddy track only**, hostnames only (`auth.example.com`, no `https://`): Caddy's virtual hosts, matching the hosts in `DISCOVERY_*` and `MINIO_PUBLIC_ENDPOINT`. The `web` container derives its Content-Security-Policy hosts from those URLs itself, so the tunnel track needs none of these |
 
@@ -663,6 +694,7 @@ LetsChat setup auto-discovery expects this shape:
   "auth": "https://auth.example.com",
   "livekit": "wss://lk.example.com",
   "database": "letschat",
+  "web": "https://app.example.com",
   "serverVersion": "0.3.1",
   "recommendedClient": "0.3.1",
   "minClient": "0.3.1"

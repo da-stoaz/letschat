@@ -185,26 +185,28 @@ EMAIL_FROM_ADDRESS=no-reply@example.com`} />
           <code>APP_DOMAIN</code> above) to serve the desktop app only.
         </p>
         <CodeBlock label=".env" code={`# The browser client connects to DISCOVERY_AUTH_URL on its own.
-
-# Let the browser fetch presigned download URLs from MinIO.
-MINIO_CORS_ALLOW_ORIGIN=https://app.example.com
+# This URL is where desktop-app invite links point; without it the desktop
+# app offers no shareable links.
+DISCOVERY_WEB_URL=https://app.example.com
 
 # DB WebSocket compression in the browser: "gzip" (default) or "none".
 VITE_WEB_WS_COMPRESSION=gzip`} />
+        <p class="guide-prose text-sm">
+          Leave <code>MINIO_CORS_ALLOW_ORIGIN=*</code> as the example file has it. Narrowing it to
+          <code>https://app.example.com</code> blocks every upload from the desktop app, whose origin is
+          <code>tauri://localhost</code> / <code>http://tauri.localhost</code>.
+        </p>
 
         <Callout type="tip" title="Don't want to set up SMTP yet?">
           Set <code>REQUIRE_EMAIL_CONFIRMATION=false</code> and <code>EMAIL_SENDER=log</code> — accounts then
           work without email (links are written to the container log instead).
         </Callout>
-        <p class="guide-prose text-sm">Everything else in <code>.env</code> already has a working default and is documented inline — <code>LIVEKIT_API_KEY</code> (must match <code>livekit/config.prod.yaml</code>), <code>POSTGRES_USER</code>/<code>POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them. Leave <code>SPACETIMEDB_SERVICE_TOKEN</code> blank for now — it only exists once the stack has started, and you fill it in during Step 5.</p>
+        <p class="guide-prose text-sm">Everything else in <code>.env</code> already has a working default and is documented inline — <code>LIVEKIT_API_KEY</code>, <code>POSTGRES_USER</code>/<code>POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them. Leave <code>SPACETIMEDB_SERVICE_TOKEN</code> blank for now — it only exists once the stack has started, and you fill it in during Step 5.</p>
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 4: Configure LiveKit</h2>
-        <p class="guide-prose">Open <code>livekit/config.prod.yaml</code> and replace the key/secret placeholder so it matches your <code>.env</code>:</p>
-        <CodeBlock label="livekit/config.prod.yaml" code={`keys:
-  letschat-prod: <paste LIVEKIT_API_SECRET here>`} />
-        <p class="guide-prose text-sm">The rest of the file (ports, <code>use_external_ip: true</code>) can stay as-is for most home server setups.</p>
+        <h2 class="text-2xl font-semibold tracking-tight">Step 4: LiveKit — nothing to edit</h2>
+        <p class="guide-prose">Compose hands <code>LIVEKIT_API_KEY</code> and <code>LIVEKIT_API_SECRET</code> from your <code>.env</code> to LiveKit and core-api alike, so they cannot disagree. <code>livekit/config.prod.yaml</code> holds no keys; leave it as downloaded (ports, <code>use_external_ip: true</code>).</p>
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">

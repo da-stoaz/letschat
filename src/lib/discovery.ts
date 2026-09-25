@@ -11,6 +11,8 @@ export interface WellKnown {
   dailyUploadQuotaBytes?: number
   userStorageLimitBytes?: number
   instanceStorageLimitBytes?: number
+  /** The instance's hosted web client, or null when it has none. */
+  web?: string | null
 }
 
 /** Loopback, `.local` and private-network hosts — where plain http is normal. */
@@ -55,6 +57,16 @@ function assertSecureEndpoints(base: string, json: WellKnown): void {
   }
 }
 
+/** Fetches a server's raw `/.well-known/letschat.json` document. */
+export async function fetchWellKnown(serverUrl: string): Promise<WellKnown> {
+  const base = normalizeServerUrl(serverUrl)
+  const res = await fetch(`${base}/.well-known/letschat.json`, { signal: AbortSignal.timeout(8000) })
+  if (!res.ok) {
+    throw new Error(`Discovery failed (${res.status}). Is /.well-known/letschat.json hosted at ${base}?`)
+  }
+  return (await res.json()) as WellKnown
+}
+
 /**
  * Fetches `/.well-known/letschat.json` from a server's base URL and maps it into
  * a {@link ServerConfig}. Throws a descriptive error if the document is missing
@@ -63,11 +75,7 @@ function assertSecureEndpoints(base: string, json: WellKnown): void {
  */
 export async function discoverConfig(serverUrl: string): Promise<ServerConfig> {
   const base = normalizeServerUrl(serverUrl)
-  const res = await fetch(`${base}/.well-known/letschat.json`, { signal: AbortSignal.timeout(8000) })
-  if (!res.ok) {
-    throw new Error(`Discovery failed (${res.status}). Is /.well-known/letschat.json hosted at ${base}?`)
-  }
-  const json = (await res.json()) as WellKnown
+  const json = await fetchWellKnown(base)
   const missing: string[] = []
   if (!json.spacetimedb) missing.push('spacetimedb')
   if (!json.auth) missing.push('auth')
