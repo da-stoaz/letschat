@@ -73,6 +73,32 @@ and core-api reaches `/sql` over the Docker network, not through the tunnel.
 
 ### Caddy track
 
+On both tracks, enter each public hostname once: `AUTH_DOMAIN`, `CHAT_DOMAIN`,
+`LIVEKIT_DOMAIN`, `FILES_DOMAIN` and optionally `APP_DOMAIN`. Use hostnames only,
+without a scheme or path. Compose builds all discovery and file URLs from
+these values; Caddy uses the same hostnames directly. HTTPS is the default;
+`PUBLIC_SCHEME=http` enables plain HTTP for LAN deployments. Both client SDKs
+accept the generated HTTP(S) service URLs and open WS(S) connections as needed.
+Leaving `APP_DOMAIN` empty omits the browser site and its advertised URL.
+
+Remove the old `DISCOVERY_*`, `MINIO_PUBLIC_ENDPOINT` and
+`VITE_WEB_CONNECT_URL` entries from the deployment `.env`. They are derived
+container settings, not separate operator inputs. Existing Caddy deployments
+can keep their hostname values; tunnel deployments copy the hostname from each
+old public URL into the corresponding `*_DOMAIN` field.
+
+Repository regression check: `python3 deploy/caddy/test_config.py` (Docker and
+the `caddy:2` image required). It checks the real Caddy configuration, Compose
+wiring and browser connect address without starting the application stack.
+
+When upgrading, download the overlay and Caddyfile together:
+
+```bash
+mkdir -p deploy/caddy
+wget -O docker-compose.prod.caddy.yml https://raw.githubusercontent.com/da-stoaz/letschat/main/docker-compose.prod.caddy.yml
+wget -O deploy/caddy/Caddyfile https://raw.githubusercontent.com/da-stoaz/letschat/main/deploy/caddy/Caddyfile
+```
+
 ```bash
 cp .env.production.caddy.example .env
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
@@ -85,9 +111,10 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml config >/tmp/letschat-caddy-config.yml
 ```
 
-Smoke-testing the production compose on one machine, with loopback URLs
-(`http://localhost:8787`, `ws://localhost:44300`, `ws://localhost:44380`,
-`http://localhost:44390`)? Set `ASPNETCORE_ENVIRONMENT=Staging` in `.env`:
+Smoke-testing the base production compose on one machine? Set
+`PUBLIC_SCHEME=http`, `AUTH_DOMAIN=localhost:8787`, `CHAT_DOMAIN=localhost:44300`,
+`LIVEKIT_DOMAIN=localhost:44380`, `FILES_DOMAIN=localhost:44390` and
+`APP_DOMAIN=localhost:44310`. Also set `ASPNETCORE_ENVIRONMENT=Staging` in `.env`:
 core-api otherwise refuses to hand clients loopback addresses. Staging keeps
 every secret check. The dev stack (`docker-compose.dev.yml`) is its own Compose
 project (`letschat-dev`), so both can run side by side.
@@ -98,29 +125,25 @@ The `web` service serves the React/Vite bundle as static files, so users can
 reach LetsChat from a browser without installing the desktop app. Its image
 (`ghcr.io/da-stoaz/letschat-web`) is built once per release by GitHub Actions
 like every other service; nothing is compiled on the server. It is
-**single-tenant**: at start the container writes `DISCOVERY_AUTH_URL` into
-`/config.js`, which the page loads before the app, so a browser hitting
+**single-tenant**: Caddy serves `/config.js` directly from the container settings,
+with the auth URL Compose derives from `AUTH_DOMAIN`. The page loads it before
+the app, so a browser hitting
 `app.<domain>` auto-discovers this instance via
 `auth.<domain>/.well-known/letschat.json` and goes straight to login — no
 setup screen. Desktop builds are unaffected (the var is unset there).
 
-The container takes everything it needs from the URLs core-api already
-advertises — `DISCOVERY_AUTH_URL` as the connect address, and the origins of all
-four public URLs for its Content-Security-Policy — so nothing is entered twice
-and nothing can disagree. Each origin keeps its URL's scheme: `https://` +
-`wss://` normally, `http://` + `ws://` for a plain-http LAN deployment (a CSP
-`https://` source never matches `http://`). `VITE_WEB_CONNECT_URL` remains an
-optional override of the connect address; the `*_DOMAIN` values are no longer
-read by the web container (Caddy still uses them as its virtual hosts).
+Compose supplies the same derived URLs to core-api and web. Native Caddy
+configuration serves the browser connect address and builds its CSP, including
+WS(S) sources for the two socket services. There are no startup scripts or
+separate URL overrides. Templates run only on the fixed `/config.js` response;
+SPA files and user content are never evaluated as templates.
 
 Other env (see the `.env.production.*.example` files):
 
-- `DISCOVERY_WEB_URL=https://app.example.com` — advertised as `web` in
+- `APP_DOMAIN=app.example.com` — Compose builds the URL advertised as `web` in
   `/.well-known/letschat.json`. The desktop app builds shareable invite links on
   it; without it the desktop app offers no invite links (direct invites still
   work).
-- `APP_DOMAIN=app.example.com` — Caddy hostname (Caddy track only); the host of
-  `DISCOVERY_WEB_URL`.
 - `VITE_WEB_WS_COMPRESSION=gzip` — DB WebSocket compression in browsers
   (`gzip` default, or `none`). The client auto-downgrades to `none` if a gzip
   socket fails to establish, so this never strands a user.
@@ -130,15 +153,15 @@ Other env (see the `.env.production.*.example` files):
 
 Routing:
 
-- **Caddy track**: handled automatically — the `{$APP_DOMAIN}` block proxies to
-  `web:80`. Point `app.<domain>` DNS at the host.
+- **Caddy track**: `APP_DOMAIN` enables the site that proxies to `web:80`.
+  Point its hostname in DNS at the host.
 - **Tunnel track**: add an ingress rule `app.<domain> -> http://web:80` in the
   Cloudflare Zero Trust dashboard (WebSocket not required — static files only).
 
-> After changing a public URL or `VITE_WEB_WS_COMPRESSION`, recreate the
-> container: `docker compose ... up -d web`. It refuses to start, naming the
-> variable, if a URL is missing or malformed or the compression is not
-> `gzip`/`none`.
+> After changing a hostname, run `docker compose ... up -d` so core-api, web
+> and (on the Caddy track) Caddy receive the same new value. Changing only
+> `VITE_WEB_WS_COMPRESSION` needs `docker compose ... up -d web`. Compose rejects
+> missing required hostnames. Use only `gzip` or `none` for compression.
 
 ## Legacy `auth.db` import
 
@@ -186,20 +209,39 @@ migration instead of wiping data.
 
 ## Upgrading a running deployment
 
-Download the current compose files first (they change with releases), set the
-release you want in `.env`, then pull and restart:
+Before upgrading, save a private copy of `.env`, both Compose files and the
+mounted configuration files in `livekit/`, `spacetimedb/` and `deploy/caddy/`
+(when used). Keep the currently deployed Docker images until the upgrade is
+verified; do not prune them. A rollback needs the previous configuration and
+images together.
+
+Download the current compose files (they change with releases), set the
+matching release in `.env`, then pull and restart. For this release:
+
+On the Caddy track, also download `deploy/caddy/Caddyfile` using the
+[Caddy track commands](#caddy-track) above.
 
 ```bash
 wget -O docker-compose.prod.base.yml https://raw.githubusercontent.com/da-stoaz/letschat/main/docker-compose.prod.base.yml
 wget -O docker-compose.prod.<track>.yml https://raw.githubusercontent.com/da-stoaz/letschat/main/docker-compose.prod.<track>.yml
-LETSCHAT_VERSION=1.2.1   # in .env
+LETSCHAT_VERSION=1.2.3   # in .env
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml up -d
 ```
 
-Rolling back is the same two commands with the previous version. Every release
-publishes immutable `:<version>` and `:sha-<commit>` tags, so a pinned
-deployment can always go back to a known-good image. The third-party images
+To roll back, restore the saved configuration (including `.env` with its old
+`LETSCHAT_VERSION`) in the same deployment directory, then run:
+
+```bash
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml up -d --pull never
+```
+
+This uses the retained images. Changing only `LETSCHAT_VERSION` is insufficient:
+for example, the 1.2.1 web image requires `AUTH_DOMAIN`, `CHAT_DOMAIN`,
+`FILES_DOMAIN` and `LIVEKIT_DOMAIN` in its container environment, which the new
+Compose file no longer passes. Its old Compose file and `.env` restore those
+values together. Every release publishes `:<version>` and `:sha-<commit>` image
+tags. The third-party images
 (SpacetimeDB, LiveKit, the MinIO-compatible Silo server, Postgres) are pinned in
 the compose file itself, so downloading it is what moves them.
 
@@ -542,11 +584,11 @@ the owner credential.
 | Rate limiting | `RATE_LIMIT_PERMIT`, `RATE_LIMIT_WINDOW_SECONDS` | Per-IP fixed window, separate budgets for registration, email, and password actions; sign-in allows 10× |
 | Client versions | `RECOMMENDED_CLIENT_VERSION`, `MIN_CLIENT_VERSION` | Optional; default to backend's compiled version |
 | LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Compose passes the pair to LiveKit as `LIVEKIT_KEYS` and to core-api, so they cannot disagree. `LIVEKIT_KEYS` replaces any `keys:` block still in `livekit/config.prod.yaml` |
-| MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT` | Served by `pgsty/silo`, Pigsty's maintained MinIO fork — MinIO's own images were deleted from Docker Hub. Same data format and `MINIO_*` settings, so an existing `minio_data` volume is used as-is. Public endpoint is baked into every presigned upload/download URL — it must be the address **clients** use (`https://files.<domain>`), not the internal one. Left unset it silently falls back to `MINIO_INTERNAL_ENDPOINT`, so core-api refuses to start in Production rather than hand every client a URL it cannot reach |
+| MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `FILES_DOMAIN` | Served by the pinned MinIO-compatible Silo image. Compose derives `MINIO_PUBLIC_ENDPOINT` from `FILES_DOMAIN` and `PUBLIC_SCHEME`; presigned URLs use this public address. Existing `minio_data` volumes are reused |
 | MinIO CORS | `MINIO_CORS_ALLOW_ORIGIN` | Keep `*`. Gates the presigned **upload** PUT as well as downloads, and the desktop app's origin is `tauri://localhost` / `http://tauri.localhost` — pinning to `https://app.<domain>` alone silently blocks every desktop upload at the CORS preflight |
-| Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_WEB_URL` | Served by core-api at `/.well-known/letschat.json`. The URLs are handed to clients verbatim; the first three default to `localhost`, so core-api refuses to start in Production if any is left on a loopback address. `DISCOVERY_WEB_URL` is optional (desktop invite links) and checked the same way when set. `database` is always `letschat` |
+| Discovery JSON | Derived automatically | Core-api serves `/.well-known/letschat.json`. Compose builds the `DISCOVERY_*` container settings from the hostnames below; no second set of URLs in `.env`. `database` is fixed to `letschat` |
 | Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
-| Service domains | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | **Caddy track only**, hostnames only (`auth.example.com`, no `https://`): Caddy's virtual hosts, matching the hosts in `DISCOVERY_*` and `MINIO_PUBLIC_ENDPOINT`. The `web` container derives its Content-Security-Policy hosts from those URLs itself, so the tunnel track needs none of these |
+| Public addresses (both tracks) | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | Hostnames only; enter each once. Compose derives URLs and Caddy serves routing, CSP and `/config.js` natively. Empty `APP_DOMAIN` omits the public browser site. Optional `PUBLIC_SCHEME=http` for LAN; default `https` |
 
 ## Upload limits and multipart transfers
 

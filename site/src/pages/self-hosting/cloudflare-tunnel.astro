@@ -91,8 +91,9 @@ import { GITHUB_REPO } from "@/lib/site";
           </li>
         </ul>
         <p class="guide-prose">
-          The browser client takes <em>your</em> server address (<code>DISCOVERY_AUTH_URL</code>) when its
-          container starts, so it's locked to this one instance and skips the setup screen entirely. Hosting it is optional — leave <code>app</code> out and the desktop app still works.
+          Compose builds the server address from <code>AUTH_DOMAIN</code>, and Caddy serves it to the
+          browser at <code>/config.js</code>. The browser is locked to this instance and skips the setup
+          screen. Hosting it is optional — leave <code>APP_DOMAIN</code> empty and omit the <code>app</code> route.
           This guide sets up both; the browser-only bits are clearly marked.
         </p>
       </article>
@@ -202,14 +203,12 @@ ADMIN_BOOTSTRAP_USERNAME=admin
 ADMIN_BOOTSTRAP_PASSWORD=  # a strong password
 ADMIN_BOOTSTRAP_EMAIL=you@example.com
 
-# Your public URLs (auth.<domain> also serves the discovery document).
-# These four are handed to clients verbatim, so they must be the public
-# addresses, not localhost or a container name. core-api refuses to start
-# if any of them is left pointing at the server itself.
-MINIO_PUBLIC_ENDPOINT=https://files.example.com
-DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
-DISCOVERY_AUTH_URL=https://auth.example.com
-DISCOVERY_LIVEKIT_URL=wss://lk.example.com`} />
+# Public hostnames — enter each once, without a scheme or path.
+# Compose builds the public URLs for discovery, files and the browser.
+AUTH_DOMAIN=auth.example.com
+CHAT_DOMAIN=chat.example.com
+FILES_DOMAIN=files.example.com
+LIVEKIT_DOMAIN=lk.example.com`} />
 
         <Callout type="warning" title="Generate SPACETIME_OIDC_PRIVATE_KEY once, then never change it">
           <p>
@@ -235,11 +234,10 @@ DISCOVERY_LIVEKIT_URL=wss://lk.example.com`} />
         <h3 class="text-lg font-medium pt-3">Hosting the browser client (optional)</h3>
         <p class="guide-prose">
           Want people to use LetsChat from a browser at <code>app.example.com</code>? It connects to
-          <code>DISCOVERY_AUTH_URL</code> on its own; add the <code>app</code> route in Step 5, and optionally:
+          the auth hostname on its own; add the <code>app</code> route in Step 5, and set:
         </p>
-        <CodeBlock label=".env" code={`# Where desktop-app invite links point; without it the desktop app offers
-# no shareable links.
-DISCOVERY_WEB_URL=https://app.example.com
+        <CodeBlock label=".env" code={`# Browser site and desktop invite links; no separate URL setting.
+APP_DOMAIN=app.example.com
 
 # DB WebSocket compression in the browser: "gzip" (default) or "none".
 VITE_WEB_WS_COMPRESSION=gzip`} />
@@ -310,8 +308,10 @@ app.example.com    ->  http://web:80               # browser client (omit if not
         <div class="step-head"><span class="step-num">6</span><h2 class="text-2xl font-semibold tracking-tight">Start the stack and connect core-api to the chat module</h2></div>
         <p class="guide-prose">
           Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
-          (e.g. <code>LETSCHAT_VERSION=1.2.0</code>) to make upgrades explicit — and a rollback a one-line
-          edit: set the previous version, then <code>docker compose … pull && docker compose … up -d</code>.
+          (e.g. <code>LETSCHAT_VERSION=1.2.3</code>) to make upgrades explicit. Before an upgrade, save
+          the current deployment files and keep the deployed images. To roll back, restore those files
+          together with <code>.env</code>, then run <code>docker compose … up -d --pull never</code>.
+          See <a href={`https://github.com/${GITHUB_REPO}/blob/main/DEPLOYMENT.md#upgrading-a-running-deployment`}>the upgrade and rollback guide</a>.
         </p>
         <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d`} />
         <p class="guide-prose">
@@ -320,8 +320,8 @@ app.example.com    ->  http://web:80               # browser client (omit if not
         </p>
         <CodeBlock label="terminal" code={`docker logs -f letschat-module-init`} />
         <Callout type="note" title="Changing the browser client's address">
-          Changed one of the public URLs later? Recreate just the web container:
-          <code>docker compose … up -d web</code>. No rebuild — the address is applied at start.
+          Changed a hostname later? Run <code>docker compose … up -d</code> so core-api
+          and web both receive it. No rebuild — the address is applied at start.
         </Callout>
 
         <h3 class="text-lg font-medium pt-3">Give core-api the module owner's key — required, before anyone signs in</h3>

@@ -1,3 +1,3 @@
-// Replaced by the web container at start with this instance's settings
-// (deploy/web/entrypoint.sh). Empty here: desktop and dev use Setup.
+// The hosted web container serves this path dynamically through Caddy.
+// Empty in desktop and dev builds, which use Setup.
 window.__LETSCHAT_CONFIG__ = {}

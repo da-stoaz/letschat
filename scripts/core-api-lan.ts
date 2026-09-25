@@ -36,6 +36,7 @@ const env: NodeJS.ProcessEnv = {
   DISCOVERY_AUTH_URL: `http://${lanIp}:${authPort}`,
   DISCOVERY_SPACETIMEDB_URI: `ws://${lanIp}:${spacetimePort}`,
   DISCOVERY_LIVEKIT_URL: `ws://${lanIp}:${livekitPort}`,
+  DISCOVERY_WEB_URL: process.env.DISCOVERY_WEB_URL ?? `http://${lanIp}:5173`,
   // Baked into MinIO presigned upload/download URLs. core-api still talks
   // to MinIO over the internal endpoint (which stays localhost).
   MINIO_PUBLIC_ENDPOINT: `http://${lanIp}:${minioPort}`,

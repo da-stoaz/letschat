@@ -27,6 +27,12 @@ For data ownership, request flows, and trust boundaries, see
 Prerequisites: Bun, Rust, the .NET 10 SDK, Docker, and the Tauri platform
 dependencies.
 
+Upgrading an existing dev stack to the `letschat-dev` Compose project? First
+stop and remove the old `letschat-dev-*` containers, including stopped init
+containers, without deleting their volumes. Their fixed names otherwise block
+the new project from starting. The named volumes are reused automatically.
+Leave production containers (`letschat-*` without `dev`) alone.
+
 ```bash
 bun install
 bun run services:up
@@ -39,6 +45,11 @@ In a second terminal:
 ```bash
 bun run tauri dev
 ```
+
+For another device on the LAN, use `bun run core-api:dev:lan`. To serve browser
+invite links too, run `bun run dev --host 0.0.0.0`; discovery advertises port
+5173 on the LAN IP. Set `DISCOVERY_WEB_URL` explicitly if the web client is
+hosted elsewhere.
 
 Useful service commands:
 

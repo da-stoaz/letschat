@@ -112,7 +112,7 @@ wget -O deploy/caddy/Caddyfile https://raw.githubusercontent.com/${GITHUB_REPO}/
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 3: Configure secrets and domains</h2>
+        <h2 class="text-2xl font-semibold tracking-tight">Step 3: Configure secrets and hostnames</h2>
         <p class="guide-prose">Open <code>.env</code> and replace every placeholder. Generate secrets with:</p>
         <CodeBlock label="terminal" code={`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
 openssl rand -base64 32   # for LIVEKIT_API_SECRET
@@ -133,22 +133,12 @@ ADMIN_BOOTSTRAP_USERNAME=admin
 ADMIN_BOOTSTRAP_PASSWORD=  # a strong password
 ADMIN_BOOTSTRAP_EMAIL=you@example.com
 
-# Public endpoints — your domains (auth.<domain> also serves discovery).
-# These four are handed to clients verbatim, so they must be the public
-# addresses, not localhost or a container name. core-api refuses to start
-# if any of them is left pointing at the server itself.
-MINIO_PUBLIC_ENDPOINT=https://files.example.com
-DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
-DISCOVERY_AUTH_URL=https://auth.example.com
-DISCOVERY_LIVEKIT_URL=wss://lk.example.com
-
-# Caddy virtual-host names — hostnames only, no https://. They must match the
-# DNS records above and the hosts in the URLs above.
+# Public hostnames — enter each once, without a scheme or path.
+# Compose builds the URLs; Caddy and clients share these settings.
 AUTH_DOMAIN=auth.example.com
 CHAT_DOMAIN=chat.example.com
 FILES_DOMAIN=files.example.com
 LIVEKIT_DOMAIN=lk.example.com
-APP_DOMAIN=app.example.com
 
 # Outbound email — required because EMAIL_SENDER defaults to smtp and
 # email confirmation is on by default
@@ -181,13 +171,12 @@ EMAIL_FROM_ADDRESS=no-reply@example.com`} />
 
         <h3 class="text-lg font-medium pt-1">Hosting the browser client (optional)</h3>
         <p class="guide-prose">
-          For the browser client at <code>app.example.com</code>, also set these. Skip them (and the
-          <code>APP_DOMAIN</code> above) to serve the desktop app only.
+          For the browser client at <code>app.example.com</code>, set its hostname below. It supplies
+          both Caddy routing and desktop invite links. Leave <code>APP_DOMAIN</code> empty to omit
+          the browser site.
         </p>
-        <CodeBlock label=".env" code={`# The browser client connects to DISCOVERY_AUTH_URL on its own.
-# This URL is where desktop-app invite links point; without it the desktop
-# app offers no shareable links.
-DISCOVERY_WEB_URL=https://app.example.com
+        <CodeBlock label=".env" code={`# Browser site and desktop invite links; no separate URL setting.
+APP_DOMAIN=app.example.com
 
 # DB WebSocket compression in the browser: "gzip" (default) or "none".
 VITE_WEB_WS_COMPRESSION=gzip`} />
@@ -213,8 +202,10 @@ VITE_WEB_WS_COMPRESSION=gzip`} />
         <h2 class="text-2xl font-semibold tracking-tight">Step 5: Pull images, start, and connect core-api to the chat module</h2>
         <p class="guide-prose">
           Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
-          (e.g. <code>LETSCHAT_VERSION=1.2.0</code>) to make upgrades explicit — and a rollback a one-line
-          edit: set the previous version and re-run the two commands below.
+          (e.g. <code>LETSCHAT_VERSION=1.2.3</code>) to make upgrades explicit. Before an upgrade, save
+          the current deployment files and keep the deployed images. To roll back, restore those files
+          together with <code>.env</code>, then run <code>docker compose … up -d --pull never</code>.
+          See <a href={`https://github.com/${GITHUB_REPO}/blob/main/DEPLOYMENT.md#upgrading-a-running-deployment`}>the upgrade and rollback guide</a>.
         </p>
         <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
@@ -222,8 +213,8 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
         <p class="guide-prose"><code>module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
         <CodeBlock label="terminal" code={`docker logs letschat-module-init`} />
         <Callout type="note">
-          Hosting the browser client? If you change one of the public URLs later, recreate just that
-          container with <code>docker compose … up -d web</code> — no rebuild, the address is applied at start.</Callout>
+          Changed a hostname? Run <code>docker compose … up -d</code> so Caddy, core-api and web
+          all receive it. No rebuild; each address is configured once.</Callout>
 
         <h3 class="text-lg font-medium pt-3">Give core-api the module owner's key — required, before anyone signs in</h3>
         <p class="guide-prose">

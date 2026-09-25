@@ -96,3 +96,8 @@ jobs:
             same "$image" $(grep -hoE "$image:[^\"[:space:]]+" docker-compose.prod.base.yml docker-compose.dev.yml | sed 's/.*://')
           done
           exit $fail
+
+      - name: Hostnames control native Caddy routing and browser configuration
+        run: |
+          docker pull caddy:2
+          python3 deploy/caddy/test_config.py

@@ -1784,13 +1784,10 @@ ein LiveKit-Voice-Call (Teilnehmer ACTIVE mit Audiospur) — null Verstöße. **
 gefunden:** Die bisherige Policy hätte die Web-App beim Scharfschalten komplett
 gebrochen. Das SpacetimeDB-SDK holt vor dem WebSocket
 `https://{CHAT}/v1/identity/websocket-token`, `connect-src` erlaubte aber nur
-`wss://{CHAT}`; `https://{$CHAT_DOMAIN}` ist ergänzt. Die vier Domain-Variablen sind
-damit auf beiden Tracks Pflicht, als reine Hostnamen passend zu `DISCOVERY_*` und
-`MINIO_PUBLIC_ENDPOINT` (`DEPLOYMENT.md`, `SECURITY.md`, die `.env`-Beispiele, beide
-Self-Hosting-Guides und die Breaking-Changes-Seite sagen das). Der `web`-Container
-prüft sie beim Start (`deploy/web/entrypoint.sh`) und bricht bei fehlendem Wert
-oder mitgegebenem Schema mit klarer Meldung ab, statt still eine kaputte Policy
-auszuliefern. Die ursprüngliche Analyse:
+`wss://{CHAT}`; `https://{$CHAT_DOMAIN}` ist ergänzt. Die Hostnamen sind auf beiden Tracks die einzigen
+Adress-Eingaben. Compose verlangt die vier Pflichtwerte und leitet die
+öffentlichen URLs daraus ab; `APP_DOMAIN` bleibt optional. Caddy liefert CSP und
+`/config.js` nativ aus, ohne Entrypoint-Skript. Die ursprüngliche Analyse:
 
 **Stelle:** `deploy/web/Caddyfile`
 
@@ -2055,7 +2052,8 @@ geprüft).
 `VITE_APP_BASE_URL` war nirgends gesetzt, der Fallback galt in jedem Release. Neu:
 optionales `DISCOVERY_WEB_URL`, ausgeliefert als `web` in
 `/.well-known/letschat.json` (additiv). Die Desktop-App baut Links darauf; ohne
-Web-Client bietet sie keine Links an statt kaputter. `VITE_APP_BASE_URL` entfällt.
+Web-Client bietet sie keine Links an statt kaputter. Compose leitet die URL aus
+`APP_DOMAIN` ab; sie muss nicht zusätzlich eingetragen werden. `VITE_APP_BASE_URL` entfällt.
 
 <a id="h5"></a>
 ## H5 — Dev- und Prod-Compose teilen das Compose-Projekt `letschat` · ✅ **behoben**
@@ -2086,12 +2084,13 @@ Key/Secret standen in `.env` **und** in `livekit/config.prod.yaml` (Vorlage:
 <a id="h8"></a>
 ## H8 — Web-CSP erzwingt `https://`/`wss://` · ✅ **behoben**
 
-`entrypoint.sh` verwarf das Schema, die CSP setzte `https://` davor — ein
-Plain-HTTP-Deployment (von `ServiceOptions` ausdrücklich erlaubt) blockierte jede
-Verbindung. Die Origins behalten jetzt das Schema der URL; die `*_DOMAIN`-Overrides
-im Web-Container entfallen (sie konnten nur widersprechen). Im echten
-Caddy-Container geprüft: TLS-Policy byte-identisch zu vorher, LAN-Policy mit
-`http://`/`ws://`.
+Die frühere CSP setzte immer `https://` und `wss://` vor die Hostnamen und
+blockierte damit Plain-HTTP-Deployments. Jetzt baut Compose die URLs aus den
+Hostnamen und `PUBLIC_SCHEME` (Standard `https`, für LAN `http`). Caddy ergänzt
+WS(S)-Quellen mit nativen `map`-Direktiven und liefert `/config.js` direkt aus;
+beide Deployment-Entrypoint-Skripte sind entfernt. Container-Regressionstest:
+`python3 deploy/caddy/test_config.py` prüft beide Tracks, HTTP/HTTPS, Routing,
+CSP, Browser-Konfiguration und den optionalen Browser-Host.
 
 <a id="h9"></a>
 ## H9 — Guides empfehlen `MINIO_CORS_ALLOW_ORIGIN=https://app.<domain>` · ✅ **behoben**

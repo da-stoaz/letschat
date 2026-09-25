@@ -1,6 +1,6 @@
 # Hosted web client: build the React/Vite SPA, then serve it as static files.
 # Built once per release by GitHub Actions and pulled by every instance; the
-# instance-specific settings are written at container start (entrypoint.sh).
+# instance-specific settings are served directly by Caddy at /config.js.
 
 # ── build stage ──────────────────────────────────────────────────────────────
 # The bundle is platform-independent, so it is built natively once instead of
@@ -20,10 +20,6 @@ RUN bun run build
 # automatic SPA fallback with a tiny, reliable footprint.
 FROM caddy:2-alpine
 COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
-COPY --chmod=755 deploy/web/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY --from=build /app/dist /srv
 EXPOSE 80
-# Derives the CSP origins from the public URLs and writes /srv/config.js.
-# Setting ENTRYPOINT resets the base image's CMD, so it is restated here.
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+# Use the base image's standard Caddy command; no custom entrypoint.

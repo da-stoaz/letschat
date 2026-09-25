@@ -6,11 +6,19 @@
 	root * /srv
 	encode zstd gzip
 
+	# The SDKs open WS(S) connections to these HTTP(S) service origins.
+	map {env.DISCOVERY_SPACETIMEDB_URI} {chat_ws} {
+		~^http(.*)$ ws${1}
+	}
+	map {env.DISCOVERY_LIVEKIT_URL} {livekit_ws} {
+		~^http(.*)$ ws${1}
+	}
+
 	# ── Security headers ────────────────────────────────────────────────────────
 	# The CSP is DERIVED FROM THIS INSTANCE'S PUBLIC URLS — DISCOVERY_AUTH_URL,
 	# DISCOVERY_SPACETIMEDB_URI, DISCOVERY_LIVEKIT_URL and MINIO_PUBLIC_ENDPOINT.
-	# entrypoint.sh turns each into {$<SERVICE>_HTTP} / {$<SERVICE>_WS} origins with
-	# the URL's own TLS-ness, and Caddy fills `{$VAR}` from the environment.
+	# Compose builds each HTTP(S) origin from its hostname. Native Caddy maps
+	# above supply the corresponding WS(S) sources.
 	#
 	# ENFORCED (BUG_ANALYSIS E4). Verified in headless Chrome against the dev stack
 	# with this exact policy: sign-in, SpacetimeDB sync, messages, a MinIO image
@@ -20,7 +28,7 @@
 	# lever — session tokens live in localStorage; `connect-src` limited to your
 	# own services is the anti-exfil lever.
 	#
-	# {$CHAT_HTTP} next to {$CHAT_WS} is REQUIRED: the SpacetimeDB SDK fetches
+	# The HTTP(S) origin next to {chat_ws} is REQUIRED: the SpacetimeDB SDK fetches
 	# /v1/identity/websocket-token over HTTP(S) before opening the socket.
 	#
 	# 'unsafe-eval' is REQUIRED, not optional: the SpacetimeDB SDK generates its
@@ -30,7 +38,7 @@
 	# Krisp WASM (supersedes 'wasm-unsafe-eval'). We still withhold 'unsafe-inline',
 	# so injected inline <script> / event-handler XSS stays blocked.
 	header {
-		Content-Security-Policy "default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: {$FILES_HTTP}; font-src 'self' data:; media-src 'self' blob: {$FILES_HTTP}; frame-src {$FILES_HTTP}; worker-src 'self' blob:; connect-src 'self' {$AUTH_HTTP} {$CHAT_HTTP} {$CHAT_WS} {$LIVEKIT_HTTP} {$LIVEKIT_WS} {$FILES_HTTP}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		Content-Security-Policy "default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: {$MINIO_PUBLIC_ENDPOINT}; font-src 'self' data:; media-src 'self' blob: {$MINIO_PUBLIC_ENDPOINT}; frame-src {$MINIO_PUBLIC_ENDPOINT}; worker-src 'self' blob:; connect-src 'self' {$DISCOVERY_AUTH_URL} {$DISCOVERY_SPACETIMEDB_URI} {chat_ws} {$DISCOVERY_LIVEKIT_URL} {livekit_ws} {$MINIO_PUBLIC_ENDPOINT}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		X-Frame-Options "DENY"
@@ -48,8 +56,19 @@
 	@html path / /index.html /config.js
 	header @html Cache-Control "no-cache"
 
-	# SPA fallback: unknown paths (client-side routes like /app, /join) serve the
-	# app shell so BrowserRouter can take over.
-	try_files {path} /index.html
-	file_server
+	# Only this trusted, fixed response is templated. toJson escapes the settings
+	# safely for JavaScript; user content and SPA assets are never templates.
+	handle /config.js {
+		header Content-Type application/javascript
+		templates {
+			mime application/javascript
+		}
+		respond `window.__LETSCHAT_CONFIG__ = {{dict "webConnectUrl" (env "DISCOVERY_AUTH_URL") "wsCompression" (env "VITE_WEB_WS_COMPRESSION") | toJson}};`
+	}
+
+	# SPA fallback: unknown paths serve the app shell for BrowserRouter.
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
 }
