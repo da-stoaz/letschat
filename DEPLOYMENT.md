@@ -153,10 +153,13 @@ migration instead of wiping data.
 
 ## Upgrading a running deployment
 
-Set the release you want in `.env`, then pull and restart:
+Update the checked-out repository first (compose files and the web client's
+source change with releases), set the release you want in `.env`, then pull and
+restart:
 
 ```bash
-LETSCHAT_VERSION=1.0.0   # in .env
+git pull
+LETSCHAT_VERSION=1.2.0   # in .env
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml up -d
 ```
@@ -186,12 +189,15 @@ deployment can always go back to a known-good image.
 > identity was already ephemeral. Treat the first 1.0.0 upgrade of such a
 > deployment as a fresh install (or plan the rename + archive-rebuild above).
 
-## Promoting core-api as a SpacetimeDB admin (plan 1.5)
+## Promoting core-api as a SpacetimeDB admin (required)
 
-Some admin-panel surfaces (currently: the **Spaces → create policy** card on
-`/admin/config`) push updates to the chat-domain SpacetimeDB module rather
-than to the Postgres `SystemConfig` row. core-api needs a SpacetimeDB
-identity that has `is_admin = true` to call those reducers.
+core-api acts as the chat module's admin with the module owner's credential
+(`SPACETIMEDB_SERVICE_TOKEN`). Without it core-api cannot pin its OIDC issuer —
+so the module keeps accepting chat registrations from any identity over the
+public WebSocket — and it cannot sync the Admin role, push account suspension
+and token revocation, release the fresh-database storage fence, run attachment
+cleanup, or save the **Spaces → create policy** card on `/admin/config`. Do this
+on every new deployment, before anyone signs in.
 
 Run this once, after `module-init` has published the database:
 

@@ -107,7 +107,7 @@ import { GITHUB_REPO } from "@/lib/site";
           <li>Fill in your <code>.env</code></li>
           <li>Set the LiveKit secret</li>
           <li>Map the subdomains</li>
-          <li>Start the stack</li>
+          <li>Start the stack and connect core-api to the chat module</li>
           <li>Forward the two voice ports</li>
           <li>Open the app — desktop or browser</li>
         </ol>
@@ -119,7 +119,7 @@ import { GITHUB_REPO } from "@/lib/site";
         <ul class="list-disc pl-5 guide-prose space-y-1.5">
           <li>A domain whose DNS is managed by Cloudflare (free plan is fine).</li>
           <li>Cloudflare <strong>Zero Trust</strong> enabled on your account (free).</li>
-          <li>An Ubuntu server with Docker Engine + the Compose plugin.</li>
+          <li>An Ubuntu server with Docker Engine 25+ and the Compose plugin 2.20.2+ (the health checks need them), plus <code>git</code>.</li>
           <li>Admin access to your home router (for the two voice ports in Step 7).</li>
         </ul>
         <p class="guide-prose">
@@ -153,26 +153,19 @@ import { GITHUB_REPO } from "@/lib/site";
 
       <!-- ── Step 2 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-7 space-y-4">
-        <div class="step-head"><span class="step-num">2</span><h2 class="text-2xl font-semibold tracking-tight">Download the files</h2></div>
-        <p class="guide-prose">On the server, in a fresh folder:</p>
-        <CodeBlock label="terminal" code={`mkdir letschat && cd letschat
-
-# the stack + the cloudflared connector overlay
-wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
-wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.tunnel.yml
-
-# the LiveKit config
-mkdir livekit
-wget -O livekit/config.prod.yaml \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml
+        <div class="step-head"><span class="step-num">2</span><h2 class="text-2xl font-semibold tracking-tight">Get the files</h2></div>
+        <p class="guide-prose">On the server:</p>
+        <CodeBlock label="terminal" code={`git clone --depth 1 https://github.com/${GITHUB_REPO}.git letschat
+cd letschat
 
 # your settings file
-wget -O .env \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.tunnel.example`} />
+cp .env.production.tunnel.example .env`} />
         <Callout type="note">
-          All images are pre-built — no Rust/Node toolchains needed on the server. The one exception is
-          the browser client, which is compiled from source in the <code>web</code> container on first start
-          (it bakes in your server address). That build is automatic.
+          Clone the repository rather than downloading single files: the browser client is compiled from
+          source in the <code>web</code> container on first start (it bakes in your server address), and that
+          build needs the source next to the compose files. Everything else is a pre-built image — no
+          Rust or .NET toolchain on the server. To upgrade later, <code>git pull</code> first so you also get the
+          current compose files.
         </Callout>
       </article>
 
@@ -230,8 +223,8 @@ LIVEKIT_DOMAIN=lk.example.com`} />
           </p>
           <p>
             If the key is unset, core-api refuses to start. If you replace it later, every token
-            already issued stops verifying — signed-in users are logged out and, until they sign in
-            again, their client may reconnect anonymously. Accounts and messages are unaffected
+            already issued stops verifying — signed-in users are logged out and asked to sign in
+            again. Accounts and messages are unaffected
             (identities do not depend on this key), but there is no reason to rotate it. Back it up
             with your other secrets.
           </p>
@@ -277,8 +270,8 @@ EMAIL_FROM_ADDRESS=you@gmail.com`} />
         </Callout>
         <p class="guide-prose text-sm">
           Everything else in the file has a working default and is documented inline — leave it alone unless
-          you have a reason. (One to know about: <code>SPACETIMEDB_SERVICE_TOKEN</code> is optional;
-          blank is fine — it only makes one admin-panel card editable.)
+          you have a reason. Leave <code>SPACETIMEDB_SERVICE_TOKEN</code> blank for now — it only exists once the
+          stack has started, and you fill it in during Step 6.
         </p>
       </article>
 
@@ -314,10 +307,10 @@ app.example.com    ->  http://web:80               # browser client (omit if not
 
       <!-- ── Step 6 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-7 space-y-4">
-        <div class="step-head"><span class="step-num">6</span><h2 class="text-2xl font-semibold tracking-tight">Start the stack</h2></div>
+        <div class="step-head"><span class="step-num">6</span><h2 class="text-2xl font-semibold tracking-tight">Start the stack and connect core-api to the chat module</h2></div>
         <p class="guide-prose">
           Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
-          (e.g. <code>LETSCHAT_VERSION=1.0.0</code>) to make upgrades explicit — and a rollback a one-line
+          (e.g. <code>LETSCHAT_VERSION=1.2.0</code>) to make upgrades explicit — and a rollback a one-line
           edit: set the previous version, then <code>docker compose … pull && docker compose … up -d</code>.
         </p>
         <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d`} />
@@ -331,6 +324,48 @@ app.example.com    ->  http://web:80               # browser client (omit if not
           first build — give it a couple of minutes. Changed <code>VITE_WEB_CONNECT_URL</code> later? Rebuild it
           with <code>docker compose … build web && docker compose … up -d web</code>.
         </Callout>
+
+        <h3 class="text-lg font-medium pt-3">Give core-api the module owner's key — required, before anyone signs in</h3>
+        <p class="guide-prose">
+          On its first start, <code>module-init</code> created the identity that owns the chat module. core-api
+          needs that credential to act as the chat side's admin: it pins its own sign-in issuer into the module
+          (until then anyone could create a chat account straight over the public WebSocket), grants your admin
+          account its chat-side admin rights, ends a disabled account's chat access, and runs attachment
+          cleanup. Read it from the persisted volume, put it into <code>.env</code>, and restart core-api:
+        </p>
+        <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml \\
+  run --rm module-init login show --token
+# → "Your auth token (don't share this!) is eyJ…" — copy everything after "is "
+
+# in .env:
+SPACETIMEDB_SERVICE_TOKEN=eyJ…
+
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --force-recreate core-api
+docker logs letschat-core-api 2>&1 | grep "trusted issuer"
+# → Pinned SpacetimeDB trusted issuer to http://core-api:8787.`} />
+        <Callout type="warning" title="Never delete the module_init_home volume">
+          It holds that identity, and only the identity that created the database may update it. Lose it and
+          every future module update fails.
+        </Callout>
+
+        <h3 class="text-lg font-medium pt-3">Register the archive worker</h3>
+        <p class="guide-prose">
+          The <code>archive-worker</code> mirrors every message into PostgreSQL — the copy that makes a future
+          destructive database migration survivable. It does nothing until the module knows its identity:
+        </p>
+        <CodeBlock label="terminal" code={`docker logs letschat-archive-worker 2>&1 | grep "Archive worker identity"
+# → Connected to SpacetimeDB. Archive worker identity: c200…
+
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml \\
+  run --rm module-init call -s http://spacetimedb:3000 letschat \\
+  set_archive_service_identity '["0x<identity from the log>"]'
+
+docker logs letschat-archive-worker 2>&1 | tail -3
+# → Subscription applied; reconciling archive.`} />
+        <p class="guide-prose text-sm">
+          Keep the <code>0x</code> prefix. The <code>archive_worker_data</code> volume keeps the worker's identity
+          across restarts; delete it and you register the new one the same way.
+        </p>
       </article>
 
       <!-- ── Step 7 ────────────────────────────────────────────────────── -->
@@ -359,13 +394,12 @@ app.example.com    ->  http://web:80               # browser client (omit if not
         <p class="guide-prose">Confirm the public endpoints answer (from anywhere):</p>
         <CodeBlock label="terminal" code={`curl -i https://auth.example.com/health
 curl -i https://auth.example.com/.well-known/letschat.json`} />
-        <Callout type="note" title="Register your own account first">
-          The first account on an instance with no admin becomes the instance admin — so create yours
-          <strong>before</strong> handing the address out. Signing in is also what lets <code>core-api</code> pin
-          its OIDC issuer into the chat module, which is what stops anyone from creating a chat account
-          straight over the public WebSocket. Confirm it took:
+        <Callout type="note" title="Your admin account">
+          The instance admin is the <code>ADMIN_BOOTSTRAP_*</code> account from Step 3 — a public registration
+          never becomes admin. Sign in with it once, then remove <code>ADMIN_BOOTSTRAP_PASSWORD</code> from
+          <code>.env</code>. The admin panel stays on the server's loopback (<code>127.0.0.1:48788</code>); reach it
+          over an SSH tunnel.
         </Callout>
-        <CodeBlock label="terminal" code={`docker logs letschat-core-api 2>&1 | grep "trusted issuer"`} />
         <p class="guide-prose">Then pick how you connect:</p>
         <ul class="list-disc pl-5 guide-prose space-y-1.5">
           <li>
