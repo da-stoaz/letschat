@@ -35,4 +35,12 @@ describe('discoverConfig', () => {
     serve({ auth: 'https://auth.example.com', spacetimedb: 'wss://chat.example.com', livekit: 'wss://lk.example.com' })
     await expect(discoverConfig('auth.example.com')).resolves.toMatchObject({ authServiceUrl: 'https://auth.example.com' })
   })
+
+  it('stores http(s) socket URLs as ws(s) so known-host pins still match', async () => {
+    serve({ auth: 'https://auth.example.com', spacetimedb: 'https://chat.example.com', livekit: 'https://lk.example.com' })
+    await expect(discoverConfig('auth.example.com')).resolves.toMatchObject({
+      spacetimedbUri: 'wss://chat.example.com',
+      livekitUrl: 'wss://lk.example.com',
+    })
+  })
 })

@@ -42,6 +42,15 @@ export function normalizeServerUrl(input: string): string {
   return `${isLocalHost(trimmed.split('/')[0]) ? 'http' : 'https'}://${trimmed}`
 }
 
+/**
+ * Socket services are stored as ws(s)://. Discovery may advertise the http(s)
+ * form of the same origin (both SDKs accept either); normalizing keeps a stored
+ * host from reading as "changed" in the known-host check just over the scheme.
+ */
+function toSocketUrl(url: string): string {
+  return url.replace(/^http(s?):\/\//i, 'ws$1://')
+}
+
 /** An https instance must not advertise plaintext endpoints. */
 function assertSecureEndpoints(base: string, json: WellKnown): void {
   if (!base.startsWith('https://')) return
@@ -83,9 +92,9 @@ export async function discoverConfig(serverUrl: string): Promise<ServerConfig> {
   if (missing.length) throw new Error(`letschat.json is missing fields: ${missing.join(', ')}`)
   assertSecureEndpoints(base, json)
   return {
-    spacetimedbUri: json.spacetimedb!,
+    spacetimedbUri: toSocketUrl(json.spacetimedb!),
     authServiceUrl: json.auth!,
-    livekitUrl: json.livekit!,
+    livekitUrl: toSocketUrl(json.livekit!),
     spacetimedbDatabase: json.database ?? 'letschat',
     uploadPartSizeBytes: json.uploadPartSizeBytes,
     uploadMaxFileSizeBytes: json.uploadMaxFileSizeBytes,
