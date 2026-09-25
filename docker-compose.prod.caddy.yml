@@ -9,11 +9,13 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      AUTH_DOMAIN: "${AUTH_DOMAIN}"
-      CHAT_DOMAIN: "${CHAT_DOMAIN}"
-      FILES_DOMAIN: "${FILES_DOMAIN}"
-      LIVEKIT_DOMAIN: "${LIVEKIT_DOMAIN}"
-      APP_DOMAIN: "${APP_DOMAIN}"
+      PUBLIC_SCHEME: "${PUBLIC_SCHEME:-https}"
+      AUTH_DOMAIN: "${AUTH_DOMAIN:?Set AUTH_DOMAIN}"
+      CHAT_DOMAIN: "${CHAT_DOMAIN:?Set CHAT_DOMAIN}"
+      FILES_DOMAIN: "${FILES_DOMAIN:?Set FILES_DOMAIN}"
+      LIVEKIT_DOMAIN: "${LIVEKIT_DOMAIN:?Set LIVEKIT_DOMAIN}"
+      # Compose's native conditional expansion omits the optional browser site.
+      CADDY_WEB_SITE: "${APP_DOMAIN:+import hosted-web ${PUBLIC_SCHEME:-https}://${APP_DOMAIN}}"
     volumes:
       - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

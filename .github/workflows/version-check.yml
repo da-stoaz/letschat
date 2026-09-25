@@ -65,3 +65,39 @@ jobs:
           fi
 
           echo "Version bumped $base -> $head ✓"
+
+  # The SpacetimeDB server image, the CLI image module-init publishes with, the
+  # Rust crate and the npm SDK must be the exact same release — a skew breaks
+  # module publish/load and the client connection, and it has slipped through
+  # twice (Dockerfile.module left behind on a server bump). Same idea for the
+  # third-party images dev and prod both pin: prod must run what dev tested.
+  image-lockstep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Pinned versions agree across files
+        run: |
+          fail=0
+          same() { # <label> <versions…>
+            label=$1; shift
+            uniq=$(printf '%s\n' "$@" | sort -u)
+            echo "$label: $(echo $uniq)"
+            if [ "$(printf '%s\n' "$uniq" | grep -c .)" -ne 1 ]; then
+              echo "::error::$label versions disagree: $(echo $uniq)"
+              fail=1
+            fi
+          }
+          same spacetimedb \
+            $(grep -hoE 'clockworklabs/spacetime:v[0-9][0-9.]*' docker-compose.prod.base.yml docker-compose.dev.yml server/Dockerfile.module | sed 's/.*:v//') \
+            $(awk '/^name = "spacetimedb"$/ { getline; gsub(/[^0-9.]/, ""); print }' server/Cargo.lock) \
+            $(grep -oE '"spacetimedb@[0-9][0-9.]*"' bun.lock | grep -oE '[0-9][0-9.]*')
+          for image in livekit/livekit-server pgsty/silo pgsty/mc; do
+            same "$image" $(grep -hoE "$image:[^\"[:space:]]+" docker-compose.prod.base.yml docker-compose.dev.yml | sed 's/.*://')
+          done
+          exit $fail
+
+      - name: Hostnames control native Caddy routing and browser configuration
+        run: |
+          docker pull caddy:2
+          python3 deploy/caddy/test_config.py

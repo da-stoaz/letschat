@@ -44,6 +44,9 @@ public sealed class DiscoveryTests : IClassFixture<LetsChatWebApplicationFactory
         Assert.Equal("http://localhost:8787", root.GetProperty("auth").GetString());
         Assert.Equal("ws://localhost:7880", root.GetProperty("livekit").GetString());
         Assert.Equal("letschat-test", root.GetProperty("database").GetString());
+        // No hosted web client configured: the key is present but null, which
+        // tells the desktop app it has no browser URL to build invite links on.
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("web").ValueKind);
 
         var serverVersion = root.GetProperty("serverVersion").GetString();
         Assert.False(string.IsNullOrWhiteSpace(serverVersion));

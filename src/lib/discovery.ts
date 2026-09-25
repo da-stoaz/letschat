@@ -11,6 +11,8 @@ export interface WellKnown {
   dailyUploadQuotaBytes?: number
   userStorageLimitBytes?: number
   instanceStorageLimitBytes?: number
+  /** The instance's hosted web client, or null when it has none. */
+  web?: string | null
 }
 
 /** Loopback, `.local` and private-network hosts — where plain http is normal. */
@@ -40,6 +42,15 @@ export function normalizeServerUrl(input: string): string {
   return `${isLocalHost(trimmed.split('/')[0]) ? 'http' : 'https'}://${trimmed}`
 }
 
+/**
+ * Socket services are stored as ws(s)://. Discovery may advertise the http(s)
+ * form of the same origin (both SDKs accept either); normalizing keeps a stored
+ * host from reading as "changed" in the known-host check just over the scheme.
+ */
+function toSocketUrl(url: string): string {
+  return url.replace(/^http(s?):\/\//i, 'ws$1://')
+}
+
 /** An https instance must not advertise plaintext endpoints. */
 function assertSecureEndpoints(base: string, json: WellKnown): void {
   if (!base.startsWith('https://')) return
@@ -55,6 +66,16 @@ function assertSecureEndpoints(base: string, json: WellKnown): void {
   }
 }
 
+/** Fetches a server's raw `/.well-known/letschat.json` document. */
+export async function fetchWellKnown(serverUrl: string): Promise<WellKnown> {
+  const base = normalizeServerUrl(serverUrl)
+  const res = await fetch(`${base}/.well-known/letschat.json`, { signal: AbortSignal.timeout(8000) })
+  if (!res.ok) {
+    throw new Error(`Discovery failed (${res.status}). Is /.well-known/letschat.json hosted at ${base}?`)
+  }
+  return (await res.json()) as WellKnown
+}
+
 /**
  * Fetches `/.well-known/letschat.json` from a server's base URL and maps it into
  * a {@link ServerConfig}. Throws a descriptive error if the document is missing
@@ -63,11 +84,7 @@ function assertSecureEndpoints(base: string, json: WellKnown): void {
  */
 export async function discoverConfig(serverUrl: string): Promise<ServerConfig> {
   const base = normalizeServerUrl(serverUrl)
-  const res = await fetch(`${base}/.well-known/letschat.json`, { signal: AbortSignal.timeout(8000) })
-  if (!res.ok) {
-    throw new Error(`Discovery failed (${res.status}). Is /.well-known/letschat.json hosted at ${base}?`)
-  }
-  const json = (await res.json()) as WellKnown
+  const json = await fetchWellKnown(base)
   const missing: string[] = []
   if (!json.spacetimedb) missing.push('spacetimedb')
   if (!json.auth) missing.push('auth')
@@ -75,9 +92,9 @@ export async function discoverConfig(serverUrl: string): Promise<ServerConfig> {
   if (missing.length) throw new Error(`letschat.json is missing fields: ${missing.join(', ')}`)
   assertSecureEndpoints(base, json)
   return {
-    spacetimedbUri: json.spacetimedb!,
+    spacetimedbUri: toSocketUrl(json.spacetimedb!),
     authServiceUrl: json.auth!,
-    livekitUrl: json.livekit!,
+    livekitUrl: toSocketUrl(json.livekit!),
     spacetimedbDatabase: json.database ?? 'letschat',
     uploadPartSizeBytes: json.uploadPartSizeBytes,
     uploadMaxFileSizeBytes: json.uploadMaxFileSizeBytes,

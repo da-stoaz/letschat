@@ -2,8 +2,8 @@
  * Per-instance settings of the hosted web client, read at runtime.
  *
  * The web image is built once in CI for every instance, so the server address
- * cannot be baked in. The web container writes `/config.js` from its
- * environment at start (deploy/web/entrypoint.sh), and `index.html` loads it
+ * cannot be baked in. Caddy serves `/config.js` directly from its
+ * environment (deploy/web/Caddyfile), and `index.html` loads it
  * before the app. Desktop and dev ship an empty default (public/config.js), and
  * a self-built bundle may still bake the VITE_* values in as a fallback.
  */

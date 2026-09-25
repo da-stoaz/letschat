@@ -9,7 +9,7 @@ rtc:
   allow_tcp_fallback: true
   tcp_port: 44381
   udp_port: 44382
-keys:
-  # Must match LIVEKIT_API_KEY and LIVEKIT_API_SECRET in .env
-  your-api-key-here: your-api-secret-here
+# No `keys:` here: docker-compose.prod.base.yml passes LIVEKIT_KEYS, built from
+# LIVEKIT_API_KEY / LIVEKIT_API_SECRET in .env — the same values core-api signs
+# voice tokens with. LIVEKIT_KEYS replaces any `keys:` block in this file.
 log_level: info

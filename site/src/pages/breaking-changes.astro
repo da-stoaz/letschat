@@ -5,6 +5,28 @@ import SiteFooter from "@/components/SiteFooter.astro";
 
 const changes = [
   {
+    version: "v1.2.3",
+    date: "September 2026",
+    items: [
+      "MinIO's own images (minio/minio, minio/mc) were deleted from Docker Hub, so a fresh docker compose pull failed. The stack now runs pgsty/silo and pgsty/mc — Pigsty's maintained fork of the same server, with the same data format and MINIO_* settings. Your existing minio_data volume is used as-is.",
+      "core-api refuses to start while any secret still holds the example file's change-me… placeholder (AUTH_JWT_SECRET, LIVEKIT_API_SECRET, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, POSTGRES_PASSWORD, ADMIN_BOOTSTRAP_PASSWORD, SPACETIME_OIDC_PRIVATE_KEY). Those values are public; a forgotten one let anyone forge sign-ins.",
+      "LiveKit's API key now comes from LIVEKIT_API_KEY / LIVEKIT_API_SECRET in .env (passed as LIVEKIT_KEYS), the same values core-api uses. livekit/config.prod.yaml no longer holds keys, and LiveKit is pinned to v1.13.5 instead of :latest.",
+      "The module publisher image uses the SpacetimeDB 2.10.1 CLI, matching the server; it had been left on 2.5.0.",
+      "APP_DOMAIN now supplies the hosted browser address advertised in discovery; the desktop app builds invite links on it. They used to point at http://localhost:1420 and never worked.",
+      "Public hostnames are entered once on both tracks: AUTH_DOMAIN, CHAT_DOMAIN, FILES_DOMAIN, LIVEKIT_DOMAIN and optional APP_DOMAIN. Compose builds the service URLs; native Caddy configuration handles routing, CSP and /config.js without entrypoint scripts. Remove DISCOVERY_* URL settings, MINIO_PUBLIC_ENDPOINT and VITE_WEB_CONNECT_URL from the deployment .env. HTTPS is the default; PUBLIC_SCHEME=http enables LAN HTTP. The client SDKs open WebSockets from the generated HTTP(S) service URLs. Empty APP_DOMAIN omits the Caddy browser site.",
+      "SPACETIMEDB_MODULE_NAME and DISCOVERY_DATABASE are fixed to letschat in the compose file, like module-init's publish target — changing only one of them used to point core-api or clients at a database that does not exist.",
+    ],
+    migration: "Download the new docker-compose.prod.base.yml (and your track's overlay) and livekit/config.prod.yaml. On the Caddy track also download deploy/caddy/Caddyfile. Configure the hostnames once using the updated .env example; no separate public URLs or shell scripts are needed. Then pull and up -d. Replace any change-me… value still in .env before pulling, or core-api will not start and names the variable in docker compose logs core-api. Set APP_DOMAIN=app.<domain> if you host the browser client. On the tunnel track, add the Cloudflare WAF rule for /sql described in the guide.",
+  },
+  {
+    version: "v1.2.2",
+    date: "September 2026",
+    items: [
+      "Nothing is entered twice any more: the web container derives the browser client's connect address from DISCOVERY_AUTH_URL and its Content-Security-Policy hosts from DISCOVERY_AUTH_URL, DISCOVERY_SPACETIMEDB_URI, DISCOVERY_LIVEKIT_URL and MINIO_PUBLIC_ENDPOINT. On the tunnel track, VITE_WEB_CONNECT_URL and AUTH_DOMAIN / CHAT_DOMAIN / FILES_DOMAIN / LIVEKIT_DOMAIN are no longer needed. The Caddy track still sets the *_DOMAIN values, because they are Caddy's virtual hosts.",
+    ],
+    migration: "Nothing required: existing values keep working as overrides. Download the new docker-compose.prod.base.yml (it passes the URLs to the web container), then you may delete the duplicated lines from .env.",
+  },
+  {
     version: "v1.2.1",
     date: "September 2026",
     items: [

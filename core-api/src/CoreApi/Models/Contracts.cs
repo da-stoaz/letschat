@@ -197,4 +197,6 @@ public sealed record WellKnownResponse(
     long UploadMaxFileSizeBytes,
     long DailyUploadQuotaBytes,
     long UserStorageLimitBytes,
-    long InstanceStorageLimitBytes);
+    long InstanceStorageLimitBytes,
+    // Hosted web client (DISCOVERY_WEB_URL), or null when the instance has none.
+    string? Web);

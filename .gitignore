@@ -23,21 +23,15 @@ dist-ssr
 *.sln
 *.sw?
 
-# Rust auth service
-auth-service/target
-auth-service/*.db
-
 # .NET build output (core-api, archive-worker, tools, …)
 **/bin/
 **/obj/
 
-# Environment files — gitignore everything with real secrets.
-# Only the *.example templates are committed:
-#   .env.example, .env.development.example,
-#   .env.production.caddy.example, .env.production.tunnel.example
+# Environment files — ignore every variant (they hold real secrets); only the
+# committed *.example templates are tracked.
 .env
-.env.development
-.env.production
+.env.*
+!.env*.example
 
 # graphify
 

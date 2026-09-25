@@ -62,6 +62,33 @@ public sealed class ServiceOptionsTests
         Assert.Contains("MINIO_SECRET_KEY", insecure);
     }
 
+    [Fact]
+    public void FindInsecureDefaults_FlagsEverySecretLeftAtItsTemplatePlaceholder()
+    {
+        // The exact values shipped in .env.production.*.example. They are public,
+        // so a deployment that forgot to replace one must not start.
+        var options = ServiceOptions.FromConfiguration(Config(new()
+        {
+            ["AUTH_JWT_SECRET"] = "change-me-generate-with-openssl-rand-hex-32",
+            ["LIVEKIT_API_SECRET"] = "change-me-generate-with-openssl-rand-base64-32",
+            ["MINIO_ACCESS_KEY"] = "change-me-access-key",
+            ["MINIO_SECRET_KEY"] = "change-me-generate-with-openssl-rand-hex-32",
+            ["ADMIN_BOOTSTRAP_PASSWORD"] = "change-me-strong-password",
+            ["SPACETIME_OIDC_ISSUER"] = "http://core-api:8787",
+            ["SPACETIME_OIDC_PRIVATE_KEY"] = "change-me-see-comment-above",
+            ["AUTH_DATABASE_URL"] =
+                "Host=postgres;Port=5432;Database=auth;Username=letschat;Password=change-me-generate-with-openssl-rand-hex-32",
+        }));
+
+        Assert.Equal(
+            new[]
+            {
+                "AUTH_JWT_SECRET", "LIVEKIT_API_SECRET", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY",
+                "ADMIN_BOOTSTRAP_PASSWORD", "SPACETIME_OIDC_PRIVATE_KEY", "POSTGRES_PASSWORD",
+            }.Order(),
+            options.FindInsecureDefaults().Order());
+    }
+
     // ── Client-facing endpoints ───────────────────────────────────────────────
     // These fail differently from a bad secret: nothing throws, nothing logs, and
     // every client is handed an address it cannot reach.
@@ -134,6 +161,24 @@ public sealed class ServiceOptionsTests
         var only = Assert.Single(options.FindClientUnreachableEndpoints());
         Assert.Contains("MINIO_PUBLIC_ENDPOINT", only);
         Assert.Contains("points at this machine", only);
+    }
+
+    [Fact]
+    public void FindClientUnreachableEndpoints_ChecksTheWebUrlOnlyWhenSet()
+    {
+        var publicDeployment = new Dictionary<string, string?>
+        {
+            ["MINIO_INTERNAL_ENDPOINT"] = "http://minio:44390",
+            ["MINIO_PUBLIC_ENDPOINT"] = "https://files.example.com",
+            ["DISCOVERY_AUTH_URL"] = "https://auth.example.com",
+            ["DISCOVERY_SPACETIMEDB_URI"] = "wss://chat.example.com",
+            ["DISCOVERY_LIVEKIT_URL"] = "wss://lk.example.com",
+        };
+        Assert.Empty(ServiceOptions.FromConfiguration(Config(publicDeployment)).FindClientUnreachableEndpoints());
+
+        publicDeployment["DISCOVERY_WEB_URL"] = "http://localhost:5173";
+        var only = Assert.Single(ServiceOptions.FromConfiguration(Config(publicDeployment)).FindClientUnreachableEndpoints());
+        Assert.Contains("DISCOVERY_WEB_URL", only);
     }
 
     [Theory]

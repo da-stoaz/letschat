@@ -112,7 +112,7 @@ wget -O deploy/caddy/Caddyfile https://raw.githubusercontent.com/${GITHUB_REPO}/
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 3: Configure secrets and domains</h2>
+        <h2 class="text-2xl font-semibold tracking-tight">Step 3: Configure secrets and hostnames</h2>
         <p class="guide-prose">Open <code>.env</code> and replace every placeholder. Generate secrets with:</p>
         <CodeBlock label="terminal" code={`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
 openssl rand -base64 32   # for LIVEKIT_API_SECRET
@@ -133,23 +133,12 @@ ADMIN_BOOTSTRAP_USERNAME=admin
 ADMIN_BOOTSTRAP_PASSWORD=  # a strong password
 ADMIN_BOOTSTRAP_EMAIL=you@example.com
 
-# Public endpoints — your domains (auth.<domain> also serves discovery).
-# These four are handed to clients verbatim, so they must be the public
-# addresses, not localhost or a container name. core-api refuses to start
-# if any of them is left pointing at the server itself.
-MINIO_PUBLIC_ENDPOINT=https://files.example.com
-DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
-DISCOVERY_AUTH_URL=https://auth.example.com
-DISCOVERY_LIVEKIT_URL=wss://lk.example.com
-
-# Caddy virtual-host names — hostnames only, no https://. They must match the
-# DNS records above and the hosts in the URLs above: the browser client's
-# Content-Security-Policy only allows these hosts.
+# Public hostnames — enter each once, without a scheme or path.
+# Compose builds the URLs; Caddy and clients share these settings.
 AUTH_DOMAIN=auth.example.com
 CHAT_DOMAIN=chat.example.com
 FILES_DOMAIN=files.example.com
 LIVEKIT_DOMAIN=lk.example.com
-APP_DOMAIN=app.example.com
 
 # Outbound email — required because EMAIL_SENDER defaults to smtp and
 # email confirmation is on by default
@@ -182,40 +171,41 @@ EMAIL_FROM_ADDRESS=no-reply@example.com`} />
 
         <h3 class="text-lg font-medium pt-1">Hosting the browser client (optional)</h3>
         <p class="guide-prose">
-          For the browser client at <code>app.example.com</code>, also set these. Skip them (and the
-          <code>APP_DOMAIN</code> above) to serve the desktop app only.
+          For the browser client at <code>app.example.com</code>, set its hostname below. It supplies
+          both Caddy routing and desktop invite links. Leave <code>APP_DOMAIN</code> empty to omit
+          the browser site.
         </p>
-        <CodeBlock label=".env" code={`# Read when the web container starts, so it auto-connects to THIS
-# instance. Point at auth.<domain>, which serves the discovery document.
-VITE_WEB_CONNECT_URL=https://auth.example.com
-
-# Let the browser fetch presigned download URLs from MinIO.
-MINIO_CORS_ALLOW_ORIGIN=https://app.example.com
+        <CodeBlock label=".env" code={`# Browser site and desktop invite links; no separate URL setting.
+APP_DOMAIN=app.example.com
 
 # DB WebSocket compression in the browser: "gzip" (default) or "none".
 VITE_WEB_WS_COMPRESSION=gzip`} />
+        <p class="guide-prose text-sm">
+          Leave <code>MINIO_CORS_ALLOW_ORIGIN=*</code> as the example file has it. Narrowing it to
+          <code>https://app.example.com</code> blocks every upload from the desktop app, whose origin is
+          <code>tauri://localhost</code> / <code>http://tauri.localhost</code>.
+        </p>
 
         <Callout type="tip" title="Don't want to set up SMTP yet?">
           Set <code>REQUIRE_EMAIL_CONFIRMATION=false</code> and <code>EMAIL_SENDER=log</code> — accounts then
           work without email (links are written to the container log instead).
         </Callout>
-        <p class="guide-prose text-sm">Everything else in <code>.env</code> already has a working default and is documented inline — <code>LIVEKIT_API_KEY</code> (must match <code>livekit/config.prod.yaml</code>), <code>POSTGRES_USER</code>/<code>POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them. Leave <code>SPACETIMEDB_SERVICE_TOKEN</code> blank for now — it only exists once the stack has started, and you fill it in during Step 5.</p>
+        <p class="guide-prose text-sm">Everything else in <code>.env</code> already has a working default and is documented inline — <code>LIVEKIT_API_KEY</code>, <code>POSTGRES_USER</code>/<code>POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them. Leave <code>SPACETIMEDB_SERVICE_TOKEN</code> blank for now — it only exists once the stack has started, and you fill it in during Step 5.</p>
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 4: Configure LiveKit</h2>
-        <p class="guide-prose">Open <code>livekit/config.prod.yaml</code> and replace the key/secret placeholder so it matches your <code>.env</code>:</p>
-        <CodeBlock label="livekit/config.prod.yaml" code={`keys:
-  letschat-prod: <paste LIVEKIT_API_SECRET here>`} />
-        <p class="guide-prose text-sm">The rest of the file (ports, <code>use_external_ip: true</code>) can stay as-is for most home server setups.</p>
+        <h2 class="text-2xl font-semibold tracking-tight">Step 4: LiveKit — nothing to edit</h2>
+        <p class="guide-prose">Compose hands <code>LIVEKIT_API_KEY</code> and <code>LIVEKIT_API_SECRET</code> from your <code>.env</code> to LiveKit and core-api alike, so they cannot disagree. <code>livekit/config.prod.yaml</code> holds no keys; leave it as downloaded (ports, <code>use_external_ip: true</code>).</p>
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
         <h2 class="text-2xl font-semibold tracking-tight">Step 5: Pull images, start, and connect core-api to the chat module</h2>
         <p class="guide-prose">
           Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
-          (e.g. <code>LETSCHAT_VERSION=1.2.0</code>) to make upgrades explicit — and a rollback a one-line
-          edit: set the previous version and re-run the two commands below.
+          (e.g. <code>LETSCHAT_VERSION=1.2.3</code>) to make upgrades explicit. Before an upgrade, save
+          the current deployment files and keep the deployed images. To roll back, restore those files
+          together with <code>.env</code>, then run <code>docker compose … up -d --pull never</code>.
+          See <a href={`https://github.com/${GITHUB_REPO}/blob/main/DEPLOYMENT.md#upgrading-a-running-deployment`}>the upgrade and rollback guide</a>.
         </p>
         <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
@@ -223,9 +213,8 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
         <p class="guide-prose"><code>module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
         <CodeBlock label="terminal" code={`docker logs letschat-module-init`} />
         <Callout type="note">
-          Hosting the browser client? If you change <code>VITE_WEB_CONNECT_URL</code> later, recreate just that
-          container with <code>docker compose … up -d web</code> — no rebuild, the address is applied at start.
-        </Callout>
+          Changed a hostname? Run <code>docker compose … up -d</code> so Caddy, core-api and web
+          all receive it. No rebuild; each address is configured once.</Callout>
 
         <h3 class="text-lg font-medium pt-3">Give core-api the module owner's key — required, before anyone signs in</h3>
         <p class="guide-prose">
