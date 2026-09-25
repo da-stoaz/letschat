@@ -61,7 +61,7 @@ import { GITHUB_REPO } from "@/lib/site";
         <Callout type="warning" title="The one exception — voice media">
           The live voice/video audio itself is real-time UDP and <strong>cannot</strong> travel through the
           tunnel. That single kind of traffic reaches your server directly, on two ports you forward on
-          your router (Step 7). Skip that and text chat works perfectly. Just voice calls won't deliver any sound.
+          your router (Step 6). Skip that and text chat works perfectly. Just voice calls won't deliver any sound.
         </Callout>
 
         <Callout type="note" title="Large file uploads use multipart">
@@ -105,7 +105,6 @@ import { GITHUB_REPO } from "@/lib/site";
           <li>Create a tunnel and copy its token</li>
           <li>Download the files</li>
           <li>Fill in your <code>.env</code></li>
-          <li>Set the LiveKit secret</li>
           <li>Map the subdomains</li>
           <li>Start the stack and connect core-api to the chat module</li>
           <li>Forward the two voice ports</li>
@@ -120,7 +119,7 @@ import { GITHUB_REPO } from "@/lib/site";
           <li>A domain whose DNS is managed by Cloudflare (free plan is fine).</li>
           <li>Cloudflare <strong>Zero Trust</strong> enabled on your account (free).</li>
           <li>An Ubuntu server with Docker Engine 25+ and the Compose plugin 2.20.2+ (the health checks need them).</li>
-          <li>Admin access to your home router (for the two voice ports in Step 7).</li>
+          <li>Admin access to your home router (for the two voice ports in Step 6).</li>
         </ul>
         <p class="guide-prose">
           <strong>30-second voice check.</strong> Voice needs a real public IP. Run this on the server and
@@ -143,7 +142,7 @@ import { GITHUB_REPO } from "@/lib/site";
         <p class="guide-prose">
           The next screen shows an install command containing <code>--token &lt;LONG-STRING&gt;</code>.
           <strong>Copy that token</strong> — it's the connector's password and the only thing you need from this page.
-          Leave the tab open; you'll add the subdomains in Step 5.
+          Leave the tab open; you'll add the subdomains in Step 4.
         </p>
         <Callout type="tip" title="Already running cloudflared?">
           If you already run <code>cloudflared</code> on this server for other apps, don't create a second
@@ -239,7 +238,7 @@ LIVEKIT_DOMAIN=lk.example.com`} />
         <h3 class="text-lg font-medium pt-3">Hosting the browser client (optional)</h3>
         <p class="guide-prose">
           Want people to use LetsChat from a browser at <code>app.example.com</code>? It connects to
-          the auth hostname on its own; add the <code>app</code> route in Step 5, and set:
+          the auth hostname on its own; add the <code>app</code> route in Step 4, and set:
         </p>
         <CodeBlock label=".env" code={`# Browser site and desktop invite links; no separate URL setting.
 APP_DOMAIN=app.example.com
@@ -270,19 +269,13 @@ EMAIL_FROM_ADDRESS=you@gmail.com`} />
         <p class="guide-prose text-sm">
           Everything else in the file has a working default and is documented inline — leave it alone unless
           you have a reason. Leave <code>SPACETIMEDB_SERVICE_TOKEN</code> blank for now — it only exists once the
-          stack has started, and you fill it in during Step 6.
+          stack has started, and you fill it in during Step 5.
         </p>
       </article>
 
       <!-- ── Step 4 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-7 space-y-4">
-        <div class="step-head"><span class="step-num">4</span><h2 class="text-2xl font-semibold tracking-tight">LiveKit — nothing to edit</h2></div>
-        <p class="guide-prose">Compose hands <code>LIVEKIT_API_KEY</code> and <code>LIVEKIT_API_SECRET</code> from your <code>.env</code> to LiveKit and core-api alike, so they cannot disagree. <code>livekit/config.prod.yaml</code> holds no keys; leave it as downloaded (ports, <code>use_external_ip: true</code>).</p>
-      </article>
-
-      <!-- ── Step 5 ────────────────────────────────────────────────────── -->
-      <article class="step-card rounded-xl p-7 space-y-4">
-        <div class="step-head"><span class="step-num">5</span><h2 class="text-2xl font-semibold tracking-tight">Map the subdomains</h2></div>
+        <div class="step-head"><span class="step-num">4</span><h2 class="text-2xl font-semibold tracking-tight">Map the subdomains</h2></div>
         <p class="guide-prose">
           Back on your tunnel's page, open <strong>Public Hostnames</strong> and add one entry per subdomain.
           The connector runs <span class="italic">inside Docker</span> next to the services, so the targets are the internal
@@ -308,9 +301,9 @@ app.example.com    ->  http://web:80               # browser client (omit if not
         </Callout>
       </article>
 
-      <!-- ── Step 6 ────────────────────────────────────────────────────── -->
+      <!-- ── Step 5 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-7 space-y-4">
-        <div class="step-head"><span class="step-num">6</span><h2 class="text-2xl font-semibold tracking-tight">Start the stack and connect core-api to the chat module</h2></div>
+        <div class="step-head"><span class="step-num">5</span><h2 class="text-2xl font-semibold tracking-tight">Start the stack and connect core-api to the chat module</h2></div>
         <p class="guide-prose">
           Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
           (e.g. <code>LETSCHAT_VERSION=1.2.3</code>) to make upgrades explicit. Before an upgrade, save
@@ -318,7 +311,12 @@ app.example.com    ->  http://web:80               # browser client (omit if not
           together with <code>.env</code>, then run <code>docker compose … up -d --pull never</code>.
           See <a href={`https://github.com/${GITHUB_REPO}/blob/main/DEPLOYMENT.md#upgrading-a-running-deployment`}>the upgrade and rollback guide</a>.
         </p>
-        <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d`} />
+        <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d`} />
+        <p class="guide-prose text-sm">
+          Always <code>pull</code> first. Docker otherwise reuses any older <code>:latest</code> images already
+          on the server, and an old chat module then creates the database without its admin bootstrap.
+        </p>
         <p class="guide-prose">
           The <code>module-init</code> container publishes the SpacetimeDB schema automatically once the
           database is healthy — no manual <code>spacetime publish</code>. Watch it finish with:
@@ -372,9 +370,9 @@ docker logs letschat-archive-worker 2>&1 | tail -3
         </p>
       </article>
 
-      <!-- ── Step 7 ────────────────────────────────────────────────────── -->
+      <!-- ── Step 6 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-7 space-y-4">
-        <div class="step-head"><span class="step-num">7</span><h2 class="text-2xl font-semibold tracking-tight">Forward the two voice ports</h2></div>
+        <div class="step-head"><span class="step-num">6</span><h2 class="text-2xl font-semibold tracking-tight">Forward the two voice ports</h2></div>
         <p class="guide-prose">
           This is the one step the tunnel can't do — voice media must reach your server directly.
           First find the server's LAN IP and give it a <strong>static DHCP reservation</strong> in your router so it
@@ -392,9 +390,9 @@ docker logs letschat-archive-worker 2>&1 | tail -3
         </p>
       </article>
 
-      <!-- ── Step 8 ────────────────────────────────────────────────────── -->
+      <!-- ── Step 7 ────────────────────────────────────────────────────── -->
       <article class="step-card rounded-xl p-7 space-y-4">
-        <div class="step-head"><span class="step-num">8</span><h2 class="text-2xl font-semibold tracking-tight">Open the app — desktop or browser</h2></div>
+        <div class="step-head"><span class="step-num">7</span><h2 class="text-2xl font-semibold tracking-tight">Open the app — desktop or browser</h2></div>
         <p class="guide-prose">Confirm the public endpoints answer (from anywhere):</p>
         <CodeBlock label="terminal" code={`curl -i https://auth.example.com/health
 curl -i https://auth.example.com/.well-known/letschat.json`} />
@@ -419,7 +417,7 @@ curl -i https://auth.example.com/.well-known/letschat.json`} />
           Sign in with the admin account from Step 3, then make a test voice call between two clients.
         </p>
         <Callout type="warning" title="Call connects but no audio?">
-          The Step 7 ports aren't reaching the host — recheck the forwards and the voice check from
+          The Step 6 ports aren't reaching the host — recheck the forwards and the voice check from
           "Before you start".
         </Callout>
       </article>
@@ -433,11 +431,11 @@ curl -i https://auth.example.com/.well-known/letschat.json`} />
           use the bundled overlay. Two changes to the path above:
         </p>
         <ul class="list-disc pl-5 guide-prose space-y-1.5">
-          <li><strong>Step 1 &amp; 6:</strong> skip the bundled connector. Start with the base file only —
+          <li><strong>Step 1 &amp; 5:</strong> skip the bundled connector. Start with the base file only —
             <code>docker compose -f docker-compose.prod.base.yml up -d</code> — and in Step 2 you don't need
             <code>docker-compose.prod.tunnel.yml</code>. Leave <code>CLOUDFLARE_TUNNEL_TOKEN</code> blank;
             your existing connector has its own credentials.</li>
-          <li><strong>Step 5:</strong> add the hostnames to your <span class="italic">existing</span> tunnel, pointing at the host's
+          <li><strong>Step 4:</strong> add the hostnames to your <span class="italic">existing</span> tunnel, pointing at the host's
             <code>localhost</code> ports instead of Docker names:</li>
         </ul>
         <CodeBlock label="cloudflare public hostnames" code={`auth.example.com   ->  http://localhost:8787

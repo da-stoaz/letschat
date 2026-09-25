@@ -58,6 +58,7 @@ Compose configuration: the probe requires the included `curl` executable.
 
 ```bash
 cp .env.production.tunnel.example .env
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
 ```
 
@@ -101,6 +102,7 @@ wget -O deploy/caddy/Caddyfile https://raw.githubusercontent.com/da-stoaz/letsch
 
 ```bash
 cp .env.production.caddy.example .env
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
 ```
 

@@ -195,16 +195,12 @@ VITE_WEB_WS_COMPRESSION=gzip`} />
           Set <code>REQUIRE_EMAIL_CONFIRMATION=false</code> and <code>EMAIL_SENDER=log</code> — accounts then
           work without email (links are written to the container log instead).
         </Callout>
-        <p class="guide-prose text-sm">Everything else in <code>.env</code> already has a working default and is documented inline — <code>LIVEKIT_API_KEY</code>, <code>POSTGRES_USER</code>/<code>POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them. Leave <code>SPACETIMEDB_SERVICE_TOKEN</code> blank for now — it only exists once the stack has started, and you fill it in during Step 5.</p>
+        <p class="guide-prose text-sm">Everything else in <code>.env</code> already has a working default and is documented inline — <code>LIVEKIT_API_KEY</code>, <code>POSTGRES_USER</code>/<code>POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them. Leave <code>SPACETIMEDB_SERVICE_TOKEN</code> blank for now — it only exists once the stack has started, and you fill it in during Step 4.</p>
       </article>
 
-      <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 4: LiveKit — nothing to edit</h2>
-        <p class="guide-prose">Compose hands <code>LIVEKIT_API_KEY</code> and <code>LIVEKIT_API_SECRET</code> from your <code>.env</code> to LiveKit and core-api alike, so they cannot disagree. <code>livekit/config.prod.yaml</code> holds no keys; leave it as downloaded (ports, <code>use_external_ip: true</code>).</p>
-      </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 5: Pull images, start, and connect core-api to the chat module</h2>
+        <h2 class="text-2xl font-semibold tracking-tight">Step 4: Pull images, start, and connect core-api to the chat module</h2>
         <p class="guide-prose">
           Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
           (e.g. <code>LETSCHAT_VERSION=1.2.3</code>) to make upgrades explicit. Before an upgrade, save
@@ -265,7 +261,7 @@ docker logs letschat-archive-worker 2>&1 | tail -3
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 6: Validate public endpoints</h2>
+        <h2 class="text-2xl font-semibold tracking-tight">Step 5: Validate public endpoints</h2>
         <CodeBlock label="terminal" code={`curl -i https://auth.example.com/health
 curl -i https://files.example.com/minio/health/live
 curl -i https://auth.example.com/.well-known/letschat.json`} />
@@ -278,7 +274,7 @@ curl -i https://auth.example.com/.well-known/letschat.json`} />
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 7: Client onboarding</h2>
+        <h2 class="text-2xl font-semibold tracking-tight">Step 6: Client onboarding</h2>
         <p class="guide-prose">
           <strong>Desktop:</strong> users enter <code>https://auth.example.com</code> in the setup screen.
           <strong>Browser:</strong> users open <code>https://app.example.com</code> and go straight to login.
