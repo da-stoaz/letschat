@@ -39,7 +39,7 @@ import { GITHUB_REPO } from "@/lib/site";
       <article class="step-card rounded-xl p-7 space-y-4">
         <h2 class="text-2xl font-semibold tracking-tight">Requirements (read first)</h2>
         <ul class="list-disc pl-5 guide-prose space-y-1.5">
-          <li>Ubuntu host with Docker Engine + Compose plugin.</li>
+          <li>Ubuntu host with Docker Engine 25+ and the Compose plugin 2.20.2+ (the health checks need them).</li>
           <li>Cloudflare DNS records set to your host public IP (DNS-only mode for ACME issuance).</li>
           <li>A routable public IPv4, <strong>not</strong> CGNAT. This track exposes the host directly, so CGNAT breaks everything, not just voice. Step 2 shows how to check.</li>
           <li>Router/firewall forwards to the host's LAN IP: <code>80/tcp</code> + <code>443/tcp</code> (Caddy TLS/HTTP) and <code>44382/udp</code> + <code>44381/tcp</code> (LiveKit media). All a manual router step.</li>
@@ -73,9 +73,8 @@ import { GITHUB_REPO } from "@/lib/site";
 wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
 
 mkdir livekit
-wget -O livekit/config.prod.yaml \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml`} />
-        <p class="guide-prose text-sm">All images are pre-built — no Rust or Node toolchains needed on the server (the browser client compiles itself in the <code>web</code> container on first start).</p>
+wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml`} />
+        <p class="guide-prose text-sm">Every service — the browser client included — is a pre-built image that GitHub Actions publishes with each release. Nothing is compiled on your server. To upgrade later, download the compose files again (they change with releases) and pull.</p>
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
@@ -83,12 +82,10 @@ wget -O livekit/config.prod.yaml \\
         <p class="guide-prose">Inside the <code>letschat</code> directory:</p>
         <CodeBlock label="terminal" code={`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.caddy.yml
 
-wget -O .env \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.caddy.example
+wget -O .env https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.caddy.example
 
 mkdir -p deploy/caddy
-wget -O deploy/caddy/Caddyfile \\
-  https://raw.githubusercontent.com/${GITHUB_REPO}/main/deploy/caddy/Caddyfile`} />
+wget -O deploy/caddy/Caddyfile https://raw.githubusercontent.com/${GITHUB_REPO}/main/deploy/caddy/Caddyfile`} />
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
@@ -169,8 +166,8 @@ EMAIL_FROM_ADDRESS=no-reply@example.com`} />
           </p>
           <p>
             If the key is unset, core-api refuses to start. If you replace it later, every token
-            already issued stops verifying — signed-in users are logged out and, until they sign in
-            again, their client may reconnect anonymously. Accounts and messages are unaffected
+            already issued stops verifying — signed-in users are logged out and asked to sign in
+            again. Accounts and messages are unaffected
             (identities do not depend on this key), but there is no reason to rotate it. Back it up
             with your other secrets.
           </p>
@@ -188,7 +185,7 @@ EMAIL_FROM_ADDRESS=no-reply@example.com`} />
           For the browser client at <code>app.example.com</code>, also set these. Skip them (and the
           <code>APP_DOMAIN</code> above) to serve the desktop app only.
         </p>
-        <CodeBlock label=".env" code={`# Baked into the browser bundle at build time so it auto-connects to THIS
+        <CodeBlock label=".env" code={`# Read when the web container starts, so it auto-connects to THIS
 # instance. Point at auth.<domain>, which serves the discovery document.
 VITE_WEB_CONNECT_URL=https://auth.example.com
 
@@ -202,7 +199,7 @@ VITE_WEB_WS_COMPRESSION=gzip`} />
           Set <code>REQUIRE_EMAIL_CONFIRMATION=false</code> and <code>EMAIL_SENDER=log</code> — accounts then
           work without email (links are written to the container log instead).
         </Callout>
-        <p class="guide-prose text-sm">Everything else in <code>.env</code> already has a working default and is documented inline — <code>LIVEKIT_API_KEY</code> (must match <code>livekit/config.prod.yaml</code>), <code>POSTGRES_USER</code>/<code>POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them.</p>
+        <p class="guide-prose text-sm">Everything else in <code>.env</code> already has a working default and is documented inline — <code>LIVEKIT_API_KEY</code> (must match <code>livekit/config.prod.yaml</code>), <code>POSTGRES_USER</code>/<code>POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them. Leave <code>SPACETIMEDB_SERVICE_TOKEN</code> blank for now — it only exists once the stack has started, and you fill it in during Step 5.</p>
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
@@ -214,10 +211,10 @@ VITE_WEB_WS_COMPRESSION=gzip`} />
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 5: Pull images and start</h2>
+        <h2 class="text-2xl font-semibold tracking-tight">Step 5: Pull images, start, and connect core-api to the chat module</h2>
         <p class="guide-prose">
           Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
-          (e.g. <code>LETSCHAT_VERSION=1.0.0</code>) to make upgrades explicit — and a rollback a one-line
+          (e.g. <code>LETSCHAT_VERSION=1.2.0</code>) to make upgrades explicit — and a rollback a one-line
           edit: set the previous version and re-run the two commands below.
         </p>
         <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
@@ -226,10 +223,51 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
         <p class="guide-prose"><code>module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
         <CodeBlock label="terminal" code={`docker logs letschat-module-init`} />
         <Callout type="note">
-          Hosting the browser client? The <code>web</code> container builds the React bundle on first start —
-          give it a couple of minutes. If you change <code>VITE_WEB_CONNECT_URL</code> later, rebuild with
-          <code>docker compose … build web && docker compose … up -d web</code>.
+          Hosting the browser client? If you change <code>VITE_WEB_CONNECT_URL</code> later, recreate just that
+          container with <code>docker compose … up -d web</code> — no rebuild, the address is applied at start.
         </Callout>
+
+        <h3 class="text-lg font-medium pt-3">Give core-api the module owner's key — required, before anyone signs in</h3>
+        <p class="guide-prose">
+          On its first start, <code>module-init</code> created the identity that owns the chat module. core-api
+          needs that credential to act as the chat side's admin: it pins its own sign-in issuer into the module
+          (until then anyone could create a chat account straight over the public WebSocket), grants your admin
+          account its chat-side admin rights, ends a disabled account's chat access, and runs attachment
+          cleanup. Read it from the persisted volume, put it into <code>.env</code>, and restart core-api:
+        </p>
+        <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml \\
+  run --rm module-init login show --token
+# → "Your auth token (don't share this!) is eyJ…" — copy everything after "is "
+
+# in .env:
+SPACETIMEDB_SERVICE_TOKEN=eyJ…
+
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d --force-recreate core-api
+docker logs letschat-core-api 2>&1 | grep "trusted issuer"
+# → Pinned SpacetimeDB trusted issuer to http://core-api:8787.`} />
+        <Callout type="warning" title="Never delete the module_init_home volume">
+          It holds that identity, and only the identity that created the database may update it. Lose it and
+          every future module update fails.
+        </Callout>
+
+        <h3 class="text-lg font-medium pt-3">Register the archive worker</h3>
+        <p class="guide-prose">
+          The <code>archive-worker</code> mirrors every message into PostgreSQL — the copy that makes a future
+          destructive database migration survivable. It does nothing until the module knows its identity:
+        </p>
+        <CodeBlock label="terminal" code={`docker logs letschat-archive-worker 2>&1 | grep "Archive worker identity"
+# → Connected to SpacetimeDB. Archive worker identity: c200…
+
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml \\
+  run --rm module-init call -s http://spacetimedb:3000 letschat \\
+  set_archive_service_identity '["0x<identity from the log>"]'
+
+docker logs letschat-archive-worker 2>&1 | tail -3
+# → Subscription applied; reconciling archive.`} />
+        <p class="guide-prose text-sm">
+          Keep the <code>0x</code> prefix. The <code>archive_worker_data</code> volume keeps the worker's identity
+          across restarts; delete it and you register the new one the same way.
+        </p>
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">
@@ -237,13 +275,12 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
         <CodeBlock label="terminal" code={`curl -i https://auth.example.com/health
 curl -i https://files.example.com/minio/health/live
 curl -i https://auth.example.com/.well-known/letschat.json`} />
-        <Callout type="note" title="Register your own account first">
-          The first account on an instance with no admin becomes the instance admin — so create yours
-          <strong>before</strong> handing the address out. Signing in is also what lets <code>core-api</code> pin
-          its OIDC issuer into the chat module, which is what stops anyone from creating a chat account
-          straight over the public WebSocket. Confirm it took:
+        <Callout type="note" title="Your admin account">
+          The instance admin is the <code>ADMIN_BOOTSTRAP_*</code> account from Step 3 — a public registration
+          never becomes admin. Sign in with it once, then remove <code>ADMIN_BOOTSTRAP_PASSWORD</code> from
+          <code>.env</code>. The admin panel stays on the server's loopback (<code>127.0.0.1:48788</code>); reach it
+          over an SSH tunnel.
         </Callout>
-        <CodeBlock label="terminal" code={`docker logs letschat-core-api 2>&1 | grep "trusted issuer"`} />
       </article>
 
       <article class="step-card rounded-xl p-7 space-y-4">

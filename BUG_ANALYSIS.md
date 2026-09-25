@@ -1778,7 +1778,7 @@ gebrochen. Das SpacetimeDB-SDK holt vor dem WebSocket
 damit auf beiden Tracks Pflicht, als reine Hostnamen passend zu `DISCOVERY_*` und
 `MINIO_PUBLIC_ENDPOINT` (`DEPLOYMENT.md`, `SECURITY.md`, die `.env`-Beispiele, beide
 Self-Hosting-Guides und die Breaking-Changes-Seite sagen das). Der `web`-Container
-prüft sie beim Start (`deploy/web/check-domains.sh`) und bricht bei fehlendem Wert
+prüft sie beim Start (`deploy/web/entrypoint.sh`) und bricht bei fehlendem Wert
 oder mitgegebenem Schema mit klarer Meldung ab, statt still eine kaputte Policy
 auszuliefern. Die ursprüngliche Analyse:
 

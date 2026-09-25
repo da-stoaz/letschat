@@ -77,17 +77,20 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
 
 ## Hosted web client (`app.<domain>`)
 
-The `web` service builds the React/Vite bundle and serves it as static files, so
-users can reach LetsChat from a browser without installing the desktop app. It is
-**single-tenant**: the bundle is built with `VITE_WEB_CONNECT_URL` baked in, so a
-browser hitting `app.<domain>` auto-discovers this instance via
+The `web` service serves the React/Vite bundle as static files, so users can
+reach LetsChat from a browser without installing the desktop app. Its image
+(`ghcr.io/da-stoaz/letschat-web`) is built once per release by GitHub Actions
+like every other service; nothing is compiled on the server. It is
+**single-tenant**: at start the container writes `VITE_WEB_CONNECT_URL` into
+`/config.js`, which the page loads before the app, so a browser hitting
+`app.<domain>` auto-discovers this instance via
 `auth.<domain>/.well-known/letschat.json` and goes straight to login — no
 setup screen. Desktop builds are unaffected (the var is unset there).
 
 Required env (see the `.env.production.*.example` files):
 
 - `APP_DOMAIN=app.example.com` — Caddy hostname (Caddy track only).
-- `VITE_WEB_CONNECT_URL=https://auth.example.com` — baked into the bundle
+- `VITE_WEB_CONNECT_URL=https://auth.example.com` — applied at container start
   (auth.<domain> serves the discovery document).
 - `VITE_WEB_WS_COMPRESSION=gzip` — DB WebSocket compression in browsers
   (`gzip` default, or `none`). The client auto-downgrades to `none` if a gzip
@@ -103,9 +106,9 @@ Routing:
 - **Tunnel track**: add an ingress rule `app.<domain> -> http://web:80` in the
   Cloudflare Zero Trust dashboard (WebSocket not required — static files only).
 
-> The bundle is built at image-build time, so **after changing
-> `VITE_WEB_CONNECT_URL` you must rebuild**: `docker compose ... build web` then
-> `up -d web`.
+> After changing `VITE_WEB_CONNECT_URL` or `VITE_WEB_WS_COMPRESSION`, recreate
+> the container: `docker compose ... up -d web`. The container refuses to start
+> if the URL is not an `http(s)://` address or the compression is not `gzip`/`none`.
 
 ## Legacy `auth.db` import
 
@@ -153,10 +156,13 @@ migration instead of wiping data.
 
 ## Upgrading a running deployment
 
-Set the release you want in `.env`, then pull and restart:
+Download the current compose files first (they change with releases), set the
+release you want in `.env`, then pull and restart:
 
 ```bash
-LETSCHAT_VERSION=1.0.0   # in .env
+wget -O docker-compose.prod.base.yml https://raw.githubusercontent.com/da-stoaz/letschat/main/docker-compose.prod.base.yml
+wget -O docker-compose.prod.<track>.yml https://raw.githubusercontent.com/da-stoaz/letschat/main/docker-compose.prod.<track>.yml
+LETSCHAT_VERSION=1.2.1   # in .env
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml up -d
 ```
@@ -186,12 +192,15 @@ deployment can always go back to a known-good image.
 > identity was already ephemeral. Treat the first 1.0.0 upgrade of such a
 > deployment as a fresh install (or plan the rename + archive-rebuild above).
 
-## Promoting core-api as a SpacetimeDB admin (plan 1.5)
+## Promoting core-api as a SpacetimeDB admin (required)
 
-Some admin-panel surfaces (currently: the **Spaces → create policy** card on
-`/admin/config`) push updates to the chat-domain SpacetimeDB module rather
-than to the Postgres `SystemConfig` row. core-api needs a SpacetimeDB
-identity that has `is_admin = true` to call those reducers.
+core-api acts as the chat module's admin with the module owner's credential
+(`SPACETIMEDB_SERVICE_TOKEN`). Without it core-api cannot pin its OIDC issuer —
+so the module keeps accepting chat registrations from any identity over the
+public WebSocket — and it cannot sync the Admin role, push account suspension
+and token revocation, release the fresh-database storage fence, run attachment
+cleanup, or save the **Spaces → create policy** card on `/admin/config`. Do this
+on every new deployment, before anyone signs in.
 
 Run this once, after `module-init` has published the database:
 

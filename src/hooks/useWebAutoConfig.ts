@@ -3,14 +3,9 @@ import { useServerConfigStore } from '../stores/serverConfigStore'
 import { discoverConfig } from '../lib/discovery'
 import { initializeSpacetime } from '../lib/spacetimedb'
 import { isHostedWebBuild } from '../lib/tauri'
+import { WEB_CONNECT_URL } from '../lib/runtimeConfig'
 
 export type WebAutoConfigStatus = 'inactive' | 'discovering' | 'done' | 'failed'
-
-/**
- * The connect URL baked into a hosted-web build (e.g. https://auth.example.com).
- * Unset on desktop builds and local dev, where the normal Setup flow is used.
- */
-const WEB_CONNECT_URL = (import.meta.env.VITE_WEB_CONNECT_URL as string | undefined)?.trim() || undefined
 
 // Module-level guard: run the one-shot discovery at most once per page load,
 // surviving React StrictMode's mount/unmount/remount.
@@ -18,7 +13,7 @@ let bootstrapStarted = false
 
 /**
  * Hosted-web bootstrap. A web build is single-tenant — locked to its own
- * deployment — so when `VITE_WEB_CONNECT_URL` is baked in and we're running in a
+ * deployment — so when a connect URL is configured and we're running in a
  * browser (not the Tauri desktop shell), auto-discover the instance config from
  * its connect URL and connect, skipping the desktop "pick a server" Setup
  * screen. Falls back to Setup (status `failed`) if discovery fails, so the user

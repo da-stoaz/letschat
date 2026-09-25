@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { MonitorDownIcon, XIcon } from 'lucide-react'
 import { isHostedWebBuild } from '../../lib/tauri'
 import { normalizeServerUrl } from '../../lib/discovery'
+import { WEB_CONNECT_URL } from '../../lib/runtimeConfig'
 import { Button } from '@/components/ui/button'
 
 const DISMISS_KEY = 'letschat.web.desktopBannerDismissed'
@@ -14,8 +15,6 @@ function detectOs(): 'macos' | 'windows' | 'linux' {
   return 'linux'
 }
 
-/** The connect URL baked into a hosted-web build; the downloads resolver lives there. */
-const WEB_CONNECT_URL = (import.meta.env.VITE_WEB_CONNECT_URL as string | undefined)?.trim() || undefined
 
 /**
  * Dismissable "also available as a desktop app" banner. Renders only on the
