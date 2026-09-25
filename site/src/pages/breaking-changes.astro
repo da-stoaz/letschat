@@ -8,12 +8,12 @@ const changes = [
     version: "v1.2.0",
     date: "September 2026",
     items: [
-      "The browser client's Content-Security-Policy is now enforced instead of report-only. The web container builds it from AUTH_DOMAIN, CHAT_DOMAIN, FILES_DOMAIN and LIVEKIT_DOMAIN, so all four must be set on both tracks — with one missing, the browser blocks that service and the web app stops working. The desktop app is not affected.",
+      "The browser client's Content-Security-Policy is now enforced instead of report-only. The web container builds it from AUTH_DOMAIN, CHAT_DOMAIN, FILES_DOMAIN and LIVEKIT_DOMAIN, so all four must be set on both tracks, as hostnames only (auth.example.com, no https://) matching the hosts in your DISCOVERY_* URLs and MINIO_PUBLIC_ENDPOINT. The web container now refuses to start if one is missing or contains a scheme. The desktop app is not affected.",
       "core-api refuses to start when a boolean or number setting has an unrecognised value (for example REQUIRE_EMAIL_CONFIRMATION=enabled). Such values used to be read silently as false or as the default — which could switch email confirmation off.",
       "Auth rate limits are counted per purpose: registration, email actions and password actions each get RATE_LIMIT_PERMIT per window, and sign-in gets ten times that. Confirmation and reset emails are additionally capped at three per account per hour.",
       "core-api now removes people from LiveKit calls once they lose voice presence (kick, ban, timeout, leave), within about 40 seconds. It reaches LiveKit's room API at http://livekit:44380, which the shipped compose file sets.",
     ],
-    migration: "Check that AUTH_DOMAIN, CHAT_DOMAIN, FILES_DOMAIN and LIVEKIT_DOMAIN are set in .env before pulling (the example files have them). If core-api does not come up, docker compose logs core-api names the setting with the bad value. Pull the new compose file along with the images. The module update adds one private table; no data is deleted.",
+    migration: "Check that AUTH_DOMAIN, CHAT_DOMAIN, FILES_DOMAIN and LIVEKIT_DOMAIN are set in .env as bare hostnames before pulling (the example files have them); if the web container exits, docker compose logs web names the variable. If core-api does not come up, docker compose logs core-api names the setting with the bad value. Pull the new compose file along with the images. The module update adds one private table; no data is deleted.",
   },
   {
     version: "v1.0.5",

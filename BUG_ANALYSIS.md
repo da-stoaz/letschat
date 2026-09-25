@@ -1775,8 +1775,12 @@ gefunden:** Die bisherige Policy hätte die Web-App beim Scharfschalten komplett
 gebrochen. Das SpacetimeDB-SDK holt vor dem WebSocket
 `https://{CHAT}/v1/identity/websocket-token`, `connect-src` erlaubte aber nur
 `wss://{CHAT}`; `https://{$CHAT_DOMAIN}` ist ergänzt. Die vier Domain-Variablen sind
-damit auf beiden Tracks Pflicht (`DEPLOYMENT.md`, `SECURITY.md` und die
-Breaking-Changes-Seite der Website sagen das). Die ursprüngliche Analyse:
+damit auf beiden Tracks Pflicht, als reine Hostnamen passend zu `DISCOVERY_*` und
+`MINIO_PUBLIC_ENDPOINT` (`DEPLOYMENT.md`, `SECURITY.md`, die `.env`-Beispiele, beide
+Self-Hosting-Guides und die Breaking-Changes-Seite sagen das). Der `web`-Container
+prüft sie beim Start (`deploy/web/check-domains.sh`) und bricht bei fehlendem Wert
+oder mitgegebenem Schema mit klarer Meldung ab, statt still eine kaputte Policy
+auszuliefern. Die ursprüngliche Analyse:
 
 **Stelle:** `deploy/web/Caddyfile`
 
