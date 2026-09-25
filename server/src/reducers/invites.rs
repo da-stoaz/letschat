@@ -2,8 +2,8 @@ use spacetimedb::rand::{Rng, distributions::Alphanumeric};
 use spacetimedb::{Identity, ReducerContext, Table, TimeDuration};
 
 use crate::helpers::{
-    assert_or_err, has_member_role, is_banned, member_key, next_id, require_account,
-    require_invite_permission, require_member_role,
+    assert_or_err, has_block_either_direction, has_member_role, is_banned, member_key, next_id,
+    require_account, require_invite_permission, require_member_role,
 };
 use crate::schema::*;
 
@@ -17,6 +17,45 @@ fn invite_is_active(ctx: &ReducerContext, invite: &Invite) -> bool {
     }
 
     true
+}
+
+/// Longest expiry a caller may ask for; `None` still means "never".
+const MAX_INVITE_EXPIRY_SECONDS: u64 = 365 * 24 * 3600;
+/// Anti-spam bound on live invites per space, and on a whitelist's length.
+const MAX_INVITES_PER_SERVER: usize = 200;
+const MAX_ALLOWED_USERNAMES: usize = 50;
+const INVITE_TOKEN_LEN: usize = 16;
+
+/// A fresh bearer token: 62^16 ≈ 5·10^28, and retried on the (theoretical)
+/// collision instead of panicking on the primary key (BUG_ANALYSIS B7).
+fn new_invite_token(ctx: &ReducerContext) -> String {
+    loop {
+        let token: String = ctx
+            .rng()
+            .sample_iter(&Alphanumeric)
+            .take(INVITE_TOKEN_LEN)
+            .map(char::from)
+            .collect();
+        if ctx.db.invite().token().find(&token).is_none() {
+            return token;
+        }
+    }
+}
+
+/// Drops one space's expired or exhausted invites through its index, instead
+/// of scanning every invite on the instance on every invite operation
+/// (BUG_ANALYSIS C8). Returns how many live invites the space still has.
+fn prune_server_invites(ctx: &ReducerContext, server_id: u64) -> usize {
+    let (live, stale): (Vec<Invite>, Vec<Invite>) = ctx
+        .db
+        .invite()
+        .server_id()
+        .filter(server_id)
+        .partition(|invite| invite_is_active(ctx, invite));
+    for invite in stale {
+        ctx.db.invite().token().delete(invite.token);
+    }
+    live.len()
 }
 
 fn cleanup_stale_invites_internal(ctx: &ReducerContext) {
@@ -64,11 +103,26 @@ pub fn create_invite(
 ) -> Result<(), String> {
     require_account(ctx)?;
     require_invite_permission(ctx, server_id, ctx.sender())?;
-    cleanup_stale_invites_internal(ctx);
     assert_or_err(
         ctx.db.server().id().find(server_id).is_some(),
         "server not found",
     )?;
+    assert_or_err(
+        prune_server_invites(ctx, server_id) < MAX_INVITES_PER_SERVER,
+        "this space has too many active invites; delete some first",
+    )?;
+    assert_or_err(
+        allowed_usernames.len() <= MAX_ALLOWED_USERNAMES,
+        "an invite can name at most 50 users",
+    )?;
+    if let Some(seconds) = expires_in_seconds {
+        // Unbounded, `seconds as i64 * 1_000_000` wrapped into an expiry in
+        // the past (BUG_ANALYSIS B8).
+        assert_or_err(
+            (1..=MAX_INVITE_EXPIRY_SECONDS).contains(&seconds),
+            "invite expiry must be between 1 second and 365 days",
+        )?;
+    }
 
     // Validate that a whitelist and max_uses are not set simultaneously
     if !allowed_usernames.is_empty() {
@@ -78,12 +132,7 @@ pub fn create_invite(
         )?;
     }
 
-    let token: String = ctx
-        .rng()
-        .sample_iter(&Alphanumeric)
-        .take(8)
-        .map(char::from)
-        .collect();
+    let token = new_invite_token(ctx);
 
     let expiry = if let Some(seconds) = expires_in_seconds {
         ctx.timestamp + TimeDuration::from_micros((seconds as i64) * 1_000_000)
@@ -96,6 +145,7 @@ pub fn create_invite(
     let normalized_usernames: Vec<String> = allowed_usernames
         .into_iter()
         .map(|u| u.trim().to_lowercase())
+        .filter(|u| !u.is_empty())
         .collect();
 
     ctx.db.invite().insert(Invite {
@@ -114,7 +164,6 @@ pub fn create_invite(
 #[spacetimedb::reducer]
 pub fn use_invite(ctx: &ReducerContext, token: String) -> Result<(), String> {
     require_account(ctx)?;
-    cleanup_stale_invites_internal(ctx);
 
     let mut invite_row = ctx
         .db
@@ -132,6 +181,11 @@ pub fn use_invite(ctx: &ReducerContext, token: String) -> Result<(), String> {
         !is_banned(ctx, invite_row.server_id, ctx.sender()),
         "you are banned",
     )?;
+    // An invite is only as good as its creator's current right to invite: it
+    // dies with a kick, ban, leave, demotion or a switch to ModeratorsOnly
+    // (BUG_ANALYSIS A13), instead of outliving all of them.
+    require_invite_permission(ctx, invite_row.server_id, invite_row.created_by)
+        .map_err(|_| "this invite is no longer valid".to_string())?;
     assert_or_err(
         has_member_role(ctx, invite_row.server_id, ctx.sender()).is_none(),
         "already a member",
@@ -171,11 +225,13 @@ pub fn use_invite(ctx: &ReducerContext, token: String) -> Result<(), String> {
         let consumed_token = invite_row.token.clone();
         ctx.db.invite().token().delete(consumed_token.clone());
 
-        // Remove any still-pending DM invite rows tied to this now-consumed token.
+        // Remove any still-pending DM invite rows tied to this now-consumed
+        // token. A DM invite is bound to its recipient, i.e. the caller.
         let pending_ids: Vec<u64> = ctx
             .db
             .dm_server_invite()
-            .iter()
+            .by_recipient()
+            .filter(ctx.sender())
             .filter(|dm| {
                 matches!(dm.status, DmInviteStatus::Pending) && dm.invite_token == consumed_token
             })
@@ -239,16 +295,28 @@ pub fn send_dm_server_invite(
 ) -> Result<(), String> {
     require_account(ctx)?;
     require_invite_permission(ctx, server_id, ctx.sender())?;
-    cleanup_stale_invites_internal(ctx);
     assert_or_err(
         ctx.db.server().id().find(server_id).is_some(),
         "server not found",
     )?;
     assert_or_err(
-        ctx.db.user().identity().find(recipient_identity).is_some(),
-        "recipient not found",
+        prune_server_invites(ctx, server_id) < MAX_INVITES_PER_SERVER,
+        "this space has too many active invites; delete some first",
     )?;
+    let recipient_username = ctx
+        .db
+        .user()
+        .identity()
+        .find(recipient_identity)
+        .ok_or_else(|| "recipient not found".to_string())?
+        .username;
     assert_or_err(ctx.sender() != recipient_identity, "cannot invite yourself")?;
+    // Same parity as send_direct_message: blocking has to end this channel too
+    // (BUG_ANALYSIS B12).
+    assert_or_err(
+        !has_block_either_direction(ctx, ctx.sender(), recipient_identity),
+        "blocked relationship exists",
+    )?;
     assert_or_err(
         has_member_role(ctx, server_id, recipient_identity).is_none(),
         "user is already a member",
@@ -258,23 +326,28 @@ pub fn send_dm_server_invite(
         "user is banned from this server",
     )?;
 
-    let has_pending_targeted_invite = ctx.db.dm_server_invite().iter().any(|inv| {
-        inv.server_id == server_id
-            && inv.recipient_identity == recipient_identity
-            && matches!(inv.status, DmInviteStatus::Pending)
-    });
+    let has_pending_targeted_invite = ctx
+        .db
+        .dm_server_invite()
+        .by_recipient()
+        .filter(recipient_identity)
+        .any(|inv| {
+            inv.server_id == server_id
+                && matches!(inv.status, DmInviteStatus::Pending)
+                && ctx
+                    .db
+                    .invite()
+                    .token()
+                    .find(&inv.invite_token)
+                    .is_some_and(|invite| invite_is_active(ctx, &invite))
+        });
     assert_or_err(
         !has_pending_targeted_invite,
         "recipient already has an active invite for this server",
     )?;
 
     // Create a single-use invite token for this DM invite (expires in 7 days)
-    let token: String = ctx
-        .rng()
-        .sample_iter(&Alphanumeric)
-        .take(8)
-        .map(char::from)
-        .collect();
+    let token = new_invite_token(ctx);
 
     let expiry = ctx.timestamp + TimeDuration::from_micros(7 * 24 * 3600 * 1_000_000_i64);
 
@@ -285,7 +358,9 @@ pub fn send_dm_server_invite(
         expires_at: expiry,
         max_uses: Some(1),
         use_count: 0,
-        allowed_usernames: Vec::new(),
+        // Bound to its recipient: every member can read invite tokens, and an
+        // unbound one worked for whoever it was forwarded to (BUG_ANALYSIS A13).
+        allowed_usernames: vec![recipient_username],
     });
 
     ctx.db.dm_server_invite().insert(DmServerInvite {
@@ -309,7 +384,6 @@ pub fn respond_dm_server_invite(
     accept: bool,
 ) -> Result<(), String> {
     require_account(ctx)?;
-    cleanup_stale_invites_internal(ctx);
 
     let mut dm_invite = ctx
         .db
@@ -334,18 +408,9 @@ pub fn respond_dm_server_invite(
         dm_invite.status = DmInviteStatus::Accepted;
         ctx.db.dm_server_invite().id().update(dm_invite);
 
-        // Try to use the underlying invite token
-        if let Err(err) = use_invite(ctx, invite_token) {
-            // Roll back to pending so stale-cleanup can remove/repair this row correctly.
-            if let Some(mut rollback_row) = ctx.db.dm_server_invite().id().find(invite_id) {
-                if matches!(rollback_row.status, DmInviteStatus::Accepted) {
-                    rollback_row.status = DmInviteStatus::Pending;
-                    ctx.db.dm_server_invite().id().update(rollback_row);
-                }
-            }
-            cleanup_stale_invites_internal(ctx);
-            return Err(err);
-        }
+        // An Err rolls the whole reducer back, including the status change
+        // above, so there is nothing to undo by hand (BUG_ANALYSIS C8).
+        use_invite(ctx, invite_token)?;
     } else {
         // Declining should invalidate the one-off invite link immediately.
         ctx.db

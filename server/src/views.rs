@@ -336,14 +336,24 @@ pub fn my_direct_messages(ctx: &ViewContext) -> Vec<DirectMessage> {
         .collect()
 }
 
-/// Invites for spaces the caller belongs to (management UI). Joining uses the
-/// `use_invite` reducer with the token, so non-members never need to read this.
+/// Invites for the management UI: moderators see every invite of the spaces
+/// they moderate, plain members only their own. Every member used to see every
+/// token, which let anyone pass a moderator's invite on and made the
+/// ModeratorsOnly policy meaningless (BUG_ANALYSIS A13). Joining uses the
+/// `use_invite` reducer with the token, so nobody needs to read this to join.
 #[spacetimedb::view(accessor = my_invites, public)]
 pub fn my_invites(ctx: &ViewContext) -> Vec<Invite> {
-    let mine = my_server_ids(ctx);
+    let me = ctx.sender();
+    let moderated = moderated_server_ids(ctx);
     let mut rows = Vec::<Invite>::new();
-    for server_id in &mine {
-        rows.extend(ctx.db.invite().server_id().filter(*server_id));
+    for server_id in &my_server_ids(ctx) {
+        rows.extend(
+            ctx.db
+                .invite()
+                .server_id()
+                .filter(*server_id)
+                .filter(|invite| moderated.contains(server_id) || invite.created_by == me),
+        );
     }
     rows
 }

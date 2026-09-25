@@ -40,6 +40,18 @@ public sealed class AccountEmailService(
         await email.SendAsync(user.Email, subject, body);
     }
 
+    /// <summary>Tells an address's owner that someone tried to register it again (BUG_ANALYSIS A9).</summary>
+    public async Task SendExistingAccountNoticeAsync(ApplicationUser user)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return;
+        }
+
+        var (subject, body) = EmailTemplates.ExistingAccount(user.DisplayName, user.UserName ?? string.Empty);
+        await email.SendAsync(user.Email, subject, body);
+    }
+
     public async Task SendApprovalEmailAsync(ApplicationUser user)
     {
         if (string.IsNullOrWhiteSpace(user.Email))

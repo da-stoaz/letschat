@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using CoreApi.Services;
 using Microsoft.Extensions.Caching.Memory;
@@ -87,7 +88,10 @@ public static class DownloadEndpoints
                 $"https://api.github.com/repos/{GitHubRepo}/releases/tags/{tag}",
                 cancellationToken);
         }
-        catch (HttpRequestException ex)
+        // A timeout surfaces as TaskCanceledException and an unexpected payload
+        // as JsonException; both used to escape as a 500 (BUG_ANALYSIS F4).
+        catch (Exception ex) when (ex is HttpRequestException or JsonException
+            || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
         {
             logger.LogWarning(ex, "GitHub releases lookup failed for {Tag}", tag);
             return Results.NotFound(new

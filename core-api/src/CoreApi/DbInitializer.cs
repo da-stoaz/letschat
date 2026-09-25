@@ -219,7 +219,7 @@ public static class DbInitializer
     /// runbook) — this covers the core-api-owned side.
     /// </para>
     /// </summary>
-    private static async Task MigrateLegacyIdentitiesAsync(
+    internal static async Task MigrateLegacyIdentitiesAsync(
         AppDbContext db,
         Services.SpacetimeTokenService spacetime,
         Services.SpacetimeClient client,
@@ -230,26 +230,27 @@ public static class DbInitializer
         // SpacetimeDB data to re-key (a valid 64-hex legacy identity); accounts
         // with a junk/empty legacy value still get their stored identity fixed,
         // but have no rows to move.
-        var pending = new List<(ApplicationUser User, string Derived)>();
-        var pairs = new List<(string OldHex, string NewHex)>();
-        foreach (var user in await db.Users.ToListAsync())
-        {
-            var derived = spacetime.ComputeIdentityHex(user.Id);
-            if (string.Equals(user.SpacetimeIdentityNorm, derived, StringComparison.Ordinal))
-            {
-                continue;
-            }
-            pending.Add((user, derived));
-            if (IsHexIdentity(user.SpacetimeIdentityNorm))
-            {
-                pairs.Add((user.SpacetimeIdentityNorm, derived));
-            }
-        }
-
-        if (pending.Count == 0)
+        // Runs on every start, so only two columns are read, untracked; full
+        // entities are loaded for the accounts that actually need a change —
+        // normally none (BUG_ANALYSIS F3).
+        var stale = (await db.Users.AsNoTracking()
+                .Select(user => new { user.Id, user.SpacetimeIdentityNorm })
+                .ToListAsync())
+            .Select(row => (row.Id, Old: row.SpacetimeIdentityNorm, Derived: spacetime.ComputeIdentityHex(row.Id)))
+            .Where(row => !string.Equals(row.Old, row.Derived, StringComparison.Ordinal))
+            .ToList();
+        if (stale.Count == 0)
         {
             return; // fresh install, or already migrated — nothing to do.
         }
+
+        var staleIds = stale.Select(row => row.Id).ToList();
+        var users = await db.Users.Where(user => staleIds.Contains(user.Id)).ToDictionaryAsync(user => user.Id);
+        var pending = stale.Select(row => (User: users[row.Id], row.Derived)).ToList();
+        var pairs = stale
+            .Where(row => IsHexIdentity(row.Old))
+            .Select(row => (OldHex: row.Old!, NewHex: row.Derived))
+            .ToList();
 
         // Re-key SpacetimeDB's data FIRST, so core-api's stored identities and the
         // chat-domain rows never diverge. If it can't run now (service token

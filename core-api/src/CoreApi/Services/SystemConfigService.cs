@@ -17,6 +17,9 @@ namespace CoreApi.Services;
 /// </summary>
 public sealed class SystemConfigService(IServiceScopeFactory scopeFactory, ServiceOptions options)
 {
+    // ponytail: process-local (BUG_ANALYSIS F2). The shipped topology runs one
+    // core-api, so an admin edit is seen everywhere at once; with several
+    // replicas, reload from the database on a timer or on a Postgres NOTIFY.
     private volatile SystemConfig _current = SeedFrom(options);
 
     /// <summary>The current configuration snapshot.</summary>

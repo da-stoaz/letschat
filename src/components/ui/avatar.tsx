@@ -48,6 +48,9 @@ function AvatarImage({ className, src, ...props }: AvatarPrimitive.Image.Props) 
     }
   }, [src])
 
+  // Only our own storage keys and local previews render. A remote URL left on
+  // a profile from before storage keys existed would make every viewer's
+  // client report itself to that host (BUG_ANALYSIS B6).
   const resolvedSrc =
     typeof src !== "string" || src.length === 0
       ? undefined
@@ -55,7 +58,9 @@ function AvatarImage({ className, src, ...props }: AvatarPrimitive.Image.Props) 
         ? signed?.key === src
           ? signed.url
           : undefined
-        : src
+        : /^(blob|data):/.test(src)
+          ? src
+          : undefined
 
   return (
     <AvatarPrimitive.Image

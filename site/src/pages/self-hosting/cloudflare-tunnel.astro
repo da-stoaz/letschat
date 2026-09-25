@@ -214,9 +214,10 @@ DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
 DISCOVERY_AUTH_URL=https://auth.example.com
 DISCOVERY_LIVEKIT_URL=wss://lk.example.com
 
-# Same hostnames again, for the browser client's Content-Security-Policy.
-# Your tunnel ingress does the routing; these only tell the web container which
-# origins the page is allowed to talk to.
+# Same hostnames again — hostnames only, no https:// — for the browser client's
+# Content-Security-Policy. Your tunnel ingress does the routing; these tell the
+# web container which hosts the page may talk to. Required: the policy is
+# enforced, and the web container refuses to start if one is missing.
 AUTH_DOMAIN=auth.example.com
 CHAT_DOMAIN=chat.example.com
 FILES_DOMAIN=files.example.com

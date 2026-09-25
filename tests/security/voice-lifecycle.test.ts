@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll, beforeAll } from 'vitest'
 import { DbConnection } from '../../src/generated'
-import { BASE, DB, createServer, makeUser, ownerSql, type TestUser } from './harness'
+import { BASE, DB, createServer, makeOpenJoinable, makeUser, none, ownerSql, type TestUser } from './harness'
 
 // Voice presence is connection-scoped: rows record the SpacetimeDB connection
 // that claimed them, and the module's `client_disconnected` lifecycle reducer
@@ -132,5 +132,54 @@ describe('voice presence — connection lifecycle', () => {
     }
 
     expect(await until(() => voiceRowCount(secondVoiceChannelId) === 0)).toBe(true)
+  })
+
+  // BUG_ANALYSIS B11: kick removed the target's voice presence, ban did not, so
+  // a banned user stayed a visible participant holding a slot.
+  it('a ban removes the banned member from voice', async () => {
+    const member = await makeUser('vban_m')
+    const serverId = Number(
+      (await owner.sql(`SELECT server_id FROM my_channels WHERE id = ${voiceChannelId}`)).rows[0].server_id,
+    )
+    await makeOpenJoinable(owner, serverId)
+    await member.call('join_discoverable_server', [serverId])
+    const memberConn = await connect(member.token)
+    try {
+      memberConn.reducers.joinVoiceChannel({ channelId: BigInt(voiceChannelId) })
+      expect(await until(() => voiceRowCount(voiceChannelId) === 1)).toBe(true)
+
+      await owner.call('ban_member', [serverId, member.idArg, none])
+      expect(voiceRowCount(voiceChannelId)).toBe(0)
+    } finally {
+      memberConn.disconnect()
+    }
+  })
+
+  // BUG_ANALYSIS D1/D2: typing rows and "online" only went away through an
+  // orderly client action, so a killed app left both behind forever.
+  it('a dying connection clears its typing rows and, if it was the last, presence', async () => {
+    const typer = await makeUser('vlife_t')
+    const serverId = Number(
+      (await owner.sql(`SELECT server_id FROM my_channels WHERE id = ${voiceChannelId}`)).rows[0].server_id,
+    )
+    await makeOpenJoinable(owner, serverId)
+    await typer.call('join_discoverable_server', [serverId])
+    const textId = Number(
+      (await typer.sql("SELECT id FROM my_channels WHERE name = 'general'")).rows[0].id,
+    )
+    const typingRows = () =>
+      ownerSql(`SELECT typing_key FROM typing_state WHERE user_identity = 0x${typer.identity}`)
+        .split('\n')
+        .filter((line) => /^\s*"/.test(line)).length
+    const online = () =>
+      /true/.test(ownerSql(`SELECT online FROM presence_state WHERE identity = 0x${typer.identity}`))
+
+    const typerConn = await connect(typer.token)
+    typerConn.reducers.touchPresence({})
+    typerConn.reducers.setTypingState({ scopeKey: `channel:${textId}`, isTyping: true })
+    expect(await until(() => typingRows() === 1 && online())).toBe(true)
+
+    typerConn.disconnect()
+    expect(await until(() => typingRows() === 0 && !online())).toBe(true)
   })
 })

@@ -4,6 +4,7 @@ import {
   mapDirectMessage,
   mapMessage,
   mapDmServerInvite,
+  mapServerMember,
   normalizeIdentity,
   sameIdentity,
 } from './mappers'
@@ -18,6 +19,9 @@ import {
   syncDmServerInvites,
   syncDiscover,
   syncServerScopedState,
+  syncServers,
+  syncMembers,
+  syncJoinRequests,
   syncChannels,
   syncMessages,
   syncPins,
@@ -269,13 +273,36 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
   conn.db.my_visible_users.onInsert(users)
   conn.db.my_visible_users.onUpdate(users)
 
+  const servers = stale('servers', () => {
+    syncServers(conn)
+    syncDiscover(conn)
+  })
+  conn.db.my_servers.onInsert(servers)
+  conn.db.my_servers.onUpdate(servers)
+  conn.db.my_servers.onDelete(servers)
+
+  // Only the caller's OWN membership changes which spaces, channels, invites
+  // and join requests are visible — every store filters by it. Anyone else
+  // joining, leaving, or changing role touches the member list and nothing
+  // more; rebuilding all six stores for that on every connected member was
+  // BUG_ANALYSIS C7.
   const serverScoped = stale('serverScoped', () => syncServerScopedState(conn))
-  conn.db.my_servers.onInsert(serverScoped)
-  conn.db.my_servers.onUpdate(serverScoped)
-  conn.db.my_servers.onDelete(serverScoped)
-  conn.db.my_server_members.onInsert(serverScoped)
-  conn.db.my_server_members.onUpdate(serverScoped)
-  conn.db.my_server_members.onDelete(serverScoped)
+  const members = stale('members', () => syncMembers(conn))
+  const memberChanged = (row: Parameters<typeof mapServerMember>[0]) => {
+    const me = useConnectionStore.getState().identity
+    if (me && sameIdentity(mapServerMember(row).userIdentity, me)) serverScoped()
+    else members()
+  }
+  conn.db.my_server_members.onInsert((_ctx, row) => memberChanged(row))
+  conn.db.my_server_members.onUpdate((_ctx, _old, row) => memberChanged(row))
+  conn.db.my_server_members.onDelete((_ctx, row) => memberChanged(row))
+
+  // Had no handler at all: new requests reached moderators, and a decline its
+  // requester, only when some unrelated membership event re-synced everything.
+  const joinRequests = stale('joinRequests', () => syncJoinRequests(conn))
+  conn.db.my_join_requests.onInsert(joinRequests)
+  conn.db.my_join_requests.onUpdate(joinRequests)
+  conn.db.my_join_requests.onDelete(joinRequests)
 
   const discover = stale('discover', () => syncDiscover(conn))
   conn.db.discover_server_member_counts.onInsert(discover)

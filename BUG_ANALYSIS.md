@@ -36,54 +36,54 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 | [A6](#a6) | ~~Presigned Download-URLs ohne Zugriffsprüfung auf den Storage-Key~~ · **✅ behoben (PR #83)** | ~~S2~~ | Storage |
 | [A7](#a7) | ~~Kein Account-Lockout, keine Passwort-Längenobergrenze → Argon2-DoS~~ · **✅ behoben (PR #84)** | ~~S2~~ | Auth |
 | [A8](#a8) | ~~Erstregistrierung wird automatisch Instanz-Admin (Land-Grab)~~ · **✅ behoben (PR #88)** | ~~S2~~ | Auth |
-| [A9](#a9) | Account-Enumeration über `/auth/register` | S3 | Auth |
-| [A10](#a10) | LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde | S3 | Voice |
-| [A11](#a11) | Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT | S2 | Auth |
+| [A9](#a9) | ~~Account-Enumeration über `/auth/register`~~ · **✅ behoben** | ~~S3~~ | Auth |
+| [A10](#a10) | ~~LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde~~ · **✅ behoben** | ~~S3~~ | Voice |
+| [A11](#a11) | ~~Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT~~ · **✅ behoben** | ~~S2~~ | Auth |
 | [A12](#a12) | ~~`/auth/link` setzt Passwörter mit widerrufener Sitzung und ohne aktuelles Passwort~~ · **✅ behoben** | ~~S2~~ | Auth |
-| [A13](#a13) | Mitglieder sehen alle Invite-Tokens, DM-Invites sind nicht an den Empfänger gebunden | S3 | Modul |
-| [A14](#a14) | ffmpeg verarbeitet unvertrauenswürdige Dateien im core-api-Container · **SSRF behoben**, Isolation offen | ~~S2~~ S3 | Storage |
+| [A13](#a13) | ~~Mitglieder sehen alle Invite-Tokens, DM-Invites sind nicht an den Empfänger gebunden~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [A14](#a14) | ~~ffmpeg verarbeitet unvertrauenswürdige Dateien im core-api-Container~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [A15](#a15) | ~~Uploader bestimmt den ausgelieferten Content-Type; PDF-Vorschau-iframe ohne Sandbox~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [A16](#a16) | ~~Legacy-Keys umgehen die 10-MiB-/`image/*`-Grenze für Avatare und Icons~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [B1](#b1) | ~~`transfer_ownership` auf sich selbst sperrt den Owner dauerhaft aus~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B2](#b2) | ~~Owner kann sich selbst kicken/bannen → verwaister Space~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B3](#b3) | ~~`edit_direct_message` prüft weder Block noch Freundschaft~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
-| [B4](#b4) | `edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status | S3 | Modul |
-| [B5](#b5) | `update_profile`: `display_name`/`avatar_url` völlig unvalidiert | S3 | Modul |
-| [B6](#b6) | Avatar-/Icon-URLs erlauben Tracking über beliebige Fremdhosts · **teilweise behoben (PR #92)**: nur noch Altbestand | ~~S3~~ S4 | Modul |
-| [B7](#b7) | Invite-Token mit nur 8 Zeichen, kein Kollisionsschutz, kein Mengenlimit | S3 | Modul |
-| [B8](#b8) | `create_invite`: `expires_in_seconds` läuft in einen i64-Overflow | S4 | Modul |
+| [B4](#b4) | ~~`edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [B5](#b5) | ~~`update_profile`: `display_name`/`avatar_url` völlig unvalidiert~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [B6](#b6) | ~~Avatar-/Icon-URLs erlauben Tracking über beliebige Fremdhosts~~ · **✅ behoben** | ~~S4~~ | Modul |
+| [B7](#b7) | ~~Invite-Token mit nur 8 Zeichen, kein Kollisionsschutz, kein Mengenlimit~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [B8](#b8) | ~~`create_invite`: `expires_in_seconds` läuft in einen i64-Overflow~~ · **✅ behoben** | ~~S4~~ | Modul |
 | [B9](#b9) | ~~`avatar_url` lässt sich nie wieder entfernen~~ · **✅ behoben (PR #92)** | ~~S4~~ | Modul |
 | [B10](#b10) | ~~Owner kann sich per `set_member_role` selbst degradieren → verwaister Space~~ · **✅ behoben** | ~~S2~~ | Modul |
-| [B11](#b11) | `ban_member` entfernt die Voice-Präsenz des Gebannten nicht | S3 | Modul |
-| [B12](#b12) | `send_dm_server_invite` ignoriert Blockierungen | S3 | Modul |
-| [B13](#b13) | `send_message` prüft die Channel-Art nicht; Timeout gilt nicht für Voice | S4 | Modul |
+| [B11](#b11) | ~~`ban_member` entfernt die Voice-Präsenz des Gebannten nicht~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [B12](#b12) | ~~`send_dm_server_invite` ignoriert Blockierungen~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [B13](#b13) | ~~`send_message` prüft die Channel-Art nicht; Timeout gilt nicht für Voice~~ · **✅ behoben** | ~~S4~~ | Modul |
 | [C1](#c1) | ~~Jede eingehende Nachricht löst drei volle Durchläufe der Historie aus~~ · **✅ behoben (PR #73)** | ~~S1~~ | Client |
 | [C2](#c2) | ~~Initialer Sync ist O(N²) und läuft in den 5-Sekunden-Timeout~~ · **✅ behoben (PR #73)** | ~~S1~~ | Client |
 | [C3](#c3) | ~~`my_channel_messages` liefert die komplette Historie ohne Limit~~ · **✅ behoben (PR #77)** | ~~S1~~ | Views |
 | [C4](#c4) | ~~`my_server_members` gibt alle Mitglieder aller Discover-Spaces preis~~ · **✅ behoben (PR #89)** | ~~S2~~ | Views |
 | [C5](#c5) | ~~Typing-Indikator macht pro Tastenanschlag einen Full-Table-Scan~~ · **✅ behoben (PR #90)** | ~~S2~~ | Modul |
 | [C6](#c6) | ~~Lösch-Reducer scannen ganze Tabellen statt Indizes zu nutzen~~ · **✅ behoben (PR #90)** | ~~S2~~ | Modul |
-| [C7](#c7) | Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients | S2 | Client |
-| [C8](#c8) | `cleanup_stale_invites_internal` scannt bei jeder Invite-Operation | S3 | Modul |
-| [C9](#c9) | `rebuild_storage_references` scannt die gesamte Historie in einer Transaktion · **teilweise behoben**: läuft nur noch bei Bedarf | ~~S3~~ S4 | Storage |
-| [C10](#c10) | Weitere lineare Scans in häufig aufgerufenen Reducern | S4 | Modul |
-| [D1](#d1) | `TypingState` wird bei Verbindungsabbruch nie aufgeräumt | S3 | Modul |
-| [D2](#d2) | Präsenz bleibt nach Absturz dauerhaft „online" | S3 | Modul |
-| [D3](#d3) | `delete_server` lässt Read-States und DM-Invites verwaist zurück | S3 | Modul |
+| [C7](#c7) | ~~Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients~~ · **✅ behoben** | ~~S2~~ | Client |
+| [C8](#c8) | ~~`cleanup_stale_invites_internal` scannt bei jeder Invite-Operation~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [C9](#c9) | ~~`rebuild_storage_references` scannt die gesamte Historie in einer Transaktion~~ · **akzeptiert** | ~~S4~~ | Storage |
+| [C10](#c10) | ~~Weitere lineare Scans in häufig aufgerufenen Reducern~~ · **✅ behoben** | ~~S4~~ | Modul |
+| [D1](#d1) | ~~`TypingState` wird bei Verbindungsabbruch nie aufgeräumt~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [D2](#d2) | ~~Präsenz bleibt nach Absturz dauerhaft „online"~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [D3](#d3) | ~~`delete_server` lässt Read-States und DM-Invites verwaist zurück~~ · **✅ behoben** | ~~S3~~ | Modul |
 | [D4](#d4) | ~~Bestätigte Anhänge werden beim Löschen ihrer Nachricht/Channels nicht entfernt~~ · **✅ behoben** | ~~S3~~ | Storage |
-| [D5](#d5) | `rekey_identities` korrumpiert Daten bei verketteten Remaps | S3 | Modul |
-| [D6](#d6) | Stale Messages im Client-Store nach Hard-Delete | S4 | Client |
+| [D5](#d5) | ~~`rekey_identities` korrumpiert Daten bei verketteten Remaps~~ · **✅ behoben** | ~~S3~~ | Modul |
+| [D6](#d6) | ~~Stale Messages im Client-Store nach Hard-Delete~~ · **✅ behoben** | ~~S4~~ | Client |
 | [D7](#d7) | ~~Storage-Collector löscht nach `--delete-data` Anhänge, bevor der Archiv-Restore beginnt~~ · **✅ behoben** | ~~S2~~ | Storage |
 | [E1](#e1) | ~~Stiller Fallback auf anonyme Identity bei Token-Ablehnung~~ · **✅ behoben (PR #90)** | ~~S3~~ | Client |
-| [E2](#e2) | Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben | S3 | Client |
-| [E3](#e3) | Discovery fällt bei nacktem Hostnamen auf `http://` zurück | S3 | Client |
-| [E4](#e4) | CSP wird nur im Report-Only-Modus ausgeliefert | S3 | Deploy |
-| [E5](#e5) | Download-URL-Cache wächst unbegrenzt | S4 | Client |
+| [E2](#e2) | ~~Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben~~ · **✅ behoben** | ~~S3~~ | Client |
+| [E3](#e3) | ~~Discovery fällt bei nacktem Hostnamen auf `http://` zurück~~ · **✅ behoben** | ~~S3~~ | Client |
+| [E4](#e4) | ~~CSP wird nur im Report-Only-Modus ausgeliefert~~ · **✅ behoben** | ~~S3~~ | Deploy |
+| [E5](#e5) | ~~Download-URL-Cache wächst unbegrenzt~~ · **✅ behoben** | ~~S4~~ | Client |
 | [E6](#e6) | ~~CSPs erlauben Inline-Video und PDF-Vorschau vom Files-Host nicht~~ · **✅ behoben** | ~~S3~~ | Client |
-| [F1](#f1) | Bool-Konfiguration schlägt bei unerwarteten Werten still fehl | S3 | Config |
-| [F2](#f2) | `SystemConfigService`-Cache ist prozesslokal | S4 | Config |
-| [F3](#f3) | `MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User | S4 | Config |
-| [F4](#f4) | GitHub-Timeout in `/downloads/{os}` wird zu einem 500 | S4 | API |
+| [F1](#f1) | ~~Bool-Konfiguration schlägt bei unerwarteten Werten still fehl~~ · **✅ behoben** | ~~S3~~ | Config |
+| [F2](#f2) | ~~`SystemConfigService`-Cache ist prozesslokal~~ · **akzeptiert** | ~~S4~~ | Config |
+| [F3](#f3) | ~~`MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User~~ · **✅ behoben** | ~~S4~~ | Config |
+| [F4](#f4) | ~~GitHub-Timeout in `/downloads/{os}` wird zu einem 500~~ · **✅ behoben** | ~~S4~~ | API |
 | [G1](#g1) | ~~`CODEBASE.md` beschreibt einen überholten Stand~~ · **✅ behoben (Baseline 2026-09-15)** | ~~S4~~ | Doku |
 
 ---
@@ -377,7 +377,18 @@ User als auch einen expliziten Grant, dessen Ziel sich erst danach registriert.
 ---
 
 <a id="a9"></a>
-## A9 — Account-Enumeration über `/auth/register` · **S3**
+## A9 — Account-Enumeration über `/auth/register` · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Mit E-Mail-Bestätigung (Produktions-Default) antworten `/auth/register` und
+`/auth/link` auf eine bereits registrierte Adresse genau wie auf eine neue: Status
+`pending_email_verification` mit zufälliger Identity bzw. derselbe 401 wie ein
+unbestätigtes Konto. Das Passwort wird trotzdem gehasht, damit die Antwortzeit nicht
+verrät, welcher Pfad lief. Der Besitzer bekommt stattdessen die Mail „You already have a
+LetsChat account" (gedeckelt über `MailSendLimiter`). Resend und Forgot-Password
+verschlucken Zustellfehler und antworten generisch (Nebenbefund). **Bewusst offen:**
+Ohne E-Mail-Bestätigung gibt die Registrierung sofort eine Sitzung aus — das lässt sich
+nicht vortäuschen, dort bleibt das 409. Usernames sind ohnehin im Chat sichtbar und
+bleiben abfragbar. Tests in `AccountEnumerationTests`. Die ursprüngliche Analyse:
 
 **Stelle:** `core-api/src/CoreApi/Endpoints/AuthEndpoints.cs:74-83`
 
@@ -402,7 +413,20 @@ existiert und unbestätigt ist.
 ---
 
 <a id="a10"></a>
-## A10 — LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde · **S3**
+## A10 — LiveKit-Token überlebt Kick/Ban um bis zu 1 Stunde · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Der neue `LiveKitVoiceReconciler` vergleicht alle 20 s jeden LiveKit-Raum mit der
+Voice-Präsenz im Modul und entfernt Teilnehmer, die zwei Runden in Folge keine
+haben — Kick, Ban, Timeout (entfernt die Präsenz seit B11/B13) oder Austritt. Die
+Präsenz entsteht vor dem Token, ein Teilnehmer ohne sie ist also entfernt worden; die
+zwei Runden fangen einen kurzen SpacetimeDB-Reconnect ab, und ein unerreichbares Modul
+setzt die Runde aus. Server-Tokens für LiveKits Room-API sind raumgebunden (gegen den
+Dev-LiveKit geprüft: `ListParticipants`/`RemoveParticipant` verlangen `room`); ein
+Teilnehmer, der zwischen Auflisten und Entfernen geht (404), bricht die Runde nicht ab.
+Neue interne Adresse `LIVEKIT_INTERNAL_URL`, in der Compose-Datei fest
+`http://livekit:44380` (wie `MINIO_INTERNAL_ENDPOINT`), keine Betreiber-Einstellung.
+Tests in `LiveKitVoiceReconcilerTests` (zwei Runden, nie mit Präsenz, nie bei
+unerreichbarem Modul). Die ursprüngliche Analyse:
 
 **Stellen:** `core-api/src/CoreApi/Services/LiveKitTokenService.cs:119-145`,
 `Endpoints/LiveKitEndpoints.cs:250-293`
@@ -431,7 +455,19 @@ ein serverseitiger `RemoveParticipant`-Aufruf an die LiveKit-API bei Kick/Ban/Le
 ---
 
 <a id="a11"></a>
-## A11 — Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT · **S2**
+## A11 — Gemeinsamer niedriger IP-Bucket ermöglicht Availability-DoS hinter CGNAT · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Umgesetzt wie unten geplant: vier getrennte Per-IP-Policies
+(`auth-login`, `auth-register` inklusive `/auth/link`, `auth-email` für Resend und
+Forgot-Password, `auth-password` für Change- und Reset-Password). Login bekommt das
+Zehnfache des konfigurierten Werts (`LoginRateLimitMultiplier`), weil der
+Account-Lockout das Raten pro Konto bereits begrenzt. Zusätzlich deckelt
+`MailSendLimiter` Bestätigungs- und Reset-Mails auf drei pro Account und Stunde; darüber
+antwortet der Endpunkt weiter generisch. Keine neue Konfiguration, der Admin-Hinweis und
+die `.env`-Beispiele beschreiben die neue Aufteilung. `AuthRateLimitTests`: viele
+Anmeldungen hinter einer Adresse nach ausgeschöpftem Registrierungs- und Mail-Budget
+bleiben 200, Username-Spraying erreicht 429, und der Mail-Deckel greift ohne
+Statusunterschied. Die ursprüngliche Analyse:
 
 **Stellen:** `core-api/src/CoreApi/Program.cs:179-205`,
 `core-api/src/CoreApi/Endpoints/AuthEndpoints.cs:22-48`
@@ -539,7 +575,14 @@ bleibt für die API-Kompatibilität bestehen.
 ---
 
 <a id="a13"></a>
-## A13 — Mitglieder sehen alle Invite-Tokens, DM-Invites sind nicht an den Empfänger gebunden · **S3**
+## A13 — Mitglieder sehen alle Invite-Tokens, DM-Invites sind nicht an den Empfänger gebunden · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `my_invites` zeigt einfachen Mitgliedern nur noch eigene Invites, Moderatoren
+weiterhin alle. DM-Invites werden mit `allowed_usernames = [empfänger]` angelegt.
+`use_invite` prüft außerdem, dass der Ersteller den Invite *jetzt noch* ausstellen
+dürfte — damit sterben Invites mit Kick, Ban, Austritt, Degradierung oder dem Wechsel auf
+`ModeratorsOnly`. Bereits bestehende, ungebundene DM-Invites bleiben bis zu ihrem Ablauf
+(7 Tage) ungebunden. Tests in `posting-and-invites.test.ts`. Die ursprüngliche Analyse:
 
 **Stellen:** `server/src/views.rs:341-349` (`my_invites`),
 `server/src/reducers/invites.rs:234-302` (`send_dm_server_invite`), `:114-192`
@@ -573,7 +616,17 @@ Invites beschränken (Moderatoren sehen alle); DM-Invites mit
 ---
 
 <a id="a14"></a>
-## A14 — ffmpeg verarbeitet unvertrauenswürdige Dateien im core-api-Container · **SSRF behoben** · S3
+## A14 — ffmpeg verarbeitet unvertrauenswürdige Dateien im core-api-Container · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Der Rest: ffmpeg bekommt eine leere Umgebung (vorher erbte es jedes
+core-api-Secret) und läuft im Image über `setpriv` als `nobody` — damit liest es auch
+nicht `/proc/…/environ` von core-api. Im gebauten Image geprüft: Poster wird als uid
+65534 gerendert, keine Umgebungsvariable kommt an. Die Warteschlange nimmt frische Jobs
+vor Wiederholungen, und ein Job hat 30 s Gesamtbudget über beide Seek-Versuche statt
+60 s pro Versuch. `FfmpegEnvironmentTests` schlägt ohne das Leeren der Umgebung fehl.
+**Bewusst belassen:** ffmpeg hat weiter Netzzugang (die Protokoll-/Demuxer-Whitelist
+schließt die SSRF) und läuft im core-api-Container; ein eigener Worker-Container wäre
+die nächste Stufe. Die ursprüngliche Analyse:
 
 **Teilweise behoben auf Branch `bug-security-fixes`.** Die SSRF war reproduzierbar:
 eine Playlist mit Endung `.m3u8` und deklariertem `video/mp4` ließ ffmpeg (lokal 8.1)
@@ -771,7 +824,12 @@ Entfreunden nicht mehr möglich ist; Löschen bleibt unberührt.
 ---
 
 <a id="b4"></a>
-## B4 — `edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status · **S3**
+## B4 — `edit_message` prüft weder Mitgliedschaft, Timeout noch Lösch-Status · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `send_message` und `edit_message` teilen sich `require_can_post` (Text-Channel,
+Mitgliedschaft, `moderator_only`, Timeout); `edit_message` weist zusätzlich gelöschte
+Nachrichten ab. Damit entstehen auch keine Storage-Referenzen an gelöschten Nachrichten
+mehr. Tests in `posting-and-invites.test.ts`. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/messages.rs:48-75`
 
@@ -805,7 +863,14 @@ Moderator-Löschung und Edit nach Kick werden beide angenommen; die Zeile trägt
 ---
 
 <a id="b5"></a>
-## B5 — `update_profile`: `display_name` und `avatar_url` völlig unvalidiert · **S3**
+## B5 — `update_profile`: `display_name` und `avatar_url` völlig unvalidiert · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `validate_display_name` (getrimmt, 1–100 Zeichen, keine Steuerzeichen) gilt
+in `update_profile`. `register_user` kürzt statt abzulehnen, weil core-api längere
+Namen akzeptiert und ein bestehendes Konto sonst nicht mehr in den Chat käme. Der
+Nebenbefund (Byte- statt Zeichenlänge bei Nachrichten) bleibt bewusst: die 4000 Bytes
+sind eine Speichergrenze, in die auch der Anhang-Marker zählt. Test in
+`module-hygiene.test.ts`. Die ursprüngliche Analyse:
 
 **Stellen:** `server/src/reducers/users.rs:52-73`, `:7-49` (`register_user`)
 
@@ -839,7 +904,13 @@ mit `.chars().count()` richtig; die übrigen Stellen sind inkonsistent.
 ---
 
 <a id="b6"></a>
-## B6 — Avatar- und Icon-URLs erlauben Tracking über beliebige Fremdhosts · **teilweise behoben** · S4
+## B6 — Avatar- und Icon-URLs erlauben Tracking über beliebige Fremdhosts · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Der Rest: `AvatarImage` rendert nur noch eigene Storage-Keys sowie
+lokale `blob:`/`data:`-Vorschauen, keine entfernten URLs mehr. Alt-Einträge mit
+Fremd-URL bleiben in der Datenbank, werden aber nicht mehr geladen und zeigen Initialen.
+Nur statisch geprüft (kein DOM-Test-Setup im Projekt). Die ursprüngliche Analyse und der
+Zwischenstand:
 
 **Stand 2026-09-24:** PR #92 hat den Schreibpfad geschlossen. `update_profile`
 (`server/src/reducers/users.rs:88-97`) prüft einen *geänderten* Avatar über
@@ -879,7 +950,12 @@ Keys/URLs aus dem eigenen MinIO zulassen.
 ---
 
 <a id="b7"></a>
-## B7 — Invite-Token mit nur 8 Zeichen, kein Kollisionsschutz, kein Mengenlimit · **S3**
+## B7 — Invite-Token mit nur 8 Zeichen, kein Kollisionsschutz, kein Mengenlimit · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Tokens haben 16 Zeichen (62¹⁶ ≈ 5·10²⁸) und werden bei einer
+Kollision neu erzeugt statt den Reducer über den Primärschlüssel panicken zu lassen.
+Pro Space sind höchstens 200 aktive Invites erlaubt, eine Whitelist hat höchstens 50
+Einträge. Test in `module-hygiene.test.ts`. Die ursprüngliche Analyse:
 
 **Stellen:** `server/src/reducers/invites.rs:80-85`, `:100-108`, `:266-284`
 
@@ -903,7 +979,10 @@ Drei Punkte:
 ---
 
 <a id="b8"></a>
-## B8 — `create_invite`: `expires_in_seconds` läuft in einen i64-Overflow · **S4**
+## B8 — `create_invite`: `expires_in_seconds` läuft in einen i64-Overflow · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `expires_in_seconds` muss zwischen 1 Sekunde und 365 Tagen liegen;
+`None` bleibt „nie". Test in `module-hygiene.test.ts`. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/invites.rs:87-92`
 
@@ -983,7 +1062,11 @@ den Reducer aufrufen darf.
 ---
 
 <a id="b11"></a>
-## B11 — `ban_member` entfernt die Voice-Präsenz des Gebannten nicht · **S3**
+## B11 — `ban_member` entfernt die Voice-Präsenz des Gebannten nicht · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Kick, Ban und Timeout rufen den gemeinsamen Helper `remove_voice_presence`.
+WebSocket-Test in `voice-lifecycle.test.ts`, der gegen das alte Modul fehlschlägt.
+Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/member_management.rs:78-106` (vgl. `kick_member`
 `:46-76`)
@@ -1005,7 +1088,11 @@ gemeinsamen Helper ziehen und in beiden Reducern aufrufen.
 ---
 
 <a id="b12"></a>
-## B12 — `send_dm_server_invite` ignoriert Blockierungen · **S3**
+## B12 — `send_dm_server_invite` ignoriert Blockierungen · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `send_dm_server_invite` prüft `has_block_either_direction` wie
+`send_direct_message`. Eine Freundschaft wird bewusst nicht verlangt. Test in
+`posting-and-invites.test.ts`. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/invites.rs:234-302`
 
@@ -1025,7 +1112,12 @@ der Blockierte sendet danach erfolgreich einen DM-Invite, das Opfer sieht die Ze
 ---
 
 <a id="b13"></a>
-## B13 — `send_message` prüft die Channel-Art nicht; Timeout gilt nicht für Voice · **S4**
+## B13 — `send_message` prüft die Channel-Art nicht; Timeout gilt nicht für Voice · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `require_can_post` verlangt einen Text- oder Announcement-Channel;
+`join_voice_channel` weist ein Mitglied im Timeout ab, und `timeout_member` entfernt es
+sofort aus dem Voice-Channel. Tests in `posting-and-invites.test.ts`. Die ursprüngliche
+Analyse:
 
 **Stellen:** `server/src/reducers/messages.rs:12-57`,
 `server/src/reducers/voice.rs:8-62`
@@ -1171,7 +1263,18 @@ Verbindung entfernt und dass beim Löschen eines Space dessen Pins mit verschwin
 ---
 
 <a id="c7"></a>
-## C7 — Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients · **S2**
+## C7 — Mitglieder-Events erzwingen instanzweiten Re-Sync bei allen Clients · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `watchLiveTables` unterscheidet jetzt: Ändert sich die *eigene*
+Mitgliedschaft, laufen weiterhin alle sechs Space-Stores neu (alle filtern danach). Tritt
+ein anderes Mitglied bei, aus, oder ändert sich seine Rolle, läuft nur `syncMembers`.
+`my_servers`-Events bauen nur Servers und Discover neu.
+
+**Nebenbefund dabei, mitbehoben:** `my_join_requests` hatte gar keinen Live-Handler.
+Neue Beitrittsanfragen erreichten Moderatoren und eine Ablehnung den Anfragenden nur,
+wenn zufällig ein anderes Mitglieder-Event den breiten Re-Sync auslöste. Drei neue
+Unit-Tests in `events.test.ts`. Nicht im laufenden Client durchgeklickt. Die ursprüngliche
+Analyse:
 
 **Stellen:** `watchLiveTables` in `src/lib/spacetimedb/events.ts` und
 `syncServerScopedState` in `src/lib/spacetimedb/sync.ts`
@@ -1196,7 +1299,14 @@ Discover-Store auch bei Clients, die die Discover-Seite nicht geöffnet haben.
 ---
 
 <a id="c8"></a>
-## C8 — `cleanup_stale_invites_internal` scannt bei jeder Invite-Operation · **S3**
+## C8 — `cleanup_stale_invites_internal` scannt bei jeder Invite-Operation · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Keine Invite-Operation scannt mehr alle Invites der Instanz:
+`create_invite` und `send_dm_server_invite` räumen nur den eigenen Space über den
+`server_id`-Index auf, `use_invite` sucht DM-Zeilen über `by_recipient`, und die
+Doppel-/Dreifach-Aufrufe in `respond_dm_server_invite` samt der wirkungslosen
+Rollback-Logik (Nebenbefund) sind entfernt. Der globale Durchlauf bleibt nur in
+`cleanup_expired_invites`. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/invites.rs:22-55`
 
@@ -1217,7 +1327,13 @@ Transaktion rückgängig — auch die Rollback-Schreibvorgänge selbst.
 ---
 
 <a id="c9"></a>
-## C9 — `rebuild_storage_references` scannt die gesamte Historie in einer Transaktion · **teilweise behoben** · S4
+## C9 — `rebuild_storage_references` scannt die gesamte Historie in einer Transaktion · **akzeptiert**
+
+**Akzeptiert (Branch `fix/security-batch-2`).** Seit dem ersten Teil läuft der Rebuild nur
+noch, wenn das Modul selbst „nicht bereit" meldet — nach Upgrade, Wipe oder Restore, also
+in einem Wartungsfenster, in dem eine Schreibpause hinnehmbar ist. Seitenweises Aufteilen
+bleibt als `ponytail:`-Notiz am Reducer, falls es je das Zeitbudget sprengt. Die
+ursprüngliche Analyse und der Zwischenstand:
 
 **Teilweise behoben auf Branch `bug-security-fixes`.** core-api startet optimistisch
 (`_storageReferencesReady = true`) und setzt das Flag nur noch zurück, wenn das Modul
@@ -1254,7 +1370,12 @@ Transportfehler; den Rebuild seitenweise über mehrere Reducer-Aufrufe verteilen
 ---
 
 <a id="c10"></a>
-## C10 — Weitere lineare Scans in häufig aufgerufenen Reducern · **S4**
+## C10 — Weitere lineare Scans in häufig aufgerufenen Reducern · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Die häufigen Pfade sind umgestellt: `mark_channel_read` nutzt
+`has_member_role`, `send_dm_server_invite` und `use_invite` den `by_recipient`-Index.
+`set_server_discovery` und `set_user_admin` scannen weiterhin — beide laufen selten und
+über Admin- bzw. Owner-Aktionen. Die ursprüngliche Analyse:
 
 Nachtrag zu [C5](#c5)/[C6](#c6); dieselbe Klasse, jeweils mit vorhandenem
 Punkt-Lookup als Alternative:
@@ -1272,7 +1393,12 @@ Punkt-Lookup als Alternative:
 # D — Datenkonsistenz und Leaks
 
 <a id="d1"></a>
-## D1 — `TypingState` wird bei Verbindungsabbruch nie aufgeräumt · **S3**
+## D1 — `TypingState` wird bei Verbindungsabbruch nie aufgeräumt · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `client_disconnected` löscht die `TypingState`-Zeilen der Identity
+über den `by_user`-Index. Ein weiteres offenes Fenster setzt sie beim nächsten
+Tastenanschlag neu. WebSocket-Test in `voice-lifecycle.test.ts`; der HTTP-basierte
+Typing-Test prüft deshalb nur noch die Autorisierung. Die ursprüngliche Analyse:
 
 **Stellen:** `server/src/reducers/presence.rs:100-130`,
 `server/src/reducers/voice.rs:69-98`
@@ -1294,7 +1420,13 @@ iteriert.
 ---
 
 <a id="d2"></a>
-## D2 — Präsenz bleibt nach Absturz dauerhaft „online" · **S3**
+## D2 — Präsenz bleibt nach Absturz dauerhaft „online" · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Eine neue private Tabelle `client_connection` (additiv) wird in
+`client_connected` gefüllt und in `client_disconnected` geleert. Ist die letzte
+Verbindung einer Identity weg, geht ihre Präsenz auf offline. Verbindungen von vor dem
+Update haben keine Zeile; der Heartbeat eines noch offenen Clients stellt „online"
+innerhalb von 25 s wieder her. WebSocket-Test in `voice-lifecycle.test.ts`. Die ursprüngliche Analyse:
 
 **Stellen:** `server/src/reducers/presence.rs:94-98`,
 `server/src/reducers/voice.rs:69-98`, `src/lib/spacetimedb/connection.ts:468-473`
@@ -1315,7 +1447,12 @@ derselben Identity aktiv sind).
 ---
 
 <a id="d3"></a>
-## D3 — `delete_server` lässt Read-States und DM-Invites verwaist zurück · **S3**
+## D3 — `delete_server` lässt Read-States und DM-Invites verwaist zurück · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `delete_channel_with_dependencies` löscht die Read-States des
+Channels, `delete_server` zusätzlich seine DM-Invites. Leave, Kick und Ban räumen über
+`remove_member_traces` Voice-Präsenz, Read-States und eine Join-Anfrage des Nutzers ab.
+Test in `module-hygiene.test.ts`. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/servers.rs:297-379`
 
@@ -1381,7 +1518,13 @@ können nicht mehr zu unbekannten oder dauerhaften Orphans werden.
 ---
 
 <a id="d5"></a>
-## D5 — `rekey_identities` korrumpiert Daten bei verketteten Remaps · **S3**
+## D5 — `rekey_identities` korrumpiert Daten bei verketteten Remaps · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `rekey_identities` lehnt Ketten (`A→B, B→C`) und mehrere Quellen
+auf dasselbe Ziel ab, bevor etwas geschrieben wird. In den Tabellen mit
+zusammengesetztem Schlüssel gewinnt die alte Zeile gegen eine bereits vorhandene unter
+dem neuen Schlüssel, statt den Insert panicken zu lassen. Test in
+`module-hygiene.test.ts`. Die ursprüngliche Analyse:
 
 **Stelle:** `server/src/reducers/rekey.rs:51-66`
 
@@ -1430,7 +1573,11 @@ und andernfalls mit einer klaren Fehlermeldung abbrechen.
 ---
 
 <a id="d6"></a>
-## D6 — Stale Messages im Client-Store nach Hard-Delete · **S4**
+## D6 — Stale Messages im Client-Store nach Hard-Delete · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** `syncMessages` und `syncDirectMessages` setzen bekannte Channels
+bzw. Konversationen ohne Zeilen in der View explizit leer. Nur statisch und über
+Build/Lint geprüft. Die ursprüngliche Analyse:
 
 **Stellen:** `src/lib/spacetimedb/sync.ts:284-299`, `:361-377`
 
@@ -1533,7 +1680,15 @@ nie ohne Token weiterverbunden wird und beide Credentials samt State bereinigt w
 ---
 
 <a id="e2"></a>
-## E2 — Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben · **S3**
+## E2 — Abmelden während des Verbindungsaufbaus kann die Sitzung wiederbeleben · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Beide Teile. `disconnect()` erhöht eine Generation; ein `connect()`
+aus einer älteren Generation probiert keinen weiteren URI-Kandidaten und keinen
+Kompressions-Fallback mehr, startet keinen Heartbeat und meldet keinen Fehler. Der Fall
+war schlimmer als ursprünglich beschrieben: `disconnect()` riss den noch im Aufbau
+befindlichen Socket ab, `connect()` ging daraufhin zum *nächsten* Kandidaten (bzw. im Web
+zum Fallback ohne Kompression) und öffnete nach der Abmeldung einen neuen. Unit-Test in
+`connection.test.ts`, der gegen den alten Code fehlschlägt. Die ursprüngliche Analyse:
 
 **Stellen:** `src/lib/spacetimedb/connection.ts:375-472` (`connect`), `:475-494`
 (`disconnect`)
@@ -1578,7 +1733,12 @@ Verbindung nach der Abmeldung wieder aufbauen.
 ---
 
 <a id="e3"></a>
-## E3 — Discovery fällt bei nacktem Hostnamen auf `http://` zurück · **S3**
+## E3 — Discovery fällt bei nacktem Hostnamen auf `http://` zurück · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Ein nackter öffentlicher Host wird zu `https://`; `localhost`,
+Loopback, `.local` und private Netze behalten `http://`. Liefert ein https-Server
+Klartext-Endpunkte (`http://`, `ws://`), bricht die Discovery ab. Unit-Tests in
+`src/lib/discovery.test.ts`. Die ursprüngliche Analyse:
 
 **Stelle:** `src/lib/discovery.ts:12-15`
 
@@ -1605,7 +1765,22 @@ sein, mit einem expliziten Opt-in für lokale Entwicklung.
 ---
 
 <a id="e4"></a>
-## E4 — CSP wird nur im Report-Only-Modus ausgeliefert · **S3**
+## E4 — CSP wird nur im Report-Only-Modus ausgeliefert · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Der Header ist jetzt `Content-Security-Policy`. Vorher in headless Chrome mit
+genau dieser Policy gegen den Dev-Stack geprüft (Dev-Hosts statt der Domain-Platzhalter):
+Anmeldung über das echte Formular, SpacetimeDB-Sync, Nachrichten, ein Bild aus MinIO und
+ein LiveKit-Voice-Call (Teilnehmer ACTIVE mit Audiospur) — null Verstöße. **Dabei
+gefunden:** Die bisherige Policy hätte die Web-App beim Scharfschalten komplett
+gebrochen. Das SpacetimeDB-SDK holt vor dem WebSocket
+`https://{CHAT}/v1/identity/websocket-token`, `connect-src` erlaubte aber nur
+`wss://{CHAT}`; `https://{$CHAT_DOMAIN}` ist ergänzt. Die vier Domain-Variablen sind
+damit auf beiden Tracks Pflicht, als reine Hostnamen passend zu `DISCOVERY_*` und
+`MINIO_PUBLIC_ENDPOINT` (`DEPLOYMENT.md`, `SECURITY.md`, die `.env`-Beispiele, beide
+Self-Hosting-Guides und die Breaking-Changes-Seite sagen das). Der `web`-Container
+prüft sie beim Start (`deploy/web/check-domains.sh`) und bricht bei fehlendem Wert
+oder mitgegebenem Schema mit klarer Meldung ab, statt still eine kaputte Policy
+auszuliefern. Die ursprüngliche Analyse:
 
 **Stelle:** `deploy/web/Caddyfile`
 
@@ -1634,7 +1809,10 @@ brechen, siehe [E6](#e6).
 ---
 
 <a id="e5"></a>
-## E5 — Download-URL-Cache wächst unbegrenzt · **S4**
+## E5 — Download-URL-Cache wächst unbegrenzt · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Abgelaufene Einträge fliegen bei jedem neuen Batch aus dem Cache.
+`inflightDownloadRequests` war nie ein Leck (wird im `finally` geleert). Die ursprüngliche Analyse:
 
 **Stelle:** `src/lib/downloadUrls.ts:18`
 
@@ -1690,7 +1868,13 @@ gebauten Bundle verifiziert; bitte dort gegenprüfen.
 # F — Konfiguration und Betrieb
 
 <a id="f1"></a>
-## F1 — Bool-Konfiguration schlägt bei unerwarteten Werten still fehl · **S3**
+## F1 — Bool-Konfiguration schlägt bei unerwarteten Werten still fehl · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Ein gesetzter, aber unbekannter Wert verhindert den Start mit klarer
+Meldung statt still auf `false` bzw. den Default zu fallen; akzeptiert werden
+true/false, 1/0, yes/no, on/off. Tests in `ServiceOptionsTests`. Der Nebenbefund zu
+`MINIO_ACCESS_KEY`/`LIVEKIT_API_KEY` bleibt: das sind Kennungen, die zugehörigen
+Secrets werden bereits geprüft. Die ursprüngliche Analyse:
 
 **Stelle:** `core-api/src/CoreApi/Configuration/ServiceOptions.cs:156-159`
 
@@ -1722,7 +1906,12 @@ nicht `LIVEKIT_API_KEY` (Default `devkey`) und nicht `ADMIN_BOOTSTRAP_PASSWORD`.
 ---
 
 <a id="f2"></a>
-## F2 — `SystemConfigService`-Cache ist prozesslokal · **S4**
+## F2 — `SystemConfigService`-Cache ist prozesslokal · **akzeptiert**
+
+**Akzeptiert (Branch `fix/security-batch-2`).** Die ausgelieferte Topologie hat genau
+eine core-api-Instanz; der Cache ist dort korrekt. Die Upgrade-Richtung (Reload per
+Timer oder Postgres-NOTIFY) steht als `ponytail:`-Notiz am Feld. Die ursprüngliche
+Analyse:
 
 **Stelle:** `core-api/src/CoreApi/Services/SystemConfigService.cs:260`, `:283-294`
 
@@ -1745,7 +1934,13 @@ Start aus. Bei parallel startenden Replikaten laufen EF-Migrationen gleichzeitig
 ---
 
 <a id="f3"></a>
-## F3 — `MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User · **S4**
+## F3 — `MigrateLegacyIdentitiesAsync` lädt bei jedem Start alle User · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Die Migration liest bei jedem Start nur noch zwei Spalten ohne
+Change-Tracking und lädt vollständige Zeilen nur für Konten, die tatsächlich angepasst
+werden müssen (normalerweise keine). Ein Flag wäre eine Schema-Migration für einen
+Blake3-Hash pro Konto gewesen. Test in `LegacyIdentityMigrationTests`. Die ursprüngliche
+Analyse:
 
 **Stelle:** `core-api/src/CoreApi/DbInitializer.cs:139`
 
@@ -1764,7 +1959,11 @@ auf einen einzelnen Lesezugriff reduzieren.
 ---
 
 <a id="f4"></a>
-## F4 — GitHub-Timeout in `/downloads/{os}` wird zu einem 500 · **S4**
+## F4 — GitHub-Timeout in `/downloads/{os}` wird zu einem 500 · ✅ **behoben**
+
+**Behoben auf Branch `fix/security-batch-2`.** Timeout (`TaskCanceledException`) und unerwartete Antwort
+(`JsonException`) liefern jetzt die freundliche 404. Ohne eigenen Test — der Pfad ist
+im Testhost hinter `IsDevBuild` nicht erreichbar. Die ursprüngliche Analyse:
 
 **Stellen:** `core-api/src/CoreApi/Endpoints/DownloadEndpoints.cs:83-97`,
 `Program.cs:112-117`
@@ -1843,18 +2042,7 @@ Der Vollständigkeit halber — diese Bereiche wurden geprüft und wirkten solid
 
 ## Vorschlag zur Priorisierung
 
-**Stand 2026-09-24 (nach Branch `bug-security-fixes`):** 27 von 57 Befunden sind
-erledigt; 30 bleiben offen. Darunter ist kein S1; offen sind noch zwei S2: A11 und C7.
-Behoben sind A1–A8, A12, A15, A16, B1–B3, B9, B10, C1–C6, D4, D7, E1, E6 und G1;
-teilweise behoben sind A14 (SSRF zu, Isolation offen), B6 und C9.
-
-**Als Nächstes — Rest der Object-Storage-Härtung:** [A14](#a14) (ffmpeg in einen
-eigenen, secret-losen Container) und [C9](#c9) (Rebuild seitenweise).
-
-**Dann — Betriebsfähigkeit unter Last:** [A11](#a11) (gemeinsamer niedriger
-Auth-Bucket hinter CGNAT) und [C7](#c7) (breite Re-Syncs bei Mitglieder-Events).
-
-**Danach — Lebenszyklus und Härtung:** [A10](#a10) (LiveKit-Revokation),
-[A13](#a13)/[B12](#b12) (Invite-Weitergabe, Block-Parität), [E4](#e4) (CSP
-Enforcement) und die verbleibenden S3/S4-Punkte. Die aktuelle Abhängigkeitslage steht
-datiert in `SECURITY.md`; für den Live-Stand gilt GitHub Dependabot.
+**Stand 2026-09-24 (nach Branch `fix/security-batch-2`):** Alle 57 Befunde sind bearbeitet:
+55 behoben, 2 bewusst akzeptiert (C9 und F2, jeweils mit `ponytail:`-Notiz im Code und
+Begründung oben). Offene Rest-Kanten, dokumentiert in den Einträgen: A9 ohne
+E-Mail-Bestätigung, A14 ohne eigenen Worker-Container, A6 für Legacy-Keys.

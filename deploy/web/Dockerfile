@@ -24,5 +24,10 @@ RUN bun run build
 # automatic SPA fallback with a tiny, reliable footprint.
 FROM caddy:2-alpine
 COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
+COPY --chmod=755 deploy/web/check-domains.sh /usr/local/bin/check-domains.sh
 COPY --from=build /app/dist /srv
 EXPOSE 80
+# Refuses to start with a missing or malformed *_DOMAIN (see the script).
+# Setting ENTRYPOINT resets the base image's CMD, so it is restated here.
+ENTRYPOINT ["/usr/local/bin/check-domains.sh"]
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

@@ -49,9 +49,11 @@ public sealed class StorageQuotaConcurrencySmokeTests
                     var id = Guid.NewGuid().ToString();
                     await UploadEndpoints.ReserveAsync(db, new PendingUpload
                     {
-                        Id = id, Username = username,
+                        Id = id,
+                        Username = username,
                         StorageKey = $"uploads/avatar/{username}/{id}.bin",
-                        FileName = "test.bin", MimeType = "application/octet-stream",
+                        FileName = "test.bin",
+                        MimeType = "application/octet-stream",
                         FileSize = 7 * UploadLimits.MiB,
                     }, false, inventory);
                     return true;

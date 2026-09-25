@@ -137,6 +137,9 @@ services:
 
       LIVEKIT_API_KEY: "${LIVEKIT_API_KEY}"
       LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET}"
+      # LiveKit's room API on the compose network: core-api removes callers who
+      # were kicked, banned or timed out (their voice presence is gone).
+      LIVEKIT_INTERNAL_URL: "http://livekit:44380"
 
       MINIO_INTERNAL_ENDPOINT: "http://minio:44390"
       MINIO_PUBLIC_ENDPOINT: "${MINIO_PUBLIC_ENDPOINT}"

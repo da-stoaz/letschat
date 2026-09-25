@@ -34,6 +34,13 @@ let reconnectAttempts = 0
 // Set while a caller-initiated disconnect() is in effect, to suppress the
 // automatic reconnect that would otherwise fire on the resulting close.
 let intentionalDisconnect = false
+/**
+ * Bumped by every disconnect(). A connect() started under an older generation
+ * was abandoned by a sign-out: it must not try the next URI candidate or the
+ * compression fallback (each would open a fresh socket after the sign-out),
+ * start the heartbeat, or report an error (BUG_ANALYSIS E2).
+ */
+let connectionGeneration = 0
 
 // Reliability-first WS compression (web only). The SDK's gzip path decodes via
 // the browser DecompressionStream API; real browsers support it (a bandwidth
@@ -374,6 +381,8 @@ function scheduleReconnect(): void {
 
 export async function connect(): Promise<void> {
   intentionalDisconnect = false
+  const generation = connectionGeneration
+  const abandoned = () => generation !== connectionGeneration
   if (connection?.isActive) return
   if (connectPromise) return connectPromise
 
@@ -396,6 +405,7 @@ export async function connect(): Promise<void> {
       const errors: string[] = []
 
       for (const [index, candidate] of uriCandidates.entries()) {
+        if (abandoned()) throw new Error('Connection attempt abandoned by sign-out.')
         const isLastCandidate = index === uriCandidates.length - 1
         try {
           await connectWithUri(candidate, SPACETIMEDB_DATABASE, isLastCandidate && reportErrors)
@@ -430,7 +440,7 @@ export async function connect(): Promise<void> {
       try {
         await tryAllCandidates(!canDowngrade)
       } catch (error) {
-        if (canDowngrade) {
+        if (canDowngrade && !abandoned()) {
           webCompressionDowngraded = true
           console.warn('[spacetimedb] compressed connect failed; retrying without WebSocket compression')
           await tryAllCandidates(true)
@@ -458,9 +468,14 @@ export async function connect(): Promise<void> {
 
   try {
     await connectPromise
+    if (abandoned()) return
     reconnectAttempts = 0
     startHeartbeat()
   } catch (error) {
+    // The rejected-token path above signs out itself; its error must still
+    // reach the caller so the UI can prompt for a fresh sign-in.
+    const reauthRequired = error instanceof Error && error.message === REAUTHENTICATION_REQUIRED_MESSAGE
+    if (abandoned() && !reauthRequired) return
     // Surface the failure as a terminal state so the UI can show an error +
     // retry instead of an eternal "connecting" spinner. Every connect attempt
     // is bounded by SPACETIMEDB_CONNECT_TIMEOUT_MS, so this always fires within
@@ -475,6 +490,7 @@ export async function connect(): Promise<void> {
 export function disconnect(): void {
   // Suppress auto-reconnect and stop the heartbeat for a caller-initiated close.
   intentionalDisconnect = true
+  connectionGeneration += 1
   stopHeartbeat()
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)

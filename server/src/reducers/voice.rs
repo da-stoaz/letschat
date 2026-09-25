@@ -1,7 +1,7 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err, find_channel, require_account, require_member_role, voice_key,
+    assert_or_err, find_channel, member_key, require_account, require_not_timed_out, voice_key,
 };
 use crate::schema::*;
 
@@ -14,10 +14,17 @@ pub fn join_voice_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), S
         "not a voice channel",
     )?;
 
-    let role = require_member_role(ctx, channel_row.server_id, ctx.sender())?;
+    let member = ctx
+        .db
+        .server_member()
+        .member_key()
+        .find(member_key(channel_row.server_id, ctx.sender()))
+        .ok_or_else(|| "not a server member".to_string())?;
     if channel_row.moderator_only {
-        assert_or_err(role != Role::Member, "channel is moderator-only")?;
+        assert_or_err(member.role != Role::Member, "channel is moderator-only")?;
     }
+    // A timeout silences text; it has to silence voice too (BUG_ANALYSIS B13).
+    require_not_timed_out(ctx, &member)?;
 
     let participant_count = ctx
         .db
@@ -61,6 +68,16 @@ pub fn join_voice_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), S
     Ok(())
 }
 
+#[spacetimedb::reducer(client_connected)]
+pub fn on_client_connected(ctx: &ReducerContext) {
+    if let Some(connection_id) = ctx.connection_id() {
+        ctx.db.client_connection().insert(ClientConnection {
+            connection_id,
+            identity: ctx.sender(),
+        });
+    }
+}
+
 /// Voice presence is connection-scoped (see `VoiceParticipant::connection_id`):
 /// when a client's socket dies — app killed, network drop, logout, module
 /// republish — its presence rows go with it. This is the single authority for
@@ -95,6 +112,37 @@ pub fn on_client_disconnected(ctx: &ReducerContext) {
         .collect();
     for key in dm_keys {
         ctx.db.dm_voice_participant().dm_voice_key().delete(key);
+    }
+
+    // Typing rows only ever went away through an explicit "stopped typing",
+    // so a crash mid-sentence left them forever (BUG_ANALYSIS D1). Typing is
+    // per keystroke; another open client re-sends it on the next one.
+    let typing_keys: Vec<String> = ctx
+        .db
+        .typing_state()
+        .by_user()
+        .filter(sender)
+        .map(|row| row.typing_key)
+        .collect();
+    for key in typing_keys {
+        ctx.db.typing_state().typing_key().delete(key);
+    }
+
+    // Presence went offline only through an orderly sign-out, so a killed app
+    // stayed "online" forever (BUG_ANALYSIS D2). Offline once the identity's
+    // last connection is gone; connections from before this table existed
+    // have no row, and the live client's heartbeat re-asserts within 25 s.
+    if let Some(conn) = conn {
+        ctx.db.client_connection().connection_id().delete(conn);
+    }
+    let still_connected = ctx.db.client_connection().identity().filter(sender).next().is_some();
+    if !still_connected
+        && let Some(mut presence) = ctx.db.presence_state().identity().find(sender)
+        && presence.online
+    {
+        presence.online = false;
+        presence.updated_at = ctx.timestamp;
+        ctx.db.presence_state().identity().update(presence);
     }
 }
 

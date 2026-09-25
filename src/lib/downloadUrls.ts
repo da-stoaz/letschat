@@ -112,6 +112,11 @@ export async function getSignedDownloadUrls(storageKeys: string[]): Promise<Map<
   if (missingKeys.length === 0) return urlsByKey
 
   const fetchedEntries = await requestDownloadUrlBatch(missingKeys)
+  // Expired URLs are useless, so they go whenever new ones arrive; the cache
+  // otherwise grew for the whole life of a desktop session (BUG_ANALYSIS E5).
+  for (const [storageKey, entry] of downloadUrlCache) {
+    if (entry.expiresAtMs <= now) downloadUrlCache.delete(storageKey)
+  }
   for (const [storageKey, entry] of fetchedEntries) {
     downloadUrlCache.set(storageKey, entry)
     urlsByKey.set(storageKey, entry.url)

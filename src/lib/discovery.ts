@@ -13,10 +13,46 @@ export interface WellKnown {
   instanceStorageLimitBytes?: number
 }
 
-/** Adds a scheme if the user typed a bare host, and trims trailing slashes. */
+/** Loopback, `.local` and private-network hosts — where plain http is normal. */
+function isLocalHost(hostWithPort: string): boolean {
+  const bracketed = /^\[([^\]]+)\]/.exec(hostWithPort)
+  const host = (bracketed ? bracketed[1] : hostWithPort.replace(/:\d+$/, '')).toLowerCase()
+  return (
+    host === 'localhost' ||
+    host === '::1' ||
+    host.endsWith('.local') ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  )
+}
+
+/**
+ * Adds a scheme if the user typed a bare host, and trims trailing slashes.
+ * A bare public host means https: the discovery document decides where every
+ * credential goes, so fetching it over plain http let anyone on the path
+ * redirect the whole session (BUG_ANALYSIS E3). Local hosts keep http.
+ */
 export function normalizeServerUrl(input: string): string {
   const trimmed = input.trim().replace(/\/+$/, '')
-  return trimmed.includes('://') ? trimmed : `http://${trimmed}`
+  if (trimmed.includes('://')) return trimmed
+  return `${isLocalHost(trimmed.split('/')[0]) ? 'http' : 'https'}://${trimmed}`
+}
+
+/** An https instance must not advertise plaintext endpoints. */
+function assertSecureEndpoints(base: string, json: WellKnown): void {
+  if (!base.startsWith('https://')) return
+  const insecure = [
+    ['auth', json.auth, /^https:\/\//],
+    ['spacetimedb', json.spacetimedb, /^(wss|https):\/\//],
+    ['livekit', json.livekit, /^(wss|https):\/\//],
+  ].filter(([, url, secure]) => !(secure as RegExp).test(url as string))
+  if (insecure.length) {
+    throw new Error(
+      `letschat.json advertises insecure endpoints for an https server: ${insecure.map(([name]) => name).join(', ')}`,
+    )
+  }
 }
 
 /**
@@ -37,6 +73,7 @@ export async function discoverConfig(serverUrl: string): Promise<ServerConfig> {
   if (!json.auth) missing.push('auth')
   if (!json.livekit) missing.push('livekit')
   if (missing.length) throw new Error(`letschat.json is missing fields: ${missing.join(', ')}`)
+  assertSecureEndpoints(base, json)
   return {
     spacetimedbUri: json.spacetimedb!,
     authServiceUrl: json.auth!,

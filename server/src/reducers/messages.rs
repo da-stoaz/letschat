@@ -1,8 +1,7 @@
 use spacetimedb::{ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err, find_channel, member_key, next_id, require_account, require_member_role,
-    require_mod_or_owner,
+    assert_or_err, find_channel, next_id, require_account, require_can_post, require_mod_or_owner,
 };
 use crate::schema::*;
 use crate::storage_refs::{
@@ -13,23 +12,7 @@ use crate::storage_refs::{
 pub fn send_message(ctx: &ReducerContext, channel_id: u64, content: String) -> Result<(), String> {
     require_account(ctx)?;
     let channel_row = find_channel(ctx, channel_id)?;
-    let role = require_member_role(ctx, channel_row.server_id, ctx.sender())?;
-
-    if channel_row.moderator_only {
-        assert_or_err(role != Role::Member, "channel is moderator-only")?;
-    }
-
-    // Check if member is timed out
-    if let Some(member_row) = ctx
-        .db
-        .server_member()
-        .member_key()
-        .find(member_key(channel_row.server_id, ctx.sender()))
-    {
-        if let Some(timeout_until) = member_row.timeout_until {
-            assert_or_err(ctx.timestamp > timeout_until, "you are timed out")?;
-        }
-    }
+    require_can_post(ctx, &channel_row)?;
 
     assert_or_err(
         (1..=4000).contains(&content.len()),
@@ -79,6 +62,10 @@ pub fn edit_message(
         message_row.sender_identity == ctx.sender(),
         "only sender can edit message",
     )?;
+    // Authorship alone let a kicked, banned or timed-out sender keep writing
+    // into the channel, and overwrite a moderator's deletion (BUG_ANALYSIS B4).
+    assert_or_err(!message_row.deleted, "message was deleted")?;
+    require_can_post(ctx, &find_channel(ctx, message_row.channel_id)?)?;
 
     sync_message_references(
         ctx,

@@ -515,6 +515,17 @@ pub struct DmVoiceParticipant {
     pub connection_id: Option<ConnectionId>,
 }
 
+/// One row per live client connection, so `client_disconnected` can tell
+/// whether the identity still has another one open before marking it offline
+/// (BUG_ANALYSIS D2). Private; only lifecycle reducers touch it.
+#[spacetimedb::table(accessor = client_connection)]
+pub struct ClientConnection {
+    #[primary_key]
+    pub connection_id: ConnectionId,
+    #[index(btree)]
+    pub identity: Identity,
+}
+
 #[spacetimedb::table(accessor = presence_state)]
 pub struct PresenceState {
     #[primary_key]

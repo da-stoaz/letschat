@@ -1,6 +1,9 @@
 use spacetimedb::{ReducerContext, Table};
 
-use crate::helpers::{assert_or_err, is_valid_username, normalize_username, require_account};
+use crate::helpers::{
+    MAX_DISPLAY_NAME_CHARS, assert_or_err, is_valid_username, normalize_username, require_account,
+    validate_display_name,
+};
 use crate::reducers::system::require_trusted_issuer;
 use crate::schema::*;
 use crate::storage_refs::sync_avatar_reference;
@@ -45,6 +48,14 @@ pub fn register_user(
         ctx.db.pending_admin_grant().identity().delete(ctx.sender());
     }
 
+    // core-api accepts longer names than the module shows, so an account from
+    // before this limit is trimmed to fit rather than locked out of chat.
+    let display_name = validate_display_name(&display_name).unwrap_or_else(|_| {
+        let clean: String = display_name.chars().filter(|c| !c.is_control()).collect();
+        let clipped: String = clean.trim().chars().take(MAX_DISPLAY_NAME_CHARS).collect();
+        if clipped.trim().is_empty() { normalized.clone() } else { clipped.trim().to_string() }
+    });
+
     ctx.db.user().insert(User {
         identity: ctx.sender(),
         username: normalized,
@@ -83,7 +94,7 @@ pub fn update_profile(
         .ok_or_else(|| "user not found".to_string())?;
 
     if let Some(name) = display_name {
-        user_row.display_name = name;
+        user_row.display_name = validate_display_name(&name)?;
     }
     // The client resends the current avatar with every profile save; only a
     // change is validated, so a pre-existing value never blocks a rename.

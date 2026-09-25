@@ -19,8 +19,9 @@ key, role, or claimed file metadata merely because the client supplied it.
 
 Application and SpacetimeDB tokens are currently persisted in webview
 `localStorage`, including desktop builds; they are not protected by an OS
-keychain. Preventing script injection and moving CSP from report-only to
-enforcement therefore matters directly to credential protection (finding E4).
+keychain. Preventing script injection therefore matters directly to credential
+protection: the hosted web client ships an enforced CSP (no `'unsafe-inline'`
+scripts, `connect-src` limited to the instance's own services).
 
 ### `core-api` is the identity authority
 
@@ -28,11 +29,13 @@ enforcement therefore matters directly to credential protection (finding E4).
 - Passwords are Argon2id hashes and inputs are limited to 8–128 characters.
 - Five failed sign-in attempts lock an account for five minutes.
 - The public JSON API has a 256 KiB request-body limit. Files never transit it.
-- Abuse-prone auth endpoints use an IP-partitioned fixed-window rate limiter;
-  only the adjacent private/loopback proxy is trusted for forwarded headers.
-  Its currently shared, low per-IP budget can deny auth service to unrelated
-  users behind the same CGNAT, VPN, or corporate gateway; this availability
-  risk and the split-policy remediation are tracked as A11.
+- Abuse-prone auth endpoints use IP-partitioned fixed-window rate limiters,
+  one budget each for registration, email actions, and password actions, so
+  flooding one flow cannot lock another. Sign-in gets ten times the budget,
+  because the per-account lockout already stops guessing and many people can
+  share one CGNAT or VPN address. Confirmation and reset mails are also capped
+  at three per account per hour. Only the adjacent private/loopback proxy is
+  trusted for forwarded headers.
 - Application access tokens live for one hour and refresh tokens for seven
   days. A per-account token generation immediately invalidates older HTTP
   sessions after a credential change.
@@ -95,8 +98,10 @@ unknown or permanent orphan.
 
 `core-api` mints a LiveKit token only when the requested identity matches the
 session account and SpacetimeDB confirms current presence in that room. Tokens
-expire after one hour. Immediate token revocation following kick/ban is still
-open as A10 in `BUG_ANALYSIS.md`.
+expire after one hour, but a removal does not wait for that: every 20 seconds
+core-api compares each LiveKit room with the module's voice presence and removes
+participants who have had none for two consecutive rounds (kick, ban, timeout,
+leave). An unreachable module pauses the comparison instead of removing anyone.
 
 ### Administration is a separate listener
 
@@ -143,8 +148,8 @@ for package versions and remediation status; do not copy that changing list into
 the architecture document.
 
 The remaining code findings are prioritized in
-[`BUG_ANALYSIS.md`](BUG_ANALYSIS.md). At this baseline there is no open S1;
-the open S2 items are A11 and C7.
+[`BUG_ANALYSIS.md`](BUG_ANALYSIS.md). As of 2026-09-24 there is no open S1 or S2
+finding.
 
 ## Security review workflow
 

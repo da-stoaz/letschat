@@ -379,9 +379,12 @@ public sealed class UploadAccessTests
         var promoted = db.PendingUploads.Single(row => row.FileName == "alice-first.bin");
         db.ConfirmedUploads.Add(new ConfirmedUpload
         {
-            StorageKey = promoted.StorageKey, Username = promoted.Username,
-            FileName = promoted.FileName, FileSize = promoted.FileSize,
-            MimeType = promoted.MimeType, ConfirmedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            StorageKey = promoted.StorageKey,
+            Username = promoted.Username,
+            FileName = promoted.FileName,
+            FileSize = promoted.FileSize,
+            MimeType = promoted.MimeType,
+            ConfirmedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
         });
         db.PendingUploads.Remove(promoted);
         await db.SaveChangesAsync();
