@@ -67,13 +67,18 @@ import { GITHUB_REPO } from "@/lib/site";
 
       <article class="step-card rounded-xl p-7 space-y-4">
         <h2 class="text-2xl font-semibold tracking-tight">Step 0: Get shared files</h2>
-        <p class="guide-prose">Download the shared base compose file and LiveKit config:</p>
+        <p class="guide-prose">Download the shared base compose file, the LiveKit config and the SpacetimeDB config:</p>
         <CodeBlock label="terminal" code={`mkdir letschat && cd letschat
 
 wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
 
 mkdir livekit
-wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml`} />
+wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml
+
+# the SpacetimeDB server config (WebSocket keepalive) — required: without it
+# Docker mounts an empty folder and the database never starts
+mkdir spacetimedb
+wget -O spacetimedb/config.prod.toml https://raw.githubusercontent.com/${GITHUB_REPO}/main/spacetimedb/config.prod.toml`} />
         <p class="guide-prose text-sm">Every service — the browser client included — is a pre-built image that GitHub Actions publishes with each release. Nothing is compiled on your server. To upgrade later, download the compose files again (they change with releases) and pull.</p>
       </article>
 

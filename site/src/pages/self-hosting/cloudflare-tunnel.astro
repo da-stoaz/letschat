@@ -165,6 +165,11 @@ wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.t
 mkdir livekit
 wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml
 
+# the SpacetimeDB server config (WebSocket keepalive) — required: without it
+# Docker mounts an empty folder and the database never starts
+mkdir spacetimedb
+wget -O spacetimedb/config.prod.toml https://raw.githubusercontent.com/${GITHUB_REPO}/main/spacetimedb/config.prod.toml
+
 # your settings file
 wget -O .env https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.tunnel.example`} />
         <Callout type="note">

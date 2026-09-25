@@ -224,6 +224,8 @@ On the Caddy track, also download `deploy/caddy/Caddyfile` using the
 ```bash
 wget -O docker-compose.prod.base.yml https://raw.githubusercontent.com/da-stoaz/letschat/main/docker-compose.prod.base.yml
 wget -O docker-compose.prod.<track>.yml https://raw.githubusercontent.com/da-stoaz/letschat/main/docker-compose.prod.<track>.yml
+wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/da-stoaz/letschat/main/livekit/config.prod.yaml
+wget -O spacetimedb/config.prod.toml https://raw.githubusercontent.com/da-stoaz/letschat/main/spacetimedb/config.prod.toml
 LETSCHAT_VERSION=1.2.3   # in .env
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml up -d
