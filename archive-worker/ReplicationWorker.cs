@@ -117,15 +117,8 @@ public sealed class ReplicationWorker(
                 PersistToken(freshToken);
                 logger.LogInformation(
                     "Connected to SpacetimeDB. Archive worker identity: {Identity}", identity);
-                // The 0x prefix is REQUIRED — the reducer's Identity argument is
-                // parsed as hex and a bare digest fails with "invalid digit
-                // found in string". The call also has to come from an identity
-                // with is_admin, or it returns HTTP 530; see DEPLOYMENT.md for
-                // the module-owner `spacetime sql` fallback.
                 logger.LogInformation(
-                    "If the archive views are empty, register this identity once (as an instance admin): " +
-                    "spacetime call {Module} set_archive_service_identity '[\"0x{Identity}\"]'",
-                    options.SpacetimeModule, identity);
+                    "core-api automatically registers this identity from the shared token volume.");
 
                 replication.Wire(conn);
                 conn.SubscriptionBuilder()

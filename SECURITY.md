@@ -110,8 +110,9 @@ paths. Production compose publishes the admin listener only on
 `127.0.0.1:48788`, intended for an SSH tunnel. Never route it through the public
 Cloudflare or Caddy ingress.
 
-For first boot, configure `SPACETIMEDB_SERVICE_TOKEN` with the persisted module
-owner token, then use `ADMIN_BOOTSTRAP_USERNAME` and a generated
+core-api automatically reads the persisted module-owner token and registers the
+archive worker. New chat registration fails closed until the issuer is pinned.
+Use `ADMIN_BOOTSTRAP_USERNAME` and a generated
 `ADMIN_BOOTSTRAP_PASSWORD` for the human administrator. The module owner receives
 the only initial chat-domain admin row during publish; public registrations are
 never implicitly promoted. Remove the account-bootstrap values after first use.
@@ -119,8 +120,10 @@ never implicitly promoted. Remove the account-bootstrap values after first use.
 ## Deployment invariants
 
 - Terminate TLS at the documented Caddy or Cloudflare ingress.
-- Expose only the documented public web/API, SpacetimeDB, LiveKit, and MinIO
-  routes. PostgreSQL and the admin listener stay private.
+- Both public proxies reach SpacetimeDB through the chat-edge allowlist. Only
+  token exchange and the letschat WebSocket pass; all other API calls return
+  404. Host proxies use :44300. The raw API on loopback :44302, PostgreSQL
+  and the admin listener stay private.
 - The five public hostnames are configured once. Compose derives discovery
   URLs from them; native Caddy configuration handles routing, CSP and the
   browser's `/config.js`. No deployment entrypoint scripts are needed.

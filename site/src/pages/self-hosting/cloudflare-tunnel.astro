@@ -118,7 +118,7 @@ import { GITHUB_REPO } from "@/lib/site";
         <ul class="list-disc pl-5 guide-prose space-y-1.5">
           <li>A domain whose DNS is managed by Cloudflare (free plan is fine).</li>
           <li>Cloudflare <strong>Zero Trust</strong> enabled on your account (free).</li>
-          <li>An Ubuntu server with Docker Engine 25+ and the Compose plugin 2.20.2+ (the health checks need them).</li>
+          <li>An Ubuntu server with Docker Engine 25+ and the Compose plugin 2.23.1+ (for health checks and inline proxy configuration).</li>
           <li>Admin access to your home router (for the two voice ports in Step 6).</li>
         </ul>
         <p class="guide-prose">
@@ -183,13 +183,10 @@ wget -O .env https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.producti
         <div class="step-head"><span class="step-num">3</span><h2 class="text-2xl font-semibold tracking-tight">Fill in your <code class="text-xl">.env</code></h2></div>
         <p class="guide-prose">Generate the secrets first:</p>
         <CodeBlock label="terminal" code={`openssl rand -hex 32      # AUTH_JWT_SECRET, POSTGRES_PASSWORD, MINIO_SECRET_KEY
-openssl rand -base64 32   # LIVEKIT_API_SECRET
-
-# Signing key for SpacetimeDB access tokens — generate ONCE and keep it
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | base64 | tr -d '\\n'`} />
+openssl rand -base64 32   # LIVEKIT_API_SECRET`} />
         <p class="guide-prose">
           Open <code>.env</code> and set <strong>every field in this block</strong> — the stack won't start
-          without <code>POSTGRES_PASSWORD</code> or <code>SPACETIME_OIDC_PRIVATE_KEY</code>, and you can't
+          without <code>POSTGRES_PASSWORD</code>, and you can't
           sign in without the admin account.
           Replace <code>example.com</code> with your domain throughout:
         </p>
@@ -199,7 +196,6 @@ POSTGRES_PASSWORD=         # openssl rand -hex 32
 LIVEKIT_API_SECRET=        # openssl rand -base64 32
 MINIO_ACCESS_KEY=          # any username you choose, e.g. letschat-minio
 MINIO_SECRET_KEY=          # openssl rand -hex 32
-SPACETIME_OIDC_PRIVATE_KEY= # openssl genpkey ... | base64 (see above) — generate ONCE
 CLOUDFLARE_TUNNEL_TOKEN=   # the token you copied in Step 1
 
 # First admin account (created on first start — change the password after)
@@ -214,25 +210,11 @@ CHAT_DOMAIN=chat.example.com
 FILES_DOMAIN=files.example.com
 LIVEKIT_DOMAIN=lk.example.com`} />
 
-        <Callout type="warning" title="Generate SPACETIME_OIDC_PRIVATE_KEY once, then never change it">
-          <p>
-            This key signs the access tokens clients present to the real-time database. core-api
-            publishes the matching public key, and the database fetches it to verify every token.
-          </p>
-          <p>
-            If the key is unset, core-api refuses to start. If you replace it later, every token
-            already issued stops verifying — signed-in users are logged out and asked to sign in
-            again. Accounts and messages are unaffected
-            (identities do not depend on this key), but there is no reason to rotate it. Back it up
-            with your other secrets.
-          </p>
-          <p>
-            If you ever <em>do</em> change it, restart the <code>spacetimedb</code> container as well.
-            It caches the public key per issuer and will not re-fetch on its own, so until it is
-            restarted every request fails with
-            <code>401 Specified key ID not found in JWKs</code> — which surfaces in the app as
-            voice refusing to connect.
-          </p>
+        <Callout type="note" title="Signing keys and service identities are automatic">
+          Fresh installs generate the signing key once in <code>core_api_data</code>.
+          core-api reads the publisher token and registers the archive worker automatically.
+          Keep these volumes in your backups. When upgrading an existing instance, keep its
+          configured <code>SPACETIME_OIDC_PRIVATE_KEY</code> unchanged.
         </Callout>
 
         <h3 class="text-lg font-medium pt-3">Hosting the browser client (optional)</h3>
@@ -268,8 +250,7 @@ EMAIL_FROM_ADDRESS=you@gmail.com`} />
         </Callout>
         <p class="guide-prose text-sm">
           Everything else in the file has a working default and is documented inline — leave it alone unless
-          you have a reason. Leave <code>SPACETIMEDB_SERVICE_TOKEN</code> blank for now — it only exists once the
-          stack has started, and you fill it in during Step 5.
+          you have a reason. The publisher token is read automatically; no <code>SPACETIMEDB_SERVICE_TOKEN</code> input is required.
         </p>
       </article>
 
@@ -292,12 +273,10 @@ app.example.com    ->  http://web:80               # browser client (omit if not
           records for you automatically. There is no separate <code>connect</code> subdomain — <code>auth</code> is the
           discovery entrypoint.
         </Callout>
-        <Callout type="tip" title="Block the raw /sql endpoint at the edge">
-          The Caddy setup answers SpacetimeDB's <code>/sql</code> HTTP endpoint on <code>chat</code> with 403; a
-          tunnel forwards it. Add the same block in Cloudflare under <strong>Security → WAF → Custom rules</strong>
-          (Free plan included) with the expression
-          <code>(http.host eq "chat.example.com" and ends_with(http.request.uri.path, "/sql"))</code> and action
-          <strong>Block</strong>. It is defence in depth — the sensitive tables are private anyway.
+        <Callout type="note" title="The chat API is filtered automatically">
+          On the tunnel network, <code>spacetimedb:3000</code> resolves to the chat-edge filter.
+          Only the client WebSocket and token exchange pass. Publishing databases, SQL and all other
+          API paths return 404. No additional WAF rule or route change is needed.
         </Callout>
       </article>
 
@@ -306,7 +285,7 @@ app.example.com    ->  http://web:80               # browser client (omit if not
         <div class="step-head"><span class="step-num">5</span><h2 class="text-2xl font-semibold tracking-tight">Start the stack and connect core-api to the chat module</h2></div>
         <p class="guide-prose">
           Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
-          (e.g. <code>LETSCHAT_VERSION=1.2.3</code>) to make upgrades explicit. Before an upgrade, save
+          (e.g. <code>LETSCHAT_VERSION=1.2.4</code>) to make upgrades explicit. Before an upgrade, save
           the current deployment files and keep the deployed images. To roll back, restore those files
           together with <code>.env</code>, then run <code>docker compose … up -d --pull never</code>.
           See <a href={`https://github.com/${GITHUB_REPO}/blob/main/DEPLOYMENT.md#upgrading-a-running-deployment`}>the upgrade and rollback guide</a>.
@@ -327,47 +306,22 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml
           and web both receive it. No rebuild — the address is applied at start.
         </Callout>
 
-        <h3 class="text-lg font-medium pt-3">Give core-api the module owner's key — required, before anyone signs in</h3>
+        <h3 class="text-lg font-medium pt-3">Check automatic setup</h3>
         <p class="guide-prose">
-          On its first start, <code>module-init</code> created the identity that owns the chat module. core-api
-          needs that credential to act as the chat side's admin: it pins its own sign-in issuer into the module
-          (until then anyone could create a chat account straight over the public WebSocket), grants your admin
-          account its chat-side admin rights, ends a disabled account's chat access, and runs attachment
-          cleanup. Read it from the persisted volume, put it into <code>.env</code>, and restart core-api:
+          core-api reads the publisher token, pins its trusted issuer and registers the archive worker
+          automatically. Until the issuer is pinned, new chat registrations are rejected. No token
+          copying or manual reducer calls are needed. Check setup and actual replication:
         </p>
-        <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml \\
-  run --rm module-init login show --token
-# → "Your auth token (don't share this!) is eyJ…" — copy everything after "is "
-
-# in .env:
-SPACETIMEDB_SERVICE_TOKEN=eyJ…
-
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d --force-recreate core-api
-docker logs letschat-core-api 2>&1 | grep "trusted issuer"
-# → Pinned SpacetimeDB trusted issuer to http://core-api:8787.`} />
-        <Callout type="warning" title="Never delete the module_init_home volume">
-          It holds that identity, and only the identity that created the database may update it. Lose it and
-          every future module update fails.
+        <CodeBlock label="terminal" code={`docker logs letschat-core-api
+# Expect: Pinned SpacetimeDB trusted issuer to http://core-api:8787.
+# Expect: Registered archive-worker identity ...
+docker compose -f docker-compose.prod.base.yml exec postgres \\
+  psql -U letschat -d archive -c 'SELECT count(*) FROM archive_user;'
+# The module-owner row should already be replicated.`} />
+        <Callout type="warning" title="Keep the identity volumes">
+          Back up <code>module_init_home</code>, <code>archive_worker_data</code> and
+          <code>core_api_data</code>. The publisher identity is required for future module updates.
         </Callout>
-
-        <h3 class="text-lg font-medium pt-3">Register the archive worker</h3>
-        <p class="guide-prose">
-          The <code>archive-worker</code> mirrors every message into PostgreSQL — the copy that makes a future
-          destructive database migration survivable. It does nothing until the module knows its identity:
-        </p>
-        <CodeBlock label="terminal" code={`docker logs letschat-archive-worker 2>&1 | grep "Archive worker identity"
-# → Connected to SpacetimeDB. Archive worker identity: c200…
-
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml \\
-  run --rm module-init call -s http://spacetimedb:3000 letschat \\
-  set_archive_service_identity '["0x<identity from the log>"]'
-
-docker logs letschat-archive-worker 2>&1 | tail -3
-# → Subscription applied; reconciling archive.`} />
-        <p class="guide-prose text-sm">
-          Keep the <code>0x</code> prefix. The <code>archive_worker_data</code> volume keeps the worker's identity
-          across restarts; delete it and you register the new one the same way.
-        </p>
       </article>
 
       <!-- ── Step 6 ────────────────────────────────────────────────────── -->

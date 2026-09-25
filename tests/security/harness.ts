@@ -174,6 +174,12 @@ export function ownerSql(query: string): string {
   })
 }
 
+/** The `iss` claim of a token, read straight out of its JWT payload segment. */
+export function issuerOf(token: string): string {
+  const payload = token.split('.')[1]
+  return (JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8')) as { iss: string }).iss
+}
+
 /** `Timestamp` reducer arg — a product of one i64, so a one-element array. */
 export const timestamp = (micros: number): [number] => [micros]
 

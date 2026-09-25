@@ -51,9 +51,9 @@ pub struct SystemSettings {
     /// at all, because every other client-callable reducer requires a `User`
     /// row (`require_account`).
     ///
-    /// `None` disables the check. That is the default so publishing this module
-    /// onto a running instance can never lock its users out; core-api pushes the
-    /// real value via `set_trusted_issuer` on startup and on an admin sign-in.
+    /// `None` means no registration at all (fail-closed). Existing users keep
+    /// working because only `register_user` checks it; core-api pushes the real
+    /// value via `set_trusted_issuer` as soon as it starts.
     #[default(None::<String>)]
     pub trusted_issuer: Option<String>,
 }

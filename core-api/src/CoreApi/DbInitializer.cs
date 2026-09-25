@@ -91,8 +91,6 @@ public static class DbInitializer
         _ = Task.Run(() => WarnIfSpacetimeUnreachableAsync(
             services.GetRequiredService<Services.SpacetimeClient>(),
             services.GetRequiredService<ServiceOptions>(), logger));
-        await PinTrustedIssuerBestEffortAsync(
-            services.GetRequiredService<Services.SpacetimeClient>(), logger);
         await MigrateLegacyIdentitiesAsync(
             services.GetRequiredService<AppDbContext>(),
             services.GetRequiredService<Services.SpacetimeTokenService>(),
@@ -167,36 +165,6 @@ public static class DbInitializer
             }
 
             await Task.Delay(SpacetimeProbeRetryDelay);
-        }
-    }
-
-    /// <summary>
-    /// Tells the SpacetimeDB module which OIDC issuer may register accounts, so
-    /// an anonymous WebSocket client can't create one behind core-api's back.
-    /// See <see cref="Services.SpacetimeClient.PinTrustedIssuerAsync"/>.
-    ///
-    /// <para>
-    /// Never fatal: the module owner's service token may not be configured yet,
-    /// and SpacetimeDB may simply not be up. Both are expected, and an admin
-    /// sign-in retries.
-    /// </para>
-    /// </summary>
-    private static async Task PinTrustedIssuerBestEffortAsync(
-        Services.SpacetimeClient spacetime, ILogger logger)
-    {
-        try
-        {
-            if (!await spacetime.PinTrustedIssuerAsync())
-            {
-                logger.LogInformation(
-                    "SpacetimeDB trusted issuer not pinned yet: no admin credential is configured. "
-                    + "Set SPACETIMEDB_SERVICE_TOKEN to the module owner's token.");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(
-                ex, "Could not pin the SpacetimeDB trusted issuer; retrying on the next admin sign-in.");
         }
     }
 
@@ -292,7 +260,7 @@ public static class DbInitializer
             pending.Count, pairs.Count);
     }
 
-    private static async Task SeedBootstrapAdminAsync(IServiceProvider services, ILogger logger)
+    internal static async Task SeedBootstrapAdminAsync(IServiceProvider services, ILogger logger)
     {
         var options = services.GetRequiredService<ServiceOptions>();
         if (string.IsNullOrWhiteSpace(options.BootstrapAdminUsername)
@@ -304,7 +272,11 @@ public static class DbInitializer
         var users = services.GetRequiredService<UserManager<ApplicationUser>>();
         var username = Validation.NormalizeUsername(options.BootstrapAdminUsername);
 
-        if (await users.FindByNameAsync(username) is not null)
+        // First run only: once any admin exists, the .env values are inert. They
+        // used to recreate a deliberately deleted bootstrap admin on the next
+        // restart, with the password still sitting in plain text in .env.
+        if ((await users.GetUsersInRoleAsync(AdminRole)).Count > 0
+            || await users.FindByNameAsync(username) is not null)
         {
             return;
         }

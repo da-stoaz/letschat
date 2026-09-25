@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using CoreApi.Configuration;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.IdentityModel.Tokens;
 
 namespace CoreApi.Services;
 
@@ -72,9 +73,9 @@ public sealed class SpacetimeClient(
         // 1. The explicitly provisioned bootstrap credential. Correct before the
         //    identity migration (and forever, if it's a dedicated service identity
         //    rather than a user account's token).
-        if (!string.IsNullOrWhiteSpace(options.SpacetimeServiceToken))
+        if (ServiceToken() is { } serviceToken)
         {
-            candidates.Add(options.SpacetimeServiceToken);
+            candidates.Add(serviceToken);
         }
 
         // 2. Freshly minted tokens for accounts holding the ASP.NET Admin role.
@@ -179,7 +180,91 @@ public sealed class SpacetimeClient(
         return content;
     }
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(options.SpacetimeServiceToken);
+    public bool IsConfigured => ServiceToken() is not null;
+
+    /// <summary>
+    /// The module owner's credential: <c>SPACETIMEDB_SERVICE_TOKEN</c> if set,
+    /// otherwise read from module-init's <c>cli.toml</c>. Read on every call,
+    /// because on a fresh install that file appears only after core-api started.
+    /// </summary>
+    private string? ServiceToken() =>
+        options.SpacetimeServiceToken ?? ReadCliToken(options.SpacetimeServiceTokenFile);
+
+    private static string? ReadCliToken(string? path)
+    {
+        try
+        {
+            return path is not null && File.Exists(path) ? ParseCliToken(File.ReadAllText(path)) : null;
+        }
+        catch (IOException)
+        {
+            return null; // mid-write by module-init; the next attempt reads it
+        }
+    }
+
+    /// <summary>The <c>spacetimedb_token = "…"</c> entry of a <c>spacetime</c> CLI config.</summary>
+    internal static string? ParseCliToken(string toml)
+    {
+        foreach (var raw in toml.Split('\n'))
+        {
+            var line = raw.Trim();
+            var eq = line.IndexOf('=');
+            if (eq < 0 || line[..eq].Trim() != "spacetimedb_token")
+            {
+                continue;
+            }
+            var value = line[(eq + 1)..].Trim().Trim('"');
+            return value.Length > 0 ? value : null;
+        }
+        return null;
+    }
+
+    /// <summary>The <c>hex_identity</c> claim of a SpacetimeDB-issued token, or null.</summary>
+    internal static string? IdentityOfToken(string token)
+    {
+        var parts = token.Trim().Split('.');
+        if (parts.Length != 3)
+        {
+            return null;
+        }
+        try
+        {
+            using var payload = JsonDocument.Parse(Base64UrlEncoder.DecodeBytes(parts[1]));
+            return payload.RootElement.ValueKind == JsonValueKind.Object
+                && payload.RootElement.TryGetProperty("hex_identity", out var hex)
+                && hex.ValueKind == JsonValueKind.String && hex.GetString() is { Length: 64 } id && id.All(Uri.IsHexDigit)
+                ? id.ToLowerInvariant()
+                : null;
+        }
+        catch (Exception ex) when (ex is JsonException or FormatException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Registers the archive-worker's identity (read from its persisted token)
+    /// as the module's archive service. Returns false while that token does not
+    /// exist yet (the worker has not started) or no admin credential is available.
+    /// Idempotent: re-registering the same identity changes nothing.
+    /// </summary>
+    public async Task<bool> RegisterArchiveServiceAsync(CancellationToken ct = default)
+    {
+        var path = options.ArchiveWorkerTokenFile;
+        if (path is null || !File.Exists(path) || (await ResolveAdminTokensAsync()).Count == 0)
+        {
+            return false;
+        }
+        var identity = IdentityOfToken(await File.ReadAllTextAsync(path, ct))
+            ?? throw new InvalidOperationException($"{path} does not hold a SpacetimeDB token.");
+
+        // set_archive_service_identity(Identity): an Identity is a one-field
+        // product, so the single argument is ["0x<hex>"].
+        await PostAdminReducerAsync(
+            "set_archive_service_identity", new List<object> { new[] { "0x" + identity } }, ct);
+        logger.LogInformation("Registered archive-worker identity {Identity}.", identity);
+        return true;
+    }
 
     /// <summary>
     /// Authorizes a LiveKit voice room by checking — <em>as the user</em> — that
@@ -849,11 +934,9 @@ public sealed class SpacetimeClient(
         // admin yet. The configured bootstrap token is the credential that still
         // holds admin at this moment. Afterwards, admin ops switch to minted
         // tokens automatically and this token is no longer needed.
-        if (string.IsNullOrWhiteSpace(options.SpacetimeServiceToken))
-        {
-            throw new InvalidOperationException(
-                "SPACETIMEDB_SERVICE_TOKEN is not configured; cannot run the identity migration.");
-        }
+        var serviceToken = ServiceToken() ?? throw new InvalidOperationException(
+            "No module-owner token (SPACETIMEDB_SERVICE_TOKEN or SPACETIMEDB_SERVICE_TOKEN_FILE); "
+            + "cannot run the identity migration.");
         if (pairs.Count == 0)
         {
             return;
@@ -876,7 +959,7 @@ public sealed class SpacetimeClient(
         {
             Content = ReducerArgs(args),
         };
-        request.Headers.Authorization = new("Bearer", options.SpacetimeServiceToken);
+        request.Headers.Authorization = new("Bearer", serviceToken);
 
         var response = await http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)

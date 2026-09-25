@@ -53,6 +53,10 @@ public sealed class SpacetimeTokenService
         {
             _rsa.ImportFromPem(ReadPrivateKeyPem(options.SpacetimeOidcPrivateKey));
         }
+        else if (options.SpacetimeOidcKeyFile is { } keyFile)
+        {
+            _rsa.ImportFromPem(LoadOrCreateKeyFile(keyFile, _rsa));
+        }
         // else: dev — a freshly generated in-memory key. Identities are unaffected
         // (they hash iss+sub only, never the key), and JWKS is fetched live so
         // SpacetimeDB verifies against this process's public key.
@@ -66,6 +70,35 @@ public sealed class SpacetimeTokenService
         _key = new RsaSecurityKey(_rsa);
         _key.KeyId = Base64UrlEncoder.Encode(_key.ComputeJwkThumbprint());
         _credentials = new SigningCredentials(_key, SecurityAlgorithms.RsaSha256);
+    }
+
+    /// <summary>
+    /// Reads the persisted signing key, or — on the very first start — persists
+    /// the freshly generated <paramref name="generated"/> key there. Written
+    /// owner-only and via a temp file + rename, so a crash mid-write can never
+    /// leave a truncated key that would fail every later start.
+    /// </summary>
+    internal static string LoadOrCreateKeyFile(string path, RSA generated)
+    {
+        if (File.Exists(path))
+        {
+            return File.ReadAllText(path);
+        }
+
+        var pem = generated.ExportPkcs8PrivateKeyPem();
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        var temp = path + ".tmp";
+        var fileOptions = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
+        if (!OperatingSystem.IsWindows())
+        {
+            fileOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
+        using (var writer = new StreamWriter(new FileStream(temp, fileOptions)))
+        {
+            writer.Write(pem);
+        }
+        File.Move(temp, path, overwrite: false);
+        return pem;
     }
 
     /// <summary>
@@ -110,7 +143,8 @@ public sealed class SpacetimeTokenService
         throw new InvalidOperationException(
             "SPACETIME_OIDC_PRIVATE_KEY is set but is neither a PEM, a base64-encoded PEM, "
             + "nor a path to an existing PEM file. Generate one with: "
-            + "openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | base64");
+            + "openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | base64 | tr -d '\\n' "
+            + "— or leave it unset and let core-api generate and keep one (SPACETIME_OIDC_KEY_FILE).");
     }
 
     /// <summary>
