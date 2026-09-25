@@ -91,7 +91,7 @@ import { GITHUB_REPO } from "@/lib/site";
           </li>
         </ul>
         <p class="guide-prose">
-          The browser client reads <em>your</em> server address (<code>VITE_WEB_CONNECT_URL</code>) when its
+          The browser client takes <em>your</em> server address (<code>DISCOVERY_AUTH_URL</code>) when its
           container starts, so it's locked to this one instance and skips the setup screen entirely. Hosting it is optional — leave <code>app</code> out and the desktop app still works.
           This guide sets up both; the browser-only bits are clearly marked.
         </p>
@@ -209,16 +209,7 @@ ADMIN_BOOTSTRAP_EMAIL=you@example.com
 MINIO_PUBLIC_ENDPOINT=https://files.example.com
 DISCOVERY_SPACETIMEDB_URI=wss://chat.example.com
 DISCOVERY_AUTH_URL=https://auth.example.com
-DISCOVERY_LIVEKIT_URL=wss://lk.example.com
-
-# Same hostnames again — hostnames only, no https:// — for the browser client's
-# Content-Security-Policy. Your tunnel ingress does the routing; these tell the
-# web container which hosts the page may talk to. Required: the policy is
-# enforced, and the web container refuses to start if one is missing.
-AUTH_DOMAIN=auth.example.com
-CHAT_DOMAIN=chat.example.com
-FILES_DOMAIN=files.example.com
-LIVEKIT_DOMAIN=lk.example.com`} />
+DISCOVERY_LIVEKIT_URL=wss://lk.example.com`} />
 
         <Callout type="warning" title="Generate SPACETIME_OIDC_PRIVATE_KEY once, then never change it">
           <p>
@@ -243,14 +234,10 @@ LIVEKIT_DOMAIN=lk.example.com`} />
 
         <h3 class="text-lg font-medium pt-3">Hosting the browser client (optional)</h3>
         <p class="guide-prose">
-          Want people to use LetsChat from a browser at <code>app.example.com</code>? Set these three.
-          Skip them and only the desktop app is served — everything else is unaffected.
+          Want people to use LetsChat from a browser at <code>app.example.com</code>? It connects to
+          <code>DISCOVERY_AUTH_URL</code> on its own; add the <code>app</code> route in Step 5, and optionally:
         </p>
-        <CodeBlock label=".env" code={`# Browser client — read when the web container starts, so it auto-connects
-# to THIS instance. Point it at auth.<domain>, which serves discovery.
-VITE_WEB_CONNECT_URL=https://auth.example.com
-
-# Let the browser fetch presigned download URLs from MinIO. Pin to the web
+        <CodeBlock label=".env" code={`# Let the browser fetch presigned download URLs from MinIO. Pin to the web
 # origin (or "*" to allow any).
 MINIO_CORS_ALLOW_ORIGIN=https://app.example.com
 
@@ -324,7 +311,7 @@ app.example.com    ->  http://web:80               # browser client (omit if not
         </p>
         <CodeBlock label="terminal" code={`docker logs -f letschat-module-init`} />
         <Callout type="note" title="Changing the browser client's address">
-          Changed <code>VITE_WEB_CONNECT_URL</code> later? Recreate just that container:
+          Changed one of the public URLs later? Recreate just the web container:
           <code>docker compose … up -d web</code>. No rebuild — the address is applied at start.
         </Callout>
 

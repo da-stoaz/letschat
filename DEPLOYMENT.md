@@ -81,17 +81,21 @@ The `web` service serves the React/Vite bundle as static files, so users can
 reach LetsChat from a browser without installing the desktop app. Its image
 (`ghcr.io/da-stoaz/letschat-web`) is built once per release by GitHub Actions
 like every other service; nothing is compiled on the server. It is
-**single-tenant**: at start the container writes `VITE_WEB_CONNECT_URL` into
+**single-tenant**: at start the container writes `DISCOVERY_AUTH_URL` into
 `/config.js`, which the page loads before the app, so a browser hitting
 `app.<domain>` auto-discovers this instance via
 `auth.<domain>/.well-known/letschat.json` and goes straight to login — no
 setup screen. Desktop builds are unaffected (the var is unset there).
 
-Required env (see the `.env.production.*.example` files):
+The container takes everything it needs from the URLs core-api already
+advertises — `DISCOVERY_AUTH_URL` as the connect address, and the hosts of all
+four public URLs for its Content-Security-Policy — so nothing is entered twice.
+`VITE_WEB_CONNECT_URL` and `AUTH_DOMAIN`/`CHAT_DOMAIN`/`FILES_DOMAIN`/
+`LIVEKIT_DOMAIN` still work as overrides.
+
+Other env (see the `.env.production.*.example` files):
 
 - `APP_DOMAIN=app.example.com` — Caddy hostname (Caddy track only).
-- `VITE_WEB_CONNECT_URL=https://auth.example.com` — applied at container start
-  (auth.<domain> serves the discovery document).
 - `VITE_WEB_WS_COMPRESSION=gzip` — DB WebSocket compression in browsers
   (`gzip` default, or `none`). The client auto-downgrades to `none` if a gzip
   socket fails to establish, so this never strands a user.
@@ -106,9 +110,10 @@ Routing:
 - **Tunnel track**: add an ingress rule `app.<domain> -> http://web:80` in the
   Cloudflare Zero Trust dashboard (WebSocket not required — static files only).
 
-> After changing `VITE_WEB_CONNECT_URL` or `VITE_WEB_WS_COMPRESSION`, recreate
-> the container: `docker compose ... up -d web`. The container refuses to start
-> if the URL is not an `http(s)://` address or the compression is not `gzip`/`none`.
+> After changing a public URL or `VITE_WEB_WS_COMPRESSION`, recreate the
+> container: `docker compose ... up -d web`. It refuses to start, naming the
+> variable, if a URL is missing or malformed or the compression is not
+> `gzip`/`none`.
 
 ## Legacy `auth.db` import
 
@@ -510,7 +515,7 @@ the owner credential.
 | MinIO CORS | `MINIO_CORS_ALLOW_ORIGIN` | Keep `*`. Gates the presigned **upload** PUT as well as downloads, and the desktop app's origin is `tauri://localhost` / `http://tauri.localhost` — pinning to `https://app.<domain>` alone silently blocks every desktop upload at the CORS preflight |
 | Discovery JSON | `DISCOVERY_SPACETIMEDB_URI`, `DISCOVERY_AUTH_URL`, `DISCOVERY_LIVEKIT_URL`, `DISCOVERY_DATABASE` | Served by core-api at `/.well-known/letschat.json`. The three URLs are handed to clients verbatim; they default to `localhost`, so core-api refuses to start in Production if any is left on a loopback address |
 | Tunnel only | `CLOUDFLARE_TUNNEL_TOKEN` | Required by `cloudflared` service |
-| Service domains | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | **Hostnames only** (`auth.example.com`, no `https://`, no path). On the Caddy track they are Caddy's virtual hosts, so nothing is served without them. On **both tracks** the first four also build the browser client's enforced Content-Security-Policy (`deploy/web/Caddyfile`) and must match the hosts in `DISCOVERY_*` and `MINIO_PUBLIC_ENDPOINT`; the `web` container refuses to start if one is missing or contains a scheme |
+| Service domains | `AUTH_DOMAIN`, `CHAT_DOMAIN`, `FILES_DOMAIN`, `LIVEKIT_DOMAIN`, `APP_DOMAIN` | **Caddy track only**, hostnames only (`auth.example.com`, no `https://`): Caddy's virtual hosts, matching the hosts in `DISCOVERY_*` and `MINIO_PUBLIC_ENDPOINT`. The `web` container derives its Content-Security-Policy hosts from those URLs itself, so the tunnel track needs none of these |
 
 ## Upload limits and multipart transfers
 

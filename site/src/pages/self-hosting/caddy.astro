@@ -143,8 +143,7 @@ DISCOVERY_AUTH_URL=https://auth.example.com
 DISCOVERY_LIVEKIT_URL=wss://lk.example.com
 
 # Caddy virtual-host names — hostnames only, no https://. They must match the
-# DNS records above and the hosts in the URLs above: the browser client's
-# Content-Security-Policy only allows these hosts.
+# DNS records above and the hosts in the URLs above.
 AUTH_DOMAIN=auth.example.com
 CHAT_DOMAIN=chat.example.com
 FILES_DOMAIN=files.example.com
@@ -185,9 +184,7 @@ EMAIL_FROM_ADDRESS=no-reply@example.com`} />
           For the browser client at <code>app.example.com</code>, also set these. Skip them (and the
           <code>APP_DOMAIN</code> above) to serve the desktop app only.
         </p>
-        <CodeBlock label=".env" code={`# Read when the web container starts, so it auto-connects to THIS
-# instance. Point at auth.<domain>, which serves the discovery document.
-VITE_WEB_CONNECT_URL=https://auth.example.com
+        <CodeBlock label=".env" code={`# The browser client connects to DISCOVERY_AUTH_URL on its own.
 
 # Let the browser fetch presigned download URLs from MinIO.
 MINIO_CORS_ALLOW_ORIGIN=https://app.example.com
@@ -223,9 +220,8 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
         <p class="guide-prose"><code>module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
         <CodeBlock label="terminal" code={`docker logs letschat-module-init`} />
         <Callout type="note">
-          Hosting the browser client? If you change <code>VITE_WEB_CONNECT_URL</code> later, recreate just that
-          container with <code>docker compose … up -d web</code> — no rebuild, the address is applied at start.
-        </Callout>
+          Hosting the browser client? If you change one of the public URLs later, recreate just that
+          container with <code>docker compose … up -d web</code> — no rebuild, the address is applied at start.</Callout>
 
         <h3 class="text-lg font-medium pt-3">Give core-api the module owner's key — required, before anyone signs in</h3>
         <p class="guide-prose">

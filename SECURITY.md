@@ -121,6 +121,8 @@ never implicitly promoted. Remove the account-bootstrap values after first use.
 - Terminate TLS at the documented Caddy or Cloudflare ingress.
 - Expose only the documented public web/API, SpacetimeDB, LiveKit, and MinIO
   routes. PostgreSQL and the admin listener stay private.
+- The web client's CSP hosts come from the advertised public URLs
+  (`DISCOVERY_*`, `MINIO_PUBLIC_ENDPOINT`), so it can never drift from them.
 - Use unique generated values for PostgreSQL, MinIO, LiveKit, session JWT, OIDC
   signing, SpacetimeDB admin, archive, and tunnel secrets.
 - Keep `SPACETIME_OIDC_ISSUER`, discovery URLs, and externally visible MinIO

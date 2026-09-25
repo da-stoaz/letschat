@@ -349,16 +349,20 @@ services:
     image: ghcr.io/da-stoaz/letschat-web:${LETSCHAT_VERSION:-latest}
     container_name: letschat-web
     environment:
-      # The instance the browser client locks onto (written into /config.js).
-      # Changing it needs a restart of this container, not a rebuild.
-      VITE_WEB_CONNECT_URL: "${VITE_WEB_CONNECT_URL:-}"
+      # The same public URLs core-api advertises. The container derives the
+      # browser client's connect URL (DISCOVERY_AUTH_URL) and the
+      # Content-Security-Policy hosts from them; nothing is entered twice.
+      DISCOVERY_AUTH_URL: "${DISCOVERY_AUTH_URL}"
+      DISCOVERY_SPACETIMEDB_URI: "${DISCOVERY_SPACETIMEDB_URI}"
+      DISCOVERY_LIVEKIT_URL: "${DISCOVERY_LIVEKIT_URL}"
+      MINIO_PUBLIC_ENDPOINT: "${MINIO_PUBLIC_ENDPOINT}"
       VITE_WEB_WS_COMPRESSION: "${VITE_WEB_WS_COMPRESSION:-gzip}"
-      # Service hostnames for the Content-Security-Policy in deploy/web/Caddyfile
-      # — same values the edge proxy uses. Required; checked at start.
-      AUTH_DOMAIN: "${AUTH_DOMAIN}"
-      CHAT_DOMAIN: "${CHAT_DOMAIN}"
-      FILES_DOMAIN: "${FILES_DOMAIN}"
-      LIVEKIT_DOMAIN: "${LIVEKIT_DOMAIN}"
+      # Optional overrides; empty means "derive from the URLs above".
+      VITE_WEB_CONNECT_URL: "${VITE_WEB_CONNECT_URL:-}"
+      AUTH_DOMAIN: "${AUTH_DOMAIN:-}"
+      CHAT_DOMAIN: "${CHAT_DOMAIN:-}"
+      FILES_DOMAIN: "${FILES_DOMAIN:-}"
+      LIVEKIT_DOMAIN: "${LIVEKIT_DOMAIN:-}"
     ports:
       - "127.0.0.1:44310:80"
     restart: unless-stopped

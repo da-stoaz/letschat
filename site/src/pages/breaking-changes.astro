@@ -5,6 +5,14 @@ import SiteFooter from "@/components/SiteFooter.astro";
 
 const changes = [
   {
+    version: "v1.2.2",
+    date: "September 2026",
+    items: [
+      "Nothing is entered twice any more: the web container derives the browser client's connect address from DISCOVERY_AUTH_URL and its Content-Security-Policy hosts from DISCOVERY_AUTH_URL, DISCOVERY_SPACETIMEDB_URI, DISCOVERY_LIVEKIT_URL and MINIO_PUBLIC_ENDPOINT. On the tunnel track, VITE_WEB_CONNECT_URL and AUTH_DOMAIN / CHAT_DOMAIN / FILES_DOMAIN / LIVEKIT_DOMAIN are no longer needed. The Caddy track still sets the *_DOMAIN values, because they are Caddy's virtual hosts.",
+    ],
+    migration: "Nothing required: existing values keep working as overrides. Download the new docker-compose.prod.base.yml (it passes the URLs to the web container), then you may delete the duplicated lines from .env.",
+  },
+  {
     version: "v1.2.1",
     date: "September 2026",
     items: [
