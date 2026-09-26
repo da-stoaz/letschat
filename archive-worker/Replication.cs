@@ -245,8 +245,8 @@ public sealed class Replication(ArchiveDatabase db, ILogger<Replication> logger)
         {
             logger.LogError(
                 "Refusing to reconcile: every archive_* view returned 0 rows. This almost always "
-                + "means this worker's identity is NOT registered — run set_archive_service_identity "
-                + "with the identity logged above. Reconciling now would DELETE the entire archive. "
+                + "means this worker's identity is NOT registered — check core-api bootstrap logs "
+                + "if this persists. Reconciling now would DELETE the entire archive. "
                 + "(If the module is genuinely empty, there is nothing to reconcile either.)");
             return;
         }

@@ -5,6 +5,16 @@ import SiteFooter from "@/components/SiteFooter.astro";
 
 const changes = [
   {
+    version: "v1.2.4",
+    date: "September 2026",
+    items: [
+      "The public chat API now allows only the letschat WebSocket and token exchange. Anonymous database publishing, SQL and all other API routes return 404. Existing tunnel routes and host proxies on port 44300 keep working; the administrative API moves to loopback port 44302.",
+      "core-api reads the publisher and archive-worker credentials from read-only volume mounts and completes setup automatically, retrying transient failures. New registrations fail closed until the issuer is pinned. No token copying or manual archive registration is needed.",
+      "Fresh installs generate an OIDC signing key in core_api_data. Existing explicit signing keys remain authoritative. Bootstrap-admin creation is skipped whenever any administrator already exists.",
+    ],
+    migration: "Download the base Compose file and your overlay together; on the Caddy track also update deploy/caddy/Caddyfile. Use Compose 2.23.1+ and the matching 1.2.4 images. Preserve existing volumes and any SPACETIME_OIDC_PRIVATE_KEY override, then pull and up -d. Include core_api_data in backups. Tunnel ingress names are unchanged; never expose administrative port 44302.",
+  },
+  {
     version: "v1.2.3",
     date: "September 2026",
     items: [
@@ -16,7 +26,7 @@ const changes = [
       "Public hostnames are entered once on both tracks: AUTH_DOMAIN, CHAT_DOMAIN, FILES_DOMAIN, LIVEKIT_DOMAIN and optional APP_DOMAIN. Compose builds the service URLs; native Caddy configuration handles routing, CSP and /config.js without entrypoint scripts. Remove DISCOVERY_* URL settings, MINIO_PUBLIC_ENDPOINT and VITE_WEB_CONNECT_URL from the deployment .env. HTTPS is the default; PUBLIC_SCHEME=http enables LAN HTTP. The client SDKs open WebSockets from the generated HTTP(S) service URLs. Empty APP_DOMAIN omits the Caddy browser site.",
       "SPACETIMEDB_MODULE_NAME and DISCOVERY_DATABASE are fixed to letschat in the compose file, like module-init's publish target — changing only one of them used to point core-api or clients at a database that does not exist.",
     ],
-    migration: "Download the new docker-compose.prod.base.yml (and your track's overlay) and livekit/config.prod.yaml. On the Caddy track also download deploy/caddy/Caddyfile. Configure the hostnames once using the updated .env example; no separate public URLs or shell scripts are needed. Then pull and up -d. Replace any change-me… value still in .env before pulling, or core-api will not start and names the variable in docker compose logs core-api. Set APP_DOMAIN=app.<domain> if you host the browser client. On the tunnel track, add the Cloudflare WAF rule for /sql described in the guide.",
+    migration: "Download the new docker-compose.prod.base.yml (and your track's overlay) and livekit/config.prod.yaml. On the Caddy track also download deploy/caddy/Caddyfile. Configure the hostnames once using the updated .env example; no separate public URLs or shell scripts are needed. Then pull and up -d. Replace any change-me… value still in .env before pulling, or core-api will not start and names the variable in docker compose logs core-api. Set APP_DOMAIN=app.<domain> if you host the browser client.",
   },
   {
     version: "v1.2.2",

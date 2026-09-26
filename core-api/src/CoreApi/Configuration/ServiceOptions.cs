@@ -145,12 +145,27 @@ public sealed class ServiceOptions
     /// <summary>
     /// Bearer token for the SpacetimeDB module owner. The module's init reducer
     /// creates that publisher identity's admin row, so no public account is used
-    /// for bootstrap. Optional — when unset, instance-admin features that require
-    /// SpacetimeDB writes are disabled in the panel. Retrieve the persisted
-    /// publisher credential with <c>spacetime login show --token</c> in the same
-    /// CLI data directory that published the module, then set this variable.
+    /// for bootstrap. Optional override: Compose normally reads the persisted
+    /// publisher credential via <see cref="SpacetimeServiceTokenFile"/>.
     /// </summary>
     public string? SpacetimeServiceToken { get; init; }
+
+    /// <summary>
+    /// The <c>spacetime</c> CLI config (<c>cli.toml</c>) of the identity that
+    /// published the module. Compose mounts module-init's volume read-only and
+    /// points this at it, so core-api reads the owner credential itself instead
+    /// of an operator copying it into <c>.env</c>. Re-read on every use: on a
+    /// fresh install the file only appears once module-init has run.
+    /// <see cref="SpacetimeServiceToken"/>, when set, wins.
+    /// </summary>
+    public string? SpacetimeServiceTokenFile { get; init; }
+
+    /// <summary>
+    /// The archive-worker's persisted SpacetimeDB token. When set, core-api
+    /// registers that identity as the archive service itself, so replication
+    /// starts without a manual <c>set_archive_service_identity</c> call.
+    /// </summary>
+    public string? ArchiveWorkerTokenFile { get; init; }
 
     // ── OIDC issuer for SpacetimeDB (identity-authority-inversion) ───────────
 
@@ -172,6 +187,14 @@ public sealed class ServiceOptions
     /// restarts publish a consistent JWKS.
     /// </summary>
     public string? SpacetimeOidcPrivateKey { get; init; }
+
+    /// <summary>
+    /// Where core-api keeps a signing key it generated itself when
+    /// <see cref="SpacetimeOidcPrivateKey"/> is unset. Compose points this at a
+    /// persistent volume, so the key survives restarts and upgrades without an
+    /// operator ever handling it.
+    /// </summary>
+    public string? SpacetimeOidcKeyFile { get; init; }
 
     public static ServiceOptions FromConfiguration(IConfiguration config)
     {
@@ -265,9 +288,12 @@ public sealed class ServiceOptions
             SpacetimeHttpUrl = Get("SPACETIMEDB_HTTP_URL", "http://localhost:4300"),
             SpacetimeModuleName = Get("SPACETIMEDB_MODULE_NAME", "letschat"),
             SpacetimeServiceToken = GetOptional("SPACETIMEDB_SERVICE_TOKEN"),
+            SpacetimeServiceTokenFile = GetOptional("SPACETIMEDB_SERVICE_TOKEN_FILE"),
+            ArchiveWorkerTokenFile = GetOptional("ARCHIVE_WORKER_TOKEN_FILE"),
 
             SpacetimeOidcIssuer = Get("SPACETIME_OIDC_ISSUER", DevSpacetimeOidcIssuer),
             SpacetimeOidcPrivateKey = GetOptional("SPACETIME_OIDC_PRIVATE_KEY"),
+            SpacetimeOidcKeyFile = GetOptional("SPACETIME_OIDC_KEY_FILE"),
         };
     }
 
@@ -319,8 +345,9 @@ public sealed class ServiceOptions
         // ever corrected, silently orphan every account. Force an explicit value.
         Check("SPACETIME_OIDC_ISSUER", SpacetimeOidcIssuer, DevSpacetimeOidcIssuer);
         // Without a stable signing key, JWKS differs per instance/restart and
-        // tokens fail to verify. Require one in prod.
-        if (string.IsNullOrWhiteSpace(SpacetimeOidcPrivateKey))
+        // tokens fail to verify. Require one in prod — either configured, or a
+        // file core-api persists its own generated key to.
+        if (string.IsNullOrWhiteSpace(SpacetimeOidcPrivateKey) && SpacetimeOidcKeyFile is null)
         {
             issues.Add("SPACETIME_OIDC_PRIVATE_KEY");
         }

@@ -21,7 +21,7 @@ The deployment invariants and known residual risks are summarized in
 
 Shared core services:
 
-- `docker-compose.prod.base.yml` — `spacetimedb`, `postgres`, `core-api`,
+- `docker-compose.prod.base.yml` — `spacetimedb`, `chat-edge`, `postgres`, `core-api`,
   `module-init`, `archive-worker`, `livekit`, `minio`, `minio-init`, `web`
   (hosted browser SPA).
 
@@ -37,7 +37,7 @@ the first success marks the container healthy immediately and ends the grace
 period early. Once the grace period ends, three consecutive failures mark it
 unhealthy (probe runtime adds to the interval). Later successful probes restore
 healthy status. `start_interval`
-requires Docker Engine 25+ and Compose 2.20.2+.
+requires Docker Engine 25+. Use Compose 2.23.1+ for the inline chat-edge configuration.
 
 These probes check API responsiveness and LiveKit node health, not dependency
 health or end-to-end media delivery. Docker does not restart a container just
@@ -62,15 +62,13 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
 ```
 
-Caddy answers SpacetimeDB's raw `/sql` HTTP endpoint on `chat.<domain>` with
-403; a tunnel forwards it. Add the same block at the Cloudflare edge — Security
-→ WAF → Custom rules, available on the Free plan:
-
-- Expression: `(http.host eq "chat.example.com" and ends_with(http.request.uri.path, "/sql"))`
-- Action: **Block**
-
-It is defence in depth: the sensitive tables are private in the module anyway,
-and core-api reaches `/sql` over the Docker network, not through the tunnel.
+Both overlays route `spacetimedb:3000` through `chat-edge`. It allows only
+`POST /v1/identity/websocket-token` and `GET /v1/database/letschat/subscribe`;
+CORS preflights for the token exchange are answered locally. Every other path
+or method returns 404, including publish, SQL, identity creation and other
+databases. No tunnel-route changes or additional WAF rules are needed.
+Host proxies keep using `127.0.0.1:44300`; the administrative API is available
+only on `127.0.0.1:44302` and the internal Docker network. Never proxy :44302.
 
 ### Caddy track
 
@@ -199,15 +197,17 @@ then `docker volume rm letschat_auth_data`.
 > line. Upgrade the CLI with `spacetime version upgrade`. A minor-version skew
 > breaks module load and the client connection.
 
-After the stack is up, publish the module:
+`module-init` publishes automatically using its persisted owner identity. No
+host CLI or second publish is needed. For administrative CLI commands, use the
+same identity inside Compose, for example:
 
 ```bash
-spacetime publish --server http://127.0.0.1:44300 letschat --module-path server --yes
+docker compose -f docker-compose.prod.base.yml run --rm module-init \
+  sql -s http://spacetimedb:3000 letschat "SELECT trusted_issuer FROM system_settings"
 ```
 
-`--yes` is safe for the **first** publish of a fresh deployment. For later
-schema updates, drop `--yes` so SpacetimeDB prompts before any destructive
-migration instead of wiping data.
+A separately installed CLI reaches the raw API at `http://127.0.0.1:44302`
+and must authenticate as the module owner. Port :44300 is the client filter.
 
 ## Upgrading a running deployment
 
@@ -228,7 +228,7 @@ wget -O docker-compose.prod.base.yml https://raw.githubusercontent.com/da-stoaz/
 wget -O docker-compose.prod.<track>.yml https://raw.githubusercontent.com/da-stoaz/letschat/main/docker-compose.prod.<track>.yml
 wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/da-stoaz/letschat/main/livekit/config.prod.yaml
 wget -O spacetimedb/config.prod.toml https://raw.githubusercontent.com/da-stoaz/letschat/main/spacetimedb/config.prod.toml
-LETSCHAT_VERSION=1.2.3   # in .env
+LETSCHAT_VERSION=1.2.4   # in .env
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml up -d
 ```
@@ -272,46 +272,23 @@ the compose file itself, so downloading it is what moves them.
 > identity was already ephemeral. Treat the first 1.0.0 upgrade of such a
 > deployment as a fresh install (or plan the rename + archive-rebuild above).
 
-## Promoting core-api as a SpacetimeDB admin (required)
+## Automatic SpacetimeDB bootstrap
 
-core-api acts as the chat module's admin with the module owner's credential
-(`SPACETIMEDB_SERVICE_TOKEN`). Without it core-api cannot pin its OIDC issuer —
-so the module keeps accepting chat registrations from any identity over the
-public WebSocket — and it cannot sync the Admin role, push account suspension
-and token revocation, release the fresh-database storage fence, run attachment
-cleanup, or save the **Spaces → create policy** card on `/admin/config`. Do this
-on every new deployment, before anyone signs in.
+core-api mounts `module_init_home` read-only and reads the publisher token from
+`.config/spacetime/cli.toml`. It pins its OIDC issuer automatically, retrying
+every ten seconds until the module and credentials are ready. No token copying
+or admin login is required. `SPACETIMEDB_SERVICE_TOKEN` remains an optional
+explicit override. Missing credentials or failed setup are logged and retried.
 
-Run this once, after `module-init` has published the database:
+The publisher receives the reserved `@module-owner` admin row at module init.
+Public registrations never receive admin just for arriving first. Until the
+issuer is pinned, new chat registrations are rejected; existing accounts keep
+working. The human bootstrap account is created only when no admin exists.
+Once another admin exists, deleting the bootstrap account does not recreate it
+on restart.
 
-> **Where the first admin comes from.** The module's `init` reducer creates a
-> reserved `@module-owner` user for the publishing identity and marks it admin.
-> That identity already controls the module code, and Compose persists its CLI
-> credentials in `module_init_home`. A public account is never promoted merely
-> for registering first.
-
-```bash
-# 1. Read the persisted publisher identity and token from module-init's volume.
-#    Use the same compose files as the running deployment.
-docker compose -f docker-compose.prod.base.yml \
-  -f docker-compose.prod.<track>.yml \
-  run --rm module-init login show --token
-
-# 2. Copy the reported token into .env, then recreate core-api so Compose loads it.
-SPACETIMEDB_SERVICE_TOKEN=<publisher-token>
-docker compose -f docker-compose.prod.base.yml \
-  -f docker-compose.prod.<track>.yml \
-  up -d --force-recreate core-api
-
-# 3. Verify: core-api logs the trusted-issuer pin. After the configured human
-#    bootstrap admin signs in, /admin/config shows the Spaces card as editable.
-```
-
-The module retains an explicit admin grant when the target account has not yet
-created its chat-side row; `register_user` consumes that grant on first connect.
-This keeps the normal sign-in-before-WebSocket ordering race-free. If you skip
-the service token, admin writes remain unavailable and the trusted OIDC issuer
-cannot be pinned, so do not expose a fresh deployment in that state.
+Keep `module_init_home`, `archive_worker_data` and `core_api_data` with your
+backups. Existing explicit OIDC keys must remain configured during an upgrade.
 
 ## Cold archive (durability)
 
@@ -327,72 +304,25 @@ drain → `--delete-data` → rebuild from Postgres.
 It runs by default in the production compose. `core-api` owns the schema and
 creates the `archive` database on startup; the worker only writes to it.
 
-### One-time bootstrap — replication does not start until you do this
+### Automatic identity registration
 
-The `archive_*` views are gated to a registered service identity, so a fresh
-worker sees nothing until an instance admin registers it.
+core-api reads the worker token from a read-only mount of `archive_worker_data`
+and registers its identity automatically. The worker's existing subscription
+then receives the archive views without a reconnect or manual command.
+Check both setup and actual replication:
 
 ```bash
-# 1. Start the stack, then read the identity the worker was issued.
-docker compose -f docker-compose.prod.base.yml logs archive-worker | grep "identity"
-
-# It logs the exact command to run, e.g.:
-#   Archive worker identity: c200a1f...
-#   If the archive views are empty, register this identity once (as an instance
-#   admin): spacetime call letschat set_archive_service_identity '["0xc200a1f..."]'
-
-# 2. Register it. The reducer is admin-gated, and note the REQUIRED 0x prefix
-#    (without it: "invalid digit found in string").
-spacetime call letschat set_archive_service_identity '["0x<identity-from-logs>"]'
-
-# 3. Verify rows are flowing.
-docker compose -f docker-compose.prod.base.yml logs archive-worker | tail -20
-#   expect: "Subscription applied; reconciling archive."
+docker compose -f docker-compose.prod.base.yml logs core-api
+# Pinned SpacetimeDB trusted issuer to http://core-api:8787.
+# Registered archive-worker identity ...
 docker compose -f docker-compose.prod.base.yml exec postgres \
-  psql -U letschat -d archive -c 'SELECT count(*) FROM archive_message;'
+  psql -U letschat -d archive -c 'SELECT count(*) FROM archive_user;'
 ```
 
-If step 2 fails with **HTTP 530**, your `spacetime` CLI identity is not an
-instance admin. Since core-api became the OIDC issuer, admin status lives on
-identities *derived from core-api accounts* — the raw CLI/publisher identity
-generally is **not** one of them. Write the row directly as the module owner
-instead:
-
-```bash
-# On a fresh instance there is no row yet — `init` does not seed one, the reducer
-# inserts it on first call — so an UPDATE would match zero rows and report
-# success while changing nothing. INSERT the singleton (id is fixed at 1):
-spacetime sql letschat \
-  "INSERT INTO archive_service (id, service_identity) VALUES (1, 0x<identity-from-logs>)"
-
-# Re-pointing an ALREADY registered worker (e.g. after its volume was recreated)
-# is the UPDATE instead:
-spacetime sql letschat \
-  "UPDATE archive_service SET service_identity = 0x<identity-from-logs> WHERE id = 1"
-```
-
-Check which one you need with
-`spacetime sql letschat "SELECT * FROM archive_service"` — no rows means INSERT.
-
-If you have no `spacetime` CLI on the host, run it through the module image using
-the publisher identity that compose already persists:
-
-```bash
-docker run --rm --network letschat_default \
-  -v letschat_module_init_home:/home/spacetime \
-  ghcr.io/da-stoaz/letschat-module:${LETSCHAT_VERSION} \
-  sql -s http://spacetimedb:3000 letschat "SELECT * FROM archive_service"
-```
-
-The identity is persisted to the `archive_worker_data` volume so it survives
-restarts. **Deleting that volume issues a new identity**, and replication stops
-until you re-register it — the reducer is idempotent, so re-running step 2 with
-the new identity is all that's needed.
-
-An unregistered worker is safe: it refuses to reconcile rather than mistaking
-empty gated views for an emptied database (which would delete the archive). It
-logs `Refusing to reconcile: every archive_* view returned 0 rows` until you
-register it.
+The fresh module's owner row should already be replicated. After sending a test
+message, verify it in `archive_message` as well. If the worker token volume is
+replaced, restart core-api so it registers the new identity. An unregistered
+worker refuses an empty reconciliation instead of erasing existing archive data.
 
 ### Rebuilding SpacetimeDB from the archive
 
@@ -455,8 +385,9 @@ it. Two consequences worth understanding before you operate this:
    its spaces and messages. **Never edit `SPACETIME_OIDC_ISSUER` after the first
    user registers.** It is set in compose rather than `.env` for that reason.
 
-`SPACETIME_OIDC_PRIVATE_KEY` is the separate signing key (base64-encoded PEM,
-see the `.env.production.*.example` files). Rotating it invalidates access
+Fresh installations generate the signing key once in `core_api_data`.
+`SPACETIME_OIDC_PRIVATE_KEY` optionally supplies an existing key (base64-encoded
+PEM); keep that override when upgrading an existing installation. Rotating it invalidates access
 tokens already issued — everyone signs in again — but leaves accounts,
 identities and data untouched.
 
@@ -474,9 +405,8 @@ moment the migration is deferred and retried on the next start.
 
 ## Who may create a chat account
 
-SpacetimeDB hands an identity to anyone who asks — `POST /v1/identity` is
-unauthenticated — and `chat.<domain>` is public, so the module cannot assume the
-caller came through core-api. Two checks in the module close that door:
+A public WebSocket can issue an anonymous identity, so the module cannot
+assume the caller came through core-api. Two checks in the module close that door:
 
 - Every client-callable reducer requires the caller to have a `User` row, i.e. a
   registered account on this instance.
@@ -486,27 +416,14 @@ caller came through core-api. Two checks in the module close that door:
   `REQUIRE_EMAIL_CONFIRMATION` and `REQUIRE_ADMIN_APPROVAL` binding on the chat
   side and not just on the HTTP API.
 
-core-api pushes its own `SPACETIME_OIDC_ISSUER` into the module with the
-`set_trusted_issuer` reducer, at startup and again whenever an administrator
-signs in. Two things follow:
+core-api sets `SPACETIME_OIDC_ISSUER` through the owner-authenticated
+`set_trusted_issuer` reducer. Its background bootstrap retries until this
+succeeds. Before then, registration fails closed. Existing registered users
+are unaffected by a temporarily absent pin.
 
-1. **The pin uses the module-owner credential.** Configure
-   `SPACETIMEDB_SERVICE_TOKEN` from `module_init_home` as described above before
-   exposing a fresh deployment. No public user participates in this bootstrap.
-
-2. **Until it is pinned, the check is off, not on.** An unpinned instance
-   behaves exactly as it did before, so publishing a new module to a running
-   deployment can never lock out its users.
-
-Confirm it took, as an instance admin:
-
-```
-spacetime sql -s <server> <database> "SELECT trusted_issuer FROM system_settings"
-```
-
-An empty result means the owner credential was absent or the module was
-unreachable when core-api last tried. Fix that configuration and restart;
-core-api logs `Pinned SpacetimeDB trusted issuer to …` when it succeeds.
+Confirm setup through `docker compose ... logs core-api`: it logs
+`Pinned SpacetimeDB trusted issuer to …` on success. Persistent bootstrap
+warnings indicate a missing owner credential or an unreachable module.
 
 ## Ending a session: disables and password resets
 
@@ -579,9 +496,9 @@ the owner credential.
 | SpacetimeDB HTTP | `SPACETIMEDB_HTTP_URL` | Where core-api reaches the module for reducer and `/sql` calls. Wired in compose to `http://spacetimedb:3000`; the code default (`localhost:4300`) is for host-run dev only and is wrong inside a container. See "Voice fails" below. The module name is fixed to `letschat` in compose for every service |
 | Secrets, generally | every `change-me…` value | core-api refuses to start while any secret (`AUTH_JWT_SECRET`, `LIVEKIT_API_SECRET`, `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY`, `POSTGRES_PASSWORD`, `ADMIN_BOOTSTRAP_PASSWORD`, `SPACETIME_OIDC_PRIVATE_KEY`) still holds the example file's placeholder — those values are public |
 | Environment | `ASPNETCORE_ENVIRONMENT` | Leave unset (`Production`). `Staging` only for a local smoke test on loopback URLs: it skips the client-reachability check, not the secret checks. Never `Development` |
-| SpacetimeDB identity | `SPACETIME_OIDC_PRIVATE_KEY` | **Required.** Signs the SpacetimeDB access token (RS256); supply a base64-encoded PEM. Generate once — replacing it forces every user to sign in again. `SPACETIME_OIDC_ISSUER` is fixed in compose and must never change (see below) |
+| SpacetimeDB identity | `SPACETIME_OIDC_PRIVATE_KEY` | **Optional override.** Fresh installs generate and persist the RS256 key in `core_api_data`; existing installs keep their explicit key. Replacing it forces every user to sign in again. `SPACETIME_OIDC_ISSUER` is fixed in compose and must never change (see below) |
 | PostgreSQL | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Only the password is mandatory; defaults are `letschat` / `auth` |
-| Cold archive | `ARCHIVE_DB` | Database name for the durable mirror, default `archive` (same Postgres instance as auth). Wired in compose for both `core-api` and `archive-worker`; needs a one-time identity registration — see "Cold archive" above |
+| Cold archive | `ARCHIVE_DB` | Database name for the durable mirror, default `archive` (same Postgres instance as auth). Wired in compose for both `core-api` and `archive-worker`; identity registration is automatic — see "Cold archive" above |
 | Bootstrap admin | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD`, `ADMIN_BOOTSTRAP_EMAIL` | First-run seeding; remove from env after first sign-in |
 | Registration policy | `REQUIRE_EMAIL_CONFIRMATION`, `REQUIRE_ADMIN_APPROVAL` | Booleans (`true`/`false`) — also runtime-editable via the admin panel |
 | Email | `EMAIL_SENDER`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_STARTTLS`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME` | `EMAIL_SENDER=smtp` for real delivery; `log` only in dev |

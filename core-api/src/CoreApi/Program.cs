@@ -97,6 +97,7 @@ builder.Services.AddSingleton<StorageService>();
 builder.Services.AddHostedService<PendingUploadSweeper>();
 builder.Services.AddHostedService<VideoThumbnailWorker>();
 builder.Services.AddHostedService<LiveKitVoiceReconciler>();
+builder.Services.AddHostedService<SpacetimeBootstrapper>();
 builder.Services.AddHttpClient(LiveKitVoiceReconciler.HttpClientName, client =>
     client.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton<StorageInventoryState>();
