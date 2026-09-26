@@ -12,14 +12,13 @@
 //     creates a `User` row, so it is the only one that has to look at the
 //     caller's token issuer.
 //
-// The whole existing suite mints SpacetimeDB-issued identities and registers
-// them, which is precisely the attack this fixes. That keeps working because
-// `trusted_issuer` is unset on a fresh database (the check is off until an
-// operator's core-api pins it) — so this file pins it explicitly, asserts the
-// behaviour, and clears it again.
+// The whole suite mints SpacetimeDB-issued identities and registers them; the
+// global setup pins SpacetimeDB's own issuer so that works. This file moves the
+// pin around to assert the gate, then puts it back.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  issuerOf,
   makeAdmin,
   makeUser,
   mintIdentity,
@@ -29,13 +28,6 @@ import {
   uniqueName,
   type TestUser,
 } from './harness'
-
-/** The `iss` claim of a token, read straight out of its JWT payload segment. */
-function issuerOf(token: string): string {
-  const payload = token.split('.')[1]
-  const json = Buffer.from(payload, 'base64url').toString('utf-8')
-  return (JSON.parse(json) as { iss: string }).iss
-}
 
 // An admin, needed to set instance-wide settings.
 //
@@ -53,8 +45,8 @@ async function setTrustedIssuer(issuer: string | null): Promise<void> {
 
 afterAll(async () => {
   try {
-    // Unpin, or every other file's SpacetimeDB-issued registrations start failing.
-    await setTrustedIssuer(null)
+    // Restore the suite-wide pin, or every other file's registrations fail.
+    await setTrustedIssuer(issuerOf(admin.token))
   } finally {
     // Give the admin bit back too, so the admin count is exactly what this file
     // found — whichever order vitest runs the files in. In `finally` because a
@@ -94,9 +86,11 @@ describe('require_account — an identity without an account has no standing', (
 })
 
 describe('require_trusted_issuer — only core-api tokens may register', () => {
-  it('is off while no issuer is pinned, so publishing cannot lock an instance out', async () => {
+  it('fails closed: nobody can register while no issuer is pinned', async () => {
+    const existing = await makeUser('existing')
     await setTrustedIssuer(null)
-    await expect(makeUser('unpinned')).resolves.toBeDefined()
+    await expect(makeUser('unpinned')).rejects.toThrow(/registration is not open yet/)
+    await expect(existing.call('create_server', [uniqueName('still_works')])).resolves.toBeUndefined()
   })
 
   it('rejects registration by a token from any other issuer', async () => {

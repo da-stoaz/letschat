@@ -5,6 +5,7 @@ services:
   caddy:
     image: caddy:2
     container_name: letschat-caddy
+    networks: [proxy, chat]
     ports:
       - "80:80"
       - "443:443"
@@ -22,7 +23,7 @@ services:
       - caddy_config:/config
     depends_on:
       - core-api
-      - spacetimedb
+      - chat-edge
       - minio
       - livekit
       - web

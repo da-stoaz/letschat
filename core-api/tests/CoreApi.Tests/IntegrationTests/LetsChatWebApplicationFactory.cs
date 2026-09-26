@@ -65,6 +65,8 @@ public sealed class LetsChatWebApplicationFactory : WebApplicationFactory<Progra
 
     /// <summary>Optional stub transport for LiveKit's room API (the voice reconciler).</summary>
     public HttpMessageHandler? LiveKitTransport { get; init; }
+    /// <summary>Extra configuration entries, applied after the defaults below.</summary>
+    public Dictionary<string, string?> ExtraConfig { get; init; } = [];
     public string? MinioEndpoint { get; init; }
     public string? MinioBucket { get; init; }
     public string? MinioAccessKey { get; init; }
@@ -121,6 +123,7 @@ public sealed class LetsChatWebApplicationFactory : WebApplicationFactory<Progra
                 ["SPACETIME_OIDC_ISSUER"] = "https://issuer.test",
                 ["SPACETIME_OIDC_PRIVATE_KEY"] = TestOidcPrivateKeyPem,
             });
+            config.AddInMemoryCollection(ExtraConfig);
         });
 
         builder.ConfigureServices(services =>

@@ -30,11 +30,11 @@
         @if (!Model.SpacetimeWriteEnabled)
         {
             <div class="alert alert-error" style="margin-bottom:14px">
-                <strong>Read-only.</strong> <code>SPACETIMEDB_SERVICE_TOKEN</code> is not
-                set on core-api, so this form can't push changes to SpacetimeDB. See the
-                <code>ServiceOptions</code> doc comment for the bootstrap (generate a
-                SpacetimeDB token, promote that identity to admin via the publisher's
-                CLI, set the env var, restart core-api).
+                <strong>Read-only.</strong> core-api has no module-owner credential yet, so
+                this form can't push changes to SpacetimeDB. With the shipped compose file it
+                reads it automatically from module-init's volume once the module is
+                published; if this stays, check <code>docker logs letschat-module-init</code>
+                and that the <code>module_init_home</code> volume is mounted into core-api.
             </div>
         }
         <div class="field">

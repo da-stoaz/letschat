@@ -88,24 +88,20 @@ fn save_settings(ctx: &ReducerContext, row: SystemSettings) {
 /// which is cheaper and, since a `User` row can only come from here, equally
 /// strict.
 ///
-/// Two deliberate holes, both of which only exist while an instance is not yet
-/// configured:
-///
-/// - **No issuer configured yet** (`trusted_issuer == None`): the check passes.
-///   Publishing this module onto a running instance must never lock out its
-///   existing users, and on a fresh instance nothing *could* have set the
-///   issuer — `set_trusted_issuer` is admin-gated and the first admin is
-///   created by the first `register_user`. core-api closes the window by
-///   pushing the issuer as soon as an admin exists (at startup, and again on an
-///   admin sign-in).
-/// - **Caller has no JWT at all**: rejected as soon as an issuer is configured.
+/// Fails closed: while no issuer is pinned, nobody can register. Existing users
+/// are unaffected (they already have a `User` row, and only this reducer checks
+/// the issuer). core-api pins its issuer with the module owner's credential —
+/// which `init` makes an admin — as soon as it starts, so on a fresh instance
+/// the closed window lasts seconds. It used to fail open, which left every
+/// instance whose operator never provisioned that credential permanently open
+/// to accounts created behind core-api's back.
 ///
 /// The issuer string is trustworthy: SpacetimeDB validates the token signature
 /// against that issuer's published JWKS before the module ever sees the call,
 /// so a caller cannot simply claim someone else's `iss`.
 pub(crate) fn require_trusted_issuer(ctx: &ReducerContext) -> Result<(), String> {
     let Some(expected) = current_settings(ctx).trusted_issuer else {
-        return Ok(());
+        return Err("registration is not open yet: the server has not finished its setup".to_string());
     };
 
     let actual = ctx
@@ -118,7 +114,7 @@ pub(crate) fn require_trusted_issuer(ctx: &ReducerContext) -> Result<(), String>
 }
 
 /// Pins the OIDC issuer whose tokens may register accounts (`None` clears it,
-/// which disables the check). Instance-admin gated.
+/// which closes registration). Instance-admin gated.
 ///
 /// Normally called by core-api rather than a human: it knows its own
 /// `SPACETIME_OIDC_ISSUER` and pushes it here, so the pinned value cannot drift

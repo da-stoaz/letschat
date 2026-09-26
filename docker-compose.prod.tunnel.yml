@@ -13,19 +13,20 @@ services:
   # host. Media stays DTLS-SRTP encrypted regardless; tunnelling signalling
   # closes the plaintext SDP/ICE/token channel an active MITM would otherwise use.
   #
-  # Caddy answers /sql on chat.<domain> with 403; a tunnel cannot. Add the
-  # equivalent Cloudflare WAF custom rule (DEPLOYMENT.md → "Cloudflare Tunnel").
+  # spacetimedb resolves to chat-edge here: only client API calls pass through.
+  # The raw database API is not on either of this proxy's networks.
   # The core-api admin panel on port 8788 must NOT be added to the tunnel —
   # reach it via SSH port-forward from an operator workstation.
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: letschat-cloudflared
+    networks: [proxy, chat]
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN}"
     depends_on:
       - core-api
-      - spacetimedb
+      - chat-edge
       - minio
       - livekit
       - web
