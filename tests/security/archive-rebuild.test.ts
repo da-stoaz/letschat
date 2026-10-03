@@ -52,17 +52,30 @@ function counterFor(tableName: string): number | null {
 }
 
 describe('archive rebuild — id allocation', () => {
+  let admin: TestUser
   let worker: TestUser
   let owner: TestUser
   let channelId: number
 
   beforeAll(async () => {
-    const admin = await makeAdmin()
+    admin = await makeAdmin()
     worker = await makeUser('wrk')
     await admin.call('set_archive_service_identity', [worker.idArg])
 
     owner = await makeUser('own')
     channelId = await createChannel(owner, await createServer(owner))
+  })
+
+  it('only the registered worker can see whether archive deletion is safe', async () => {
+    const stranger = await makeUser('archive_status')
+    expect((await stranger.sql('SELECT * FROM archive_replication_status')).rows).toEqual([])
+    await admin.call('release_storage_init_fence', [none])
+    await admin.call('rebuild_storage_references')
+    expect((await worker.sql('SELECT * FROM archive_replication_status')).rows).toEqual([{ can_delete: true }])
+
+    const id = await sendMessage(owner, channelId, 'before restore fence')
+    await restoreMessage(worker, { id, channelId, sender: owner, content: 'restore in progress' })
+    expect((await worker.sql('SELECT * FROM archive_replication_status')).rows).toEqual([{ can_delete: false }])
   })
 
   it('an organic insert does not collide with a restored row', async () => {

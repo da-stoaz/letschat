@@ -7,7 +7,7 @@ namespace CoreApi.Services;
 /// which the cold archive silently replicates nothing).
 ///
 /// <para>
-/// Retries until both are done, because on a fresh install neither can succeed
+/// Retries setup and keeps watching for replacement worker identities. On a fresh install neither can succeed
 /// at first: module-init publishes — and writes the owner credential core-api
 /// reads — only after SpacetimeDB is healthy, and the worker persists its token
 /// on its first connect. Runs after the listener is up, so SpacetimeDB can also
@@ -27,7 +27,6 @@ public sealed class SpacetimeBootstrapper(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var issuerPinned = false;
-        var archiveRegistered = options.ArchiveWorkerTokenFile is null;
 
         for (var round = 1; !stoppingToken.IsCancellationRequested; round++)
         {
@@ -39,14 +38,14 @@ public sealed class SpacetimeBootstrapper(
                     "Registration stays closed until the trusted issuer is pinned: no module-owner "
                     + "credential yet (SPACETIMEDB_SERVICE_TOKEN or SPACETIMEDB_SERVICE_TOKEN_FILE).");
             }
-            if (!archiveRegistered)
+            if (options.ArchiveWorkerTokenFile is not null)
             {
-                archiveRegistered = await AttemptAsync(
+                await AttemptAsync(
                     () => spacetime.RegisterArchiveServiceAsync(stoppingToken), loud,
                     "Archive-worker identity not registered yet: its token file or an admin "
                     + "credential is missing, so the cold archive is not replicating.");
             }
-            if (issuerPinned && archiveRegistered)
+            if (issuerPinned && options.ArchiveWorkerTokenFile is null)
             {
                 return;
             }

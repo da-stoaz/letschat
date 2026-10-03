@@ -32,15 +32,6 @@ public sealed class SpacetimeClient(
     private const string ClientName = "spacetimedb";
     internal const string StorageCleanupAuthorizationSentinel = "__letschat_cleanup_authorized__";
     /// <summary>
-    /// Optimistic: the module's own <c>storage_reference_state</c> is the truth,
-    /// and <c>claim_unreferenced_storage</c> checks it atomically. Assuming "not
-    /// ready" here made every core-api start and every transient failure run a
-    /// full-history rebuild that blocks all SpacetimeDB writes (BUG_ANALYSIS C9);
-    /// now only the module saying "not ready" triggers one.
-    /// </summary>
-    private bool _storageReferencesReady = true;
-
-    /// <summary>
     /// Builds the ordered list of credentials an admin reducer call may be signed
     /// with. Which one actually holds admin changes across the OIDC identity
     /// migration, so both are offered and the caller tries them in turn.
@@ -242,6 +233,8 @@ public sealed class SpacetimeClient(
         }
     }
 
+    private string? _registeredArchiveIdentity;
+
     /// <summary>
     /// Registers the archive-worker's identity (read from its persisted token)
     /// as the module's archive service. Returns false while that token does not
@@ -251,17 +244,20 @@ public sealed class SpacetimeClient(
     public async Task<bool> RegisterArchiveServiceAsync(CancellationToken ct = default)
     {
         var path = options.ArchiveWorkerTokenFile;
-        if (path is null || !File.Exists(path) || (await ResolveAdminTokensAsync()).Count == 0)
+        if (path is null || !File.Exists(path))
         {
             return false;
         }
         var identity = IdentityOfToken(await File.ReadAllTextAsync(path, ct))
             ?? throw new InvalidOperationException($"{path} does not hold a SpacetimeDB token.");
+        if (identity == _registeredArchiveIdentity) return true;
+        if ((await ResolveAdminTokensAsync()).Count == 0) return false;
 
         // set_archive_service_identity(Identity): an Identity is a one-field
         // product, so the single argument is ["0x<hex>"].
         await PostAdminReducerAsync(
             "set_archive_service_identity", new List<object> { new[] { "0x" + identity } }, ct);
+        _registeredArchiveIdentity = identity;
         logger.LogInformation("Registered archive-worker identity {Identity}.", identity);
         return true;
     }
@@ -505,13 +501,6 @@ public sealed class SpacetimeClient(
         }
         catch (Exception ex)
         {
-            // "storage references are not ready" after an upgrade, a module wipe
-            // or an archive restore: re-run the rebuild gate next sweep. Any
-            // other failure just skips this sweep.
-            if (ex.Message.Contains("storage references are not ready", StringComparison.Ordinal))
-            {
-                _storageReferencesReady = false;
-            }
             logger.LogWarning(ex,
                 "SpacetimeDB could not claim unreferenced storage; no objects will be deleted.");
             return null;
@@ -556,12 +545,10 @@ public sealed class SpacetimeClient(
                 .ToHashSet(StringComparer.Ordinal);
             if (!found.Remove(StorageCleanupAuthorizationSentinel))
             {
-                _storageReferencesReady = false;
                 logger.LogWarning(
                     "SpacetimeDB storage-claim view omitted its sentinel; no objects will be deleted.");
                 return null;
             }
-            _storageReferencesReady = true;
             return found;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -578,19 +565,15 @@ public sealed class SpacetimeClient(
 
     /// <summary>
     /// Ensures the module's derived object-reference table represents all live
-    /// rows before cleanup begins. Idempotent and retried after a missing view
-    /// sentinel, such as after a module wipe/rebuild while core-api stayed up.
+    /// rows before each cleanup sweep. The module makes this a cheap no-op
+    /// while ready; checking every sweep also detects restores with no objects
+    /// eligible for cleanup, without a core-api restart.
     /// </summary>
     public async Task<bool> EnsureStorageReferencesReadyAsync(CancellationToken ct = default)
     {
-        if (_storageReferencesReady)
-        {
-            return true;
-        }
         try
         {
             await PostAdminReducerAsync("rebuild_storage_references", Array.Empty<object>(), ct);
-            _storageReferencesReady = true;
             return true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -839,8 +822,8 @@ public sealed class SpacetimeClient(
     /// owner receives that credential during <c>init</c>; core-api uses it when
     /// <c>SPACETIMEDB_SERVICE_TOKEN</c> is configured. This is called both at
     /// startup and whenever an admin signs in; later calls are skipped via
-    /// <see cref="_trustedIssuerPinned"/>. Until it succeeds the module leaves
-    /// the check off rather than locking the instance out.
+    /// <see cref="_trustedIssuerPinned"/>. Until it succeeds the module rejects
+    /// new registrations.
     /// </para>
     ///
     /// <para>Returns <c>true</c> if the issuer is pinned (now or earlier).</para>

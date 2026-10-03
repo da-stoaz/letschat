@@ -5,6 +5,7 @@ import { cancelUpload, isBlockedMimeType, uploadFiles, type UploadScope } from '
 import type { Identity } from '../../types/domain'
 import type { ChatMessageAttachment } from '../../types/attachments'
 import { TypingIndicator } from './TypingIndicator'
+import { getClipboardFiles } from './clipboardFiles'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
@@ -305,6 +306,14 @@ export function ChatComposer({
       <Textarea
         ref={textareaRef}
         value={value}
+        onPaste={(event) => {
+          if (disabled || submitting) return
+          const files = getClipboardFiles(event.clipboardData)
+          if (files.length === 0) return
+          // File clipboards can also contain filenames/URLs as text.
+          event.preventDefault()
+          tryQueueFiles(files)
+        }}
         onChange={(event) => {
           setLocalError(null)
           onChange(event.target.value)

@@ -188,7 +188,7 @@ export function MessageBubble({
                       ) : null}
                     </div>
                   )}
-                  {!isEditing && message.editedAt ? <span className="ml-1 text-xs text-muted-foreground">[edited]</span> : null}
+                  {!message.deleted && !isEditing && message.editedAt ? <span className="ml-1 text-xs text-muted-foreground">[edited]</span> : null}
                   {!isEditing && isPinned ? (
                     <span className="ml-1 inline-flex items-center gap-0.5 text-xs text-muted-foreground">
                       <PinIcon className="size-3" />

@@ -307,8 +307,11 @@ creates the `archive` database on startup; the worker only writes to it.
 ### Automatic identity registration
 
 core-api reads the worker token from a read-only mount of `archive_worker_data`
-and registers its identity automatically. The worker's existing subscription
-then receives the archive views without a reconnect or manual command.
+and registers its identity automatically, including replacements while core-api
+is running. The worker waits for registration before subscribing to archive views.
+Before connecting, it validates its persisted token and replaces it automatically
+if SpacetimeDB rejects it with HTTP 401. Network/server failures do not rotate the
+identity; explicitly configured tokens remain under operator control.
 Check both setup and actual replication:
 
 ```bash
@@ -320,9 +323,17 @@ docker compose -f docker-compose.prod.base.yml exec postgres \
 ```
 
 The fresh module's owner row should already be replicated. After sending a test
-message, verify it in `archive_message` as well. If the worker token volume is
-replaced, restart core-api so it registers the new identity. An unregistered
-worker refuses an empty reconciliation instead of erasing existing archive data.
+message, verify it in `archive_message` as well. Replacing the worker token volume
+does not require a core-api restart. An unregistered worker waits. During a restore,
+replication copies messages but does not delete archive rows. After the ten-minute
+restore quiet period, core-api rebuilds the references on its next cleanup sweep;
+the running worker then automatically reconciles the archive. Token recovery
+neither resets databases nor releases restore fences.
+
+Failed archive writes are retried in order with a backoff capped at 15 seconds.
+Later writes and reconciliation watermarks wait for that operation to succeed.
+Persistent schema or database errors therefore pause replication and require
+operator attention; they are logged rather than silently skipping rows.
 
 ### Rebuilding SpacetimeDB from the archive
 
@@ -334,8 +345,13 @@ docker compose -f docker-compose.prod.base.yml run --rm \
   -e ARCHIVE_REBUILD=1 archive-worker
 ```
 
-It reloads every durable table verbatim (explicit primary keys and timestamps)
-and exits. Take a Postgres backup first — this is the copy you are restoring
+It reloads the archived tables with their original primary keys and timestamps.
+Each batch waits for the database's commit confirmation before sending the next.
+Success is logged only after every batch is confirmed; reducer failures,
+confirmation timeouts, connection failures and cancellation exit with code 1.
+A failed restore can have committed earlier batches: correct the cause and rerun
+the idempotent restore before resuming normal operation. Take a Postgres backup
+first — this is the copy you are restoring
 from, and it is the only one.
 
 Attachment cleanup is paused from the moment `--delete-data` runs: the module's

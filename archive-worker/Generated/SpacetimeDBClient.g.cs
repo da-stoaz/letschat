@@ -38,6 +38,7 @@ namespace SpacetimeDB.Types
             AddTable(ArchiveMessages = new(conn));
             AddTable(ArchivePinnedMessages = new(conn));
             AddTable(ArchiveReadStates = new(conn));
+            AddTable(ArchiveReplicationStatus = new(conn));
             AddTable(ArchiveServerMembers = new(conn));
             AddTable(ArchiveServers = new(conn));
             AddTable(ArchiveService = new(conn));
@@ -568,6 +569,7 @@ namespace SpacetimeDB.Types
             new QueryBuilder().From.ArchiveMessages().ToSql(),
             new QueryBuilder().From.ArchivePinnedMessages().ToSql(),
             new QueryBuilder().From.ArchiveReadStates().ToSql(),
+            new QueryBuilder().From.ArchiveReplicationStatus().ToSql(),
             new QueryBuilder().From.ArchiveServerMembers().ToSql(),
             new QueryBuilder().From.ArchiveServers().ToSql(),
             new QueryBuilder().From.ArchiveService().ToSql(),
@@ -608,6 +610,7 @@ namespace SpacetimeDB.Types
         public global::SpacetimeDB.Table<Message, ArchiveMessagesCols, ArchiveMessagesIxCols> ArchiveMessages() => new("archive_messages", new ArchiveMessagesCols("archive_messages"), new ArchiveMessagesIxCols("archive_messages"));
         public global::SpacetimeDB.Table<PinnedMessage, ArchivePinnedMessagesCols, ArchivePinnedMessagesIxCols> ArchivePinnedMessages() => new("archive_pinned_messages", new ArchivePinnedMessagesCols("archive_pinned_messages"), new ArchivePinnedMessagesIxCols("archive_pinned_messages"));
         public global::SpacetimeDB.Table<ReadState, ArchiveReadStatesCols, ArchiveReadStatesIxCols> ArchiveReadStates() => new("archive_read_states", new ArchiveReadStatesCols("archive_read_states"), new ArchiveReadStatesIxCols("archive_read_states"));
+        public global::SpacetimeDB.Table<ArchiveReplicationStatus, ArchiveReplicationStatusCols, ArchiveReplicationStatusIxCols> ArchiveReplicationStatus() => new("archive_replication_status", new ArchiveReplicationStatusCols("archive_replication_status"), new ArchiveReplicationStatusIxCols("archive_replication_status"));
         public global::SpacetimeDB.Table<ServerMember, ArchiveServerMembersCols, ArchiveServerMembersIxCols> ArchiveServerMembers() => new("archive_server_members", new ArchiveServerMembersCols("archive_server_members"), new ArchiveServerMembersIxCols("archive_server_members"));
         public global::SpacetimeDB.Table<Server, ArchiveServersCols, ArchiveServersIxCols> ArchiveServers() => new("archive_servers", new ArchiveServersCols("archive_servers"), new ArchiveServersIxCols("archive_servers"));
         public global::SpacetimeDB.Table<ArchiveService, ArchiveServiceCols, ArchiveServiceIxCols> ArchiveService() => new("archive_service", new ArchiveServiceCols("archive_service"), new ArchiveServiceIxCols("archive_service"));

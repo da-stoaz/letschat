@@ -497,6 +497,27 @@ pub fn my_bans(ctx: &ViewContext) -> Vec<Ban> {
 /// in `reducers/archive.rs` (kept local to avoid a cross-module pub constant).
 const ARCHIVE_SERVICE_ID: u8 = 1;
 
+#[derive(SpacetimeType)]
+pub struct ArchiveReplicationStatus {
+    pub can_delete: bool,
+}
+
+/// A recovering worker may copy rows, but must not prune its backup while a
+/// restore is pending. Empty for every identity except the registered worker.
+#[spacetimedb::view(accessor = archive_replication_status, public)]
+pub fn archive_replication_status(ctx: &ViewContext) -> Option<ArchiveReplicationStatus> {
+    if !is_archive_service(ctx) {
+        return None;
+    }
+    Some(ArchiveReplicationStatus {
+        // Restore reducers invalidate this state; the normal reference rebuild
+        // marks it ready only after the restore quiet period has passed.
+        can_delete: ctx.db.storage_reference_state().id().find(1)
+            .map(|state| state.ready)
+            .unwrap_or(false),
+    })
+}
+
 /// True if the subscribing identity is the registered archive worker.
 fn is_archive_service(ctx: &ViewContext) -> bool {
     ctx.db

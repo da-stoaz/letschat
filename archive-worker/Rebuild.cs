@@ -49,29 +49,38 @@ public sealed class Rebuild(WorkerOptions options, ILogger<Rebuild> logger)
             users.Count, servers.Count, channels.Count, members.Count, bans.Count, joinRequests.Count,
             invites.Count, dmInvites.Count, friends.Count, blocks.Count, readStates.Count, pins.Count, messages.Count, dms.Count);
 
-        SubmitAll(conn, users, conn.Reducers.ArchiveRestoreUser);
-        SubmitAll(conn, servers, conn.Reducers.ArchiveRestoreServer);
-        SubmitAll(conn, channels, conn.Reducers.ArchiveRestoreChannel);
-        SubmitAll(conn, members, conn.Reducers.ArchiveRestoreServerMember);
-        SubmitAll(conn, bans, conn.Reducers.ArchiveRestoreBan);
-        SubmitAll(conn, joinRequests, conn.Reducers.ArchiveRestoreJoinRequest);
-        SubmitAll(conn, invites, conn.Reducers.ArchiveRestoreInvite);
-        SubmitAll(conn, dmInvites, conn.Reducers.ArchiveRestoreDmServerInvite);
-        SubmitAll(conn, friends, conn.Reducers.ArchiveRestoreFriend);
-        SubmitAll(conn, blocks, conn.Reducers.ArchiveRestoreBlock);
-        SubmitAll(conn, readStates, conn.Reducers.ArchiveRestoreReadState);
-        SubmitAll(conn, pins, conn.Reducers.ArchiveRestorePinnedMessage);
-        SubmitAll(conn, messages, conn.Reducers.ArchiveRestoreMessage);
-        SubmitAll(conn, dms, conn.Reducers.ArchiveRestoreDirectMessage);
+        var confirmed = new ConfirmedRestore(conn.FrameTick, TimeSpan.FromMinutes(1));
+        conn.Reducers.OnArchiveRestoreUser += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestoreServer += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestoreChannel += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestoreServerMember += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestoreBan += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestoreJoinRequest += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestoreInvite += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestoreDmServerInvite += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestoreFriend += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestoreBlock += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestoreReadState += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestorePinnedMessage += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestoreMessage += (ctx, _) => confirmed.Complete(ctx.Event.Status);
+        conn.Reducers.OnArchiveRestoreDirectMessage += (ctx, _) => confirmed.Complete(ctx.Event.Status);
 
-        // Grace period so every enqueued reducer call is flushed and applied
-        // before the process exits.
-        for (var i = 0; i < 400 && !ct.IsCancellationRequested; i++)
-        {
-            conn.FrameTick();
-            await Task.Delay(10, ct);
-        }
-        logger.LogInformation("Rebuild: all durable tables submitted. Done.");
+        await SubmitAllAsync(users, conn.Reducers.ArchiveRestoreUser, confirmed, ct);
+        await SubmitAllAsync(servers, conn.Reducers.ArchiveRestoreServer, confirmed, ct);
+        await SubmitAllAsync(channels, conn.Reducers.ArchiveRestoreChannel, confirmed, ct);
+        await SubmitAllAsync(members, conn.Reducers.ArchiveRestoreServerMember, confirmed, ct);
+        await SubmitAllAsync(bans, conn.Reducers.ArchiveRestoreBan, confirmed, ct);
+        await SubmitAllAsync(joinRequests, conn.Reducers.ArchiveRestoreJoinRequest, confirmed, ct);
+        await SubmitAllAsync(invites, conn.Reducers.ArchiveRestoreInvite, confirmed, ct);
+        await SubmitAllAsync(dmInvites, conn.Reducers.ArchiveRestoreDmServerInvite, confirmed, ct);
+        await SubmitAllAsync(friends, conn.Reducers.ArchiveRestoreFriend, confirmed, ct);
+        await SubmitAllAsync(blocks, conn.Reducers.ArchiveRestoreBlock, confirmed, ct);
+        await SubmitAllAsync(readStates, conn.Reducers.ArchiveRestoreReadState, confirmed, ct);
+        await SubmitAllAsync(pins, conn.Reducers.ArchiveRestorePinnedMessage, confirmed, ct);
+        await SubmitAllAsync(messages, conn.Reducers.ArchiveRestoreMessage, confirmed, ct);
+        await SubmitAllAsync(dms, conn.Reducers.ArchiveRestoreDirectMessage, confirmed, ct);
+
+        logger.LogInformation("Rebuild: all durable tables committed successfully.");
     }
 
     // ── Reverse-map readers (inverse of Replication's forward maps) ──
@@ -207,12 +216,13 @@ public sealed class Rebuild(WorkerOptions options, ILogger<Rebuild> logger)
     private static Timestamp Ts(Reader x, int i) => new(x.I64(i));
     private static Timestamp? NTs(Reader x, int i) => x.IsNull(i) ? null : new Timestamp(x.I64(i));
 
-    private void SubmitAll<T>(DbConnection conn, List<T> rows, Action<List<T>> call)
+    private static async Task SubmitAllAsync<T>(List<T> rows, Action<List<T>> call,
+        ConfirmedRestore confirmed, CancellationToken ct)
     {
         for (var i = 0; i < rows.Count; i += BatchSize)
         {
-            call(rows.GetRange(i, Math.Min(BatchSize, rows.Count - i)));
-            for (var t = 0; t < 3; t++) conn.FrameTick();
+            var batch = rows.GetRange(i, Math.Min(BatchSize, rows.Count - i));
+            await confirmed.ExecuteAsync(() => call(batch), ct);
         }
     }
 

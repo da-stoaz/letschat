@@ -235,6 +235,12 @@ pub(crate) fn remove_references(ctx: &ReducerContext, owner_key: &str) {
 #[spacetimedb::reducer]
 pub fn rebuild_storage_references(ctx: &ReducerContext) -> Result<(), String> {
     require_system_admin(ctx, ctx.sender())?;
+    // Cheap readiness check on every cleanup sweep, even when there are no
+    // attachment candidates. Restore reducers invalidate this durable state.
+    if ctx.db.storage_reference_state().id().find(REFERENCE_STATE_ID)
+        .is_some_and(|state| state.ready) {
+        return Ok(());
+    }
     if let Some(fence) = ctx.db.storage_restore_fence().id().find(REFERENCE_STATE_ID) {
         if init_time(ctx, &fence).is_some() {
             return Err("database was freshly initialized; restore the archive first, or call \

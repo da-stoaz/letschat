@@ -178,28 +178,26 @@ public sealed class Replication(ArchiveDatabase db, ILogger<Replication> logger)
         "SELECT * FROM archive_blocks",
         "SELECT * FROM archive_read_states",
         "SELECT * FROM archive_pinned_messages",
-        // Needed so the worker can observe its own service-identity registration
-        // (and re-evaluate the gated views) without a reconnect.
-        "SELECT * FROM archive_service",
+        "SELECT * FROM archive_replication_status",
     ];
 
     /// <summary>Registers insert/update/delete handlers for every archive table.</summary>
     public void Wire(DbConnection conn)
     {
-        Wire(conn.Db.ArchiveUsers, _users);
-        Wire(conn.Db.ArchiveServers, _servers);
-        Wire(conn.Db.ArchiveServerMembers, _members);
-        Wire(conn.Db.ArchiveBans, _bans);
-        Wire(conn.Db.ArchiveJoinRequests, _joinRequests);
-        Wire(conn.Db.ArchiveInvites, _invites);
-        Wire(conn.Db.ArchiveDmServerInvites, _dmServerInvites);
-        Wire(conn.Db.ArchiveChannels, _channels);
-        Wire(conn.Db.ArchiveMessages, _messages);
-        Wire(conn.Db.ArchiveDirectMessages, _directMessages);
-        Wire(conn.Db.ArchiveFriends, _friends);
-        Wire(conn.Db.ArchiveBlocks, _blocks);
-        Wire(conn.Db.ArchiveReadStates, _readStates);
-        Wire(conn.Db.ArchivePinnedMessages, _pinnedMessages);
+        Wire(conn, conn.Db.ArchiveUsers, _users);
+        Wire(conn, conn.Db.ArchiveServers, _servers);
+        Wire(conn, conn.Db.ArchiveServerMembers, _members);
+        Wire(conn, conn.Db.ArchiveBans, _bans);
+        Wire(conn, conn.Db.ArchiveJoinRequests, _joinRequests);
+        Wire(conn, conn.Db.ArchiveInvites, _invites);
+        Wire(conn, conn.Db.ArchiveDmServerInvites, _dmServerInvites);
+        Wire(conn, conn.Db.ArchiveChannels, _channels);
+        Wire(conn, conn.Db.ArchiveMessages, _messages);
+        Wire(conn, conn.Db.ArchiveDirectMessages, _directMessages);
+        Wire(conn, conn.Db.ArchiveFriends, _friends);
+        Wire(conn, conn.Db.ArchiveBlocks, _blocks);
+        Wire(conn, conn.Db.ArchiveReadStates, _readStates);
+        Wire(conn, conn.Db.ArchivePinnedMessages, _pinnedMessages);
     }
 
     /// <summary>
@@ -213,6 +211,11 @@ public sealed class Replication(ArchiveDatabase db, ILogger<Replication> logger)
     /// </summary>
     public void ReconcileAll(DbConnection conn)
     {
+        if (!CanDelete(conn))
+        {
+            logger.LogWarning("Archive deletion reconciliation paused: registration or database restore is pending. Live rows are still copied.");
+            return;
+        }
         var requests = new List<ReconcileRequest>
         {
             Build(conn.Db.ArchiveUsers, _users),
@@ -259,7 +262,10 @@ public sealed class Replication(ArchiveDatabase db, ILogger<Replication> logger)
         }
     }
 
-    private void Wire<TRow>(RemoteTableHandle<EventContext, TRow> handle, TableReplicator<TRow> rep)
+    private static bool CanDelete(DbConnection conn) =>
+        conn.Db.ArchiveReplicationStatus.Iter().Any(status => status.CanDelete);
+
+    private void Wire<TRow>(DbConnection conn, RemoteTableHandle<EventContext, TRow> handle, TableReplicator<TRow> rep)
         where TRow : class, IStructuralReadWrite, new()
     {
         handle.OnInsert += (_, row) =>
@@ -268,6 +274,7 @@ public sealed class Replication(ArchiveDatabase db, ILogger<Replication> logger)
             db.EnqueueExec($"update {rep.PgTable}", rep.UpsertSql, rep.UpsertValues(row));
         handle.OnDelete += (_, row) =>
         {
+            if (!CanDelete(conn)) return;
             // Views carry NO primary key to the client, so the SDK can't coalesce
             // an in-place row update into OnUpdate — it delivers delete(old) +
             // insert(new) for the same PK, and the two callbacks may arrive in

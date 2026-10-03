@@ -141,6 +141,50 @@ public sealed class SpacetimeBootstrapTests : IDisposable
     }
 
     [Fact]
+    public async Task Registers_a_replacement_worker_identity_without_restarting_core_api()
+    {
+        var workerToken = Path.Combine(_dir, "worker.token");
+        await File.WriteAllTextAsync(workerToken, WorkerToken(new string('d', 64)));
+        var stub = new RecordingStub();
+        await using var factory = new LetsChatWebApplicationFactory
+        {
+            SpacetimeTransport = stub,
+            ExtraConfig =
+            {
+                ["SPACETIMEDB_SERVICE_TOKEN"] = "eyJ.owner.token",
+                ["ARCHIVE_WORKER_TOKEN_FILE"] = workerToken,
+            },
+        };
+        _ = factory.CreateClient();
+        await stub.WaitForAsync("set_archive_service_identity");
+        var client = factory.Services.GetRequiredService<SpacetimeClient>();
+        await client.RegisterArchiveServiceAsync();
+        Assert.Single(stub.ArchiveCalls); // unchanged identity causes no write
+
+        await File.WriteAllTextAsync(workerToken, WorkerToken(new string('e', 64)));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        while (stub.ArchiveCalls.Count < 2) await Task.Delay(50, timeout.Token);
+        Assert.Contains(new string('e', 64), stub.ArchiveCalls.Last().Body);
+    }
+
+    [Fact]
+    public async Task Storage_readiness_is_rechecked_after_a_successful_sweep()
+    {
+        var stub = new RecordingStub();
+        await using var factory = new LetsChatWebApplicationFactory
+        {
+            SpacetimeTransport = stub,
+            ExtraConfig = { ["SPACETIMEDB_SERVICE_TOKEN"] = "eyJ.owner.token" },
+        };
+        _ = factory.CreateClient();
+        var client = factory.Services.GetRequiredService<SpacetimeClient>();
+        Assert.True(await client.EnsureStorageReferencesReadyAsync());
+        var first = stub.StorageRebuildCalls;
+        Assert.True(await client.EnsureStorageReferencesReadyAsync());
+        Assert.True(stub.StorageRebuildCalls > first);
+    }
+
+    [Fact]
     public async Task The_bootstrap_admin_is_not_recreated_once_any_admin_exists()
     {
         await using var factory = new LetsChatWebApplicationFactory
@@ -184,6 +228,8 @@ public sealed class SpacetimeBootstrapTests : IDisposable
         private readonly ConcurrentDictionary<string, TaskCompletionSource<Call>> _calls = new();
         public bool RejectFirstPin { get; init; }
         public int PinAttempts;
+        public int StorageRebuildCalls;
+        public ConcurrentQueue<Call> ArchiveCalls { get; } = new();
 
         private TaskCompletionSource<Call> Slot(string reducer) =>
             _calls.GetOrAdd(reducer, _ => new(TaskCreationOptions.RunContinuationsAsynchronously));
@@ -206,6 +252,10 @@ public sealed class SpacetimeBootstrapTests : IDisposable
                 var body = request.Content is null
                     ? string.Empty
                     : await request.Content.ReadAsStringAsync(cancellationToken);
+                if (path.EndsWith("/rebuild_storage_references", StringComparison.Ordinal))
+                    Interlocked.Increment(ref StorageRebuildCalls);
+                if (path.EndsWith("/set_archive_service_identity", StringComparison.Ordinal))
+                    ArchiveCalls.Enqueue(new Call(request.Headers.Authorization?.ToString() ?? "", body));
                 Slot(path[(marker + "/call/".Length)..]).TrySetResult(
                     new Call(request.Headers.Authorization?.ToString() ?? string.Empty, body));
             }

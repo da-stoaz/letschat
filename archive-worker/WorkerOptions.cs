@@ -14,10 +14,9 @@ public sealed class WorkerOptions
 
     /// <summary>
     /// Explicit bearer token for the worker's dedicated service identity. When
-    /// empty, the worker connects without one: SpacetimeDB issues a fresh
-    /// identity + token on first connect, which the worker persists to
-    /// <see cref="TokenFile"/> and reuses on subsequent runs so its identity is
-    /// stable across restarts.
+    /// empty, the worker obtains and persists an identity token, validates it
+    /// before connecting, and replaces it only when SpacetimeDB rejects it with
+    /// 401. An explicit token is never changed automatically.
     /// </summary>
     public string? Token { get; init; }
 
