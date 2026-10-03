@@ -43,7 +43,6 @@ namespace SpacetimeDB.Types
             AddTable(ArchiveServers = new(conn));
             AddTable(ArchiveService = new(conn));
             AddTable(ArchiveUsers = new(conn));
-            AddTable(DiscoverServerMemberCounts = new(conn));
             AddTable(MyBans = new(conn));
             AddTable(MyBlocks = new(conn));
             AddTable(MyChannelMessages = new(conn));
@@ -62,7 +61,6 @@ namespace SpacetimeDB.Types
             AddTable(MyTypingStates = new(conn));
             AddTable(MyVisibleUsers = new(conn));
             AddTable(MyVoiceParticipants = new(conn));
-            AddTable(StorageDeletionClaimsForCleanup = new(conn));
             AddTable(SystemSettings = new(conn));
         }
     }
@@ -576,7 +574,6 @@ namespace SpacetimeDB.Types
             new QueryBuilder().From.ArchiveServers().ToSql(),
             new QueryBuilder().From.ArchiveService().ToSql(),
             new QueryBuilder().From.ArchiveUsers().ToSql(),
-            new QueryBuilder().From.DiscoverServerMemberCounts().ToSql(),
             new QueryBuilder().From.MyBans().ToSql(),
             new QueryBuilder().From.MyBlocks().ToSql(),
             new QueryBuilder().From.MyChannelMessages().ToSql(),
@@ -595,7 +592,6 @@ namespace SpacetimeDB.Types
             new QueryBuilder().From.MyTypingStates().ToSql(),
             new QueryBuilder().From.MyVisibleUsers().ToSql(),
             new QueryBuilder().From.MyVoiceParticipants().ToSql(),
-            new QueryBuilder().From.StorageDeletionClaimsForCleanup().ToSql(),
             new QueryBuilder().From.SystemSettings().ToSql(),
         }
         ;
@@ -619,7 +615,6 @@ namespace SpacetimeDB.Types
         public global::SpacetimeDB.Table<Server, ArchiveServersCols, ArchiveServersIxCols> ArchiveServers() => new("archive_servers", new ArchiveServersCols("archive_servers"), new ArchiveServersIxCols("archive_servers"));
         public global::SpacetimeDB.Table<ArchiveService, ArchiveServiceCols, ArchiveServiceIxCols> ArchiveService() => new("archive_service", new ArchiveServiceCols("archive_service"), new ArchiveServiceIxCols("archive_service"));
         public global::SpacetimeDB.Table<User, ArchiveUsersCols, ArchiveUsersIxCols> ArchiveUsers() => new("archive_users", new ArchiveUsersCols("archive_users"), new ArchiveUsersIxCols("archive_users"));
-        public global::SpacetimeDB.Table<DiscoverServerMemberCount, DiscoverServerMemberCountsCols, DiscoverServerMemberCountsIxCols> DiscoverServerMemberCounts() => new("discover_server_member_counts", new DiscoverServerMemberCountsCols("discover_server_member_counts"), new DiscoverServerMemberCountsIxCols("discover_server_member_counts"));
         public global::SpacetimeDB.Table<Ban, MyBansCols, MyBansIxCols> MyBans() => new("my_bans", new MyBansCols("my_bans"), new MyBansIxCols("my_bans"));
         public global::SpacetimeDB.Table<Block, MyBlocksCols, MyBlocksIxCols> MyBlocks() => new("my_blocks", new MyBlocksCols("my_blocks"), new MyBlocksIxCols("my_blocks"));
         public global::SpacetimeDB.Table<Message, MyChannelMessagesCols, MyChannelMessagesIxCols> MyChannelMessages() => new("my_channel_messages", new MyChannelMessagesCols("my_channel_messages"), new MyChannelMessagesIxCols("my_channel_messages"));
@@ -638,7 +633,6 @@ namespace SpacetimeDB.Types
         public global::SpacetimeDB.Table<TypingState, MyTypingStatesCols, MyTypingStatesIxCols> MyTypingStates() => new("my_typing_states", new MyTypingStatesCols("my_typing_states"), new MyTypingStatesIxCols("my_typing_states"));
         public global::SpacetimeDB.Table<User, MyVisibleUsersCols, MyVisibleUsersIxCols> MyVisibleUsers() => new("my_visible_users", new MyVisibleUsersCols("my_visible_users"), new MyVisibleUsersIxCols("my_visible_users"));
         public global::SpacetimeDB.Table<VoiceParticipant, MyVoiceParticipantsCols, MyVoiceParticipantsIxCols> MyVoiceParticipants() => new("my_voice_participants", new MyVoiceParticipantsCols("my_voice_participants"), new MyVoiceParticipantsIxCols("my_voice_participants"));
-        public global::SpacetimeDB.Table<StorageDeletionClaim, StorageDeletionClaimsForCleanupCols, StorageDeletionClaimsForCleanupIxCols> StorageDeletionClaimsForCleanup() => new("storage_deletion_claims_for_cleanup", new StorageDeletionClaimsForCleanupCols("storage_deletion_claims_for_cleanup"), new StorageDeletionClaimsForCleanupIxCols("storage_deletion_claims_for_cleanup"));
         public global::SpacetimeDB.Table<SystemSettings, SystemSettingsCols, SystemSettingsIxCols> SystemSettings() => new("system_settings", new SystemSettingsCols("system_settings"), new SystemSettingsIxCols("system_settings"));
     }
 
@@ -743,7 +737,6 @@ namespace SpacetimeDB.Types
                 Reducer.BanMember args => Reducers.InvokeBanMember(eventContext, args),
                 Reducer.BlockUser args => Reducers.InvokeBlockUser(eventContext, args),
                 Reducer.CancelJoinRequest args => Reducers.InvokeCancelJoinRequest(eventContext, args),
-                Reducer.ClaimUnreferencedStorage args => Reducers.InvokeClaimUnreferencedStorage(eventContext, args),
                 Reducer.CleanupExpiredInvites args => Reducers.InvokeCleanupExpiredInvites(eventContext, args),
                 Reducer.CreateChannel args => Reducers.InvokeCreateChannel(eventContext, args),
                 Reducer.CreateInvite args => Reducers.InvokeCreateInvite(eventContext, args),
@@ -771,10 +764,8 @@ namespace SpacetimeDB.Types
                 Reducer.MoveChannelRelative args => Reducers.InvokeMoveChannelRelative(eventContext, args),
                 Reducer.MoveChannelTo args => Reducers.InvokeMoveChannelTo(eventContext, args),
                 Reducer.PinMessage args => Reducers.InvokePinMessage(eventContext, args),
-                Reducer.RebuildStorageReferences args => Reducers.InvokeRebuildStorageReferences(eventContext, args),
                 Reducer.RegisterUser args => Reducers.InvokeRegisterUser(eventContext, args),
                 Reducer.RekeyIdentities args => Reducers.InvokeRekeyIdentities(eventContext, args),
-                Reducer.ReleaseStorageInitFence args => Reducers.InvokeReleaseStorageInitFence(eventContext, args),
                 Reducer.RemoveFriend args => Reducers.InvokeRemoveFriend(eventContext, args),
                 Reducer.RemoveTimeout args => Reducers.InvokeRemoveTimeout(eventContext, args),
                 Reducer.RenameServer args => Reducers.InvokeRenameServer(eventContext, args),

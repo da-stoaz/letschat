@@ -122,11 +122,24 @@ public sealed class ReplicationWorker(
                 WaitForRegistration(conn, identity, () =>
                 {
                     replication.Wire(conn);
+                    var subscribed = false;
+                    var canDelete = false;
+                    void ReconcileWhenReady()
+                    {
+                        if (!subscribed) return;
+                        var ready = conn.Db.ArchiveReplicationStatus.Iter().Any(row => row.CanDelete);
+                        if (ready && !canDelete) replication.ReconcileAll(conn);
+                        canDelete = ready;
+                    }
+                    conn.Db.ArchiveReplicationStatus.OnInsert += (_, _) => ReconcileWhenReady();
+                    conn.Db.ArchiveReplicationStatus.OnUpdate += (_, _, _) => ReconcileWhenReady();
+                    conn.Db.ArchiveReplicationStatus.OnDelete += (_, _) => ReconcileWhenReady();
                     conn.SubscriptionBuilder()
                         .OnApplied(_ =>
                         {
-                            logger.LogInformation("Subscription applied; reconciling archive.");
-                            replication.ReconcileAll(conn);
+                            logger.LogInformation("Subscription applied; watching archive reconciliation readiness.");
+                            subscribed = true;
+                            ReconcileWhenReady();
                         })
                         .OnError((_, ex) =>
                         {

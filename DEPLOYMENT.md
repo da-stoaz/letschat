@@ -324,9 +324,11 @@ docker compose -f docker-compose.prod.base.yml exec postgres \
 
 The fresh module's owner row should already be replicated. After sending a test
 message, verify it in `archive_message` as well. Replacing the worker token volume
-does not require a core-api restart. An unregistered worker waits; while a restore
-fence is active, replication copies messages but does not delete archive rows.
-Token recovery neither resets databases nor releases restore fences.
+does not require a core-api restart. An unregistered worker waits. During a restore,
+replication copies messages but does not delete archive rows. After the ten-minute
+restore quiet period, core-api rebuilds the references on its next cleanup sweep;
+the running worker then automatically reconciles the archive. Token recovery
+neither resets databases nor releases restore fences.
 
 ### Rebuilding SpacetimeDB from the archive
 

@@ -2,7 +2,6 @@
 Run: python3 tests/upgrade/archive-recovery.py
 Only creates/removes its randomly named Compose project. Never uses dev/prod volumes.
 """
-import base64
 import json
 import os
 from pathlib import Path
@@ -104,7 +103,7 @@ with tempfile.TemporaryDirectory(prefix=PROJECT) as temporary:
         run("docker", "cp", str(path), container("archive-worker") + ":/data/archive-worker.token")
 
     try:
-        compose("up", "-d", "core-api", "module-init", "archive-worker")
+        compose("up", "-d", "core-api", "module-init", "archive-worker", "minio-init")
         auth = "http://" + compose("port", "core-api", "8787")
         database = "http://" + compose("port", "spacetimedb", "3000")
         wait(lambda: http(auth + "/health")[0] == 200, "old core-api health")
@@ -150,7 +149,7 @@ with tempfile.TemporaryDirectory(prefix=PROJECT) as temporary:
             image = "module" if service == "module-init" else service
             config["services"][service]["image"] = f"ghcr.io/da-stoaz/letschat-{image}:archive-recovery"
         config_file.write_text(json.dumps(config))
-        compose("up", "-d", "core-api", "module-init", "archive-worker")
+        compose("up", "-d", "core-api", "module-init", "archive-worker", "minio-init")
         auth = "http://" + compose("port", "core-api", "8787")
         wait(lambda: http(auth + "/health")[0] == 200, "candidate core-api health")
         wait(lambda: worker_token() != broken_token, "automatic managed token recovery")
@@ -182,18 +181,24 @@ with tempfile.TemporaryDirectory(prefix=PROJECT) as temporary:
         wait(lambda: pg("SELECT count(*) FROM archive_message WHERE content = 'after database restart'") == "1", "replication resumes after server recreation")
         assert worker_token() == stable
         print("PASS server recreation preserves token validity and ongoing replication", flush=True)
-        # Freeze cleanup during a simulated restore; only this isolated stack is stopped.
-        compose("stop", "core-api")
+        # Exercise the real ten-minute restore quiet period and the running
+        # core-api sweeper. No SQL fence edits or service restarts may release it.
+        worker_started = run("docker", "inspect", "--format", "{{.State.StartedAt}}", container("archive-worker"))
+        core_started = run("docker", "inspect", "--format", "{{.State.StartedAt}}", container("core-api"))
         call("archive_restore_message", [[]], stable)
         pg("INSERT INTO archive_message SELECT 999999, channel_id, sender_identity, 'preserve during restore', sent_at, edited_at, deleted FROM archive_message LIMIT 1")
-        compose("restart", "archive-worker")
         call("send_message", [channel_id, "during restore"], account["spacetimeToken"])
         wait(lambda: pg("SELECT count(*) FROM archive_message WHERE content = 'during restore'") == "1", "replication while restore fenced")
         assert pg("SELECT count(*) FROM archive_message WHERE id = 999999") == "1"
-        sql("DELETE FROM storage_restore_fence WHERE id = 1")
-        compose("restart", "archive-worker")
-        wait(lambda: pg("SELECT count(*) FROM archive_message WHERE id = 999999") == "0", "normal reconciliation after restore fence cleared")
-        print("PASS restore fence retains archive rows; normal reconciliation resumes after release", flush=True)
+        status, body = http(database + "/v1/database/letschat/call/rebuild_storage_references", [], owner_token)
+        assert status != 200 and "archive restore in progress" in body
+        print("Waiting for the real restore quiet period and automatic cleanup (up to 12 minutes)…", flush=True)
+        wait(lambda: pg("SELECT count(*) FROM archive_message WHERE id = 999999") == "0", "automatic reconciliation after restore completion", timeout=720)
+        assert len(sql("SELECT id FROM storage_restore_fence")) == 1, "restore fence must remain intact"
+        assert worker_started == run("docker", "inspect", "--format", "{{.State.StartedAt}}", container("archive-worker"))
+        assert core_started == run("docker", "inspect", "--format", "{{.State.StartedAt}}", container("core-api"))
+        assert pg("SELECT count(*) FROM archive_message WHERE content = 'during restore'") == "1"
+        print("PASS restore protection and automatic reconciliation with the fence retained and both services continuously running", flush=True)
     finally:
         # Explicit project + generated file: never addresses any pre-existing stack.
         compose("down", "--volumes", "--remove-orphans")

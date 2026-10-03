@@ -70,6 +70,7 @@ describe('archive rebuild — id allocation', () => {
     const stranger = await makeUser('archive_status')
     expect((await stranger.sql('SELECT * FROM archive_replication_status')).rows).toEqual([])
     await admin.call('release_storage_init_fence', [none])
+    await admin.call('rebuild_storage_references')
     expect((await worker.sql('SELECT * FROM archive_replication_status')).rows).toEqual([{ can_delete: true }])
 
     const id = await sendMessage(owner, channelId, 'before restore fence')

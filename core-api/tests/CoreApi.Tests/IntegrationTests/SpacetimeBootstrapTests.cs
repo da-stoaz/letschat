@@ -168,6 +168,23 @@ public sealed class SpacetimeBootstrapTests : IDisposable
     }
 
     [Fact]
+    public async Task Storage_readiness_is_rechecked_after_a_successful_sweep()
+    {
+        var stub = new RecordingStub();
+        await using var factory = new LetsChatWebApplicationFactory
+        {
+            SpacetimeTransport = stub,
+            ExtraConfig = { ["SPACETIMEDB_SERVICE_TOKEN"] = "eyJ.owner.token" },
+        };
+        _ = factory.CreateClient();
+        var client = factory.Services.GetRequiredService<SpacetimeClient>();
+        Assert.True(await client.EnsureStorageReferencesReadyAsync());
+        var first = stub.StorageRebuildCalls;
+        Assert.True(await client.EnsureStorageReferencesReadyAsync());
+        Assert.True(stub.StorageRebuildCalls > first);
+    }
+
+    [Fact]
     public async Task The_bootstrap_admin_is_not_recreated_once_any_admin_exists()
     {
         await using var factory = new LetsChatWebApplicationFactory
@@ -211,6 +228,7 @@ public sealed class SpacetimeBootstrapTests : IDisposable
         private readonly ConcurrentDictionary<string, TaskCompletionSource<Call>> _calls = new();
         public bool RejectFirstPin { get; init; }
         public int PinAttempts;
+        public int StorageRebuildCalls;
         public ConcurrentQueue<Call> ArchiveCalls { get; } = new();
 
         private TaskCompletionSource<Call> Slot(string reducer) =>
@@ -234,6 +252,8 @@ public sealed class SpacetimeBootstrapTests : IDisposable
                 var body = request.Content is null
                     ? string.Empty
                     : await request.Content.ReadAsStringAsync(cancellationToken);
+                if (path.EndsWith("/rebuild_storage_references", StringComparison.Ordinal))
+                    Interlocked.Increment(ref StorageRebuildCalls);
                 if (path.EndsWith("/set_archive_service_identity", StringComparison.Ordinal))
                     ArchiveCalls.Enqueue(new Call(request.Headers.Authorization?.ToString() ?? "", body));
                 Slot(path[(marker + "/call/".Length)..]).TrySetResult(

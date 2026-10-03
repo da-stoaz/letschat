@@ -11,8 +11,7 @@ use crate::schema::{
     dm_voice_participant__view, friend__view, invite__view, join_request__view, message__view,
     pinned_message__view, presence_state__view, read_state__view, server__view,
     server_member__view, storage_cleanup_batch__view, storage_deletion_claim__view,
-    storage_reference_state__view, storage_restore_fence__view, typing_state__view, user__view,
-    voice_participant__view,
+    storage_reference_state__view, typing_state__view, user__view, voice_participant__view,
 };
 
 /// How many of the newest messages per channel — and per DM conversation — the
@@ -511,7 +510,11 @@ pub fn archive_replication_status(ctx: &ViewContext) -> Option<ArchiveReplicatio
         return None;
     }
     Some(ArchiveReplicationStatus {
-        can_delete: ctx.db.storage_restore_fence().id().find(1).is_none(),
+        // Restore reducers invalidate this state; the normal reference rebuild
+        // marks it ready only after the restore quiet period has passed.
+        can_delete: ctx.db.storage_reference_state().id().find(1)
+            .map(|state| state.ready)
+            .unwrap_or(false),
     })
 }
 

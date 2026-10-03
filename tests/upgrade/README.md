@@ -19,10 +19,11 @@ used. It deliberately invalidates a worker credential in the disposable stack.
 Checks: baseline message replication, persistent `401 InvalidSignature` with the
 released worker, recovery by updating images on the same volumes, existing chat
 retention, new message replication, a second identity change without restarting
-core-api, and token validity after recreating SpacetimeDB. Finally, with cleanup
-stopped to simulate an unfinished restore, it checks that the restore fence
-prevents archive pruning while messages still replicate, and that reconciliation
-resumes after the fence is released.
+core-api, and token validity after recreating SpacetimeDB. Finally it exercises
+the real ten-minute restore quiet period: new messages replicate while archive
+pruning is blocked, then core-api automatically completes the reference rebuild
+and the worker reconciles. Neither service is restarted, and the restore fence
+is neither edited nor deleted. Allow about 13 minutes for the full test.
 
 This is a developer regression test, not a production upgrade command. Production
 uses the normal release image update; managed credentials recover automatically.
