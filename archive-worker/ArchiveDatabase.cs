@@ -75,20 +75,30 @@ public sealed class ArchiveDatabase(WorkerOptions options, ILogger<ArchiveDataba
     {
         await foreach (var op in _queue.Reader.ReadAllAsync(ct))
         {
-            try
+            var delayMs = 1000;
+            while (true)
             {
-                await op.Run(_conn!, ct);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                // Idempotent upserts + the reconcile-on-resubscribe path heal a
-                // dropped write, so log and keep draining rather than wedging.
-                logger.LogError(ex, "Archive write failed: {Description}", op.Description);
-                await EnsureConnectionAsync(ct);
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    await EnsureConnectionAsync(ct);
+                    await op.Run(_conn!, ct);
+                    break;
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // Retry this same idempotent operation before advancing the
+                    // FIFO. Skipping it could lose a message or stamp a false
+                    // reconciliation watermark while SpacetimeDB stays connected.
+                    logger.LogError(ex, "Archive write failed: {Description}; retrying in {Delay}ms.",
+                        op.Description, delayMs);
+                    await Task.Delay(delayMs, ct);
+                    delayMs = Math.Min(delayMs * 2, 15000);
+                }
             }
         }
     }
@@ -157,17 +167,10 @@ public sealed class ArchiveDatabase(WorkerOptions options, ILogger<ArchiveDataba
 
     private async Task EnsureConnectionAsync(CancellationToken ct)
     {
-        try
-        {
-            if (_conn is { State: System.Data.ConnectionState.Open }) return;
-            _conn?.Dispose();
-            _conn = new NpgsqlConnection(options.ArchiveConnectionString);
-            await _conn.OpenAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to re-open archive connection.");
-        }
+        if (_conn is { State: System.Data.ConnectionState.Open }) return;
+        _conn?.Dispose();
+        _conn = new NpgsqlConnection(options.ArchiveConnectionString);
+        await _conn.OpenAsync(ct);
     }
 
     public async ValueTask DisposeAsync()

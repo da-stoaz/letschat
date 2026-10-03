@@ -330,6 +330,11 @@ restore quiet period, core-api rebuilds the references on its next cleanup sweep
 the running worker then automatically reconciles the archive. Token recovery
 neither resets databases nor releases restore fences.
 
+Failed archive writes are retried in order with a backoff capped at 15 seconds.
+Later writes and reconciliation watermarks wait for that operation to succeed.
+Persistent schema or database errors therefore pause replication and require
+operator attention; they are logged rather than silently skipping rows.
+
 ### Rebuilding SpacetimeDB from the archive
 
 After a destructive migration, restore the durable tables from Postgres by
@@ -340,8 +345,13 @@ docker compose -f docker-compose.prod.base.yml run --rm \
   -e ARCHIVE_REBUILD=1 archive-worker
 ```
 
-It reloads every durable table verbatim (explicit primary keys and timestamps)
-and exits. Take a Postgres backup first — this is the copy you are restoring
+It reloads the archived tables with their original primary keys and timestamps.
+Each batch waits for the database's commit confirmation before sending the next.
+Success is logged only after every batch is confirmed; reducer failures,
+confirmation timeouts, connection failures and cancellation exit with code 1.
+A failed restore can have committed earlier batches: correct the cause and rerun
+the idempotent restore before resuming normal operation. Take a Postgres backup
+first — this is the copy you are restoring
 from, and it is the only one.
 
 Attachment cleanup is paused from the moment `--delete-data` runs: the module's

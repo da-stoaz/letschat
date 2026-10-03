@@ -162,6 +162,27 @@ with tempfile.TemporaryDirectory(prefix=PROJECT) as temporary:
         wait(lambda: pg("SELECT count(*) FROM archive_message WHERE content = 'after upgrade'") == "1", "new messages replicated after upgrade")
         print("PASS upgrade: automatic recovery, existing chat retained, new messages archived", flush=True)
 
+        # Fail one real PostgreSQL write, without interrupting the SpacetimeDB
+        # subscription. A later event must not overtake or replace that write.
+        pg("""
+            CREATE SEQUENCE retry_probe;
+            CREATE FUNCTION fail_archive_write_once() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+              IF NEW.content = 'retry failed archive write' AND nextval('retry_probe') = 1 THEN
+                RAISE EXCEPTION 'injected archive write failure';
+              END IF;
+              RETURN NEW;
+            END $$;
+            CREATE TRIGGER retry_probe BEFORE INSERT ON archive_message
+              FOR EACH ROW EXECUTE FUNCTION fail_archive_write_once();
+        """)
+        call("send_message", [channel_id, "retry failed archive write"], account["spacetimeToken"])
+        call("send_message", [channel_id, "after failed archive write"], account["spacetimeToken"])
+        wait(lambda: pg("SELECT count(*) FROM archive_message WHERE content IN ('retry failed archive write', 'after failed archive write')") == "2", "failed write retried without resubscribing")
+        assert int(pg("SELECT last_value FROM retry_probe")) >= 2
+        pg("DROP TRIGGER retry_probe ON archive_message; DROP FUNCTION fail_archive_write_once(); DROP SEQUENCE retry_probe")
+        print("PASS failed PostgreSQL write retried with the subscription still running", flush=True)
+
         core_started = run("docker", "inspect", "--format", "{{.State.StartedAt}}", container("core-api"))
         compose("stop", "archive-worker")
         replacement_broken = corrupt(worker_token())
@@ -181,6 +202,38 @@ with tempfile.TemporaryDirectory(prefix=PROJECT) as temporary:
         wait(lambda: pg("SELECT count(*) FROM archive_message WHERE content = 'after database restart'") == "1", "replication resumes after server recreation")
         assert worker_token() == stable
         print("PASS server recreation preserves token validity and ongoing replication", flush=True)
+
+        # Exercise the real one-shot worker across three message batches. Seed
+        # rows only in the archive so a successful exit must mean they arrived.
+        compose("stop", "archive-worker")
+        pg("""INSERT INTO archive_message
+            SELECT n, m.channel_id, m.sender_identity, 'restore batch ' || n,
+                   m.sent_at, m.edited_at, m.deleted
+            FROM (SELECT * FROM archive_message LIMIT 1) m
+            CROSS JOIN generate_series(100000, 101099) n""")
+        restored = compose("run", "--rm", "--no-deps", "-e", "ARCHIVE_REBUILD=1", "archive-worker")
+        assert "all durable tables committed successfully" in restored
+        assert len(sql("SELECT id FROM message WHERE id >= 100000 AND id <= 101099")) == 1100
+        # Repeating the complete restore must remain idempotent.
+        compose("run", "--rm", "--no-deps", "-e", "ARCHIVE_REBUILD=1", "archive-worker")
+        assert len(sql("SELECT id FROM message WHERE id >= 100000 AND id <= 101099")) == 1100
+        print("PASS confirmed multi-batch restore and idempotent rerun", flush=True)
+
+        # Duplicate usernames are valid in the archive schema but rejected by
+        # the module. Verify reducer failure reaches the real process exit code.
+        pg("INSERT INTO archive_user SELECT repeat('e', 64), username, display_name, avatar_url, created_at, is_admin FROM archive_user LIMIT 1")
+        try:
+            compose("run", "--rm", "--no-deps", "-e", "ARCHIVE_REBUILD=1", "archive-worker")
+            raise AssertionError("Failed restore exited successfully")
+        except subprocess.CalledProcessError as error:
+            assert error.returncode != 0
+            assert "Rebuild failed" in error.stdout
+            assert "all durable tables committed successfully" not in error.stdout
+        finally:
+            pg("DELETE FROM archive_user WHERE identity = repeat('e', 64)")
+        compose("start", "archive-worker")
+        print("PASS reducer rejection produces a failed rebuild process", flush=True)
+
         # Exercise the real ten-minute restore quiet period and the running
         # core-api sweeper. No SQL fence edits or service restarts may release it.
         worker_started = run("docker", "inspect", "--format", "{{.State.StartedAt}}", container("archive-worker"))

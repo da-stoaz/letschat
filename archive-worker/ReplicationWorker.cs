@@ -31,6 +31,7 @@ public sealed class ReplicationWorker(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Rebuild failed.");
+                Environment.ExitCode = 1;
             }
             lifetime.StopApplication();
             return;
@@ -86,22 +87,32 @@ public sealed class ReplicationWorker(
             {
                 logger.LogError(ex, "Rebuild connect error.");
                 connected.TrySetException(ex);
-            });
+            })
+            .OnDisconnect((_, ex) => connected.TrySetException(
+                ex ?? new IOException("Disconnected before archive registration completed.")));
 
         if (!string.IsNullOrWhiteSpace(token))
             builder = builder.WithToken(token);
 
         var connection = builder.Build();
 
-        while (!connected.Task.IsCompleted && !ct.IsCancellationRequested)
+        try
         {
-            connection.FrameTick();
-            await Task.Delay(options.TickIntervalMs, ct);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadline.CancelAfter(TimeSpan.FromMinutes(2));
+            while (!connected.Task.IsCompleted)
+            {
+                deadline.Token.ThrowIfCancellationRequested();
+                connection.FrameTick();
+                await Task.Delay(options.TickIntervalMs, deadline.Token);
+            }
+            await connected.Task;
+            await rebuild.RunAsync(connection, ct);
         }
-        await connected.Task; // surfaces a connect error
-
-        await rebuild.RunAsync(connection, ct);
-        try { connection.Disconnect(); } catch { /* already closing */ }
+        finally
+        {
+            try { connection.Disconnect(); } catch { /* already closing */ }
+        }
     }
 
     private async Task RunConnectionAsync(CancellationToken ct)

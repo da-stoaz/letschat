@@ -20,6 +20,9 @@ Checks: baseline message replication, persistent `401 InvalidSignature` with the
 released worker, recovery by updating images on the same volumes, existing chat
 retention, new message replication, a second identity change without restarting
 core-api, and token validity after recreating SpacetimeDB. Finally it exercises
+failed PostgreSQL writes without reconnecting the subscription, a confirmed
+1,100-message restore spanning multiple batches, an idempotent rerun, and a
+rejected restore reducer producing a nonzero process exit code. It also exercises
 the real ten-minute restore quiet period: new messages replicate while archive
 pruning is blocked, then core-api automatically completes the reference rebuild
 and the worker reconciles. Neither service is restarted, and the restore fence
