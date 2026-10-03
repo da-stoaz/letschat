@@ -307,8 +307,11 @@ creates the `archive` database on startup; the worker only writes to it.
 ### Automatic identity registration
 
 core-api reads the worker token from a read-only mount of `archive_worker_data`
-and registers its identity automatically. The worker's existing subscription
-then receives the archive views without a reconnect or manual command.
+and registers its identity automatically, including replacements while core-api
+is running. The worker waits for registration before subscribing to archive views.
+Before connecting, it validates its persisted token and replaces it automatically
+if SpacetimeDB rejects it with HTTP 401. Network/server failures do not rotate the
+identity; explicitly configured tokens remain under operator control.
 Check both setup and actual replication:
 
 ```bash
@@ -320,9 +323,10 @@ docker compose -f docker-compose.prod.base.yml exec postgres \
 ```
 
 The fresh module's owner row should already be replicated. After sending a test
-message, verify it in `archive_message` as well. If the worker token volume is
-replaced, restart core-api so it registers the new identity. An unregistered
-worker refuses an empty reconciliation instead of erasing existing archive data.
+message, verify it in `archive_message` as well. Replacing the worker token volume
+does not require a core-api restart. An unregistered worker waits; while a restore
+fence is active, replication copies messages but does not delete archive rows.
+Token recovery neither resets databases nor releases restore fences.
 
 ### Rebuilding SpacetimeDB from the archive
 

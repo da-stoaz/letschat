@@ -11,7 +11,8 @@ use crate::schema::{
     dm_voice_participant__view, friend__view, invite__view, join_request__view, message__view,
     pinned_message__view, presence_state__view, read_state__view, server__view,
     server_member__view, storage_cleanup_batch__view, storage_deletion_claim__view,
-    storage_reference_state__view, typing_state__view, user__view, voice_participant__view,
+    storage_reference_state__view, storage_restore_fence__view, typing_state__view, user__view,
+    voice_participant__view,
 };
 
 /// How many of the newest messages per channel — and per DM conversation — the
@@ -496,6 +497,23 @@ pub fn my_bans(ctx: &ViewContext) -> Vec<Ban> {
 /// Singleton-id used by [`crate::schema::ArchiveService`]. Mirrors the constant
 /// in `reducers/archive.rs` (kept local to avoid a cross-module pub constant).
 const ARCHIVE_SERVICE_ID: u8 = 1;
+
+#[derive(SpacetimeType)]
+pub struct ArchiveReplicationStatus {
+    pub can_delete: bool,
+}
+
+/// A recovering worker may copy rows, but must not prune its backup while a
+/// restore is pending. Empty for every identity except the registered worker.
+#[spacetimedb::view(accessor = archive_replication_status, public)]
+pub fn archive_replication_status(ctx: &ViewContext) -> Option<ArchiveReplicationStatus> {
+    if !is_archive_service(ctx) {
+        return None;
+    }
+    Some(ArchiveReplicationStatus {
+        can_delete: ctx.db.storage_restore_fence().id().find(1).is_none(),
+    })
+}
 
 /// True if the subscribing identity is the registered archive worker.
 fn is_archive_service(ctx: &ViewContext) -> bool {

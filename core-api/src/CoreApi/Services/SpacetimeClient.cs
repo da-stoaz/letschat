@@ -242,6 +242,8 @@ public sealed class SpacetimeClient(
         }
     }
 
+    private string? _registeredArchiveIdentity;
+
     /// <summary>
     /// Registers the archive-worker's identity (read from its persisted token)
     /// as the module's archive service. Returns false while that token does not
@@ -251,17 +253,20 @@ public sealed class SpacetimeClient(
     public async Task<bool> RegisterArchiveServiceAsync(CancellationToken ct = default)
     {
         var path = options.ArchiveWorkerTokenFile;
-        if (path is null || !File.Exists(path) || (await ResolveAdminTokensAsync()).Count == 0)
+        if (path is null || !File.Exists(path))
         {
             return false;
         }
         var identity = IdentityOfToken(await File.ReadAllTextAsync(path, ct))
             ?? throw new InvalidOperationException($"{path} does not hold a SpacetimeDB token.");
+        if (identity == _registeredArchiveIdentity) return true;
+        if ((await ResolveAdminTokensAsync()).Count == 0) return false;
 
         // set_archive_service_identity(Identity): an Identity is a one-field
         // product, so the single argument is ["0x<hex>"].
         await PostAdminReducerAsync(
             "set_archive_service_identity", new List<object> { new[] { "0x" + identity } }, ct);
+        _registeredArchiveIdentity = identity;
         logger.LogInformation("Registered archive-worker identity {Identity}.", identity);
         return true;
     }
@@ -839,8 +844,8 @@ public sealed class SpacetimeClient(
     /// owner receives that credential during <c>init</c>; core-api uses it when
     /// <c>SPACETIMEDB_SERVICE_TOKEN</c> is configured. This is called both at
     /// startup and whenever an admin signs in; later calls are skipped via
-    /// <see cref="_trustedIssuerPinned"/>. Until it succeeds the module leaves
-    /// the check off rather than locking the instance out.
+    /// <see cref="_trustedIssuerPinned"/>. Until it succeeds the module rejects
+    /// new registrations.
     /// </para>
     ///
     /// <para>Returns <c>true</c> if the issuer is pinned (now or earlier).</para>

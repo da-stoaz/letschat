@@ -13,6 +13,7 @@ namespace ArchiveWorker;
 /// </summary>
 public sealed class ReplicationWorker(
     WorkerOptions options,
+    ArchiveCredentials credentials,
     ArchiveDatabase db,
     Replication replication,
     Rebuild rebuild,
@@ -70,17 +71,16 @@ public sealed class ReplicationWorker(
     /// </summary>
     private async Task RunRebuildAsync(CancellationToken ct)
     {
-        var token = LoadToken();
+        var token = await credentials.GetTokenAsync(ct);
         var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var builder = DbConnection.Builder()
             .WithUri(options.SpacetimeUri)
             .WithDatabaseName(options.SpacetimeModule)
-            .OnConnect((_, identity, freshToken) =>
+            .OnConnect((conn, identity, _) =>
             {
-                PersistToken(freshToken);
                 logger.LogInformation("Rebuild: connected as {Identity}", identity);
-                connected.TrySetResult();
+                WaitForRegistration(conn, identity, () => connected.TrySetResult(), ex => connected.TrySetException(ex));
             })
             .OnConnectError(ex =>
             {
@@ -106,29 +106,39 @@ public sealed class ReplicationWorker(
 
     private async Task RunConnectionAsync(CancellationToken ct)
     {
-        var token = LoadToken();
+        var token = await credentials.GetTokenAsync(ct);
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var builder = DbConnection.Builder()
             .WithUri(options.SpacetimeUri)
             .WithDatabaseName(options.SpacetimeModule)
-            .OnConnect((conn, identity, freshToken) =>
+            .OnConnect((conn, identity, _) =>
             {
-                PersistToken(freshToken);
                 logger.LogInformation(
                     "Connected to SpacetimeDB. Archive worker identity: {Identity}", identity);
                 logger.LogInformation(
                     "core-api automatically registers this identity from the shared token volume.");
 
-                replication.Wire(conn);
-                conn.SubscriptionBuilder()
-                    .OnApplied(_ =>
-                    {
-                        logger.LogInformation("Subscription applied; reconciling archive.");
-                        replication.ReconcileAll(conn);
-                    })
-                    .OnError((_, ex) => logger.LogError(ex, "Subscription error."))
-                    .Subscribe(Replication.SubscriptionQueries);
+                WaitForRegistration(conn, identity, () =>
+                {
+                    replication.Wire(conn);
+                    conn.SubscriptionBuilder()
+                        .OnApplied(_ =>
+                        {
+                            logger.LogInformation("Subscription applied; reconciling archive.");
+                            replication.ReconcileAll(conn);
+                        })
+                        .OnError((_, ex) =>
+                        {
+                            logger.LogError(ex, "Subscription error; reconnecting.");
+                            closed.TrySetResult();
+                        })
+                        .Subscribe(Replication.SubscriptionQueries);
+                }, ex =>
+                {
+                    logger.LogError(ex, "Archive registration subscription failed.");
+                    closed.TrySetResult();
+                });
             })
             .OnConnectError(ex =>
             {
@@ -147,41 +157,37 @@ public sealed class ReplicationWorker(
 
         var connection = builder.Build();
 
-        // Pump the client until it drops or we're asked to stop.
-        while (!ct.IsCancellationRequested && !closed.Task.IsCompleted)
-        {
-            connection.FrameTick();
-            await Task.Delay(options.TickIntervalMs, ct);
-        }
-
-        try { connection.Disconnect(); } catch { /* already closing */ }
-    }
-
-    private string? LoadToken()
-    {
-        if (!string.IsNullOrWhiteSpace(options.Token)) return options.Token;
         try
         {
-            return File.Exists(options.TokenFile) ? File.ReadAllText(options.TokenFile).Trim() : null;
+            while (!ct.IsCancellationRequested && !closed.Task.IsCompleted)
+            {
+                connection.FrameTick();
+                await Task.Delay(options.TickIntervalMs, ct);
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            logger.LogWarning(ex, "Could not read token file {File}.", options.TokenFile);
-            return null;
+            try { connection.Disconnect(); } catch { /* already closing */ }
         }
     }
 
-    private void PersistToken(string token)
+    // Subscribe to gated archive views only after core-api has registered this
+    // identity, including when token recovery happens after core-api started.
+    private static void WaitForRegistration(DbConnection conn, Identity identity,
+        Action ready, Action<Exception> failed)
     {
-        // Only the auto-issued token is cached; an explicitly configured token is authoritative.
-        if (!string.IsNullOrWhiteSpace(options.Token) || string.IsNullOrWhiteSpace(token)) return;
-        try
+        var applied = false;
+        void TryReady()
         {
-            File.WriteAllText(options.TokenFile, token);
+            if (applied || !conn.Db.ArchiveService.Iter().Any(row => row.ServiceIdentity == identity)) return;
+            applied = true;
+            ready();
         }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Could not persist token to {File}; identity may change on restart.", options.TokenFile);
-        }
+        conn.Db.ArchiveService.OnInsert += (_, _) => TryReady();
+        conn.Db.ArchiveService.OnUpdate += (_, _, _) => TryReady();
+        conn.SubscriptionBuilder()
+            .OnApplied(_ => TryReady())
+            .OnError((_, ex) => failed(ex))
+            .Subscribe(["SELECT * FROM archive_service"]);
     }
 }
