@@ -155,7 +155,22 @@ other supported browsers load hls.js only when playback is requested.
 The player displays a poster until the first frame, retries pending posters,
 and fits the media to its aspect ratio and viewport height. Pop out moves
 playback into a persistent floating player with expand and browser
-picture-in-picture controls, independent of virtualized chat rows.
+picture-in-picture controls, independent of virtualized chat rows. Playing
+videos also pop out automatically when scrolled out of view, including when
+the virtualizer unmounts their message. A stable portal container moves the
+existing video element between the message and floating panel, preserving its
+playback position and buffer. Paused or ended videos do not auto-pop out;
+automatic pop-out does not move keyboard focus. Automatically floated videos
+return to their original message when at least a quarter of its placeholder
+is visible, including after virtualization remounts it. Explicit Pop out stays
+floating. Both directions animate the same live player for 220 ms using a
+uniform scale; reduced-motion preferences skip the movement.
+Closing the floating panel (or pressing Escape) returns the same live player
+to a visible original message, preserving play/pause state, position, volume
+and buffer. If the message is offscreen, it dismisses playback and remembers
+the position for the next Play. Resume positions are kept for up to 100 videos
+in the current app session and cleared on account changes; completed videos
+start from the beginning.
 
 Initial limits are 500 MiB per attachment and 64 MiB per multipart part;
 the five upload/quota `.env` values seed runtime-editable values in
