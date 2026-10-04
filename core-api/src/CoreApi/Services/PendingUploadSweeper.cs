@@ -157,8 +157,14 @@ public sealed class PendingUploadSweeper(
         {
             try
             {
+                db.ChangeTracker.Clear();
+                await using var deletion = db.Database.IsRelational()
+                    ? await db.Database.BeginTransactionAsync(ct) : null;
+                var current = await VideoPlaybackWorker.LockUploadAsync(db, upload.StorageKey, ct);
+                if (current is null || current.ConfirmedAt >= cutoff) continue;
                 await storage.DeleteObjectAsync(upload.StorageKey);
                 await storage.DeleteObjectAsync(upload.StorageKey + VideoThumbnailWorker.KeySuffix);
+                await storage.DeleteVideoPlaybackAsync(upload.StorageKey, ct);
                 if (db.Database.IsRelational())
                 {
                     swept += await db.ConfirmedUploads
@@ -167,13 +173,13 @@ public sealed class PendingUploadSweeper(
                 }
                 else
                 {
-                    var current = await db.ConfirmedUploads.FindAsync([upload.StorageKey], ct);
                     if (current is not null && current.ConfirmedAt < cutoff)
                     {
                         db.ConfirmedUploads.Remove(current);
                         swept += await db.SaveChangesAsync(ct);
                     }
                 }
+                if (deletion is not null) await deletion.CommitAsync(ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -230,7 +236,9 @@ public sealed class PendingUploadSweeper(
                     Username = parsed.Uploader,
                     FileName = Path.GetFileName(item.StorageKey),
                     FileSize = item.Size,
-                    MimeType = "application/octet-stream",
+                    MimeType = StorageService.InlineContentType(item.StorageKey) ?? "application/octet-stream",
+                    ThumbnailState = StorageService.InlineContentType(item.StorageKey)?.StartsWith("video/") == true ? ThumbnailState.Pending : ThumbnailState.None,
+                    VideoState = StorageService.InlineContentType(item.StorageKey)?.StartsWith("video/") == true ? ThumbnailState.Pending : ThumbnailState.None,
                     ConfirmedAt = new DateTimeOffset(item.LastModifiedUtc.ToUniversalTime())
                         .ToUnixTimeSeconds(),
                 });

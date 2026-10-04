@@ -96,6 +96,8 @@ builder.Services.AddSingleton<LiveKitTokenService>();
 builder.Services.AddSingleton<StorageService>();
 builder.Services.AddHostedService<PendingUploadSweeper>();
 builder.Services.AddHostedService<VideoThumbnailWorker>();
+builder.Services.AddHostedService<VideoPlaybackWorker>();
+builder.Services.AddSingleton<VideoPlaybackAccess>();
 builder.Services.AddHostedService<LiveKitVoiceReconciler>();
 builder.Services.AddHostedService<SpacetimeBootstrapper>();
 builder.Services.AddHttpClient(LiveKitVoiceReconciler.HttpClientName, client =>
@@ -337,6 +339,7 @@ app.UseRateLimiter();
 app.MapAuthEndpoints();
 app.MapLiveKitEndpoints();
 app.MapUploadEndpoints();
+app.MapVideoPlaybackEndpoints();
 app.MapMiscEndpoints();
 app.MapDownloadEndpoints();
 app.MapRazorPages();

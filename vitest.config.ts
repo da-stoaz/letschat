@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
 
 // Two test suites kept apart so the fast frontend unit tests don't drag in the
 // heavyweight SpacetimeDB setup:
@@ -12,6 +13,8 @@ export default defineConfig({
   test: {
     projects: [
       {
+        plugins: [react()],
+        resolve: { alias: { '@': new URL('./src', import.meta.url).pathname } },
         test: {
           name: 'unit',
           include: ['src/**/*.test.ts'],

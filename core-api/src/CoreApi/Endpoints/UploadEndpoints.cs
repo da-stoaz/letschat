@@ -376,6 +376,8 @@ public static class UploadEndpoints
             ConfirmedAt = UnixNow(),
             ThumbnailState = pending.MimeType.StartsWith("video/", StringComparison.Ordinal)
                 ? ThumbnailState.Pending : ThumbnailState.None,
+            VideoState = pending.MimeType.StartsWith("video/", StringComparison.Ordinal)
+                ? ThumbnailState.Pending : ThumbnailState.None,
         });
         db.PendingUploads.Remove(pending);
         await db.SaveChangesAsync(ct);
@@ -562,7 +564,7 @@ public static class UploadEndpoints
     /// Per-request cache keyed by scope (<c>ch:5</c>, <c>srv:3</c>, …) so a
     /// batch of twenty images from one channel is one query, not twenty.
     /// </param>
-    private static async Task<bool> MayReadAsync(
+    internal static async Task<bool> MayReadAsync(
         ApplicationUser caller,
         string rawKey,
         StorageKey key,

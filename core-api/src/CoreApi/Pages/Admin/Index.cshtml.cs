@@ -64,7 +64,7 @@ public sealed class IndexModel(
         if (InventoryReady)
         {
             StoredFiles = await db.ConfirmedUploads.CountAsync();
-            StoredBytes = await db.ConfirmedUploads.SumAsync(u => u.FileSize);
+            StoredBytes = await db.ConfirmedUploads.SumAsync(u => u.FileSize + u.VideoBytes);
             PendingUploads = await db.PendingUploads.CountAsync();
             ReservedBytes = await db.PendingUploads.SumAsync(u => u.FileSize);
         }

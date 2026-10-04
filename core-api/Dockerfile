@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 # ffmpeg renders video posters (VideoThumbnailWorker). A static multi-arch
 # build: Ubuntu's ffmpeg package would add ~700 MB of shared libraries.
 COPY --from=mwader/static-ffmpeg:7.1 /ffmpeg /usr/local/bin/ffmpeg
+COPY --from=mwader/static-ffmpeg:7.1 /ffprobe /usr/local/bin/ffprobe
 WORKDIR /app
 COPY --from=build /app ./
 

@@ -1,10 +1,13 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { DownloadIcon, ExternalLinkIcon, FileIcon, ImageIcon, Loader2Icon, MusicIcon, PlayIcon, VideoIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { downloadAttachment } from '@/lib/attachmentDownload'
 import type { ChatMessageAttachment } from '@/types/attachments'
 import { formatFileSize, getAttachmentKind } from './attachmentUtils'
+import { useVideoPlayerStore } from '@/stores/videoPlayerStore'
+import { videoThumbnailKey } from './attachmentUtils'
 import { InlineVideo } from './InlineVideo'
+import { videoSize } from './videoPresentation'
 import type { AttachmentResolution } from './useAttachmentResolver'
 
 type AttachmentListItemProps = {
@@ -37,6 +40,22 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
     setIsPlaying(false)
   }, [])
   const [posterMissing, setPosterMissing] = useState(false)
+  const [posterAttempt, setPosterAttempt] = useState(0)
+  const [aspectRatio, setAspectRatio] = useState(16 / 9)
+  const popOut = (position = 0) => {
+    if (!resolution.url) return
+    stopVideo(position)
+    useVideoPlayerStore.getState().open({ url: resolution.url, storageKey: attachment.storageKey, fileName: attachment.fileName, poster: thumbnailUrl, aspectRatio, startAt: position })
+  }
+  useEffect(() => {
+    if (!posterMissing || posterAttempt >= 20) return
+    const timer = setTimeout(() => {
+      onRetry(videoThumbnailKey(attachment.storageKey))
+      setPosterAttempt(value => value + 1)
+      setPosterMissing(false)
+    }, Math.min(30_000, 3000 * (posterAttempt + 1)))
+    return () => clearTimeout(timer)
+  }, [posterMissing, posterAttempt, onRetry, attachment.storageKey])
   const [isCancelling, setIsCancelling] = useState(false)
   const [downloadProgressFraction, setDownloadProgressFraction] = useState<number | null>(null)
   const kind = getAttachmentKind(attachment.mimeType)
@@ -53,7 +72,7 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
   }
 
   return (
-    <div className="rounded-lg border border-border/70 bg-muted/20 p-1">
+    <div className="max-w-full rounded-lg border border-border/70 bg-muted/20 p-1" style={kind === 'video' ? { width: videoSize(aspectRatio, 60).width } : undefined}>
       {(kind === 'image' || kind === 'video' || kind === 'audio') && canOpen ? (
         <div className="mb-1 overflow-hidden rounded-md border border-border/60 bg-background/50">
           {kind === 'image' ? (
@@ -66,7 +85,7 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
             </button>
           ) : kind === 'video' ? (
             isPlaying ? (
-              <InlineVideo url={resolution.url ?? ''} startAt={resumeAt} onStop={stopVideo} />
+              <InlineVideo url={resolution.url ?? ''} storageKey={attachment.storageKey} fileName={attachment.fileName} poster={thumbnailUrl} aspectRatio={aspectRatio} onAspectRatio={setAspectRatio} startAt={resumeAt} onStop={stopVideo} onPopOut={popOut} />
             ) : (
               // No <video> until asked: WebKit buffers media on render whatever
               // `preload` says, which pulled GBs per page load. Only the small
@@ -74,14 +93,17 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
               <button
                 type="button"
                 aria-label={`Play ${attachment.fileName}`}
-                className="relative flex h-56 w-full items-center justify-center bg-black focus:outline-none"
+                className="relative mx-auto flex max-w-full items-center justify-center overflow-hidden bg-muted focus-visible:outline-2 focus-visible:outline-primary"
+                style={videoSize(aspectRatio, 60)}
                 onClick={() => setIsPlaying(true)}
               >
                 {thumbnailUrl && !posterMissing ? (
                   <img
+                    key={posterAttempt}
                     src={thumbnailUrl}
                     alt=""
-                    className="max-h-56 w-full object-contain"
+                    className="absolute inset-0 h-full w-full object-contain"
+                    onLoad={event => { const img = event.currentTarget; setAspectRatio(img.naturalWidth / img.naturalHeight); setPosterMissing(false) }}
                     onError={() => setPosterMissing(true)}
                   />
                 ) : null}
@@ -96,7 +118,7 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             {renderKindIcon()}
@@ -126,6 +148,10 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
                 onOpenImage({ url: resolution.url, fileName: attachment.fileName })
                 return
               }
+              if (kind === 'video') {
+                popOut(resumeAt)
+                return
+              }
               if (isPdf) {
                 onOpenPdf({ url: resolution.url, fileName: attachment.fileName })
                 return
@@ -134,7 +160,7 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
             }}
           >
             <ExternalLinkIcon className="size-4" />
-            {kind === 'image' || isPdf ? 'Preview' : 'Open'}
+            {kind === 'video' ? 'Pop out' : kind === 'image' || isPdf ? 'Preview' : 'Open'}
           </Button>
 
           <Button

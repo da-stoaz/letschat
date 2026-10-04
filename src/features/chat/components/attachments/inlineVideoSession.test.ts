@@ -1,6 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { attachInlineVideo } from './inlineVideoSession'
 
+const hlsMock = vi.hoisted(() => ({ created: 0, destroyed: 0, events: new Map<string, (...args: unknown[]) => void>() }))
+vi.mock('hls.js', () => ({ default: class {
+  static Events = { ERROR: 'error', MANIFEST_PARSED: 'manifest' }
+  static isSupported() { return true }
+  constructor() { hlsMock.created++ }
+  on(event: string, handler: (...args: unknown[]) => void) { hlsMock.events.set(event, handler) }
+  loadSource() {}
+  attachMedia() {}
+  destroy() { hlsMock.destroyed++ }
+} }))
+
 class FakeVideo {
   src = ''
   ended = false
@@ -26,6 +37,7 @@ class FakeVideo {
   removeAttribute(name: string): void {
     if (name === 'src') this.src = ''
   }
+  canPlayType(): string { return '' }
   load(): void {
     this.loads += 1
   }
@@ -36,6 +48,9 @@ let observerCallback: ((entries: Array<{ isIntersecting: boolean }>) => void) | 
 describe('attachInlineVideo', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    hlsMock.created = 0
+    hlsMock.destroyed = 0
+    hlsMock.events.clear()
     vi.stubGlobal('IntersectionObserver', class {
       constructor(callback: typeof observerCallback) { observerCallback = callback }
       observe(): void {}
@@ -90,4 +105,51 @@ describe('attachInlineVideo', () => {
     video.emit('ended')
     expect(onStop).toHaveBeenLastCalledWith(0)
   })
+  it('destroys HLS on unmount and ignores an import that resolves after teardown', async () => {
+    const video = new FakeVideo()
+    const setup = () => attachInlineVideo(video as unknown as HTMLVideoElement, '/master.m3u8', 12, vi.fn(), { hls: true })
+    setup()()
+    await vi.dynamicImportSettled()
+    expect(hlsMock.created).toBe(0)
+    const teardown = setup()
+    await vi.dynamicImportSettled()
+    expect(hlsMock.created).toBe(1)
+    hlsMock.events.get('manifest')?.()
+    expect(video.plays).toBe(1)
+    video.emit('loadedmetadata')
+    expect(video.currentTime).toBe(12)
+    teardown()
+    expect(hlsMock.destroyed).toBe(1)
+    expect(video.src).toBe('')
+  })
+
+  it('surfaces fatal streaming errors and keeps a pop-out alive offscreen or paused', async () => {
+    const video = new FakeVideo()
+    const stop = vi.fn()
+    const error = vi.fn()
+    const teardown = attachInlineVideo(video as unknown as HTMLVideoElement, '/master.m3u8', 0, stop, { hls: true, persistent: true, onError: error })
+    await vi.dynamicImportSettled()
+    video.emit('pause')
+    vi.advanceTimersByTime(60_000)
+    observerCallback?.([{ isIntersecting: false }])
+    expect(stop).not.toHaveBeenCalled()
+    hlsMock.events.get('error')?.('error', { fatal: true })
+    expect(error).toHaveBeenCalledOnce()
+    expect(hlsMock.destroyed).toBe(1)
+    teardown()
+  })
+
+  it('uses native HLS without loading hls.js and exposes blocked autoplay', async () => {
+    const video = new FakeVideo()
+    video.canPlayType = () => 'probably'
+    video.play = () => Promise.reject(new Error('blocked'))
+    const blocked = vi.fn()
+    const teardown = attachInlineVideo(video as unknown as HTMLVideoElement, '/master.m3u8', 10, vi.fn(), { hls: true, onBlocked: blocked })
+    await Promise.resolve()
+    expect(video.src).toBe('/master.m3u8')
+    expect(hlsMock.created).toBe(0)
+    expect(blocked).toHaveBeenCalledOnce()
+    teardown()
+  })
+
 })

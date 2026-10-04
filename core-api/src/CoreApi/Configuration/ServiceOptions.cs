@@ -68,6 +68,7 @@ public sealed class ServiceOptions
     public long InstanceStorageLimitMiB { get; init; }
     /// <summary>ffmpeg binary for video poster frames; missing binary disables thumbnails.</summary>
     public string FfmpegPath { get; init; } = "ffmpeg";
+    public string FfprobePath { get; init; } = "ffprobe";
 
     public required string LiveKitApiKey { get; init; }
     public required string LiveKitApiSecret { get; init; }
@@ -256,6 +257,7 @@ public sealed class ServiceOptions
             UserStorageLimitMiB = GetInitialUploadLong("USER_STORAGE_LIMIT_MIB", 0),
             InstanceStorageLimitMiB = GetInitialUploadLong("INSTANCE_STORAGE_LIMIT_MIB", 0),
             FfmpegPath = Get("FFMPEG_PATH", "ffmpeg"),
+            FfprobePath = Get("FFPROBE_PATH", "ffprobe"),
 
             LiveKitApiKey = Get("LIVEKIT_API_KEY", "devkey"),
             LiveKitApiSecret = Get("LIVEKIT_API_SECRET", DevLiveKitApiSecret),

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
@@ -57,8 +58,13 @@ public sealed class VideoThumbnailSmokeTests
             var inventory = factory.Services.GetRequiredService<StorageInventoryState>();
             for (var i = 0; i < 100 && !inventory.IsReady; i++) await Task.Delay(100);
 
+            var playbackWorker = factory.Services.GetServices<IHostedService>().OfType<VideoPlaybackWorker>().Single();
+            var worker = factory.Services.GetServices<IHostedService>().OfType<VideoThumbnailWorker>().Single();
+            await playbackWorker.StopAsync(CancellationToken.None);
+            await worker.StopAsync(CancellationToken.None);
+
             // Default mp4 muxing puts the index at the end, like camera files.
-            RunFfmpeg($"-v error -f lavfi -i testsrc=duration=3:size=1280x720:rate=25 -c:v libx264 -pix_fmt yuv420p {video}");
+            RunFfmpeg($"-v error -f lavfi -i testsrc=duration=9:size=1920x1080:rate=25 -f lavfi -i sine=frequency=440:duration=9 -c:a aac -c:v libx264 -preset ultrafast -pix_fmt yuv420p {video}");
             await admin.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = VideoKey, FilePath = video });
             await admin.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = BrokenKey, ContentBody = "not a video" });
             await admin.PutObjectAsync(new PutObjectRequest
@@ -76,7 +82,6 @@ public sealed class VideoThumbnailSmokeTests
                 await db.SaveChangesAsync();
             }
 
-            var worker = factory.Services.GetServices<IHostedService>().OfType<VideoThumbnailWorker>().Single();
             for (var i = 0; i < 7; i++) await worker.RunOnceAsync(CancellationToken.None);
 
             using var poster = await admin.GetObjectAsync(bucket, VideoKey + VideoThumbnailWorker.KeySuffix);
@@ -93,6 +98,39 @@ public sealed class VideoThumbnailSmokeTests
                 Assert.Equal(ThumbnailState.Failed, db.ConfirmedUploads.Single(row => row.StorageKey == PlaylistKey).ThumbnailState);
             }
             Assert.False(await worker.RunOnceAsync(CancellationToken.None));
+            for (var i = 0; i < 9; i++) await playbackWorker.RunOnceAsync(CancellationToken.None);
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var ready = db.ConfirmedUploads.Single(row => row.StorageKey == VideoKey);
+                Assert.Equal(ThumbnailState.Done, ready.VideoState);
+                var variants = JsonSerializer.Deserialize<List<VideoRendition>>(ready.VideoManifest!)!;
+                Assert.Equal(new[] { 720, 1080 }, variants.Select(v => v.Height));
+                Assert.All(variants, v => Assert.Contains("#EXT-X-ENDLIST", v.Playlist));
+                var segments = await admin.ListObjectsV2Async(new ListObjectsV2Request { BucketName = bucket, Prefix = VideoPlayback.Prefix(VideoKey) });
+                Assert.Equal(6, segments.S3Objects.Count);
+                Assert.Equal(segments.S3Objects.Sum(o => o.Size), ready.VideoBytes);
+                Assert.Equal(ThumbnailState.Failed, db.ConfirmedUploads.Single(row => row.StorageKey == BrokenKey).VideoState);
+                Assert.Equal(ThumbnailState.Failed, db.ConfirmedUploads.Single(row => row.StorageKey == PlaylistKey).VideoState);
+
+                // A re-encode that exceeds quota must leave the original and no derived objects.
+                ready.VideoState = ThumbnailState.Pending;
+                var settings = db.SystemConfig.Single();
+                settings.UserStorageLimitMiB = 1;
+                ready.FileSize = 1024 * 1024;
+                await db.SaveChangesAsync();
+            }
+            await playbackWorker.RunOnceAsync(CancellationToken.None);
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var rejected = db.ConfirmedUploads.Single(row => row.StorageKey == VideoKey);
+                Assert.Equal(ThumbnailState.Failed, rejected.VideoState);
+                Assert.Equal(0, rejected.VideoBytes);
+                Assert.Null(rejected.VideoManifest);
+            }
+            Assert.Empty((await admin.ListObjectsV2Async(new ListObjectsV2Request { BucketName = bucket, Prefix = VideoPlayback.Prefix(VideoKey) })).S3Objects ?? []);
+            Assert.True((await admin.GetObjectMetadataAsync(bucket, VideoKey)).ContentLength > 0);
         }
         finally
         {
@@ -112,6 +150,7 @@ public sealed class VideoThumbnailSmokeTests
         MimeType = "video/mp4",
         ConfirmedAt = confirmedAt,
         ThumbnailState = ThumbnailState.Pending,
+        VideoState = ThumbnailState.Pending,
     };
 
     private static bool FfmpegInstalled()

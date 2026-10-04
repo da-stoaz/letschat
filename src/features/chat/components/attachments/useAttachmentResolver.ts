@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { invalidateSignedDownloadUrl } from '@/lib/downloadUrls'
 import { getSignedDownloadUrls } from '@/lib/uploads'
 import type { ChatMessageAttachment } from '@/types/attachments'
 import { getAttachmentKind, videoThumbnailKey } from './attachmentUtils'
@@ -123,6 +124,7 @@ export function useAttachmentResolver(attachments: ChatMessageAttachment[]) {
   }, [attachmentKeys, resolutions])
 
   const retry = useCallback((storageKey: string) => {
+    invalidateSignedDownloadUrl(storageKey)
     setResolutions((previous) => ({
       ...previous,
       [storageKey]: LOADING_STATE,

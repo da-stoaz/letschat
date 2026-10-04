@@ -129,6 +129,34 @@ a time at below-normal priority and writes `{videoKey}.thumb.jpg`, which shares
 the video's read rule and is removed with it. Local development needs ffmpeg on
 `PATH` (or `FFMPEG_PATH`); without it thumbnails stay pending.
 
+`VideoPlaybackWorker` also prepares HLS VOD renditions (H.264/AAC, four-second
+segments) up to 720p and 1080p, preserving aspect ratio and never upscaling.
+The original remains available for download and playback while processing or
+when a file cannot be converted. Existing videos are queued by the migration.
+Development needs both `ffmpeg` and `ffprobe` (`FFMPEG_PATH`, `FFPROBE_PATH`);
+the production image includes both. Restart after installing missing tools.
+
+A PostgreSQL advisory lock permits one encoder per installation, with two
+encoder threads, a 30-minute job timeout, a two-hour input-duration limit,
+and a 2 GiB output ceiling. Three unsuccessful attempts leave the original
+available. Temporary output requires up to 2 GiB of free local disk space.
+Derived segments count against retained storage quotas. Their byte reservation
+is committed before publication; retries remove partial output, and lifecycle
+collection deletes segments under the same original-row lock as publication.
+
+`POST /uploads/video-playback` checks the original attachment's permissions
+and returns processing status or a one-hour, video-scoped playlist grant.
+Segments use private MinIO signed URLs; no account token appears in a media
+URL. Grants have the same one-hour access window as downloads and survive API
+restarts/replicas sharing `JWT_SECRET`. The web player renews before expiry.
+The web CSP includes the API host in `media-src` for native HLS in Safari;
+other supported browsers load hls.js only when playback is requested.
+
+The player displays a poster until the first frame, retries pending posters,
+and fits the media to its aspect ratio and viewport height. Pop out moves
+playback into a persistent floating player with expand and browser
+picture-in-picture controls, independent of virtualized chat rows.
+
 Initial limits are 500 MiB per attachment and 64 MiB per multipart part;
 the five upload/quota `.env` values seed runtime-editable values in
 `/admin/config`. Avatars/icons remain limited to 10 MiB and `image/*`.

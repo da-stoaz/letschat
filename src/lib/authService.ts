@@ -323,6 +323,18 @@ export async function authServiceDownloadUrls(payload: DownloadUrlsPayload): Pro
   return postJson<DownloadUrlsResponse, DownloadUrlsPayload>('/uploads/download-urls', payload)
 }
 
+export type VideoPlaybackResponse = {
+  state: 'ready' | 'processing' | 'unavailable'
+  manifestPath: string | null
+  expiresIn: number
+}
+
+export async function authServiceVideoPlayback(payload: DownloadUrlPayload): Promise<VideoPlaybackResponse & { url: string | null }> {
+  const base = useServerConfigStore.getState().config?.authServiceUrl
+  const response = await postJson<VideoPlaybackResponse, DownloadUrlPayload>('/uploads/video-playback', payload)
+  return { ...response, url: response.manifestPath && base ? new URL(response.manifestPath, base).href : null }
+}
+
 export async function authServiceRenewSession(payload: RenewSessionPayload): Promise<AuthFrameworkToken> {
   const result = await postJson<{ sessionToken: AuthFrameworkToken }, RenewSessionPayload>('/auth/renew-session', payload)
   setStoredAuthSessionToken(result.sessionToken)

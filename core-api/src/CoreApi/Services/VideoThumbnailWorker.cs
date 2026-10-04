@@ -30,7 +30,6 @@ public sealed class VideoThumbnailWorker(
     private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(10);
     /// <summary>Shared by both seek attempts, so one file can hold the queue for at most this long.</summary>
     private static readonly TimeSpan JobTimeout = TimeSpan.FromSeconds(30);
-    private const string SetprivPath = "/usr/bin/setpriv";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -58,7 +57,8 @@ public sealed class VideoThumbnailWorker(
             }
             if (!worked)
             {
-                await Task.Delay(IdleDelay, stoppingToken);
+                try { await Task.Delay(IdleDelay, stoppingToken); }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
             }
         }
     }
@@ -177,25 +177,6 @@ public sealed class VideoThumbnailWorker(
     /// <c>nobody</c> user via <c>setpriv</c>, which also keeps it out of
     /// core-api's <c>/proc/…/environ</c>. On a dev machine it runs directly.
     /// </summary>
-    private ProcessStartInfo Ffmpeg(params string[] arguments)
-    {
-        var sandbox = Environment.IsPrivilegedProcess && File.Exists(SetprivPath);
-        var info = new ProcessStartInfo(sandbox ? SetprivPath : options.FfmpegPath)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        info.Environment.Clear();
-        info.Environment["PATH"] = "/usr/local/bin:/usr/bin:/bin";
-        if (sandbox)
-        {
-            foreach (var flag in new[] { "--reuid=nobody", "--regid=nogroup", "--clear-groups", "--no-new-privs", options.FfmpegPath })
-            {
-                info.ArgumentList.Add(flag);
-            }
-        }
-        foreach (var argument in arguments) info.ArgumentList.Add(argument);
-        return info;
-    }
+    private ProcessStartInfo Ffmpeg(params string[] arguments) =>
+        VideoProcess.StartInfo(options.FfmpegPath, arguments);
 }

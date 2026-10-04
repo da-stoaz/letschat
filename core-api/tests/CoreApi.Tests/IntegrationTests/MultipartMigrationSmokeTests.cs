@@ -40,7 +40,21 @@ public sealed class MultipartMigrationSmokeTests
                     VALUES (1, true, true, false, 10, 300, 'localhost', 1025, false,
                       'test@example.com', 'Test', NOW())
                     """);
+                await db.Database.ExecuteSqlRawAsync("""
+                    INSERT INTO "ConfirmedUploads" ("StorageKey", "Username", "FileName", "FileSize", "MimeType", "ConfirmedAt")
+                    VALUES ('uploads/dm/alice/bob/old.MP4', 'alice', 'old.MP4', 100, 'application/octet-stream', 1)
+                    """);
                 await db.Database.MigrateAsync();
+                var video = await db.ConfirmedUploads.SingleAsync();
+                Assert.Equal(ThumbnailState.Pending, video.VideoState);
+                await using (var tx = await db.Database.BeginTransactionAsync())
+                {
+                    Assert.NotNull(await VideoPlaybackWorker.LockUploadAsync(db, video.StorageKey, CancellationToken.None));
+                    video.VideoBytes = 50;
+                    await db.SaveChangesAsync();
+                    Assert.Equal(150, await StorageUsage.RetainedAndPendingAsync(db, "alice"));
+                    await tx.RollbackAsync();
+                }
                 var row = await db.SystemConfig.SingleAsync();
                 Assert.Equal(0, row.UploadPartSizeMiB);
                 Assert.Equal(0, row.UploadMaxFileSizeMiB);

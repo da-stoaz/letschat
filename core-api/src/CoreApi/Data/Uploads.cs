@@ -59,6 +59,11 @@ public sealed class ConfirmedUpload
     /// <summary>Poster-frame job for videos; see <c>VideoThumbnailWorker</c>.</summary>
     public ThumbnailState ThumbnailState { get; set; }
     public int ThumbnailAttempts { get; set; }
+    public ThumbnailState VideoState { get; set; }
+    public int VideoAttempts { get; set; }
+    /// <summary>Retained or reserved derived bytes, charged until deletion succeeds.</summary>
+    public long VideoBytes { get; set; }
+    public string? VideoManifest { get; set; }
 }
 
 public enum ThumbnailState

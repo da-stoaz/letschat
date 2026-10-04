@@ -155,7 +155,11 @@ public sealed class StorageService : IDisposable
             Verb = HttpVerb.GET,
             Expires = DateTime.UtcNow.AddSeconds(expiresInSeconds),
         };
-        if (InlineContentType(storageKey) is { } contentType)
+        if (storageKey.StartsWith("derived/hls/", StringComparison.Ordinal))
+        {
+            request.ResponseHeaderOverrides.ContentType = "video/mp2t";
+        }
+        else if (InlineContentType(storageKey) is { } contentType)
         {
             request.ResponseHeaderOverrides.ContentType = contentType;
         }
@@ -242,6 +246,36 @@ public sealed class StorageService : IDisposable
     /// <summary>Removes an object that failed confirmation, so a rejected upload does not linger.</summary>
     public Task DeleteObjectAsync(string storageKey) =>
         _internal.DeleteObjectAsync(_bucket, storageKey);
+
+    public async Task PutVideoSegmentAsync(string storageKey, string path, CancellationToken ct)
+    {
+        await using var stream = File.OpenRead(path);
+        await _internal.PutObjectAsync(new PutObjectRequest
+        {
+            BucketName = _bucket, Key = storageKey, InputStream = stream, ContentType = "video/mp2t",
+        }, ct);
+    }
+
+    public async Task DeleteVideoPlaybackAsync(string originalKey, CancellationToken ct)
+    {
+        // Always start at the first page: deleting changes the listing.
+        while (true)
+        {
+            var page = await _internal.ListObjectsV2Async(new ListObjectsV2Request
+            {
+                BucketName = _bucket, Prefix = VideoPlayback.Prefix(originalKey), MaxKeys = 500,
+            }, ct);
+            var objects = page.S3Objects ?? [];
+            if (objects.Count == 0) return;
+            var deleted = await _internal.DeleteObjectsAsync(new DeleteObjectsRequest
+            {
+                BucketName = _bucket,
+                Objects = objects.Select(item => new KeyVersion { Key = item.Key }).ToList(),
+            }, ct);
+            if (deleted.DeleteErrors?.Count > 0)
+                throw new IOException("Could not delete all video playback segments.");
+        }
+    }
 
     /// <summary>One bounded page used to adopt objects created before lifecycle tracking existed.</summary>
     public async Task<StorageObjectPage> ListObjectsPageAsync(

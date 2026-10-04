@@ -155,6 +155,10 @@ export async function getSignedDownloadUrl(storageKey: string): Promise<string> 
   }
 }
 
+export function invalidateSignedDownloadUrl(storageKey: string): void {
+  downloadUrlCache.delete(storageKey)
+}
+
 export function clearSignedDownloadUrlCache(): void {
   downloadUrlCache.clear()
   inflightDownloadRequests.clear()

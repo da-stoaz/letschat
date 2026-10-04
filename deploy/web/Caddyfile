@@ -38,7 +38,7 @@
 	# Krisp WASM (supersedes 'wasm-unsafe-eval'). We still withhold 'unsafe-inline',
 	# so injected inline <script> / event-handler XSS stays blocked.
 	header {
-		Content-Security-Policy "default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: {$MINIO_PUBLIC_ENDPOINT}; font-src 'self' data:; media-src 'self' blob: {$MINIO_PUBLIC_ENDPOINT}; frame-src {$MINIO_PUBLIC_ENDPOINT}; worker-src 'self' blob:; connect-src 'self' {$DISCOVERY_AUTH_URL} {$DISCOVERY_SPACETIMEDB_URI} {chat_ws} {$DISCOVERY_LIVEKIT_URL} {livekit_ws} {$MINIO_PUBLIC_ENDPOINT}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		Content-Security-Policy "default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: {$MINIO_PUBLIC_ENDPOINT}; font-src 'self' data:; media-src 'self' blob: {$MINIO_PUBLIC_ENDPOINT} {$DISCOVERY_AUTH_URL}; frame-src {$MINIO_PUBLIC_ENDPOINT}; worker-src 'self' blob:; connect-src 'self' {$DISCOVERY_AUTH_URL} {$DISCOVERY_SPACETIMEDB_URI} {chat_ws} {$DISCOVERY_LIVEKIT_URL} {livekit_ws} {$MINIO_PUBLIC_ENDPOINT}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		X-Frame-Options "DENY"

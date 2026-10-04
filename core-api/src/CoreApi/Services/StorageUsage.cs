@@ -11,7 +11,7 @@ public static class StorageUsage
     {
         var confirmed = db.ConfirmedUploads
             .Where(row => username == null || row.Username == username)
-            .Select(row => row.FileSize);
+            .Select(row => row.FileSize + row.VideoBytes);
         var pending = db.PendingUploads
             .Where(row => username == null || row.Username == username)
             .Select(row => row.FileSize);
