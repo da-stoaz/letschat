@@ -11,14 +11,14 @@ export type VideoSource = { url: string; storageKey: string; fileName: string; p
 type InlineVideoProps = VideoSource & {
   startAt: number
   onStop: (position: number) => void
-  onPopOut?: (position: number) => void
+  docked?: boolean
   persistent?: boolean
   expanded?: boolean
   onAspectRatio?: (ratio: number) => void
 }
 
 /** Mount on Play; let native media controls paint above the native poster. */
-export function InlineVideo({ url, storageKey, fileName, poster, aspectRatio = 16 / 9, startAt, onStop, onPopOut, persistent = false, expanded = false, onAspectRatio }: InlineVideoProps) {
+export function InlineVideo({ url, storageKey, fileName, poster, aspectRatio = 16 / 9, startAt, onStop, docked = false, persistent = false, expanded = false, onAspectRatio }: InlineVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const resumePosition = useRef(startAt)
   const resumeAutoplay = useRef(true)
@@ -124,8 +124,8 @@ export function InlineVideo({ url, storageKey, fileName, poster, aspectRatio = 1
   const pipSupported = typeof document !== 'undefined' && document.pictureInPictureEnabled
   return (
     <div className="flex w-full min-w-0 flex-col items-center">
-      <div className="relative max-w-full overflow-hidden rounded-md bg-black" style={videoSize(ratio, expanded ? 78 : persistent ? 40 : 60)}>
-        <video ref={videoRef} aria-label={fileName} controls playsInline disablePictureInPicture={Boolean(onPopOut)} preload="none" poster={poster ?? undefined}
+      <div className="relative max-w-full overflow-hidden rounded-md bg-black" style={videoSize(ratio, expanded ? 78 : docked ? 60 : persistent ? 40 : 60)}>
+        <video ref={videoRef} aria-label={fileName} controls playsInline disablePictureInPicture={docked} preload="none" poster={poster ?? undefined}
           className="absolute inset-0 h-full w-full object-contain"
           onPlaying={() => { setBlocked(false); setError(null) }}
         />
@@ -146,7 +146,7 @@ export function InlineVideo({ url, storageKey, fileName, poster, aspectRatio = 1
       </div>
       <div className="flex w-full flex-wrap items-center justify-between gap-1 px-2 py-1">
         <span className="text-xs text-muted-foreground" aria-live="polite">{sourceLabel}</span>
-        {onPopOut ? <Button size="sm" variant="ghost" onClick={() => onPopOut(videoRef.current?.currentTime ?? startAt)}><PictureInPicture2Icon className="size-4" />Pop out</Button> : pipSupported ? (
+        {!docked && pipSupported ? (
           <Button size="sm" variant="ghost" disabled={!frame} onClick={() => {
             const video = videoRef.current
             if (video) void (document.pictureInPictureElement === video ? document.exitPictureInPicture() : video.requestPictureInPicture()).catch(() => setPipError(true))

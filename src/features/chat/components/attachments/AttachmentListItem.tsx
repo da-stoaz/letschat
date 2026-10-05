@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { DownloadIcon, ExternalLinkIcon, FileIcon, ImageIcon, Loader2Icon, MusicIcon, PlayIcon, VideoIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { downloadAttachment } from '@/lib/attachmentDownload'
@@ -6,11 +6,12 @@ import type { ChatMessageAttachment } from '@/types/attachments'
 import { formatFileSize, getAttachmentKind } from './attachmentUtils'
 import { useVideoPlayerStore } from '@/stores/videoPlayerStore'
 import { videoThumbnailKey } from './attachmentUtils'
-import { InlineVideo } from './InlineVideo'
 import { videoSize } from './videoPresentation'
+import { observeVideoDock } from './videoDock'
 import type { AttachmentResolution } from './useAttachmentResolver'
 
 type AttachmentListItemProps = {
+  originId: string
   attachment: ChatMessageAttachment
   resolution: AttachmentResolution
   thumbnailUrl?: string | null
@@ -30,22 +31,30 @@ function isPdfAttachment(attachment: ChatMessageAttachment): boolean {
   return attachment.storageKey.toLowerCase().endsWith('.pdf')
 }
 
-export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRetry, onOpenImage, onOpenPdf }: AttachmentListItemProps) {
+export function AttachmentListItem({ originId, attachment, resolution, thumbnailUrl, onRetry, onOpenImage, onOpenPdf }: AttachmentListItemProps) {
   const cancelDownloadRef = useRef<(() => Promise<void>) | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [resumeAt, setResumeAt] = useState(0)
-  const stopVideo = useCallback((position: number) => {
-    setResumeAt(position)
-    setIsPlaying(false)
-  }, [])
+  const canOpen = Boolean(resolution.url)
+  const [anchor, setAnchor] = useState<HTMLDivElement | null>(null)
+  const player = useVideoPlayerStore(state => state.player?.storageKey === attachment.storageKey ? state.player : null)
+  const isOrigin = player?.originId === originId
+  const activeAnchor = useVideoPlayerStore(state => state.anchor)
+  const isPlayingHere = Boolean(player && activeAnchor && activeAnchor === anchor)
+  useLayoutEffect(() => {
+    return () => { if (anchor) useVideoPlayerStore.getState().releaseAnchor(anchor) }
+  }, [anchor])
+  useEffect(() => {
+    if (!anchor || !isOrigin) return
+    return observeVideoDock(anchor, (visible, autoReturn) => useVideoPlayerStore.getState().setVisibility(originId, anchor, visible, autoReturn))
+  }, [anchor, isOrigin, originId])
   const [posterMissing, setPosterMissing] = useState(false)
   const [posterAttempt, setPosterAttempt] = useState(0)
-  const [aspectRatio, setAspectRatio] = useState(16 / 9)
+  const [posterRatio, setPosterRatio] = useState(16 / 9)
+  const aspectRatio = player?.aspectRatio ?? posterRatio
   const popOut = (position = 0) => {
     if (!resolution.url) return
-    stopVideo(position)
-    useVideoPlayerStore.getState().open({ url: resolution.url, storageKey: attachment.storageKey, fileName: attachment.fileName, poster: thumbnailUrl, aspectRatio, startAt: position })
+    if (player) { useVideoPlayerStore.getState().float(); return }
+    useVideoPlayerStore.getState().open({ originId, url: resolution.url, storageKey: attachment.storageKey, fileName: attachment.fileName, poster: thumbnailUrl, aspectRatio, startAt: position })
   }
   useEffect(() => {
     if (!posterMissing || posterAttempt >= 20) return
@@ -59,7 +68,6 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
   const [isCancelling, setIsCancelling] = useState(false)
   const [downloadProgressFraction, setDownloadProgressFraction] = useState<number | null>(null)
   const kind = getAttachmentKind(attachment.mimeType)
-  const canOpen = Boolean(resolution.url)
   const isPdf = isPdfAttachment(attachment)
   const hasDownloadProgress = isSaving && downloadProgressFraction !== null
   const downloadPercent = hasDownloadProgress ? Math.round(downloadProgressFraction * 100) : null
@@ -84,34 +92,40 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
               <img src={resolution.url ?? ''} alt={attachment.fileName} className="max-h-56 w-full object-contain" />
             </button>
           ) : kind === 'video' ? (
-            isPlaying ? (
-              <InlineVideo url={resolution.url ?? ''} storageKey={attachment.storageKey} fileName={attachment.fileName} poster={thumbnailUrl} aspectRatio={aspectRatio} onAspectRatio={setAspectRatio} startAt={resumeAt} onStop={stopVideo} onPopOut={popOut} />
-            ) : (
-              // No <video> until asked: WebKit buffers media on render whatever
-              // `preload` says, which pulled GBs per page load. Only the small
-              // poster image is fetched up front.
-              <button
-                type="button"
-                aria-label={`Play ${attachment.fileName}`}
-                className="relative mx-auto flex max-w-full items-center justify-center overflow-hidden bg-muted focus-visible:outline-2 focus-visible:outline-primary"
-                style={videoSize(aspectRatio, 60)}
-                onClick={() => setIsPlaying(true)}
-              >
-                {thumbnailUrl && !posterMissing ? (
-                  <img
-                    key={posterAttempt}
-                    src={thumbnailUrl}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-contain"
-                    onLoad={event => { const img = event.currentTarget; setAspectRatio(img.naturalWidth / img.naturalHeight); setPosterMissing(false) }}
-                    onError={() => setPosterMissing(true)}
-                  />
-                ) : null}
-                <span className="absolute flex size-14 items-center justify-center rounded-full bg-black/60 text-white">
-                  <PlayIcon className="size-7 fill-current" />
-                </span>
-              </button>
-            )
+            <div ref={setAnchor}>
+              {!isPlayingHere ? (
+                // No <video> until asked: WebKit buffers media on render whatever
+                // `preload` says, which pulled GBs per page load. Only the small
+                // poster image is fetched up front.
+                <button
+                  type="button"
+                  aria-label={`${player ? 'Show player for' : 'Play'} ${attachment.fileName}`}
+                  className="relative mx-auto flex max-w-full items-center justify-center overflow-hidden bg-muted focus-visible:outline-2 focus-visible:outline-primary"
+                  style={videoSize(aspectRatio, 60)}
+                  onClick={() => {
+                    if (player) { useVideoPlayerStore.getState().float(); return }
+                    if (resolution.url && anchor) useVideoPlayerStore.getState().open({
+                      originId, url: resolution.url, storageKey: attachment.storageKey, fileName: attachment.fileName,
+                      poster: thumbnailUrl, aspectRatio, startAt: 0,
+                    }, anchor)
+                  }}
+                >
+                  {thumbnailUrl && !posterMissing ? (
+                    <img
+                      key={posterAttempt}
+                      src={thumbnailUrl}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-contain"
+                      onLoad={event => { const img = event.currentTarget; setPosterRatio(img.naturalWidth / img.naturalHeight); setPosterMissing(false) }}
+                      onError={() => setPosterMissing(true)}
+                    />
+                  ) : null}
+                  <span className="absolute flex size-14 items-center justify-center rounded-full bg-black/60 text-white">
+                    <PlayIcon className="size-7 fill-current" />
+                  </span>
+                </button>
+              ) : null}
+            </div>
           ) : (
             <audio src={resolution.url ?? ''} preload="none" controls className="w-full p-1.5" />
           )}
@@ -149,7 +163,7 @@ export function AttachmentListItem({ attachment, resolution, thumbnailUrl, onRet
                 return
               }
               if (kind === 'video') {
-                popOut(resumeAt)
+                popOut()
                 return
               }
               if (isPdf) {

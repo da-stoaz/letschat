@@ -25,7 +25,7 @@ function dedupeAttachments(attachments: ChatMessageAttachment[]): ChatMessageAtt
   return deduped
 }
 
-export function MessageAttachmentList({ attachments }: { attachments: ChatMessageAttachment[] }) {
+export function MessageAttachmentList({ messageKey, attachments }: { messageKey: string; attachments: ChatMessageAttachment[] }) {
   const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null)
   const [previewPdf, setPreviewPdf] = useState<PreviewPdf | null>(null)
   const uniqueAttachments = useMemo(() => dedupeAttachments(attachments), [attachments])
@@ -73,6 +73,7 @@ export function MessageAttachmentList({ attachments }: { attachments: ChatMessag
         {regularAttachments.map((attachment) => (
           <AttachmentListItem
             key={attachment.storageKey}
+            originId={`${messageKey}:${attachment.storageKey}`}
             attachment={attachment}
             resolution={getResolution(attachment.storageKey)}
             thumbnailUrl={

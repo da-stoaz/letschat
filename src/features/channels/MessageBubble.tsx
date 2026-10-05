@@ -173,7 +173,7 @@ export function MessageBubble({
                     </div>
                   ) : (
                     <div className="space-y-1.5">
-                      <MessageAttachmentList attachments={parsed.attachments} />
+                      <MessageAttachmentList messageKey={`${message.senderIdentity}:${message.sentAt}:${message.id}`} attachments={parsed.attachments} />
                       {hasText ? (
                         <div className="prose prose-invert max-w-none break-words text-sm text-foreground prose-p:my-0 prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-pre:rounded prose-pre:border prose-pre:border-border/70 prose-pre:bg-muted/70 prose-a:text-sky-400 hover:prose-a:text-sky-300">
                           <ReactMarkdown
