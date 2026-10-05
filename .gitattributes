@@ -11,3 +11,6 @@ src/generated/**/*.ts text eol=lf
 *.ico binary
 *.icns binary
 *.wasm binary
+
+src-tauri/vendor/glib-0.18.5/** linguist-vendored
+site/vendor/http-cache-semantics/** linguist-vendored
