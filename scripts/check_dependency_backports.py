@@ -59,6 +59,10 @@ verify_archive(ROOT / 'site/vendor/http-cache-semantics', 'package',
          b'        if (this.maxAge() === 0) {\n'
          b'            return this._evaluateRequestMissResult(req);\n'
          b'        }\n\n        // In all circumstances'),
+        (b'            .split(/\\s*,\\s*/);',
+         b"            .split(',')\n            .map(name => name.trim());"),
+        (b'inHeaders.connection.trim().split(/\\s*,\\s*/)',
+         b"inHeaders.connection.split(',').map(name => name.trim())"),
     ], 2)
 
 manifest = tomllib.loads((ROOT / 'src-tauri/Cargo.toml').read_text())

@@ -494,7 +494,8 @@ module.exports = class CachePolicy {
         const fields = this._resHeaders.vary
             .trim()
             .toLowerCase()
-            .split(/\s*,\s*/);
+            .split(',')
+            .map(name => name.trim());
 
         for (const name of fields) {
             // A Vary header field-value of "*" always fails to match
@@ -534,7 +535,7 @@ module.exports = class CachePolicy {
         }
         // 9.1.  Connection
         if (inHeaders.connection) {
-            const tokens = inHeaders.connection.trim().split(/\s*,\s*/);
+            const tokens = inHeaders.connection.split(',').map(name => name.trim());
             for (const name of tokens) {
                 delete headers[name];
             }

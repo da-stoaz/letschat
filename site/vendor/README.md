@@ -10,12 +10,16 @@ A shared response containing Set-Cookie without public/immutable opt-in has
 maxAge() == 0, yet a large or unbounded client max-stale can still reuse it.
 An audit reporting zero findings is therefore insufficient validation.
 
-The only source change is a guard in evaluateRequest: zero-lifetime entries
+The cache reuse fix is a guard in evaluateRequest: zero-lifetime entries
 require synchronous revalidation and never supply a cached response. This is
 intentionally conservative: even an explicitly public max-age=0 entry must
 revalidate. Normal positive-lifetime public caching and permitted stale reuse
 remain available. This avoids guessing which of maxAge's zero-return paths
 represent security restrictions.
+
+CodeQL also identified quadratic whitespace backtracking in the upstream
+comma-separated header parser. Both Connection and Vary now split on a literal
+comma and trim each token separately, preserving token handling in linear time.
 
 The npm override routes every Astro consumer to this local copy. The site is
 statically generated, but the dependency is fixed rather than merely dismissing
@@ -32,7 +36,8 @@ npm audit --audit-level=low
 npm run build
 ```
 
-The archive check permits only this exact guard. Regression tests cover session
+The archive check permits only this guard and the two header-parser replacements. Regression tests cover session
 cookies, private/no-store/no-cache responses, wildcard Vary, proxy revalidation,
-serialized policies, and normal public caching. Remove this override and copy
+serialized policies, normal public caching, and whitespace-heavy header parsing
+in a subprocess with a five-second deadline. Remove this override and copy
 when an upstream release passes these behavioral checks without the patch.

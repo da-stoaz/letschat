@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -46,4 +47,48 @@ test('explicitly public responses still use fresh and allowed stale cache entrie
   policy.now = () => now + 20_000;
   assert.equal(policy.satisfiesWithoutRevalidation(request), false);
   assert.equal(policy.satisfiesWithoutRevalidation(staleRequest('max-stale=60')), true);
+});
+
+
+test('Connection header tokens are trimmed and removed from cached response headers', () => {
+  const policy = new CachePolicy(request, response({
+    'cache-control': 'public, max-age=600',
+    connection: '  x-private \t, x-other  ',
+    'x-private': 'secret',
+    'x-other': 'secret',
+    'x-retained': 'public',
+  }));
+  const headers = policy.responseHeaders();
+  assert.equal(headers.connection, undefined);
+  assert.equal(headers['x-private'], undefined);
+  assert.equal(headers['x-other'], undefined);
+  assert.equal(headers['x-retained'], 'public');
+});
+
+test('Vary header tokens retain case-insensitive trimmed matching', () => {
+  const varyingRequest = { ...request, headers: { ...request.headers, 'accept-language': 'en', accept: 'text/html' } };
+  const policy = new CachePolicy(varyingRequest, response({
+    'cache-control': 'public, max-age=600', vary: ' Accept-Language \t, Accept  ',
+  }));
+  assert.equal(policy.satisfiesWithoutRevalidation(varyingRequest), true);
+  assert.equal(policy.satisfiesWithoutRevalidation({ ...varyingRequest,
+    headers: { ...varyingRequest.headers, 'accept-language': 'de' },
+  }), false);
+});
+
+test('whitespace-heavy Connection and Vary headers finish within a bounded subprocess', () => {
+  const result = spawnSync(process.execPath, ['-e', `
+    const assert = require('node:assert/strict');
+    const CachePolicy = require(process.argv[1]);
+    const token = 'x' + ' '.repeat(250_000) + 'y';
+    const req = { url: 'https://example.invalid/', method: 'GET', headers: { host: 'example.invalid', [token]: 'value' } };
+    const policy = new CachePolicy(req, { status: 200, headers: {
+      'cache-control': 'public, max-age=600', connection: token, vary: token, [token]: 'secret',
+    } });
+    assert.equal(policy.responseHeaders()[token], undefined);
+    assert.equal(policy.satisfiesWithoutRevalidation(req), true);
+    assert.equal(policy.satisfiesWithoutRevalidation({ ...req, headers: { host: 'example.invalid' } }), false);
+  `, astroRequire.resolve('http-cache-semantics')], { timeout: 5000, encoding: 'utf8' });
+  assert.equal(result.error, undefined, result.error?.message);
+  assert.equal(result.status, 0, result.stderr);
 });
