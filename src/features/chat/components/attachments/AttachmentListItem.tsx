@@ -81,27 +81,29 @@ export function AttachmentListItem({ originId, attachment, resolution, thumbnail
 
   return (
     <div className="max-w-full rounded-lg border border-border/70 bg-muted/20 p-1" style={kind === 'video' ? { width: videoSize(aspectRatio, 60).width } : undefined}>
-      {(kind === 'image' || kind === 'video' || kind === 'audio') && canOpen ? (
+      {kind === 'video' || kind === 'image' || (kind === 'audio' && canOpen) ? (
         <div className="mb-1 overflow-hidden rounded-md border border-border/60 bg-background/50">
           {kind === 'image' ? (
             <button
               type="button"
-              className="block w-full cursor-zoom-in focus:outline-none"
+              disabled={!canOpen}
+              className="relative flex h-56 w-full items-center justify-center cursor-zoom-in focus:outline-none"
               onClick={() => resolution.url && onOpenImage({ url: resolution.url, fileName: attachment.fileName })}
             >
-              <img src={resolution.url ?? ''} alt={attachment.fileName} className="max-h-56 w-full object-contain" />
+              {resolution.url ? <img src={resolution.url} alt={attachment.fileName} className="h-full w-full object-contain" /> : <Loader2Icon className="size-7 animate-spin" />}
             </button>
           ) : kind === 'video' ? (
-            <div ref={setAnchor}>
+            <div ref={setAnchor} className="grid">
               {!isPlayingHere ? (
                 // No <video> until asked: WebKit buffers media on render whatever
                 // `preload` says, which pulled GBs per page load. Only the small
                 // poster image is fetched up front.
                 <button
                   type="button"
+                  disabled={!canOpen}
                   aria-label={`${player ? 'Show player for' : 'Play'} ${attachment.fileName}`}
                   className="relative mx-auto flex max-w-full items-center justify-center overflow-hidden bg-muted focus-visible:outline-2 focus-visible:outline-primary"
-                  style={videoSize(aspectRatio, 60)}
+                  style={{ ...videoSize(aspectRatio, 60), gridArea: '1 / 1' }}
                   onClick={() => {
                     if (player) { useVideoPlayerStore.getState().float(); return }
                     if (resolution.url && anchor) useVideoPlayerStore.getState().open({
@@ -121,7 +123,7 @@ export function AttachmentListItem({ originId, attachment, resolution, thumbnail
                     />
                   ) : null}
                   <span className="absolute flex size-14 items-center justify-center rounded-full bg-black/60 text-white">
-                    <PlayIcon className="size-7 fill-current" />
+                    {canOpen ? <PlayIcon className="size-7 fill-current" /> : <Loader2Icon className="size-7 animate-spin" />}
                   </span>
                 </button>
               ) : null}
@@ -235,7 +237,7 @@ export function AttachmentListItem({ originId, attachment, resolution, thumbnail
           />
         </div>
       ) : null}
-      {resolution.loading ? <p className="mt-1 text-xs text-muted-foreground">Loading secure file URL…</p> : null}
+      {resolution.loading && kind !== 'video' && kind !== 'image' ? <p className="mt-1 text-xs text-muted-foreground">Loading secure file URL…</p> : null}
     </div>
   )
 }

@@ -28,14 +28,15 @@ export function VideoPlayerHost() {
 
   useLayoutEffect(() => useVideoPlayerStore.subscribe((state, previous) => {
     if (state.anchor !== previous.anchor || state.player?.storageKey !== previous.player?.storageKey) {
-      dock.capture(state.player?.storageKey === previous.player?.storageKey)
+      const leavingViewport = state.autoFloating && !state.anchor && !state.visibleAnchor
+      dock.capture(state.player?.storageKey === previous.player?.storageKey, !leavingViewport)
     }
   }), [dock])
 
   useLayoutEffect(() => {
     if (!key || !user) { dock.destroy(); return }
     const target = anchor?.isConnected ? anchor : floatingSlot.current
-    if (target) dock.move(target)
+    if (target) dock.move(target, Boolean(anchor?.isConnected))
   }, [anchor, dock, key, user])
   useEffect(() => () => dock.destroy(), [dock])
 
@@ -47,7 +48,7 @@ export function VideoPlayerHost() {
     document.addEventListener('keydown', onKey)
     return () => {
       document.removeEventListener('keydown', onKey)
-      if (focusOnOpen && previous?.isConnected) previous.focus()
+      if (focusOnOpen && previous?.isConnected) previous.focus({ preventScroll: true })
     }
   }, [key, floating, focusOnOpen, dismiss])
   useEffect(() => useSelfStore.subscribe((state, previous) => {

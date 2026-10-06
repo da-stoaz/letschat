@@ -1,9 +1,9 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDownIcon } from 'lucide-react'
 import { MessageBubble, type MessageGroup, type RenderableMessage } from '../channels/MessageBubble'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { getHistoryScrollOffset } from './chatScroll'
 
 const HISTORY_PAGE_SIZE = 50
 const GROUP_WINDOW_MS = 7 * 60 * 1000
@@ -46,10 +46,6 @@ function isSameGroup(previous: RenderableMessage, next: RenderableMessage): bool
   return nextMs - previousMs <= GROUP_WINDOW_MS
 }
 
-function estimateGroupHeight(group: MessageGroup): number {
-  return 48 + group.messages.length * 28
-}
-
 export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   scopeKey: string
   messages: RenderableMessage[]
@@ -85,8 +81,11 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE_SIZE)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [highlightedId, setHighlightedId] = useState<number | null>(null)
+  const [jumpRequest, setJumpRequest] = useState(0)
   const pendingJumpRef = useRef<number | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const followBottom = useRef(true)
+  const previousLayout = useRef<{ scopeKey: string; firstMessageId: number | undefined; scrollHeight: number; scrollTop: number } | null>(null)
 
   const sortedMessages = useMemo(
     () => [...messages].sort((a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt)),
@@ -96,9 +95,20 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   // Adjust-state-during-render: entering a different channel/DM resets
   // pagination before paint instead of one frame late in an effect.
   const [lastScopeKey, setLastScopeKey] = useState(scopeKey)
+  const [lastMessageCount, setLastMessageCount] = useState(messages.length)
   if (scopeKey !== lastScopeKey) {
+    followBottom.current = true
     setLastScopeKey(scopeKey)
+    setLastMessageCount(sortedMessages.length)
     setHistoryLimit(HISTORY_PAGE_SIZE)
+  } else if (sortedMessages.length !== lastMessageCount) {
+    // Keep already loaded messages in the DOM when new messages arrive while
+    // reading history, rather than trimming the top of the page underneath it.
+    if (lastMessageCount > 0 && sortedMessages.length > lastMessageCount &&
+      (!followBottom.current || historyLimit >= lastMessageCount)) {
+      setHistoryLimit(previous => previous + sortedMessages.length - lastMessageCount)
+    }
+    setLastMessageCount(sortedMessages.length)
   }
 
   const visibleMessages = useMemo(() => {
@@ -142,35 +152,58 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
     return items
   }, [visibleMessages])
 
-  const rowVirtualizer = useVirtualizer({
-    count: feedItems.length,
-    getScrollElement: () => scrollRef.current,
-    getItemKey: (index) => feedItems[index]?.key ?? index,
-    estimateSize: (index) => {
-      const item = feedItems[index]
-      if (!item) return 80
-      if (item.type === 'date') return 36
-      return estimateGroupHeight(item.group)
-    },
-    measureElement: (element) => element?.getBoundingClientRect().height ?? 0,
-    overscan: 8,
-  })
-
   const scrollToBottom = () => {
     const element = scrollRef.current
     if (!element) return
+    followBottom.current = true
     element.scrollTop = element.scrollHeight
     setIsAtBottom(true)
   }
 
-  useEffect(() => {
-    if (!isAtBottom) return
-    requestAnimationFrame(() => scrollToBottom())
-  }, [feedItems.length, isAtBottom])
+  // ponytail: loaded pages stay mounted; add measured page windowing only if
+  // profiling very long histories warrants it.
+  // Native layout gives every loaded message its real height before paint.
+  // Compensate a prepended page once, instead of correcting estimated heights
+  // repeatedly during a WebKit scroll gesture.
+  useLayoutEffect(() => {
+    const element = scrollRef.current
+    if (!element) return
+    const previous = previousLayout.current
+    const firstMessageId = visibleMessages[0]?.id
+    if (followBottom.current) {
+      element.scrollTop = element.scrollHeight
+    } else if (
+      previous?.scopeKey === scopeKey && previous.firstMessageId !== firstMessageId &&
+      visibleMessages.some(message => message.id === previous.firstMessageId)
+    ) {
+      element.scrollTop = getHistoryScrollOffset(previous.scrollTop, previous.scrollHeight, element.scrollHeight)
+    }
+    previousLayout.current = { scopeKey, firstMessageId, scrollHeight: element.scrollHeight, scrollTop: element.scrollTop }
+  }, [scopeKey, visibleMessages])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const element = scrollRef.current
+    const content = element?.firstElementChild
+    if (!element || !content) return
+    const observer = new ResizeObserver(() => {
+      // Secure URL resolution and image loading can change actual heights.
+      // Follow those changes only while the reader is still at the bottom.
+      if (followBottom.current) element.scrollTop = element.scrollHeight
+      if (previousLayout.current) {
+        previousLayout.current.scrollTop = element.scrollTop
+        previousLayout.current.scrollHeight = element.scrollHeight
+      }
+    })
+    observer.observe(content)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  useLayoutEffect(() => {
     if (scrollToBottomToken === 0) return
-    requestAnimationFrame(() => scrollToBottom())
+    followBottom.current = true
+    const element = scrollRef.current
+    if (element) element.scrollTop = element.scrollHeight
   }, [scrollToBottomToken])
 
   // Phase 1: the parent triggers a jump imperatively (from a search-result or
@@ -182,40 +215,63 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
       jumpToMessage: (messageId: number) => {
         const index = sortedMessages.findIndex((message) => message.id === messageId)
         if (index < 0) return
+        followBottom.current = false
         const neededLimit = sortedMessages.length - index
         setHistoryLimit((previous) => Math.max(previous, neededLimit))
         setIsAtBottom(false)
         setHighlightedId(messageId)
+        setJumpRequest(previous => previous + 1)
         pendingJumpRef.current = messageId
       },
     }),
     [sortedMessages],
   )
 
-  // Phase 2: once the target group is present in feedItems, scroll to it.
-  useEffect(() => {
+  // Phase 2: once the actual message is laid out, scroll to it before paint.
+  useLayoutEffect(() => {
     const target = pendingJumpRef.current
     if (target == null) return
-    const itemIndex = feedItems.findIndex(
-      (item) => item.type === 'group' && item.group.messages.some((message) => message.id === target),
-    )
-    if (itemIndex < 0) return
+    if (!visibleMessages.some(message => message.id === target)) return
     pendingJumpRef.current = null
-    requestAnimationFrame(() => rowVirtualizer.scrollToIndex(itemIndex, { align: 'center' }))
-    const timer = setTimeout(() => {
-      setHighlightedId((current) => (current === target ? null : current))
-    }, 2600)
+    const element = scrollRef.current
+    const message = element?.querySelector<HTMLElement>(`[data-message-id="${target}"]`)
+    if (!element || !message) return
+    element.scrollTop += message.getBoundingClientRect().top - element.getBoundingClientRect().top
+      - Math.max(0, (element.clientHeight - message.offsetHeight) / 2)
+  }, [visibleMessages, jumpRequest])
+
+  useEffect(() => {
+    if (highlightedId == null) return
+    const timer = setTimeout(() => setHighlightedId(null), 2600)
     return () => clearTimeout(timer)
-  }, [feedItems, rowVirtualizer])
+  }, [highlightedId])
 
   return (
     <div className="relative min-h-0 flex-1">
       <div
         ref={scrollRef}
         className="app-scrollbar h-full overflow-x-hidden overflow-y-auto"
+        style={{ overflowAnchor: 'none', overscrollBehavior: 'none' }}
+        onKeyDownCapture={(event) => {
+          if (['ArrowUp', 'PageUp', 'Home'].includes(event.key)) followBottom.current = false
+        }}
+        onWheelCapture={(event) => {
+          // Stop following on intent, before layout/measurement scroll events.
+          if (event.deltaY < 0) {
+            followBottom.current = false
+          }
+        }}
         onScroll={(event) => {
           const target = event.currentTarget
-          const atBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 80
+          const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight
+          const previous = previousLayout.current
+          if (previous && target.scrollTop < previous.scrollTop) followBottom.current = false
+          else if (distanceFromBottom <= 1) followBottom.current = true
+          if (previous) {
+            previous.scrollTop = target.scrollTop
+            previous.scrollHeight = target.scrollHeight
+          }
+          const atBottom = distanceFromBottom < 80
           setIsAtBottom((previous) => (previous === atBottom ? previous : atBottom))
 
           if (target.scrollTop <= 60) {
@@ -229,56 +285,35 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
           }
         }}
       >
-        <div
-          style={{
-            height: `${rowVirtualizer.getTotalSize()}px`,
-            position: 'relative',
-          }}
-        >
-          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-            const item = feedItems[virtualRow.index]
-            if (!item) return null
-
-            return (
-              <div
-                key={item.key}
-                ref={rowVirtualizer.measureElement}
-                data-index={virtualRow.index}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
-              >
-                {item.type === 'date' ? (
-                  <div className="my-1.5 flex items-center gap-2 px-4">
-                    <Separator className="flex-1" />
-                    <span className="text-xs text-muted-foreground">{item.dateLabel}</span>
-                    <Separator className="flex-1" />
-                  </div>
-                ) : (
-                  <MessageBubble
-                    group={item.group}
-                    canModerate={canDeleteAny}
-                    allowEditOwn={allowEditOwn}
-                    selfIdentity={selfIdentity}
-                    highlightMessageId={highlightedId}
-                    pinnedMessageIds={pinnedMessageIds}
-                    onTogglePin={onTogglePin}
-                    onEditMessage={(message, newContent) => {
-                      if (!onEditMessage) return
-                      void onEditMessage(message, newContent)
-                    }}
-                    onDeleteMessage={(message) => {
-                      void onDeleteMessage(message)
-                    }}
-                  />
-                )}
-              </div>
-            )
-          })}
+        <div>
+          {feedItems.map((item) => (
+            <div key={item.key}>
+              {item.type === 'date' ? (
+                <div className="my-1.5 flex items-center gap-2 px-4">
+                  <Separator className="flex-1" />
+                  <span className="text-xs text-muted-foreground">{item.dateLabel}</span>
+                  <Separator className="flex-1" />
+                </div>
+              ) : (
+                <MessageBubble
+                  group={item.group}
+                  canModerate={canDeleteAny}
+                  allowEditOwn={allowEditOwn}
+                  selfIdentity={selfIdentity}
+                  highlightMessageId={highlightedId}
+                  pinnedMessageIds={pinnedMessageIds}
+                  onTogglePin={onTogglePin}
+                  onEditMessage={(message, newContent) => {
+                    if (!onEditMessage) return
+                    void onEditMessage(message, newContent)
+                  }}
+                  onDeleteMessage={(message) => {
+                    void onDeleteMessage(message)
+                  }}
+                />
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
