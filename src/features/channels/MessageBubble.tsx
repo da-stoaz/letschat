@@ -148,6 +148,7 @@ export function MessageBubble({
               return (
                 <div
                   key={message.id}
+                  data-message-id={message.id}
                   className={`group/message relative rounded-md transition-colors ${
                     isHighlighted ? 'bg-primary/15 ring-1 ring-primary/40' : ''
                   }`}

@@ -189,6 +189,7 @@ class Slot {
   isConnected = true
   style: Record<string, string> = { minHeight: '' }
   parentElement: Slot | null = null
+  firstElementChild: Slot | null = null
   rect: { left: number; top: number; width: number; height: number }
   constructor(rect = { left: 0, top: 0, width: 800, height: 450 }) { this.rect = rect }
   appendChild(child: Slot) { child.parentElement = this }
@@ -201,9 +202,16 @@ function flight(reduced = false) {
   const body = new Slot()
   vi.stubGlobal('document', { body, addEventListener: vi.fn(), removeEventListener: vi.fn() })
   vi.stubGlobal('window', { innerWidth: 1200, innerHeight: 900, matchMedia: () => ({ matches: reduced }) })
-  const animations: { cancel: ReturnType<typeof vi.fn>; onfinish: (() => void) | null }[] = []
+  let resize: () => void = () => {}
+  const disconnect = vi.fn()
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(callback: () => void) { resize = callback }
+    observe = vi.fn()
+    disconnect = disconnect
+  })
+  const animations: { cancel: ReturnType<typeof vi.fn>; pause: ReturnType<typeof vi.fn>; currentTime: number; onfinish: (() => void) | null }[] = []
   const container = Object.assign(new Slot(), { animate: vi.fn(() => {
-    const animation = { cancel: vi.fn(), onfinish: null as (() => void) | null }
+    const animation = { cancel: vi.fn(), pause: vi.fn(), currentTime: 0, onfinish: null as (() => void) | null }
     animations.push(animation)
     return animation
   }) })
@@ -211,19 +219,121 @@ function flight(reduced = false) {
   const floating = new Slot({ left: 600, top: 500, width: 400, height: 225 })
   const dock = createVideoDock(container as unknown as HTMLElement)
   dock.move(inline as unknown as HTMLElement)
-  return { body, container, inline, floating, animations, dock }
+  return { body, container, inline, floating, animations, dock, resize: () => resize(), disconnect }
 }
 
 describe('video docking animation', () => {
-  it('moves the same live container above clipping ancestors, then attaches it to the destination', () => {
-    const { dock, container, inline, floating, body, animations } = flight()
+  it('leaves a progressing native clock alone and clears timers on dismissal', () => {
+    vi.useFakeTimers()
+    const { dock, floating, animations } = flight()
     dock.capture()
     dock.move(floating as unknown as HTMLElement)
-    expect(container.parentElement).toBe(body)
-    expect(floating.style.minHeight).toBe('225px')
+    animations[0].currentTime = 80
+    vi.advanceTimersByTime(80)
+    expect(animations[0].pause).not.toHaveBeenCalled()
+    expect(animations[0].currentTime).toBe(80)
+    dock.destroy()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('animates the whole floating card and cancels it if native animation frames stall', () => {
+    vi.useFakeTimers()
+    const { dock, container, floating } = flight()
+    const animation = { cancel: vi.fn(), pause: vi.fn(), currentTime: 0, onfinish: null as (() => void) | null }
+    const card = Object.assign(new Slot(), { animate: vi.fn<(frames: Keyframe[], options: KeyframeAnimationOptions) => typeof animation>(() => animation) })
+    dock.capture()
+    dock.move(floating as unknown as HTMLElement, false, card as unknown as HTMLElement)
+    expect(container.parentElement).toBe(floating)
+    expect(container.animate).not.toHaveBeenCalled()
+    expect(card.animate).toHaveBeenCalledOnce()
+    // Keep playing media visible even at the first frame in a suspended webview.
+    expect(card.animate.mock.calls[0]?.[0]).toEqual([
+      { opacity: 0.4, transform: 'translateY(24px) scale(0.96)' },
+      { opacity: 1, transform: 'translateY(0) scale(1)' },
+    ])
+    vi.advanceTimersByTime(80)
+    expect(animation.pause).toHaveBeenCalledOnce()
+    expect(animation.currentTime).toBe(80)
+    vi.advanceTimersByTime(80)
+    expect(animation.currentTime).toBe(160)
+    vi.advanceTimersByTime(80)
+    expect(animation.cancel).toHaveBeenCalledOnce()
+    expect(animation.onfinish).toBeNull()
+  })
+
+  it('reserves the inline content before departure can shrink it to floating dimensions', () => {
+    const { dock, container, inline, floating, resize, disconnect } = flight()
+    const content = new Slot()
+    container.firstElementChild = content
+    dock.move(floating as unknown as HTMLElement)
+    dock.move(inline as unknown as HTMLElement, true)
+    expect(inline.style.minHeight).toBe('450px')
+    content.rect.height = 480 // Metadata/footer/viewport changes while inline.
+    resize()
+    expect(inline.style.minHeight).toBe('480px')
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({ ...inline.rect, height: 300 })
+    inline.rect.height = 480
+    dock.capture(true)
+    expect(disconnect).toHaveBeenCalled()
+    dock.move(floating as unknown as HTMLElement)
+    content.rect.height = 225
+    resize() // Ignore a queued notification for the now floating content.
+    expect(inline.style.minHeight).toBe('480px')
+    dock.destroy()
+    expect(inline.style.minHeight).toBe('')
+  })
+
+  it.each([-500, 1000])('animates exits at the destination when the source is offscreen at y=%s', top => {
+    const { dock, container, inline, floating, animations } = flight()
+    inline.rect.top = top
+    dock.capture(true)
+    dock.move(floating as unknown as HTMLElement)
+    expect(container.parentElement).toBe(floating)
+    expect(inline.style.minHeight).toBe('450px')
     expect(container.animate.mock.calls[0]).toEqual([
-      [{ transform: 'translate(-600px, -500px) scale(2)' }, { transform: 'translate(0, 0) scale(1)' }],
-      { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+      [{ opacity: 0.4, transform: 'translateY(24px) scale(0.96)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }],
+      { duration: 240, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    ])
+    animations[0].onfinish?.()
+    dock.capture()
+    dock.move(inline as unknown as HTMLElement)
+    expect(container.animate.mock.calls[1]).toEqual([
+      [{ opacity: 0.4, transform: 'translateY(24px) scale(0.96)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }],
+      { duration: 240, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    ])
+  })
+
+  it('preserves the outgoing row footprint until playback returns or is dismissed', () => {
+    const { dock, container, inline, floating, animations } = flight()
+    inline.style.minHeight = '80px'
+    dock.capture()
+    expect(inline.style.minHeight).toBe('450px')
+    dock.move(floating as unknown as HTMLElement)
+    animations[0].onfinish?.()
+    expect(inline.style.minHeight).toBe('450px')
+    expect(container.style.gridArea).toBe('1 / 1')
+    dock.capture()
+    dock.move(inline as unknown as HTMLElement)
+    animations[1].onfinish?.()
+    expect(inline.style.minHeight).toBe('80px')
+    dock.capture()
+    dock.move(floating as unknown as HTMLElement)
+    dock.destroy()
+    expect(inline.style.minHeight).toBe('80px')
+    expect(floating.style.minHeight).toBe('')
+  })
+
+  it('fades the same live container in place without overlays or scroll listeners', () => {
+    const { dock, container, inline, floating, animations } = flight()
+    dock.capture()
+    dock.move(floating as unknown as HTMLElement)
+    expect(container.parentElement).toBe(floating)
+    expect(container.style.position).toBeUndefined()
+    expect(document.addEventListener).not.toHaveBeenCalled()
+    expect(floating.style.minHeight).toBe('')
+    expect(container.animate.mock.calls[0]).toEqual([
+      [{ opacity: 0.4, transform: 'translateY(24px) scale(0.96)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }],
+      { duration: 240, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
     ])
     animations[0].onfinish?.()
     expect(container.parentElement).toBe(floating)
@@ -234,7 +344,7 @@ describe('video docking animation', () => {
     expect(container.parentElement).toBe(inline)
   })
 
-  it('cancels an interrupted flight without allowing its old completion to move the player back', () => {
+  it('cancels an interrupted transition without allowing its old completion to move the player back', () => {
     const { dock, inline, floating, container, animations } = flight()
     dock.capture()
     dock.move(floating as unknown as HTMLElement)
@@ -242,11 +352,13 @@ describe('video docking animation', () => {
     dock.move(inline as unknown as HTMLElement)
     expect(animations[0].cancel).toHaveBeenCalledOnce()
     expect(animations[0].onfinish).toBeNull()
-    expect(floating.style.minHeight).toBe('')
+    expect(floating.style.minHeight).toBe('225px')
     animations[1].onfinish?.()
     expect(container.parentElement).toBe(inline)
+    expect(container.style.position).toBeUndefined()
     dock.destroy()
     expect(container.parentElement).toBeNull()
+    expect(floating.style.minHeight).toBe('')
   })
 
   it('settles even when a background webview suspends animation frames', () => {
@@ -254,7 +366,7 @@ describe('video docking animation', () => {
     const { dock, floating, container, animations } = flight()
     dock.capture()
     dock.move(floating as unknown as HTMLElement)
-    vi.advanceTimersByTime(300)
+    vi.advanceTimersByTime(400)
     expect(container.parentElement).toBe(floating)
     expect(animations[0].onfinish).toBeNull()
   })
