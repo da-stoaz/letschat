@@ -17,6 +17,7 @@ export function VideoPlayerHost() {
   const [container] = useState(() => document.createElement('div'))
   const [dock] = useState(() => createVideoDock(container))
   const floatingSlot = useRef<HTMLDivElement>(null)
+  const floatingSection = useRef<HTMLElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const floating = !anchor
   const key = player?.storageKey
@@ -28,16 +29,15 @@ export function VideoPlayerHost() {
 
   useLayoutEffect(() => useVideoPlayerStore.subscribe((state, previous) => {
     if (state.anchor !== previous.anchor || state.player?.storageKey !== previous.player?.storageKey) {
-      const leavingViewport = state.autoFloating && !state.anchor && !state.visibleAnchor
-      dock.capture(state.player?.storageKey === previous.player?.storageKey, !leavingViewport)
+      dock.capture(state.player?.storageKey === previous.player?.storageKey)
     }
   }), [dock])
 
   useLayoutEffect(() => {
     if (!key || !user) { dock.destroy(); return }
     const target = anchor?.isConnected ? anchor : floatingSlot.current
-    if (target) dock.move(target, Boolean(anchor?.isConnected))
-  }, [anchor, dock, key, user])
+    if (target) dock.move(target, Boolean(anchor?.isConnected), anchor?.isConnected ? container : floatingSection.current ?? container)
+  }, [anchor, container, dock, key, user])
   useEffect(() => () => dock.destroy(), [dock])
 
   useEffect(() => {
@@ -59,7 +59,7 @@ export function VideoPlayerHost() {
   const ratio = player.aspectRatio ?? 16 / 9
   const mediaWidth = (expanded ? 78 : 40) * ratio
   return <>
-    <section hidden={!floating} aria-label={`Video player: ${player.fileName}`} className={expanded
+    <section ref={floatingSection} hidden={!floating} aria-label={`Video player: ${player.fileName}`} className={expanded
       ? 'fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-1.5rem)] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-xl border bg-background p-3 shadow-2xl'
       : 'fixed right-3 bottom-3 z-50 max-h-[calc(100dvh-1.5rem)] overflow-auto rounded-xl border bg-background p-2 shadow-2xl'}
       style={{ width: expanded ? `min(calc(100vw - 1.5rem), calc(${mediaWidth}dvh + 1.5rem))` : `min(32rem, calc(100vw - 1.5rem), calc(${mediaWidth}dvh + 1rem))` }}>

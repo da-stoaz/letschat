@@ -12,12 +12,11 @@ export function observeVideoDock(anchor: HTMLElement, onVisibility: (visible: bo
 
 /** Animate the live portal, never a screenshot or a second media element. */
 export function createVideoDock(container: HTMLElement) {
-  let from: DOMRect | null = null
+  let animateHandoff = false
   let animation: Animation | null = null
+  let frameTimer: ReturnType<typeof setInterval> | undefined
   let settleTimer: ReturnType<typeof setTimeout> | undefined
   let destination: HTMLElement | null = null
-  let animateFromOrigin = true
-  let clearFlight: (() => void) | undefined
   const reservations = new Map<HTMLElement, string>()
   const reserve = (slot: HTMLElement, height: number) => {
     if (!reservations.has(slot)) reservations.set(slot, slot.style.minHeight)
@@ -44,28 +43,25 @@ export function createVideoDock(container: HTMLElement) {
     }
   }
   const cancel = () => {
+    clearInterval(frameTimer)
     clearTimeout(settleTimer)
     if (animation) { animation.onfinish = null; animation.cancel(); animation = null }
-    clearFlight?.()
-    clearFlight = undefined
   }
   return {
     // Called by the store subscription before React hides/replaces either slot.
-    capture(continuous = true, originVisible = true) {
+    capture(continuous = true) {
       sizeObserver.disconnect()
       inlineSlot = null
       if (!continuous) {
         for (const slot of reservations.keys()) release(slot)
       }
-      from = continuous && container.isConnected ? container.getBoundingClientRect() : null
-      animateFromOrigin = originVisible
-      // The poster has no playback footer. Keep the full outgoing footprint
-      // so the virtualizer and browser scroll anchoring see no row-size change.
-      if (from && destination && container.parentElement === destination) {
-        reserve(destination, Math.max(from.height, destination.getBoundingClientRect().height))
+      animateHandoff = continuous && container.isConnected
+      // Keep the outgoing message footprint while the same player is docked.
+      if (animateHandoff && destination && container.parentElement === destination) {
+        reserve(destination, Math.max(container.getBoundingClientRect().height, destination.getBoundingClientRect().height))
       }
     },
-    move(target: HTMLElement, inline = false) {
+    move(target: HTMLElement, inline = false, presentation = container) {
       if (destination === target && container.isConnected) {
         if (inline && container.parentElement === target) watchInline(target)
         return
@@ -80,72 +76,41 @@ export function createVideoDock(container: HTMLElement) {
       container.style.gridArea = '1 / 1'
       target.appendChild(container)
       release(target)
-      const to = container.getBoundingClientRect()
       if (inline) watchInline(target)
-      const start = from
-      from = null
-      if (!start?.width || !to.width || !to.height || !container.animate ||
-          window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const transition = animateHandoff || presentation !== container
+      animateHandoff = false
+      if (!transition || !presentation.animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
-      // Automatic exits start outside the chat's clipping viewport. Flying
-      // that rectangle above the page would reveal a large offscreen player.
-      if (!animateFromOrigin) {
-        animation = container.animate([
-          { opacity: 0, transform: 'translateY(8px) scale(0.98)' },
-          { opacity: 1, transform: 'translateY(0) scale(1)' },
-        ], { duration: 160, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
-        animation.onfinish = cancel
-        settleTimer = setTimeout(cancel, 300)
-        return
-      }
-
-      // Reserve the destination's layout while the live player flies above
-      // clipping/transform ancestors in the virtualized chat.
-      reserve(target, to.height)
-      sizeObserver.disconnect()
-      inlineSlot = null
-      Object.assign(container.style, {
-        position: 'fixed', left: `${to.left}px`, top: `${to.top}px`,
-        width: `${to.width}px`, zIndex: '60', transformOrigin: 'top left',
-      })
-      document.body.appendChild(container)
-      const followScroll = () => {
-        const rect = target.getBoundingClientRect()
-        container.style.left = `${rect.left}px`
-        container.style.top = `${rect.top}px`
-      }
-      document.addEventListener('scroll', followScroll, true)
-      clearFlight = () => {
-        document.removeEventListener('scroll', followScroll, true)
-        container.removeAttribute('style')
-        container.style.gridArea = '1 / 1'
-      }
-      // Uniform scale preserves the recorded aspect ratio throughout the move.
-      // A virtualized jump may put the old row thousands of pixels away.
-      const startLeft = Math.max(-start.width, Math.min(window.innerWidth, start.left))
-      const startTop = Math.max(-start.height, Math.min(window.innerHeight, start.top))
-      animation = container.animate([
-        { transform: `translate(${startLeft - to.left}px, ${startTop - to.top}px) scale(${start.width / to.width})` },
-        { transform: 'translate(0, 0) scale(1)' },
-      ], { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
-      const finish = () => {
-        cancel()
-        if (target.isConnected) {
-          target.appendChild(container)
-          release(target)
-          if (inline) watchInline(target)
+      // Animate in place: opacity/transform leave layout and the chat's scroll
+      // position untouched, and playback stays in this single live container.
+      animation = presentation.animate([
+        { opacity: 0.4, transform: 'translateY(24px) scale(0.96)' },
+        { opacity: 1, transform: 'translateY(0) scale(1)' },
+      ], { duration: 240, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
+      animation.onfinish = cancel
+      const started = performance.now()
+      let manual = false
+      // WebKit can suspend its animation clock while media/timers keep running.
+      // Only drive the clock ourselves if it falls behind; normal frames stay native.
+      frameTimer = setInterval(() => {
+        if (!animation) return
+        const elapsed = performance.now() - started
+        if (!manual && elapsed - Number(animation.currentTime) > 50) {
+          animation.pause()
+          manual = true
         }
-      }
-      animation.onfinish = finish
-      // Hidden/background webviews can suspend their animation timeline. Never
-      // strand the live player in the overlay waiting for a compositor frame.
-      settleTimer = setTimeout(finish, 300)
+        if (manual) {
+          animation.currentTime = Math.min(elapsed, 240)
+          if (elapsed >= 240) cancel()
+        }
+      }, 16)
+      settleTimer = setTimeout(cancel, 400)
     },
     destroy() {
       cancel()
       sizeObserver.disconnect()
       inlineSlot = null
-      from = null
+      animateHandoff = false
       destination = null
       container.remove()
       for (const slot of reservations.keys()) release(slot)
