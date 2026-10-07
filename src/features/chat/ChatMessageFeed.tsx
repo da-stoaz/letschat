@@ -97,7 +97,6 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   const [lastScopeKey, setLastScopeKey] = useState(scopeKey)
   const [lastMessageCount, setLastMessageCount] = useState(messages.length)
   if (scopeKey !== lastScopeKey) {
-    followBottom.current = true
     setLastScopeKey(scopeKey)
     setLastMessageCount(sortedMessages.length)
     setHistoryLimit(HISTORY_PAGE_SIZE)
@@ -170,6 +169,7 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
     if (!element) return
     const previous = previousLayout.current
     const firstMessageId = visibleMessages[0]?.id
+    if (previous?.scopeKey !== scopeKey) followBottom.current = true
     if (followBottom.current) {
       element.scrollTop = element.scrollHeight
     } else if (
