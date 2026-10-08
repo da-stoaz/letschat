@@ -29,6 +29,7 @@ import type { ServerMemberWithUser } from '../../stores/membersStore'
 import type { Role } from '../../types/domain'
 
 interface MemberPanelProps {
+  showHeader?: boolean
   members: ServerMemberWithUser[]
   selfIdentity: string | null
   selfRole: Role | null
@@ -108,7 +109,8 @@ function MemberRow({
       ) : showMenu ? (
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="size-6 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-muted transition-opacity"
+            aria-label={`Actions for ${displayName}`}
+            className="touch-visible size-6 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-muted transition-opacity"
             onClick={(e) => e.stopPropagation()}
           >
             <MoreHorizontalIcon className="size-3.5 text-muted-foreground" />
@@ -190,6 +192,7 @@ function MemberRow({
 }
 
 export function MemberPanel({
+  showHeader = true,
   members,
   selfIdentity,
   selfRole,
@@ -224,12 +227,12 @@ export function MemberPanel({
 
   return (
     <aside className="h-full rounded-xl border border-border/70 bg-card/70 p-3">
-      <div className="mb-3 flex items-center justify-between">
+      {showHeader ? <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold">Members</h3>
         <Badge variant="secondary">{members.length}</Badge>
-      </div>
+      </div> : null}
 
-      <ScrollArea className="h-[calc(100%-2rem)] pr-1">
+      <ScrollArea className={showHeader ? 'h-[calc(100%-2rem)] pr-1' : 'h-full pr-1'}>
         <div className="space-y-4">
           {ROLE_ORDER.map((role) => {
             const roleMembers = groupedMembers[role]

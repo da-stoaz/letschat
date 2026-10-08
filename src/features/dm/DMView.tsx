@@ -12,6 +12,8 @@ import { useDmServerInvitesStore } from '../../stores/dmServerInvitesStore'
 import { useServersStore } from '../../stores/serversStore'
 import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { useIsMobile } from '../../hooks/use-mobile'
+import { useComposerStore } from '../../stores/composerStore'
+import { CompactBack } from '../../components/CompactBack'
 import { ChatComposer } from '../chat/ChatComposer'
 import { ChatMessageFeed } from '../chat/ChatMessageFeed'
 import { DmVoicePanel } from './DmVoicePanel'
@@ -31,7 +33,6 @@ import { loadOlderDirectMessages } from '../../lib/spacetimedb/history'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { useUsersStore } from '../../stores/usersStore'
 
@@ -139,9 +140,9 @@ function isDeletedForViewer(message: DirectMessage, selfIdentity: string | null)
 }
 
 export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
-  const [draft, setDraft] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [scrollToBottomToken, setScrollToBottomToken] = useState(0)
+  const scopeKey = `dm:${partnerIdentity.toLowerCase()}`
+  const setError = (error: string | null) => useComposerStore.getState().update(scopeKey, { error })
+  const scrollToBottomToken = useComposerStore(s => s.drafts[scopeKey]?.sent ?? 0)
   const isMobile = useIsMobile()
   const [callPanelMinimized, setCallPanelMinimized] = useState(!isMobile)
   // Adjust-state-during-render: reset the panel to its default whenever the
@@ -332,7 +333,8 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card/60">
-      <header className="flex items-center gap-2 border-b border-border/70 px-4 py-2">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border/70 px-3 py-2">
+        <CompactBack />
         <div className="min-w-0 flex flex-1 items-center gap-2">
           <Avatar className="size-8 rounded-full">
             {partner.avatarUrl ? <AvatarImage src={partner.avatarUrl} alt={partner.displayName} /> : null}
@@ -344,33 +346,35 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
               <PresenceDot status={partner.status} />
             </div>
             <p className="truncate text-xs text-muted-foreground">
-              Direct conversation with @{partner.username}
+              @{partner.username}
               {ongoingCallDuration ? ` • Ongoing call since ${ongoingCallDuration}` : ''}
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {showStatusBadge ? <Badge variant="outline">In call</Badge> : null}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+          {showStatusBadge && !isMobile ? <Badge variant="outline">In call</Badge> : null}
           <Button
             size="sm"
             variant={joined ? 'destructive' : 'default'}
+            aria-label={connecting ? 'Joining call' : joined ? 'Leave call' : 'Call'}
             disabled={connecting}
             onClick={() => {
               void onPrimaryCallAction()
             }}
           >
             {joined ? <PhoneOffIcon className="size-4" /> : <PhoneCallIcon className="size-4" />}
-            {connecting ? 'Joining...' : joined ? 'Leave Call' : 'Call User'}
+            <span className="hidden sm:inline">{connecting ? 'Joining…' : joined ? 'Leave call' : 'Call'}</span>
           </Button>
           {hasActiveCall ? (
             <Button
               type="button"
               size="sm"
               variant="ghost"
+              aria-label={callPanelMinimized ? 'Show call' : 'Minimize call'}
               onClick={() => setCallPanelMinimized((value) => !value)}
             >
               {callPanelMinimized ? <PanelBottomOpenIcon className="size-4" /> : <PanelBottomCloseIcon className="size-4" />}
-              {callPanelMinimized ? 'Show Call' : 'Minimize'}
+              <span className="hidden sm:inline">{callPanelMinimized ? 'Show call' : 'Minimize'}</span>
             </Button>
           ) : null}
         </div>
@@ -383,21 +387,15 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
       ) : null}
 
       <ChatMessageFeed
-        scopeKey={`dm:${partnerIdentity}`}
+        key={scopeKey}
+        scopeKey={scopeKey}
         messages={renderMessages}
         onLoadOlder={() => void loadOlderDirectMessages(partnerIdentity)}
         selfIdentity={selfIdentity}
         canDeleteAny
         allowEditOwn
         onEditMessage={async (message, newContent) => {
-          setError(null)
-          try {
-            await reducers.editDirectMessage(message.id, newContent)
-          } catch (e) {
-            const messageText = e instanceof Error ? e.message : 'Could not edit message.'
-            setError(messageText)
-            throw e
-          }
+          await reducers.editDirectMessage(message.id, newContent)
         }}
         onDeleteMessage={async (message) => {
           setError(null)
@@ -419,30 +417,15 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         </div>
       )}
 
-      <Separator />
-
       <ChatComposer
-        value={draft}
-        onChange={setDraft}
+        key={scopeKey}
+        scopeKey={scopeKey}
         placeholder={`Message @${partner.username}`}
         uploadScope={{ kind: 'dm', partner: partner.username }}
         typingScopeKey={typingScopeKey}
         typingIdentity={selfIdentity}
-        error={error}
         onSubmit={async ({ text, attachments }) => {
-          setError(null)
-          try {
-            const payload = composeMessageWithAttachments(text, attachments)
-            await reducers.sendDirectMessage(partnerIdentity, payload)
-            setDraft('')
-            clearDmUnread(partnerIdentity)
-            reducers.markDmRead(partnerIdentity).catch(() => undefined)
-            setScrollToBottomToken((current) => current + 1)
-          } catch (e) {
-            const message = e instanceof Error ? e.message : 'Could not send direct message.'
-            setError(message)
-            throw e
-          }
+          await reducers.sendDirectMessage(partnerIdentity, composeMessageWithAttachments(text, attachments))
         }}
       />
     </section>

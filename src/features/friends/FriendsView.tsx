@@ -1,3 +1,4 @@
+import { CompactBack } from '../../components/CompactBack'
 import { useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -54,7 +55,7 @@ function FriendRow({
   const presentation = useUserPresentation(identity)
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-3 py-2 transition-colors hover:border-border/60 hover:bg-background/60">
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <div className="relative shrink-0">
           <Avatar className="size-9 rounded-full">
             {presentation.avatarUrl ? <AvatarImage src={presentation.avatarUrl} alt={presentation.displayName} /> : null}
@@ -228,15 +229,15 @@ export function FriendsView() {
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card/60">
       <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} className="flex min-h-0 flex-1 flex-col">
-        <header className="flex flex-col gap-3 border-b border-border/70 px-4 py-3">
+        <header className="flex shrink-0 flex-col gap-3 border-b border-border/70 px-4 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold leading-tight">Friends</h2>
+              <div className="flex items-center gap-2"><CompactBack /><h2 className="text-lg font-semibold leading-tight">Friends</h2></div>
               <p className="text-xs text-muted-foreground">
                 {acceptedFriends.length} total · {onlineFriends.length} online
               </p>
             </div>
-            <TabsList>
+            <TabsList className="max-w-full overflow-x-auto">
               <TabsTrigger value="online">Online</TabsTrigger>
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="pending" className="gap-1.5">
@@ -283,7 +284,6 @@ export function FriendsView() {
               {onlineFriends.length === 0 ? (
                 <EmptyState
                   title="No friends online right now"
-                  hint="When friends come online, they'll show up here."
                 />
               ) : (
                 onlineFriends.map(({ identity }) => (
@@ -294,7 +294,7 @@ export function FriendsView() {
 
             <TabsContent value="all" className="mt-0 space-y-1 data-[state=inactive]:hidden">
               {acceptedFriends.length === 0 ? (
-                <EmptyState title="No friends yet" hint="Add someone by username above to get started." />
+                <EmptyState title="No friends yet" />
               ) : (
                 acceptedFriends.map(({ identity }) => (
                   <FriendRow key={identity} identity={identity} trailing={acceptedTrailing(identity)} />

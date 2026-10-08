@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { SearchIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { parseMessageAttachments } from '../chat/attachmentPayload'
@@ -81,42 +82,39 @@ function SearchResultRow({ result, onJump }: { result: SearchResult; onJump: (me
 export function ChannelMessageSearch({
   messages,
   onJump,
+  compact = false,
+  mobileOpen = false,
+  onMobileOpenChange,
 }: {
+  compact?: boolean
+  mobileOpen?: boolean
+  onMobileOpenChange?: (open: boolean) => void
   messages: Message[]
   onJump: (messageId: number) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [desktopOpen, setDesktopOpen] = useState(false)
+  const open = compact ? mobileOpen : desktopOpen
+  const setOpen = (next: boolean) => {
+    if (compact) onMobileOpenChange?.(next)
+    else setDesktopOpen(next)
+  }
   const [query, setQuery] = useState('')
 
   const results = useMemo(() => buildResults(messages, query), [messages, query])
   const trimmed = query.trim()
 
-  return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next)
-        if (!next) setQuery('')
-      }}
-    >
-      <PopoverTrigger
-        render={
-          <Button variant="ghost" size="icon-xs" aria-label="Search messages">
-            <SearchIcon className="size-3.5" />
-          </Button>
-        }
-      />
-      <PopoverContent align="end" className="w-80 gap-2">
+  const content = <>
         <Input
           autoFocus
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search this channel…"
+          aria-label="Search loaded messages"
+          placeholder="Search loaded messages…"
           className="h-8"
         />
         <div className="max-h-72 overflow-y-auto app-scrollbar">
           {trimmed.length === 0 ? (
-            <p className="px-2 py-4 text-center text-xs text-muted-foreground">Type to search loaded messages.</p>
+            null
           ) : results.length === 0 ? (
             <p className="px-2 py-4 text-center text-xs text-muted-foreground">No matches found.</p>
           ) : (
@@ -135,6 +133,31 @@ export function ChannelMessageSearch({
             </div>
           )}
         </div>
+  </>
+  if (compact) return <Sheet open={open} onOpenChange={setOpen}>
+    <SheetContent className="data-[side=right]:w-full sm:max-w-sm">
+      <SheetHeader><SheetTitle>Search messages</SheetTitle></SheetHeader>
+      <div className="min-h-0 overflow-y-auto px-4 pb-4">{content}</div>
+    </SheetContent>
+  </Sheet>
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) setQuery('')
+      }}
+    >
+      <PopoverTrigger
+        render={
+          <Button variant="ghost" size="icon-xs" aria-label="Search messages">
+            <SearchIcon className="size-3.5" />
+          </Button>
+        }
+      />
+      <PopoverContent align="end" className="w-80 gap-2">
+        {content}
       </PopoverContent>
     </Popover>
   )

@@ -1,3 +1,5 @@
+import { useComposerStore } from '../../stores/composerStore'
+import { readingPositions } from '../../features/chat/readingPosition'
 import type { DbConnection } from '../../generated'
 import {
   mapUser,
@@ -485,6 +487,8 @@ export function syncAll(conn: DbConnection): void {
 // ─── Client state reset ───────────────────────────────────────────────────────
 
 export function resetClientState(): void {
+  useComposerStore.getState().reset()
+  readingPositions.clear()
   const voiceSession = useVoiceSessionStore.getState()
   voiceSession.room?.disconnect()
   voiceSession.reset()

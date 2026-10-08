@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Responsive UI verification</title>
+<style>body{margin:16px;background:#27272a;color:white;font:14px system-ui}button{padding:8px;margin:3px}iframe{display:block;height:740px;border:1px solid #52525b;margin-top:12px;max-width:none}</style></head>
+<body><p>Isolated UI fixtures. No backend connection.</p><div id="widths"></div><div id="routes"></div><button id="image">Image preview</button><button id="matrix">Check all widths and routes</button><p id="matrix-report"></p><p id="report">Loading…</p>
+<iframe id="preview" title="LetsChat responsive preview" src="./responsive-frame.html" width="390"></iframe>
+<script>
+ const frame=document.querySelector('iframe');
+ for(const width of [320,390,430,768,844,1024,1440]){const button=document.createElement('button');button.textContent=width;button.onclick=()=>frame.width=width;document.querySelector('#widths').append(button)}
+ for(const [label,path] of [['Spaces','/app/spaces'],['Channels','/app/1/channels'],['Conversation','/app/1/10'],['Messages','/app/messages'],['DM','/app/dm/friend'],['Friends','/app/dm/friends'],['Settings','/app/settings'],['Invalid channel','/app/1/999']]){const button=document.createElement('button');button.textContent=label;button.onclick=()=>frame.contentWindow.postMessage({path},location.origin);document.querySelector('#routes').append(button)}
+ document.querySelector('#image').onclick=()=>frame.contentWindow.postMessage({preview:true},location.origin);
+ document.querySelector('#matrix').onclick=async()=>{
+ const paths=['/app/spaces','/app/1/channels','/app/1/10','/app/messages','/app/dm/friend','/app/dm/friends','/app/settings','/app/1/999'];
+ const failures=[];let count=0;document.querySelector('#matrix-report').textContent='Checking…';
+ for(const width of [320,390,430,768,844,1024,1440])for(const path of paths){
+ frame.width=width;frame.contentWindow.postMessage({path},location.origin);await new Promise(resolve=>setTimeout(resolve,150));
+ const doc=frame.contentDocument;const composer=doc.querySelector('textarea')?.getBoundingClientRect();
+ if(doc.documentElement.scrollWidth>width)failures.push(`${width} ${path}: page overflow`);
+ if(composer&&(composer.width<100||composer.right>width||composer.bottom>frame.contentWindow.innerHeight))failures.push(`${width} ${path}: composer clipped`);
+ count++;}
+ frame.width=390;frame.contentWindow.postMessage({path:'/app/1/10'},location.origin);
+ document.querySelector('#matrix-report').textContent=failures.length?failures.join('; '):`${count} layout checks passed`;
+ };
+ window.addEventListener('message' ,event=>{if(event.origin===location.origin&&event.data.report)document.querySelector('#report').textContent=event.data.report});
+</script></body></html>

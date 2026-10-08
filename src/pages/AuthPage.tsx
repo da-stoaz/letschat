@@ -82,10 +82,10 @@ export function AuthPage() {
       ? 'This account is not ready to sign in yet.'
       : view === 'forgot'
         ? 'Reset your password.'
-        : 'Sign in with your persisted account credentials.'
+        : 'Sign in'
 
   return (
-      <section className="relative grid min-h-full place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,--theme(--color-blue-500/25),transparent),radial-gradient(900px_700px_at_100%_0%,--theme(--color-cyan-500/20),transparent)] p-4">
+      <section className="app-safe-area [--app-edge-padding:1rem] relative grid h-full min-h-0 overflow-y-auto place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,--theme(--color-blue-500/25),transparent),radial-gradient(900px_700px_at_100%_0%,--theme(--color-cyan-500/20),transparent)] p-4">
       {showConnectionControls && (
         <>
           <Button
@@ -111,7 +111,7 @@ export function AuthPage() {
           </Sheet>
         </>
       )}
-      <Card className="w-full max-w-md border-border/70 bg-card/90 backdrop-blur-sm">
+      <Card className="w-full max-w-md border-border/70 bg-card/90 backdrop-blur-sm my-auto">
         <CardHeader>
           <CardTitle className="text-2xl">LetsChat</CardTitle>
           <CardDescription>{headerDescription}</CardDescription>

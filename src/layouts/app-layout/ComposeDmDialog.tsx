@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { SearchIcon } from 'lucide-react'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
@@ -37,8 +37,7 @@ export function ComposeDmDialog({ open, onOpenChange, friends, onSelectFriend }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Compose New DM</DialogTitle>
-          <DialogDescription>Select a friend to start or continue a direct message.</DialogDescription>
+          <DialogTitle>New message</DialogTitle>
         </DialogHeader>
 
         <div className="relative">
@@ -46,7 +45,8 @@ export function ComposeDmDialog({ open, onOpenChange, friends, onSelectFriend }:
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by display name or username"
+            aria-label="Search friends"
+            placeholder="Search friends"
             className="pl-8"
             spellCheck={false}
             autoCorrect="off"
@@ -55,7 +55,7 @@ export function ComposeDmDialog({ open, onOpenChange, friends, onSelectFriend }:
           />
         </div>
 
-        <ScrollArea className="h-72 rounded-md border border-border/70 bg-muted/20 p-2">
+        <ScrollArea className="h-72 max-h-[calc(var(--app-height,100dvh)-12rem)] rounded-md border border-border/70 bg-muted/20 p-2">
           <div className="space-y-1">
             {filtered.length > 0 ? (
               filtered.map((friend) => (

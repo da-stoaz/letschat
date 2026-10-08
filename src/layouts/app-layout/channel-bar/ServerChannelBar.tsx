@@ -116,7 +116,7 @@ export function ServerChannelBar({
               {canAccessServerPanel ? (
                 <DropdownMenuItem onClick={onOpenServerPanel}>
                   <Settings2Icon className="size-3.5" />
-                  Space Panel
+                  Manage space
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem
@@ -179,8 +179,8 @@ export function ServerChannelBar({
                     type="button"
                     size="icon-xs"
                     variant={muted ? 'secondary' : 'ghost'}
-                    aria-label={muted ? 'Unmute channel' : 'Mute channel'}
-                    title={muted ? 'Unmute channel' : 'Mute channel'}
+                    aria-label={muted ? 'Unmute notifications' : 'Mute notifications'}
+                    title={muted ? 'Unmute notifications' : 'Mute notifications'}
                     onClick={(event) => {
                       event.stopPropagation()
                       onToggleChannelMute(channel.id)

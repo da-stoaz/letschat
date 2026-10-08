@@ -1,5 +1,6 @@
+import { CompactBack } from '../components/CompactBack'
 import { useEffect } from 'react'
-import { Navigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { useChannelsStore } from '../stores/channelsStore'
 import { useServersStore } from '../stores/serversStore'
 import { useUiStore } from '../stores/uiStore'
@@ -44,8 +45,9 @@ export function ServerChannelPage() {
       return (
         <Card className="h-full border-border/70 bg-card/70">
           <CardHeader>
+            <CompactBack />
             <CardTitle>No channels in this space yet</CardTitle>
-            <CardDescription>Create your first text channel to start chatting.</CardDescription>
+            <CardDescription>No channels yet.</CardDescription>
           </CardHeader>
           <CardContent>
             <Button onClick={() => reducers.createChannel(serverNumericId, 'general', 'Text', false)}>
@@ -60,8 +62,9 @@ export function ServerChannelPage() {
     return (
       <Card className="h-full border-border/70 bg-card/70">
         <CardHeader>
+          <CompactBack />
           <CardTitle>Channel not found</CardTitle>
-          <CardDescription>Pick a channel from the sidebar.</CardDescription>
+          <CardDescription><Link className="underline" to={`/app/${serverNumericId}/channels`}>Channels</Link></CardDescription>
         </CardHeader>
       </Card>
     )

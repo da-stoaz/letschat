@@ -1,30 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Loader2Icon, PaperclipIcon, SendHorizonalIcon, XIcon } from 'lucide-react'
 import { reducers } from '../../lib/spacetimedb'
-import { cancelUpload, isBlockedMimeType, uploadFiles, type UploadScope } from '../../lib/uploads'
+import { cancelUpload, isBlockedMimeType, type UploadScope } from '../../lib/uploads'
 import type { Identity } from '../../types/domain'
-import type { ChatMessageAttachment } from '../../types/attachments'
+import { EMPTY_DRAFT, useComposerStore, type QueuedFile, type UploadStage } from '../../stores/composerStore'
+import { submitComposer, shouldSubmitOnEnter, type ChatComposerSubmitPayload } from './submitComposer'
+import { useTouchInput } from '../../hooks/useTouchInput'
 import { TypingIndicator } from './TypingIndicator'
 import { getClipboardFiles } from './clipboardFiles'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 
-type UploadStage = 'requesting' | 'uploading' | 'confirming' | 'done' | 'failed'
-
-type QueuedFile = {
-  id: string
-  file: File
-}
-
-export type ChatComposerSubmitPayload = {
-  text: string
-  attachments: ChatMessageAttachment[]
-}
-
 type ChatComposerProps = {
-  value: string
-  onChange: (value: string) => void
+  scopeKey: string
   onSubmit: (payload: ChatComposerSubmitPayload) => Promise<void> | void
   /** Who may read the files attached here — see `UploadScope`. */
   uploadScope: UploadScope
@@ -34,7 +23,6 @@ type ChatComposerProps = {
   disabledHint?: string
   typingScopeKey?: string
   typingIdentity?: Identity | null
-  error?: string | null
   maxLength?: number
   sendLabel?: string
 }
@@ -74,8 +62,7 @@ function stageLabel(stage: UploadStage): string {
 }
 
 export function ChatComposer({
-  value,
-  onChange,
+  scopeKey,
   onSubmit,
   uploadScope,
   placeholder,
@@ -84,7 +71,6 @@ export function ChatComposer({
   disabledHint = 'This channel is read-only for members.',
   typingScopeKey,
   typingIdentity = null,
-  error = null,
   maxLength = 4000,
   sendLabel = 'Send',
 }: ChatComposerProps) {
@@ -92,11 +78,15 @@ export function ChatComposer({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const typingSentRef = useRef(false)
   const lastTypingPulseMsRef = useRef(0)
-  const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([])
-  const [uploadStageByFileId, setUploadStageByFileId] = useState<Record<string, UploadStage>>({})
-  const [uploadProgressByFileId, setUploadProgressByFileId] = useState<Record<string, number>>({})
-  const [localError, setLocalError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
+  const touch = useTouchInput()
+  const draft = useComposerStore(s => s.drafts[scopeKey] ?? EMPTY_DRAFT)
+  const { text: value, files: queuedFiles, stages: uploadStageByFileId, progress: uploadProgressByFileId, error: localError, submitting } = draft
+  const updateDraft = (patch: Partial<typeof draft>) => useComposerStore.getState().update(scopeKey, patch)
+  const setLocalError = (error: string | null) => updateDraft({ error })
+  const setQueuedFiles = (update: (files: QueuedFile[]) => QueuedFile[]) => {
+    const current = useComposerStore.getState().drafts[scopeKey] ?? EMPTY_DRAFT
+    updateDraft({ files: update(current.files) })
+  }
 
   const emitTypingState = useCallback((isTyping: boolean) => {
     if (!typingScopeKey || !typingIdentity) return
@@ -130,10 +120,10 @@ export function ChatComposer({
   }, [disabled, emitTypingState, submitting, typingIdentity, typingScopeKey, value])
 
   useEffect(() => {
-    if (!disabled || !typingSentRef.current) return
+    if ((!disabled && !submitting) || !typingSentRef.current) return
     emitTypingState(false)
     typingSentRef.current = false
-  }, [disabled, emitTypingState])
+  }, [disabled, submitting, emitTypingState])
 
   useEffect(
     () => () => {
@@ -188,46 +178,12 @@ export function ChatComposer({
 
   return (
     <form
-      className="space-y-1 p-1.5"
-      onSubmit={async (event) => {
+      className="shrink-0 space-y-2 border-t border-border/60 p-3"
+      onSubmit={(event) => {
         event.preventDefault()
-        if (disabled || submitting) return
-        const trimmed = value.trim()
-        if (!trimmed && queuedFiles.length === 0) return
-
-        setLocalError(null)
-        setSubmitting(true)
-        try {
-          const uploads = queuedFiles.map((entry) => entry.file)
-          const attachments =
-            uploads.length > 0
-              ? await uploadFiles(uploads, uploadScope, (file, stage) => {
-                  const id = fileIdentity(file)
-                  setUploadStageByFileId((current) => ({ ...current, [id]: stage }))
-                }, (file, progress) => {
-                  const id = fileIdentity(file)
-                  setUploadProgressByFileId((current) => ({ ...current, [id]: progress.fraction }))
-                })
-              : []
-
-          await onSubmit({ text: trimmed, attachments })
-          setQueuedFiles([])
-          setUploadStageByFileId({})
-          setUploadProgressByFileId({})
-          if (fileInputRef.current) {
-            fileInputRef.current.value = ''
-          }
-
-          if (typingSentRef.current) {
-            emitTypingState(false)
-            typingSentRef.current = false
-          }
-        } catch (submitError) {
-          const message = submitError instanceof Error ? submitError.message : 'Could not send message.'
-          setLocalError(message)
-        } finally {
-          setSubmitting(false)
-        }
+        if (disabled) return
+        // Capture these props now; uploads can finish after this view changes.
+        void submitComposer(scopeKey, uploadScope, onSubmit)
       }}
     >
       <input
@@ -243,7 +199,7 @@ export function ChatComposer({
       />
 
       {queuedFiles.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border/70 bg-muted/20 p-1.5">
+        <div className="flex max-h-[min(128px,calc(var(--app-height,100dvh)/4))] flex-wrap items-center gap-1.5 overflow-y-auto rounded-lg border border-border/70 bg-muted/20 p-1.5">
           {queuedFiles.map((entry) => {
             const stage = uploadStageByFileId[entry.id]
             const progressFraction = uploadProgressByFileId[entry.id] ?? 0
@@ -254,7 +210,7 @@ export function ChatComposer({
                 key={entry.id}
                 className="inline-flex max-w-full flex-col gap-1 rounded-md border border-border/70 bg-card px-2 py-1 text-xs"
               >
-                <span className="inline-flex w-full items-center gap-2">
+                <span className="inline-flex w-full min-w-0 flex-wrap items-center gap-2">
                   <span className="truncate">{entry.file.name}</span>
                   <span className="shrink-0 text-muted-foreground">{formatFileSize(entry.file.size)}</span>
                   {stage ? (
@@ -266,22 +222,18 @@ export function ChatComposer({
                   {showProgress ? <span className="shrink-0 text-muted-foreground">{progressPercent}%</span> : null}
                   <button
                     type="button"
-                    className="ml-auto shrink-0 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                    className="ml-auto inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
                     onClick={() => {
                       if (submitting) return
                       void cancelUpload(entry.file).catch(() => undefined)
                       setLocalError(null)
-                      setQueuedFiles((current) => current.filter((item) => item.id !== entry.id))
-                      setUploadStageByFileId((current) => {
-                        const next = { ...current }
-                        delete next[entry.id]
-                        return next
-                      })
-                      setUploadProgressByFileId((current) => {
-                        const next = { ...current }
-                        delete next[entry.id]
-                        return next
-                      })
+                      const current = useComposerStore.getState().drafts[scopeKey] ?? EMPTY_DRAFT
+                      const stages = { ...current.stages }
+                      const progress = { ...current.progress }
+                      delete stages[entry.id]
+                      delete progress[entry.id]
+                      updateDraft({ files: current.files.filter(item => item.id !== entry.id), stages, progress })
+
                     }}
                     disabled={submitting}
                     aria-label={`Remove ${entry.file.name}`}
@@ -316,7 +268,7 @@ export function ChatComposer({
         }}
         onChange={(event) => {
           setLocalError(null)
-          onChange(event.target.value)
+          updateDraft({ text: event.target.value })
         }}
         onBlur={() => {
           if (!typingSentRef.current) return
@@ -324,15 +276,16 @@ export function ChatComposer({
           typingSentRef.current = false
         }}
         onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey) {
+          if (shouldSubmitOnEnter(event.key, event.shiftKey, event.nativeEvent.isComposing || event.keyCode === 229, touch)) {
             event.preventDefault()
             event.currentTarget.form?.requestSubmit()
           }
         }}
         maxLength={maxLength}
+        aria-label={placeholder}
         placeholder={placeholder}
         disabled={disabled || submitting}
-        className="min-h-10 resize-none overflow-y-auto"
+        className="min-h-10 max-h-[min(180px,calc(var(--app-height,100dvh)/4))] resize-none overflow-y-auto"
       />
       {disabled ? <p className="text-xs text-muted-foreground">{disabledHint}</p> : (helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null)}
       <div className="flex items-center gap-1.5">
@@ -351,11 +304,11 @@ export function ChatComposer({
             scopeKey={typingScopeKey}
             selfIdentity={typingIdentity}
             className="min-w-0 truncate text-xs text-muted-foreground"
-            fallbackText={value.length >= 3500 ? `${value.length}/${maxLength}` : 'Shift+Enter for newline'}
+            fallbackText={value.length >= 3500 ? `${value.length}/${maxLength}` : ''}
           />
         ) : (
           <p className="truncate text-xs text-muted-foreground">
-            {value.length >= 3500 ? `${value.length}/${maxLength}` : 'Shift+Enter for newline'}
+            {value.length >= 3500 ? `${value.length}/${maxLength}` : ''}
           </p>
         )}
         <Button
@@ -368,8 +321,7 @@ export function ChatComposer({
           {submitting ? 'Sending…' : sendLabel}
         </Button>
       </div>
-      {localError ? <p className="text-sm text-destructive">{localError}</p> : null}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {localError ? <p role="alert" className="text-sm text-destructive">{localError}</p> : null}
     </form>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { HashIcon, SidebarIcon } from 'lucide-react'
+import { HashIcon, SidebarIcon, MoreHorizontalIcon, SearchIcon, PinIcon } from 'lucide-react'
 import { reducers } from '../../lib/spacetimedb'
 import { useChannelsStore } from '../../stores/channelsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
@@ -11,6 +11,8 @@ import { useServerRole } from '../../hooks/useServerRole'
 import { warnOnce } from '../../lib/devWarnings'
 import { loadOlderChannelMessages } from '../../lib/spacetimedb/history'
 import { ChatMessageFeed, type ChatMessageFeedHandle } from '../chat/ChatMessageFeed'
+import { useComposerStore } from '../../stores/composerStore'
+import { CompactBack } from '../../components/CompactBack'
 import { ChatComposer } from '../chat/ChatComposer'
 import { ChannelMessageSearch } from './ChannelMessageSearch'
 import { ChannelPinsPopover } from './ChannelPinsPopover'
@@ -18,15 +20,18 @@ import { composeMessageWithAttachments } from '../chat/attachmentPayload'
 import type { Message, PinnedMessage, u64 } from '../../types/domain'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
+import { useIsMobile } from '../../hooks/use-mobile'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 const EMPTY_MESSAGES: Message[] = []
 const EMPTY_PINS: PinnedMessage[] = []
 
 export function TextChannelView({ channelId }: { channelId: u64 | null }) {
-  const [draft, setDraft] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [scrollToBottomToken, setScrollToBottomToken] = useState(0)
+  const compact = useIsMobile()
+  const [panel, setPanel] = useState<'search' | 'pins' | null>(null)
+  const scopeKey = `channel:${channelId}`
+  const setError = (error: string | null) => useComposerStore.getState().update(scopeKey, { error })
+  const scrollToBottomToken = useComposerStore(s => s.drafts[scopeKey]?.sent ?? 0)
   const feedRef = useRef<ChatMessageFeedHandle>(null)
   const jumpToMessageId = (messageId: number) => {
     feedRef.current?.jumpToMessage(messageId)
@@ -37,7 +42,6 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const membersByServer = useMembersStore((s) => s.membersByServer)
   const messagesByChannel = useMessagesStore((s) => s.messagesByChannel)
   const pinsByChannel = usePinsStore((s) => s.pinsByChannel)
-  const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
   const clearUnread = useUiStore((s) => s.clearUnread)
   const unreadByChannel = useUiStore((s) => s.unreadByChannel)
   const toggleRightPanel = useUiStore((s) => s.toggleRightPanel)
@@ -89,16 +93,28 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-card/40">
-      <header className="flex items-center justify-between border-b border-border/70 px-3 py-2 sm:px-4">
-        <div className="flex items-center gap-2">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border/70 px-3 py-2 sm:px-4">
+        <CompactBack />
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <HashIcon className="size-4 text-muted-foreground" />
-          <strong className="font-medium">{channel?.name ?? `channel-${channelId}`}</strong>
-          <span className="text-xs text-muted-foreground">{memberCount} members</span>
-          {channel?.moderatorOnly ? <Badge variant="secondary">Moderator only</Badge> : null}
+          <strong className="truncate font-medium">{channel?.name ?? `channel-${channelId}`}</strong>
+          <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{memberCount} members</span>
+          {channel?.moderatorOnly ? <Badge variant="secondary" className="hidden sm:inline-flex">Moderator only</Badge> : null}
         </div>
-        <div className="flex items-center gap-1">
-          <ChannelMessageSearch messages={messages} onJump={jumpToMessageId} />
+        <div className="flex shrink-0 items-center gap-1">
+          {compact ? <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="Channel actions" />}><MoreHorizontalIcon /></DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={toggleRightPanel}><SidebarIcon />Members</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPanel('search')}><SearchIcon />Search messages</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPanel('pins')}><PinIcon />Pinned messages</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu> : null}
+          <ChannelMessageSearch compact={compact} mobileOpen={panel === 'search'} onMobileOpenChange={(open) => { if (!open) setPanel(null) }} messages={messages} onJump={jumpToMessageId} />
           <ChannelPinsPopover
+            compact={compact}
+            mobileOpen={panel === 'pins'}
+            onMobileOpenChange={(open) => { if (!open) setPanel(null) }}
             pins={pins}
             messages={messages}
             canModerate={canModerate}
@@ -110,14 +126,15 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
               })
             }}
           />
-          <Button variant="outline" size="sm" className="h-8" onClick={toggleRightPanel}>
+          {!compact ? <Button variant="outline" size="sm" className="h-8" onClick={toggleRightPanel}>
             <SidebarIcon className="size-4" />
             Members
-          </Button>
+          </Button> : null}
         </div>
       </header>
 
       <ChatMessageFeed
+        key={scopeKey}
         ref={feedRef}
         scopeKey={`channel:${channelId}`}
         messages={messages}
@@ -126,14 +143,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         unreadCount={unreadCount}
         canDeleteAny={canModerate}
         onEditMessage={async (message, newContent) => {
-          setError(null)
-          try {
-            await reducers.editMessage(message.id, newContent)
-          } catch (e) {
-            const messageText = e instanceof Error ? e.message : 'Could not edit message.'
-            setError(messageText)
-            throw e
-          }
+          await reducers.editMessage(message.id, newContent)
         }}
         onDeleteMessage={async (message) => {
           setError(null)
@@ -161,32 +171,17 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         }
       />
 
-      <Separator />
-
       <ChatComposer
-        value={draft}
-        onChange={setDraft}
+        key={scopeKey}
+        scopeKey={scopeKey}
         disabled={readOnlyForMember}
         placeholder={readOnlyForMember ? 'This channel is read-only for members' : `Message #${channel?.name ?? 'channel'}`}
         uploadScope={{ kind: 'channel', channelId }}
         typingScopeKey={typingScopeKey}
         typingIdentity={selfIdentity}
-        error={error}
         onSubmit={async ({ text, attachments }) => {
-          setError(null)
-          try {
-            const payload = composeMessageWithAttachments(text, attachments)
-            await reducers.sendMessage(channelId, payload)
-            setDraft('')
-            setActiveChannelId(channelId)
-            clearUnread(channelId)
-            reducers.markChannelRead(channelId).catch(() => undefined)
-            setScrollToBottomToken((current) => current + 1)
-          } catch (e) {
-            const message = e instanceof Error ? e.message : 'Could not send message.'
-            setError(message)
-            throw e
-          }
+          if (channelId === null) return
+          await reducers.sendMessage(channelId, composeMessageWithAttachments(text, attachments))
         }}
       />
     </section>

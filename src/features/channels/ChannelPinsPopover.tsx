@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { PinIcon, PinOffIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { parseMessageAttachments } from '../chat/attachmentPayload'
@@ -52,7 +53,7 @@ function PinRow({
           size="icon-xs"
           variant="ghost"
           aria-label="Unpin message"
-          className="opacity-0 transition-opacity group-hover/pin:opacity-100"
+          className="touch-visible opacity-0 transition-opacity group-hover/pin:opacity-100 group-focus-within/pin:opacity-100"
           onClick={() => onUnpin(pin.messageId)}
         >
           <PinOffIcon className="size-3.5" />
@@ -68,14 +69,25 @@ export function ChannelPinsPopover({
   canModerate,
   onJump,
   onUnpin,
+  compact = false,
+  mobileOpen = false,
+  onMobileOpenChange,
 }: {
   pins: PinnedMessage[]
+  compact?: boolean
+  mobileOpen?: boolean
+  onMobileOpenChange?: (open: boolean) => void
   messages: Message[]
   canModerate: boolean
   onJump: (messageId: number) => void
   onUnpin: (messageId: number) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [desktopOpen, setDesktopOpen] = useState(false)
+  const open = compact ? mobileOpen : desktopOpen
+  const setOpen = (next: boolean) => {
+    if (compact) onMobileOpenChange?.(next)
+    else setDesktopOpen(next)
+  }
 
   const resolved = useMemo<ResolvedPin[]>(() => {
     const byId = new Map(messages.map((message) => [message.id, message]))
@@ -96,24 +108,11 @@ export function ChannelPinsPopover({
     return rows
   }, [pins, messages])
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <Button variant="ghost" size="icon-xs" aria-label="Pinned messages">
-            <PinIcon className="size-3.5" />
-          </Button>
-        }
-      />
-      <PopoverContent align="end" className="w-80 gap-1.5">
-        <div className="px-2 pb-1 text-xs font-semibold text-muted-foreground">
-          Pinned messages{resolved.length > 0 ? ` · ${resolved.length}` : ''}
-        </div>
+  const content = <>
         <div className="max-h-72 overflow-y-auto app-scrollbar">
           {resolved.length === 0 ? (
             <p className="px-2 py-4 text-center text-xs text-muted-foreground">
               No pinned messages yet.
-              {canModerate ? ' Hover a message and use the pin icon to add one.' : ''}
             </p>
           ) : (
             <div className="flex flex-col gap-0.5">
@@ -132,6 +131,26 @@ export function ChannelPinsPopover({
             </div>
           )}
         </div>
+  </>
+  if (compact) return <Sheet open={open} onOpenChange={setOpen}>
+    <SheetContent className="data-[side=right]:w-full sm:max-w-sm">
+      <SheetHeader><SheetTitle>Pinned messages</SheetTitle></SheetHeader>
+      <div className="min-h-0 overflow-y-auto px-4 pb-4">{content}</div>
+    </SheetContent>
+  </Sheet>
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <Button variant="ghost" size="icon-xs" aria-label="Pinned messages">
+            <PinIcon className="size-3.5" />
+          </Button>
+        }
+      />
+      <PopoverContent align="end" className="w-80 gap-1.5">
+        <h2 className="px-2 text-sm font-medium">Pinned messages</h2>
+        {content}
       </PopoverContent>
     </Popover>
   )

@@ -60,9 +60,9 @@ export function VideoPlayerHost() {
   const mediaWidth = (expanded ? 78 : 40) * ratio
   return <>
     <section ref={floatingSection} hidden={!floating} aria-label={`Video player: ${player.fileName}`} className={expanded
-      ? 'fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-1.5rem)] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-xl border bg-background p-3 shadow-2xl'
-      : 'fixed right-3 bottom-3 z-50 max-h-[calc(100dvh-1.5rem)] overflow-auto rounded-xl border bg-background p-2 shadow-2xl'}
-      style={{ width: expanded ? `min(calc(100vw - 1.5rem), calc(${mediaWidth}dvh + 1.5rem))` : `min(32rem, calc(100vw - 1.5rem), calc(${mediaWidth}dvh + 1rem))` }}>
+      ? 'fixed left-1/2 top-1/2 z-50 max-h-[calc(var(--app-height,100dvh)-1.5rem)] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-xl border bg-background p-3 shadow-2xl'
+      : 'fixed right-3 bottom-3 z-50 max-h-[calc(var(--app-height,100dvh)-1.5rem)] overflow-auto rounded-xl border bg-background p-2 shadow-2xl'}
+      style={{ top: expanded ? 'calc(var(--app-top, 0px) + var(--app-height, 100dvh) / 2)' : undefined, bottom: expanded ? undefined : 'calc(0.75rem + env(safe-area-inset-bottom) + max(0px, 100dvh - var(--app-height, 100dvh) - var(--app-top, 0px)))', width: expanded ? `min(calc(100vw - 1.5rem), calc(${mediaWidth}dvh + 1.5rem))` : `min(32rem, calc(100vw - 1.5rem), calc(${mediaWidth}dvh + 1rem))` }}>
       <div className="flex items-center gap-2 pb-2">
         <p className="min-w-0 flex-1 truncate text-sm font-medium">{player.fileName}</p>
         <Button size="icon-sm" variant="ghost" aria-label={expanded ? 'Minimize video' : 'Expand video'} onClick={() => setExpanded(value => !value)}>{expanded ? <Minimize2Icon /> : <Maximize2Icon />}</Button>
