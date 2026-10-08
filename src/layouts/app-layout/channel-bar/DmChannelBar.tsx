@@ -24,7 +24,7 @@ export function DmChannelBar({
   const showCallTime = channelBarWidth >= 290
 
   return (
-    <ChannelBarShell header={<CardTitle className="text-base">Direct Messages</CardTitle>}>
+    <ChannelBarShell header={<CardTitle className="text-base">Messages</CardTitle>}>
       <ScrollArea className="h-full min-w-0 pr-2">
         <div className="space-y-3">
           <Button
@@ -37,9 +37,6 @@ export function DmChannelBar({
           </Button>
 
           <section className="space-y-2">
-            <div className="flex items-center justify-between px-1">
-              <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Direct Messages</p>
-            </div>
 
             {dmContacts.length > 0 ? (
               dmContacts.map((contact) => {
@@ -95,8 +92,8 @@ export function DmChannelBar({
                       type="button"
                       size="icon-xs"
                       variant={muted ? 'secondary' : 'ghost'}
-                      aria-label={muted ? 'Unmute user' : 'Mute user'}
-                      title={muted ? 'Unmute user' : 'Mute user'}
+                      aria-label={muted ? 'Unmute notifications' : 'Mute notifications'}
+                      title={muted ? 'Unmute notifications' : 'Mute notifications'}
                       onClick={(event) => {
                         event.stopPropagation()
                         onToggleUserMute(contact.identity)

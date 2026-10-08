@@ -43,7 +43,7 @@ export function WebJoinPage() {
 
   if (error) {
     return (
-      <main className="grid min-h-screen place-items-center p-4">
+      <main className="grid min-h-full place-items-center p-4">
         <Card className="w-full max-w-md border-border/70 bg-card/90 backdrop-blur">
           <CardHeader>
             <CardTitle className="text-base">Couldn't join the server</CardTitle>

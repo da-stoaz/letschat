@@ -22,7 +22,7 @@ export function SetupPage() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/20),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/15),transparent)] p-4">
+    <main className="grid min-h-full place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/20),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/15),transparent)] p-4">
       <div className="w-full max-w-md space-y-4">
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">LetsChat</h1>

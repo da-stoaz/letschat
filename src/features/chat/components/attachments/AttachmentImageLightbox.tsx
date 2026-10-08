@@ -76,7 +76,7 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="!inset-0 !top-0 !left-0 !z-[80] !h-screen !w-screen !max-w-none !translate-x-0 !translate-y-0 !rounded-none !border-0 !p-0 !sm:max-w-none bg-black"
+        className="attachment-lightbox !inset-0 !top-[var(--app-top,0px)] !left-0 !z-[80] !h-[var(--app-height,100dvh)] !w-screen !max-w-none !translate-x-0 !translate-y-0 !rounded-none !border-0 !pt-[env(safe-area-inset-top)] !pr-[env(safe-area-inset-right)] !pb-[env(safe-area-inset-bottom)] !pl-[env(safe-area-inset-left)] !sm:max-w-none bg-black"
       >
         <DialogTitle className="sr-only">Image preview</DialogTitle>
 
@@ -99,12 +99,12 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
           {({ zoomIn, zoomOut, resetTransform }) => (
             <div className="group relative h-full w-full overflow-auto">
               {activeImage ? (
-                <div className="flex min-h-full min-w-full items-center justify-center px-6 py-16 sm:px-8">
+                <div className="flex min-h-full min-w-full items-center justify-center px-6 py-24 sm:px-8 sm:py-16">
                   {activeImage.url ? (
                     <TransformComponent
                       wrapperStyle={{
                         width: 'calc(100dvw - 3rem)',
-                        height: 'calc(100dvh - 8rem)',
+                        height: 'max(100px, calc(var(--app-height, 100dvh) - 12rem))',
                       }}
                       contentStyle={{
                         width: '100%',
@@ -155,7 +155,7 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
               ) : null}
 
               <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3 sm:top-4 sm:px-4">
-                <div className="pointer-events-auto flex w-full max-w-4xl items-center gap-1 rounded-xl border border-white/20 bg-black/65 p-1 backdrop-blur">
+                <div className="pointer-events-auto flex w-full max-w-4xl flex-wrap items-center gap-1 rounded-xl border border-white/20 bg-black/65 p-1 backdrop-blur">
                   <p className="min-w-0 flex-1 truncate px-2 text-sm font-medium text-white">
                     {activeImage?.fileName ?? 'Image preview'}
                   </p>
@@ -165,6 +165,17 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
                     </span>
                   ) : null}
 
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    className="text-white hover:bg-white/15 sm:order-last"
+                    onClick={onClose}
+                  >
+                    <XIcon className="size-5" />
+                    <span className="sr-only">Close preview</span>
+                  </Button>
+                  <div className="flex w-full items-center justify-center gap-1 sm:w-auto">
                   <Button
                     type="button"
                     size="icon-sm"
@@ -200,7 +211,7 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
                     <span className="sr-only">Zoom in</span>
                   </Button>
 
-                  <div className="px-2 text-xs font-medium text-white/80">{Math.round(zoomScale * 100)}%</div>
+                  <div className="hidden px-2 text-xs font-medium text-white/80 sm:block">{Math.round(zoomScale * 100)}%</div>
 
                   <Button
                     type="button"
@@ -224,17 +235,9 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
                     <DownloadIcon className="size-4" />
                     {isSaving ? 'Saving…' : 'Save'}
                   </Button>
+                  </div>
 
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    className="text-white hover:bg-white/15"
-                    onClick={onClose}
-                  >
-                    <XIcon className="size-5" />
-                    <span className="sr-only">Close preview</span>
-                  </Button>
+
                 </div>
               </div>
             </div>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ConnectionState } from 'livekit-client'
-import { PhoneCallIcon, PhoneOffIcon, PanelBottomCloseIcon, PanelBottomOpenIcon, ServerIcon, CheckIcon, XIcon } from 'lucide-react'
-import { dmVoiceRoomKey, joinLiveKitDmVoice, leaveLiveKitDmVoice, useLiveKitRoom } from '../../lib/livekit'
+import { PhoneCallIcon, PanelBottomCloseIcon, PanelBottomOpenIcon, ServerIcon, CheckIcon, XIcon } from 'lucide-react'
+import { dmVoiceRoomKey, isCallCancelled, joinLiveKitDmVoice, useLiveKitRoom } from '../../lib/livekit'
 import { reducers } from '../../lib/spacetimedb'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useDmStore } from '../../stores/dmStore'
@@ -12,6 +13,8 @@ import { useDmServerInvitesStore } from '../../stores/dmServerInvitesStore'
 import { useServersStore } from '../../stores/serversStore'
 import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { useIsMobile } from '../../hooks/use-mobile'
+import { useComposerStore } from '../../stores/composerStore'
+import { CompactBack } from '../../components/CompactBack'
 import { ChatComposer } from '../chat/ChatComposer'
 import { ChatMessageFeed } from '../chat/ChatMessageFeed'
 import { DmVoicePanel } from './DmVoicePanel'
@@ -19,7 +22,6 @@ import {
   encodeDmSystemMessage,
   formatDmSystemMetadata,
   formatDmSystemPrimaryText,
-  getCallDurationSeconds,
   parseDmSystemMessage,
 } from './systemMessages'
 import { useOngoingCallDuration } from '../voice/hooks/useOngoingCallDuration'
@@ -31,7 +33,6 @@ import { loadOlderDirectMessages } from '../../lib/spacetimedb/history'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { useUsersStore } from '../../stores/usersStore'
 
@@ -139,9 +140,10 @@ function isDeletedForViewer(message: DirectMessage, selfIdentity: string | null)
 }
 
 export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
-  const [draft, setDraft] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [scrollToBottomToken, setScrollToBottomToken] = useState(0)
+  const scopeKey = `dm:${partnerIdentity.toLowerCase()}`
+  const setError = (error: string | null) => useComposerStore.getState().update(scopeKey, { error })
+  const scrollToBottomToken = useComposerStore(s => s.drafts[scopeKey]?.sent ?? 0)
+  const navigate = useNavigate()
   const isMobile = useIsMobile()
   const [callPanelMinimized, setCallPanelMinimized] = useState(!isMobile)
   // Adjust-state-during-render: reset the panel to its default whenever the
@@ -170,10 +172,6 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   const dmRoom = useDmVoiceSessionStore((s) => s.room)
   const joinedPartnerIdentity = useDmVoiceSessionStore((s) => s.joinedPartnerIdentity)
   const dmJoining = useDmVoiceSessionStore((s) => s.joining)
-  const dmAnswered = useDmVoiceSessionStore((s) => s.answered)
-  const setDmRoom = useDmVoiceSessionStore((s) => s.setRoom)
-  const setJoinedPartnerIdentity = useDmVoiceSessionStore((s) => s.setJoinedPartnerIdentity)
-  const setDmJoining = useDmVoiceSessionStore((s) => s.setJoining)
   const setDmAnswered = useDmVoiceSessionStore((s) => s.setAnswered)
   const messages = conversations[partnerIdentity] ?? EMPTY_DM_MESSAGES
   const partner = useUserPresentation(partnerIdentity)
@@ -227,19 +225,10 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
       : null
   const { connectionState } = useLiveKitRoom(roomForPartner)
   const joined = roomForPartner !== null && connectionState === ConnectionState.Connected
-  const connecting = dmJoining || (roomForPartner !== null && connectionState === ConnectionState.Connecting)
+  const connecting = (dmJoining && normalizeIdentity(joinedPartnerIdentity) === normalizeIdentity(partnerIdentity)) || (roomForPartner !== null && (connectionState === ConnectionState.Connecting || connectionState === ConnectionState.Reconnecting || connectionState === ConnectionState.SignalReconnecting))
   const hasActiveCall = joined || connecting || voiceParticipants.length > 0
-  // The call button already says "Joining…" / "Leave Call", so a badge repeating it
-  // is noise sitting right next to its own label. Show the badge only for the one
-  // state the button cannot express: a call already in progress that you are not in.
+  // Show incoming call status before the local session starts.
   const showStatusBadge = !connecting && !joined && voiceParticipants.length > 0
-  const selfVoiceParticipant = useMemo(
-    () =>
-      voiceParticipants.find(
-        (participant) => normalizeIdentity(participant.userIdentity) === normalizeIdentity(selfIdentity),
-      ) ?? null,
-    [selfIdentity, voiceParticipants],
-  )
   const remoteJoinedCount = useMemo(
     () =>
       voiceParticipants.filter(
@@ -266,46 +255,22 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
 
   const onPrimaryCallAction = async () => {
     try {
-      if (joined) {
-        const callDurationSeconds = getCallDurationSeconds(selfVoiceParticipant?.joinedAt)
-        await leaveLiveKitDmVoice(partnerIdentity, roomForPartner)
-        setDmRoom(null)
-        setJoinedPartnerIdentity(null)
-        setDmAnswered(false)
-        if (callDurationSeconds !== null) {
-          await reducers
-            .sendDirectMessage(
-              partnerIdentity,
-              encodeDmSystemMessage('call_ended', {
-                durationSeconds: callDurationSeconds,
-                missed: !dmAnswered,
-              }),
-            )
-            .catch(() => undefined)
-        }
+      if (joined || connecting) {
+        navigate('/app/call', { state: { returnTo: `/app/dm/${partnerIdentity}` } })
         return
       }
-
-      setDmJoining(true)
       const shouldEmitCallStarted = voiceParticipants.length === 0
-      if (dmRoom && joinedPartnerIdentity && normalizeIdentity(joinedPartnerIdentity) !== normalizeIdentity(partnerIdentity)) {
-        await leaveLiveKitDmVoice(joinedPartnerIdentity, dmRoom)
-        setDmRoom(null)
-        setJoinedPartnerIdentity(null)
-      }
-      const nextRoom = await joinLiveKitDmVoice(partnerIdentity)
-      setDmRoom(nextRoom)
-      setJoinedPartnerIdentity(partnerIdentity)
-      setDmAnswered(false)
+      const joiningCall = joinLiveKitDmVoice(partnerIdentity)
+      if (isMobile) navigate('/app/call', { state: { returnTo: `/app/dm/${partnerIdentity}` } })
+      await joiningCall
       if (shouldEmitCallStarted) {
         await reducers.sendDirectMessage(partnerIdentity, encodeDmSystemMessage('call_started')).catch(() => undefined)
       }
       setCallPanelMinimized(false)
     } catch (callError) {
+      if (isCallCancelled(callError)) return
       const message = callError instanceof Error ? callError.message : 'Could not update DM call state.'
       toast.error(message)
-    } finally {
-      setDmJoining(false)
     }
   }
 
@@ -332,7 +297,8 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card/60">
-      <header className="flex items-center gap-2 border-b border-border/70 px-4 py-2">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border/70 px-3 py-2">
+        <CompactBack />
         <div className="min-w-0 flex flex-1 items-center gap-2">
           <Avatar className="size-8 rounded-full">
             {partner.avatarUrl ? <AvatarImage src={partner.avatarUrl} alt={partner.displayName} /> : null}
@@ -344,60 +310,54 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
               <PresenceDot status={partner.status} />
             </div>
             <p className="truncate text-xs text-muted-foreground">
-              Direct conversation with @{partner.username}
+              @{partner.username}
               {ongoingCallDuration ? ` • Ongoing call since ${ongoingCallDuration}` : ''}
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {showStatusBadge ? <Badge variant="outline">In call</Badge> : null}
-          <Button
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+          {showStatusBadge && !isMobile ? <Badge variant="outline">In call</Badge> : null}
+          {!isMobile && (joined || connecting) ? null : <Button
             size="sm"
-            variant={joined ? 'destructive' : 'default'}
-            disabled={connecting}
+            aria-label={joined || connecting ? 'Show call' : showStatusBadge ? 'Answer call' : 'Call'}
             onClick={() => {
               void onPrimaryCallAction()
             }}
           >
-            {joined ? <PhoneOffIcon className="size-4" /> : <PhoneCallIcon className="size-4" />}
-            {connecting ? 'Joining...' : joined ? 'Leave Call' : 'Call User'}
-          </Button>
-          {hasActiveCall ? (
+            <PhoneCallIcon className="size-4" />
+            <span className="hidden sm:inline">{joined || connecting ? 'Show call' : showStatusBadge ? 'Answer' : 'Call'}</span>
+          </Button>}
+          {hasActiveCall && !isMobile ? (
             <Button
               type="button"
               size="sm"
               variant="ghost"
+              aria-label={callPanelMinimized ? 'Show call' : 'Minimize call'}
               onClick={() => setCallPanelMinimized((value) => !value)}
             >
               {callPanelMinimized ? <PanelBottomOpenIcon className="size-4" /> : <PanelBottomCloseIcon className="size-4" />}
-              {callPanelMinimized ? 'Show Call' : 'Minimize'}
+              <span className="hidden sm:inline">{callPanelMinimized ? 'Show call' : 'Minimize'}</span>
             </Button>
           ) : null}
         </div>
       </header>
 
-      {hasActiveCall && !callPanelMinimized ? (
-        <div className="border-b border-border/70 p-2">
-          <DmVoicePanel partnerIdentity={partnerIdentity} showHeader={false} />
+      {hasActiveCall && !isMobile && !callPanelMinimized ? (
+        <div className="min-h-0 shrink-0 border-b border-border/70 p-2">
+          <DmVoicePanel partnerIdentity={partnerIdentity} />
         </div>
       ) : null}
 
       <ChatMessageFeed
-        scopeKey={`dm:${partnerIdentity}`}
+        key={scopeKey}
+        scopeKey={scopeKey}
         messages={renderMessages}
         onLoadOlder={() => void loadOlderDirectMessages(partnerIdentity)}
         selfIdentity={selfIdentity}
         canDeleteAny
         allowEditOwn
         onEditMessage={async (message, newContent) => {
-          setError(null)
-          try {
-            await reducers.editDirectMessage(message.id, newContent)
-          } catch (e) {
-            const messageText = e instanceof Error ? e.message : 'Could not edit message.'
-            setError(messageText)
-            throw e
-          }
+          await reducers.editDirectMessage(message.id, newContent)
         }}
         onDeleteMessage={async (message) => {
           setError(null)
@@ -419,30 +379,15 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         </div>
       )}
 
-      <Separator />
-
       <ChatComposer
-        value={draft}
-        onChange={setDraft}
+        key={scopeKey}
+        scopeKey={scopeKey}
         placeholder={`Message @${partner.username}`}
         uploadScope={{ kind: 'dm', partner: partner.username }}
         typingScopeKey={typingScopeKey}
         typingIdentity={selfIdentity}
-        error={error}
         onSubmit={async ({ text, attachments }) => {
-          setError(null)
-          try {
-            const payload = composeMessageWithAttachments(text, attachments)
-            await reducers.sendDirectMessage(partnerIdentity, payload)
-            setDraft('')
-            clearDmUnread(partnerIdentity)
-            reducers.markDmRead(partnerIdentity).catch(() => undefined)
-            setScrollToBottomToken((current) => current + 1)
-          } catch (e) {
-            const message = e instanceof Error ? e.message : 'Could not send direct message.'
-            setError(message)
-            throw e
-          }
+          await reducers.sendDirectMessage(partnerIdentity, composeMessageWithAttachments(text, attachments))
         }}
       />
     </section>

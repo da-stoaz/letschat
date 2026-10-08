@@ -121,8 +121,12 @@
   * {
     @apply border-border outline-ring/50;
     }
+  [data-slot='dropdown-menu-trigger']:focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--foreground) 70%, transparent);
+    outline-offset: -2px;
+  }
   html, body, #root {
-    height: 100%;
+    height: var(--app-height, 100dvh);
     overscroll-behavior: none;
   }
   body {
@@ -134,6 +138,49 @@
     @apply font-sans;
     color-scheme: dark;
     }
+}
+
+@layer components {
+  .app-viewport {
+    position: fixed;
+    inset-inline: 0;
+    top: var(--app-top, 0px);
+    height: var(--app-height, 100dvh);
+  }
+
+  .message-content {
+    overflow-wrap: anywhere;
+  }
+  .message-content pre, .message-content table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .message-content pre { white-space: pre; }
+
+  button, a, [role='menuitem'] { touch-action: manipulation; }
+  button:active:not(:disabled) { filter: brightness(0.9); }
+
+  @media (max-width: 767px), (pointer: coarse) {
+    button:not([role='switch']), [role='menuitem'], [role='tab'],
+    [data-slot='dropdown-menu-trigger'], [data-slot='call-device-select'] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+    [data-slot='input'], [data-slot='textarea'], [data-slot='call-device-select'] { font-size: 1rem; }
+    [data-slot='input'] { min-height: 44px; }
+    .touch-visible { opacity: 1; }
+    .message-content { font-size: 1rem; line-height: 1.5; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 1ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer components {
@@ -192,4 +239,83 @@
   [data-slot='select-content']::-webkit-scrollbar-thumb:hover {
     background: var(--app-scrollbar-thumb-hover);
   }
+}
+
+/* Viewport constraints must take precedence over component sizing utilities. */
+.app-safe-area {
+  padding-top: max(var(--app-edge-padding, 0.25rem), env(safe-area-inset-top));
+  padding-right: max(var(--app-edge-padding, 0.25rem), env(safe-area-inset-right));
+  padding-bottom: max(var(--app-edge-padding, 0.25rem), env(safe-area-inset-bottom));
+  padding-left: max(var(--app-edge-padding, 0.25rem), env(safe-area-inset-left));
+}
+
+[data-slot='dialog-content']:not(.attachment-lightbox):not(.call-fullscreen) {
+  top: calc(var(--app-top, 0px) + var(--app-height, 100dvh) / 2);
+  max-height: calc(var(--app-height, 100dvh) - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+[data-slot='dialog-header'], [data-slot='sheet-header'] {
+  padding-right: 2.75rem;
+}
+
+[data-slot='sheet-content'] {
+  max-height: var(--app-height, 100dvh);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  overscroll-behavior: contain;
+}
+
+[data-slot='sheet-content'][data-side='right'],
+[data-slot='sheet-content'][data-side='left'] {
+  top: var(--app-top, 0px);
+  bottom: auto;
+  height: var(--app-height, 100dvh);
+}
+
+[data-slot='sheet-content'][data-side='bottom'] {
+  bottom: max(0px, calc(100dvh - var(--app-height, 100dvh) - var(--app-top, 0px)));
+}
+
+[data-slot='popover-content'], [data-slot='dropdown-menu-content'] {
+  max-width: calc(100vw - 1rem);
+}
+
+[data-slot='dialog-content'].call-fullscreen {
+  display: flex;
+  flex-direction: column;
+  top: var(--app-top, 0px);
+  left: 0;
+  width: 100%;
+  height: var(--app-height, 100dvh);
+  max-width: none;
+  max-height: none;
+  /* Tailwind's dialog centering uses the independent translate property. */
+  translate: none;
+  transform: none;
+  animation: none;
+  overflow: hidden;
+  border-radius: 0;
+  gap: 0;
+  --app-edge-padding: 0.5rem;
+}
+
+.call-fullscreen .call-spotlight {
+  container-type: size;
+  place-items: center;
+}
+
+.call-fullscreen .call-spotlight > div {
+  width: min(100%, calc(100cqh * 16 / 9), 75rem);
+  aspect-ratio: 16 / 9;
+}
+
+.call-fullscreen .call-spotlight + div > div {
+  margin-inline: auto;
+}
+
+.call-fullscreen .call-toolbar > div:first-child {
+  border: 0;
+  padding-top: 0;
 }

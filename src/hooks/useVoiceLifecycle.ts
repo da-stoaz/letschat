@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { reducers } from '../lib/spacetimedb'
+import { leaveLiveKitVoice, leaveLiveKitDmVoice, retryCallCleanup } from '../lib/livekit'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useDmVoiceSessionStore } from '../stores/dmVoiceSessionStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
@@ -33,10 +34,8 @@ export function useVoiceLifecycle(): void {
       const store = useVoiceSessionStore.getState()
       if (store.room !== room) return
       const channelId = store.joinedChannelId
-      store.setRoom(null)
-      store.setJoinedChannelId(null)
       if (channelId !== null) {
-        void reducers.leaveVoiceChannel(channelId).catch(() => undefined)
+        void leaveLiveKitVoice(channelId, room)
       }
     }
     room.on('disconnected', onDisconnected)
@@ -51,9 +50,8 @@ export function useVoiceLifecycle(): void {
       const store = useDmVoiceSessionStore.getState()
       if (store.room !== dmRoom) return
       const partnerIdentity = store.joinedPartnerIdentity
-      store.reset()
       if (partnerIdentity !== null) {
-        void reducers.leaveDmVoice(partnerIdentity).catch(() => undefined)
+        void leaveLiveKitDmVoice(partnerIdentity, dmRoom)
       }
     }
     dmRoom.on('disconnected', onDisconnected)
@@ -64,6 +62,7 @@ export function useVoiceLifecycle(): void {
 
   useEffect(() => {
     if (connectionStatus !== 'connected') return
+    void retryCallCleanup()
     // Deliberately read through getState(): this must fire on connection
     // transitions only, never because session state changed.
     const voice = useVoiceSessionStore.getState()

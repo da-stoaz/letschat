@@ -3,7 +3,7 @@ import { ArrowDownIcon } from 'lucide-react'
 import { MessageBubble, type MessageGroup, type RenderableMessage } from '../channels/MessageBubble'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { getHistoryScrollOffset } from './chatScroll'
+import { captureReadingPosition, restoreReadingPosition, readingPositions } from './readingPosition'
 
 const HISTORY_PAGE_SIZE = 50
 const GROUP_WINDOW_MS = 7 * 60 * 1000
@@ -78,14 +78,19 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   onTogglePin,
   onLoadOlder,
 }, ref) {
-  const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE_SIZE)
+  const [initialReading] = useState(() => readingPositions.get(scopeKey))
+  const [historyLimit, setHistoryLimit] = useState(() => initialReading
+    ? initialReading.historyLimit + Math.max(0, messages.length - initialReading.messageCount)
+    : HISTORY_PAGE_SIZE)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [highlightedId, setHighlightedId] = useState<number | null>(null)
   const [jumpRequest, setJumpRequest] = useState(0)
   const pendingJumpRef = useRef<number | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  const followBottom = useRef(true)
-  const previousLayout = useRef<{ scopeKey: string; firstMessageId: number | undefined; scrollHeight: number; scrollTop: number } | null>(null)
+  const followBottom = useRef(initialReading?.followBottom ?? true)
+  const latestReading = useRef(initialReading)
+  const lastSentToken = useRef(scrollToBottomToken)
+  const touchStartY = useRef<number | null>(null)
 
   const sortedMessages = useMemo(
     () => [...messages].sort((a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt)),
@@ -156,55 +161,46 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
     if (!element) return
     followBottom.current = true
     element.scrollTop = element.scrollHeight
+    latestReading.current = captureReadingPosition(element, historyLimit, sortedMessages.length, true)
+    readingPositions.set(scopeKey, latestReading.current)
     setIsAtBottom(true)
   }
 
-  // ponytail: loaded pages stay mounted; add measured page windowing only if
-  // profiling very long histories warrants it.
-  // Native layout gives every loaded message its real height before paint.
-  // Compensate a prepended page once, instead of correcting estimated heights
-  // repeatedly during a WebKit scroll gesture.
   useLayoutEffect(() => {
     const element = scrollRef.current
     if (!element) return
-    const previous = previousLayout.current
-    const firstMessageId = visibleMessages[0]?.id
-    if (previous?.scopeKey !== scopeKey) followBottom.current = true
-    if (followBottom.current) {
-      element.scrollTop = element.scrollHeight
-    } else if (
-      previous?.scopeKey === scopeKey && previous.firstMessageId !== firstMessageId &&
-      visibleMessages.some(message => message.id === previous.firstMessageId)
-    ) {
-      element.scrollTop = getHistoryScrollOffset(previous.scrollTop, previous.scrollHeight, element.scrollHeight)
-    }
-    previousLayout.current = { scopeKey, firstMessageId, scrollHeight: element.scrollHeight, scrollTop: element.scrollTop }
-  }, [scopeKey, visibleMessages])
+    if (latestReading.current) restoreReadingPosition(element, latestReading.current)
+    else if (followBottom.current) element.scrollTop = element.scrollHeight
+    latestReading.current = captureReadingPosition(element, historyLimit, sortedMessages.length, followBottom.current)
+    readingPositions.set(scopeKey, latestReading.current)
+  }, [scopeKey, visibleMessages, historyLimit, sortedMessages.length])
 
   useLayoutEffect(() => {
     const element = scrollRef.current
     const content = element?.firstElementChild
     if (!element || !content) return
     const observer = new ResizeObserver(() => {
-      // Secure URL resolution and image loading can change actual heights.
-      // Follow those changes only while the reader is still at the bottom.
-      if (followBottom.current) element.scrollTop = element.scrollHeight
-      if (previousLayout.current) {
-        previousLayout.current.scrollTop = element.scrollTop
-        previousLayout.current.scrollHeight = element.scrollHeight
-      }
+      if (latestReading.current) restoreReadingPosition(element, latestReading.current)
+      const position = captureReadingPosition(element, latestReading.current?.historyLimit ?? HISTORY_PAGE_SIZE, latestReading.current?.messageCount ?? 0, followBottom.current)
+      latestReading.current = position
+      readingPositions.set(scopeKey, position)
     })
     observer.observe(content)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [])
+  }, [scopeKey])
 
   useLayoutEffect(() => {
-    if (scrollToBottomToken === 0) return
+    if (scrollToBottomToken === lastSentToken.current) return
+    lastSentToken.current = scrollToBottomToken
     followBottom.current = true
     const element = scrollRef.current
-    if (element) element.scrollTop = element.scrollHeight
-  }, [scrollToBottomToken])
+    if (element) {
+      element.scrollTop = element.scrollHeight
+      latestReading.current = captureReadingPosition(element, historyLimit, sortedMessages.length, true)
+      readingPositions.set(scopeKey, latestReading.current)
+    }
+  }, [scrollToBottomToken, scopeKey, historyLimit, sortedMessages.length])
 
   // Phase 1: the parent triggers a jump imperatively (from a search-result or
   // pin click). Load the target into the visible window and mark it for the
@@ -238,7 +234,9 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
     if (!element || !message) return
     element.scrollTop += message.getBoundingClientRect().top - element.getBoundingClientRect().top
       - Math.max(0, (element.clientHeight - message.offsetHeight) / 2)
-  }, [visibleMessages, jumpRequest])
+    latestReading.current = captureReadingPosition(element, historyLimit, sortedMessages.length, false)
+    readingPositions.set(scopeKey, latestReading.current)
+  }, [visibleMessages, jumpRequest, scopeKey, historyLimit, sortedMessages.length])
 
   useEffect(() => {
     if (highlightedId == null) return
@@ -247,7 +245,7 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   }, [highlightedId])
 
   return (
-    <div className="relative min-h-0 flex-1">
+    <div className="relative min-h-0 min-w-0 flex-1">
       <div
         ref={scrollRef}
         className="app-scrollbar h-full overflow-x-hidden overflow-y-auto"
@@ -261,16 +259,20 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
             followBottom.current = false
           }
         }}
+        onTouchStart={(event) => { touchStartY.current = event.touches[0]?.clientY ?? null }}
+        onTouchMove={(event) => {
+          const y = event.touches[0]?.clientY
+          if (y !== undefined && touchStartY.current !== null && y > touchStartY.current + 4) followBottom.current = false
+        }}
+        onPointerDown={(event) => {
+          if (event.pointerType === 'mouse' && event.target === event.currentTarget) followBottom.current = false
+        }}
         onScroll={(event) => {
           const target = event.currentTarget
           const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight
-          const previous = previousLayout.current
-          if (previous && target.scrollTop < previous.scrollTop) followBottom.current = false
-          else if (distanceFromBottom <= 1) followBottom.current = true
-          if (previous) {
-            previous.scrollTop = target.scrollTop
-            previous.scrollHeight = target.scrollHeight
-          }
+          if (distanceFromBottom <= 1) followBottom.current = true
+          latestReading.current = captureReadingPosition(target, historyLimit, sortedMessages.length, followBottom.current)
+          readingPositions.set(scopeKey, latestReading.current)
           const atBottom = distanceFromBottom < 80
           setIsAtBottom((previous) => (previous === atBottom ? previous : atBottom))
 
@@ -303,10 +305,7 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
                   highlightMessageId={highlightedId}
                   pinnedMessageIds={pinnedMessageIds}
                   onTogglePin={onTogglePin}
-                  onEditMessage={(message, newContent) => {
-                    if (!onEditMessage) return
-                    void onEditMessage(message, newContent)
-                  }}
+                  onEditMessage={onEditMessage ?? (() => undefined)}
                   onDeleteMessage={(message) => {
                     void onDeleteMessage(message)
                   }}

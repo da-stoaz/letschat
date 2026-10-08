@@ -40,7 +40,7 @@ export function InvitePage() {
   }
 
   return (
-    <section className="grid min-h-screen place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,--theme(--color-blue-500/25),transparent),radial-gradient(900px_700px_at_100%_0%,--theme(--color-cyan-500/20),transparent)] p-4">
+    <section className="grid min-h-full place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,--theme(--color-blue-500/25),transparent),radial-gradient(900px_700px_at_100%_0%,--theme(--color-cyan-500/20),transparent)] p-4">
       <div className="w-full max-w-md space-y-4">
         <Card className="border-border/70 bg-card/90 backdrop-blur-sm">
           <CardHeader className="text-center pb-3">

@@ -26,11 +26,16 @@ import { ComposeDmDialog } from './app-layout/ComposeDmDialog'
 import { LayoutModals, type MemberActionModal } from './app-layout/LayoutModals'
 import { MemberPanel } from './app-layout/MemberPanel'
 import { ActiveCallCard } from './app-layout/ActiveCallCard'
+import { MobileCallStrip } from '../features/voice/components/MobileCallStrip'
 import { CallAudioRenderer } from '../features/voice/components/CallAudioRenderer'
 import { AppRail } from './app-layout/AppRail'
 import { ChannelBar } from './app-layout/ChannelBar'
 import { cn } from '../lib/utils'
 import { useIsMobile } from '../hooks/use-mobile'
+import { useContainerWidth } from '../hooks/useViewport'
+import { paneWidths } from './app-layout/navigation'
+import { CompactBack } from '../components/CompactBack'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
 import type { Channel } from '../types/domain'
@@ -176,7 +181,6 @@ export function AppLayout() {
   const activeChannelId = Number(params.channelId ?? 0) || null
   const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
   const setActiveDmPartner = useUiStore((s) => s.setActiveDmPartner)
-  const setActiveCallDockVisible = useUiStore((s) => s.setActiveCallDockVisible)
   const clearUnread = useUiStore((s) => s.clearUnread)
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen)
   const role = useServerRole(activeServerId)
@@ -186,7 +190,13 @@ export function AppLayout() {
   const isDiscoverPage = location.pathname.startsWith('/app/discover')
   const isServerManagePage = /^\/app\/[^/]+\/manage\/?$/.test(location.pathname)
   // Settings and Discover are full-pane: no channel bar, collapsed two-column grid.
-  const isFullPanePage = isSettingsPage || isDiscoverPage
+  const pathname = location.pathname.replace(/\/+$/, '')
+  const isListPage = pathname === '/app/spaces' || pathname === '/app/messages' || /^\/app\/\d+\/channels\/?$/.test(location.pathname)
+  const isFullPanePage = isSettingsPage || isDiscoverPage || isListPage || pathname === '/app/call'
+  const { ref: layoutRef, width: layoutWidth } = useContainerWidth()
+  const { channelWidth: displayedChannelWidth, membersInline } = paneWidths(layoutWidth, channelBarWidth, memberPanelWidth, isFullPanePage)
+  const showMembers = rightPanelOpen && activeServerId !== null && activeChannelId !== null && !isServerManagePage
+  const inlineMembers = showMembers && membersInline
   const normalizedSelfIdentity = selfIdentity ? normalizeIdentity(selfIdentity) : null
 
   useEffect(() => {
@@ -482,7 +492,7 @@ export function AppLayout() {
     dmVoiceRoom !== null ||
     voiceJoining ||
     dmVoiceJoining
-  const activeCallDockVisible = hasActiveCallDock && !isMobile
+  const activeCallDockVisible = hasActiveCallDock && !isMobile && !isFullPanePage
   const {
     activeSpeakerIds: roomActiveSpeakerIds,
     localParticipant: roomLocalParticipant,
@@ -512,10 +522,6 @@ export function AppLayout() {
     },
     [roomActiveSpeakerIds, roomLocalParticipant, roomRemoteParticipants],
   )
-
-  useEffect(() => {
-    setActiveCallDockVisible(activeCallDockVisible)
-  }, [activeCallDockVisible, setActiveCallDockVisible])
 
   useEffect(() => {
     void syncUnreadBadgeCount()
@@ -578,9 +584,62 @@ export function AppLayout() {
     window.addEventListener('pointerup', handlePointerUp, { once: true })
   }, [channelBarWidth, isMobile])
 
+  const channelBar = (
+    <ChannelBar
+      channelBarWidth={isListPage ? layoutWidth : displayedChannelWidth}
+      activeServerId={activeServerId}
+      activeServer={activeServer}
+      activeChannelId={activeChannelId}
+      role={role}
+      channels={sidebarChannels}
+      activeChannelsCount={sidebarChannels.length}
+      unreadByChannel={unreadByChannel}
+      participantsByChannel={participantsByChannel}
+      joinedVoiceChannelId={joinedVoiceChannelId}
+      activeSpeakerIdentityKeys={activeSpeakerIdentityKeys}
+      memberProfileByIdentity={memberProfileByIdentity}
+      onOpenInvite={() => setShowInvite(true)}
+      onOpenCreateChannel={() => setShowCreateChannel(true)}
+      onOpenServerPanel={openServerPanel}
+      onLeaveServer={() => setShowLeaveServer(true)}
+      isChannelMuted={(channelId) => Boolean(mutedChannels[channelId])}
+      onToggleChannelMute={(channelId) => toggleMutedChannel(channelId)}
+      onSelectChannel={(channelId) => {
+        if (activeServerId === null) return
+        openChannel(activeServerId, channelId)
+      }}
+      onOpenFriends={() => navigate('/app/dm/friends')}
+      dmContacts={dmContactsWithPresence}
+      dmUnreadByIdentity={unreadByDmPartner}
+      isUserMuted={(identity) => Boolean(mutedUsers[normalizeIdentity(identity)])}
+      onToggleUserMute={(identity) => toggleMutedUser(normalizeIdentity(identity))}
+      activeDmIdentity={activeDmIdentity}
+      dmCallActiveByIdentity={dmCallActiveByIdentity}
+      onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
+    />
+  )
+  const memberPanel = (
+    <MemberPanel
+      showHeader={inlineMembers}
+      members={activeServerMembers}
+      selfIdentity={selfIdentity}
+      selfRole={role}
+      serverId={activeServerId}
+      onKick={(member) => setMemberAction({ kind: 'kick', member })}
+      onBan={(member) => setMemberAction({ kind: 'ban', member })}
+      onTimeout={(member) => setMemberAction({ kind: 'timeout', member })}
+      onRemoveTimeout={async (member) => {
+        if (activeServerId !== null) await reducers.removeTimeout(activeServerId, member.userIdentity)
+      }}
+      onSetRole={(member, newRole) => setMemberAction({ kind: 'setRole', member, newRole })}
+      onTransferOwnership={(member) => setMemberAction({ kind: 'transferOwnership', member })}
+    />
+  )
+
   const mainPane = (
     <div
-      className={cn('grid min-h-0 min-w-0 gap-2 overflow-hidden', rightPanelOpen && activeServerId && !isServerManagePage ? 'grid-cols-[minmax(0,1fr)_var(--member-panel-width)]' : 'grid-cols-1')}
+      key="main-pane"
+      className={cn('grid min-h-0 min-w-0 gap-2 overflow-hidden', inlineMembers ? 'grid-cols-[minmax(0,1fr)_var(--member-panel-width)]' : 'grid-cols-1')}
       style={{ ['--member-panel-width' as string]: `${memberPanelWidth}px` }}
     >
       <Card className="relative h-full min-h-0 gap-0 border-border/60 bg-card/80 py-0 backdrop-blur">
@@ -590,11 +649,11 @@ export function AppLayout() {
             isFullPanePage || isServerManagePage ? 'p-1.5 sm:p-2' : 'p-0',
           )}
         >
-          <Outlet />
+          <Outlet context={{ channelBar, servers, countUnreadInServer, activeCallDockVisible, onCreateSpace: () => setShowCreateServer(true), onCompose: () => setShowComposeDm(true) }} />
         </CardContent>
       </Card>
 
-      {rightPanelOpen && activeServerId && !isServerManagePage ? (
+      {inlineMembers ? (
         <div className="relative min-h-0 min-w-0">
           <ResizeHandle
             label="Resize member panel"
@@ -606,20 +665,7 @@ export function AppLayout() {
             onPointerDown={onMemberPanelResizeStart}
             onResize={(next) => setMemberPanelWidth(clampMemberPanelWidth(next))}
           />
-          <MemberPanel
-            members={activeServerMembers}
-            selfIdentity={selfIdentity}
-            selfRole={role}
-            serverId={activeServerId}
-            onKick={(member) => setMemberAction({ kind: 'kick', member })}
-            onBan={(member) => setMemberAction({ kind: 'ban', member })}
-            onTimeout={(member) => setMemberAction({ kind: 'timeout', member })}
-            onRemoveTimeout={async (member) => {
-              await reducers.removeTimeout(activeServerId, member.userIdentity)
-            }}
-            onSetRole={(member, newRole) => setMemberAction({ kind: 'setRole', member, newRole })}
-            onTransferOwnership={(member) => setMemberAction({ kind: 'transferOwnership', member })}
-          />
+          {memberPanel}
         </div>
       ) : null}
     </div>
@@ -630,18 +676,20 @@ export function AppLayout() {
       {/* Persistent call audio sinks — keep audio playing across view navigation. */}
       <CallAudioRenderer />
       <main
-        className="relative h-full overflow-hidden bg-background p-1 text-foreground"
-        style={{ ['--channel-bar-width' as string]: `${channelBarWidth}px` }}
+        ref={layoutRef}
+        className="app-safe-area relative flex h-full min-h-0 flex-col overflow-hidden bg-background p-1 text-foreground"
+        style={{ ['--channel-bar-width' as string]: `${displayedChannelWidth}px` }}
       >
+        {isMobile && (isSettingsPage || isDiscoverPage || isServerManagePage) ? <div className="shrink-0 border-b"><CompactBack /></div> : null}
         <div
           className={cn(
-            'grid h-full min-h-0 grid-rows-1 gap-1.5 overflow-hidden',
-            isFullPanePage
+            'grid min-h-0 flex-1 grid-rows-1 gap-1.5 overflow-hidden',
+            isMobile ? 'grid-cols-1' : isFullPanePage
               ? 'grid-cols-[48px_minmax(0,1fr)]'
-              : 'grid-cols-[48px_var(--channel-bar-width)_minmax(0,1fr)] max-md:grid-cols-[48px_minmax(0,1fr)]',
+              : 'grid-cols-[48px_var(--channel-bar-width)_minmax(0,1fr)]',
           )}
         >
-          <AppRail
+          {!isMobile ? <AppRail
             servers={servers}
             activeServerId={activeServerId}
             activeDmIdentity={activeDmIdentity}
@@ -661,43 +709,12 @@ export function AppLayout() {
             dmUnreadByIdentity={unreadByDmPartner}
             hasVoiceActivityInServer={hasVoiceActivityInServer}
             dmCallActiveByIdentity={dmCallActiveByIdentity}
-          />
+          /> : null}
 
-          {isFullPanePage ? null : (
+          {isFullPanePage || isMobile ? null : (
             <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto] gap-3">
               <div className="relative min-h-0 min-w-0">
-                <ChannelBar
-                  channelBarWidth={channelBarWidth}
-                  activeServerId={activeServerId}
-                  activeServer={activeServer}
-                  activeChannelId={activeChannelId}
-                  role={role}
-                  channels={sidebarChannels}
-                  activeChannelsCount={sidebarChannels.length}
-                  unreadByChannel={unreadByChannel}
-                  participantsByChannel={participantsByChannel}
-                  joinedVoiceChannelId={joinedVoiceChannelId}
-                  activeSpeakerIdentityKeys={activeSpeakerIdentityKeys}
-                  memberProfileByIdentity={memberProfileByIdentity}
-                  onOpenInvite={() => setShowInvite(true)}
-                  onOpenCreateChannel={() => setShowCreateChannel(true)}
-                  onOpenServerPanel={openServerPanel}
-                  onLeaveServer={() => setShowLeaveServer(true)}
-                  isChannelMuted={(channelId) => Boolean(mutedChannels[channelId])}
-                  onToggleChannelMute={(channelId) => toggleMutedChannel(channelId)}
-                  onSelectChannel={(channelId) => {
-                    if (activeServerId === null) return
-                    openChannel(activeServerId, channelId)
-                  }}
-                  onOpenFriends={() => navigate('/app/dm/friends')}
-                  dmContacts={dmContactsWithPresence}
-                  dmUnreadByIdentity={unreadByDmPartner}
-                  isUserMuted={(identity) => Boolean(mutedUsers[normalizeIdentity(identity)])}
-                  onToggleUserMute={(identity) => toggleMutedUser(normalizeIdentity(identity))}
-                  activeDmIdentity={activeDmIdentity}
-                  dmCallActiveByIdentity={dmCallActiveByIdentity}
-                  onOpenDmContact={(identity) => navigate(`/app/dm/${identity}`)}
-                />
+                {channelBar}
                 <ResizeHandle
                   label="Resize channel bar"
                   width={channelBarWidth}
@@ -721,7 +738,15 @@ export function AppLayout() {
 
           {mainPane}
         </div>
+        <MobileCallStrip />
       </main>
+
+      <Sheet open={showMembers && !membersInline} onOpenChange={(open) => { if (!open && useUiStore.getState().rightPanelOpen) useUiStore.getState().toggleRightPanel() }}>
+        <SheetContent className="data-[side=right]:w-full sm:max-w-sm">
+          <SheetHeader><SheetTitle>Members · {activeServerMembers.length}</SheetTitle></SheetHeader>
+          <div className="min-h-0 flex-1 px-3 pb-3">{memberPanel}</div>
+        </SheetContent>
+      </Sheet>
 
       <LayoutModals
         showCreateServer={showCreateServer}

@@ -1,3 +1,6 @@
+import { resetCallSessions } from '../livekit'
+import { useComposerStore } from '../../stores/composerStore'
+import { readingPositions } from '../../features/chat/readingPosition'
 import type { DbConnection } from '../../generated'
 import {
   mapUser,
@@ -28,7 +31,6 @@ import { useDiscoverStore } from '../../stores/discoverStore'
 import { useJoinRequestStore, type JoinRequestWithUser } from '../../stores/joinRequestStore'
 import { useDmStore } from '../../stores/dmStore'
 import { useDmVoiceStore } from '../../stores/dmVoiceStore'
-import { useDmVoiceSessionStore } from '../../stores/dmVoiceSessionStore'
 import { useFriendsStore } from '../../stores/friendsStore'
 import { useMembersStore } from '../../stores/membersStore'
 import { useMessagesStore } from '../../stores/messagesStore'
@@ -38,7 +40,6 @@ import { useServersStore } from '../../stores/serversStore'
 import { useUiStore } from '../../stores/uiStore'
 import { useUsersStore } from '../../stores/usersStore'
 import { useVoiceStore } from '../../stores/voiceStore'
-import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
 import { usePresenceStore } from '../../stores/presenceStore'
 import { useReadStore } from '../../stores/readStore'
 import { useTypingStore } from '../../stores/typingStore'
@@ -485,12 +486,9 @@ export function syncAll(conn: DbConnection): void {
 // ─── Client state reset ───────────────────────────────────────────────────────
 
 export function resetClientState(): void {
-  const voiceSession = useVoiceSessionStore.getState()
-  voiceSession.room?.disconnect()
-  voiceSession.reset()
-  const dmVoiceSession = useDmVoiceSessionStore.getState()
-  dmVoiceSession.room?.disconnect()
-  dmVoiceSession.reset()
+  useComposerStore.getState().reset()
+  readingPositions.clear()
+  resetCallSessions()
 
   useConnectionStore.getState().setIdentity(null)
   useConnectionStore.getState().setSynced(false)

@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react'
-import { PhoneCallIcon, PhoneMissedIcon, PhoneOffIcon, PencilIcon, PinIcon, PinOffIcon, Trash2Icon } from 'lucide-react'
+import { PhoneCallIcon, PhoneMissedIcon, PhoneOffIcon, PencilIcon, PinIcon, PinOffIcon, Trash2Icon, MoreHorizontalIcon, Loader2Icon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useTouchInput } from '../../hooks/useTouchInput'
+import { shouldSubmitOnEnter } from '../chat/submitComposer'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { PresenceDot } from '@/components/user/PresenceDot'
@@ -37,7 +40,7 @@ interface MessageBubbleProps {
   highlightMessageId?: number | null
   pinnedMessageIds?: Set<number> | null
   onTogglePin?: (message: RenderableMessage, pinned: boolean) => void
-  onEditMessage: (message: RenderableMessage, newContent: string) => void
+  onEditMessage: (message: RenderableMessage, newContent: string) => Promise<void> | void
   onDeleteMessage: (message: RenderableMessage) => void
 }
 
@@ -61,6 +64,9 @@ export function MessageBubble({
   onEditMessage,
   onDeleteMessage,
 }: MessageBubbleProps) {
+  const touch = useTouchInput()
+  const [saving, setSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
   const sender = useUserPresentation(group.senderIdentity)
   const firstMessage = group.messages[0]
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -112,8 +118,8 @@ export function MessageBubble({
         </Avatar>
 
         <div className="min-w-0 flex-1">
-          <div className="mb-1.5 flex items-center gap-2">
-            <span className="text-sm font-semibold">{sender.displayName}</span>
+          <div className="mb-1.5 flex min-w-0 flex-wrap items-center gap-2">
+            <span className="min-w-0 break-words text-sm font-semibold">{sender.displayName}</span>
             <PresenceDot status={sender.status} />
             <span className="text-xs text-muted-foreground">{formatTimestamp(firstMessage.sentAt)}</span>
           </div>
@@ -130,17 +136,27 @@ export function MessageBubble({
 
               const isEditing = editingId === message.id
 
-              const submitEdit = () => {
+              const submitEdit = async () => {
+                if (saving) return
                 const trimmed = editDraft.trim()
                 if (!trimmed && parsed.attachments.length === 0) return
-                onEditMessage(message, composeMessageWithAttachments(trimmed, parsed.attachments))
-                setEditingId(null)
-                setEditDraft('')
+                setSaving(true)
+                setEditError(null)
+                try {
+                  await onEditMessage(message, composeMessageWithAttachments(trimmed, parsed.attachments))
+                  setEditingId(null)
+                  setEditDraft('')
+                } catch (error) {
+                  setEditError(error instanceof Error ? error.message : 'Could not save message.')
+                } finally {
+                  setSaving(false)
+                }
               }
 
               const cancelEdit = () => {
                 setEditingId(null)
                 setEditDraft('')
+                setEditError(null)
               }
 
               const isHighlighted = highlightMessageId != null && message.id === highlightMessageId
@@ -149,7 +165,7 @@ export function MessageBubble({
                 <div
                   key={message.id}
                   data-message-id={message.id}
-                  className={`group/message relative rounded-md transition-colors ${
+                  className={`group/message relative rounded-md transition-colors ${touch && !message.deleted && !isEditing && (canEdit || canDelete || canPin) ? 'pr-11 min-h-11' : ''} ${
                     isHighlighted ? 'bg-primary/15 ring-1 ring-primary/40' : ''
                   }`}
                 >
@@ -161,22 +177,25 @@ export function MessageBubble({
                         value={editDraft}
                         onChange={(e) => setEditDraft(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit() }
-                          if (e.key === 'Escape') cancelEdit()
+                          if (shouldSubmitOnEnter(e.key, e.shiftKey, e.nativeEvent.isComposing || e.keyCode === 229, touch)) { e.preventDefault(); void submitEdit() }
+                          if (e.key === 'Escape' && !saving && !e.nativeEvent.isComposing) cancelEdit()
                         }}
-                        className="min-h-0 text-sm"
+                        className="min-h-0"
+                        aria-label="Edit message"
+                        disabled={saving}
                         autoFocus
                       />
-                      <p className="text-xs text-muted-foreground">
-                        <kbd className="rounded border border-border px-1 py-0.5 font-mono text-[10px]">Enter</kbd> to save ·{' '}
-                        <kbd className="rounded border border-border px-1 py-0.5 font-mono text-[10px]">Esc</kbd> to cancel
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" disabled={saving || (!editDraft.trim() && !parsed.attachments.length)} onClick={() => void submitEdit()}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : null}{saving ? 'Saving…' : 'Save'}</Button>
+                        <Button size="sm" variant="ghost" disabled={saving} onClick={cancelEdit}>Cancel</Button>
+                      </div>
+                      {editError ? <p role="alert" className="text-sm text-destructive">{editError}</p> : null}
                     </div>
                   ) : (
                     <div className="space-y-1.5">
                       <MessageAttachmentList messageKey={`${message.senderIdentity}:${message.sentAt}:${message.id}`} attachments={parsed.attachments} />
                       {hasText ? (
-                        <div className="prose prose-invert max-w-none break-words text-sm text-foreground prose-p:my-0 prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-pre:rounded prose-pre:border prose-pre:border-border/70 prose-pre:bg-muted/70 prose-a:text-sky-400 hover:prose-a:text-sky-300">
+                        <div className="message-content prose prose-invert min-w-0 max-w-none break-words text-sm text-foreground prose-p:my-0 prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-pre:rounded prose-pre:border prose-pre:border-border/70 prose-pre:bg-muted/70 prose-a:text-sky-400 hover:prose-a:text-sky-300">
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{
@@ -196,8 +215,18 @@ export function MessageBubble({
                     </span>
                   ) : null}
 
-                  {!isEditing && (canEdit || canDelete || canPin) ? (
-                    <div className="absolute -top-3 right-1 flex items-center gap-0.5 rounded-md border border-border/70 bg-popover/95 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover/message:opacity-100">
+                  {!isEditing && !message.deleted && touch && (canEdit || canDelete || canPin) ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="absolute top-0 right-0" aria-label="Message actions" />}><MoreHorizontalIcon className="size-4" /></DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        {canEdit ? <DropdownMenuItem onClick={() => { setEditingId(message.id); setEditDraft(parsed.text); setEditError(null) }}><PencilIcon />Edit message</DropdownMenuItem> : null}
+                        {canPin ? <DropdownMenuItem onClick={() => onTogglePin?.(message, !isPinned)}>{isPinned ? <PinOffIcon /> : <PinIcon />}{isPinned ? 'Unpin message' : 'Pin message'}</DropdownMenuItem> : null}
+                        {canDelete ? <DropdownMenuItem variant="destructive" onClick={() => onDeleteMessage(message)}><Trash2Icon />Delete message</DropdownMenuItem> : null}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : null}
+                  {!isEditing && !message.deleted && !touch && (canEdit || canDelete || canPin) ? (
+                    <div className="absolute -top-3 right-1 flex items-center gap-0.5 rounded-md border border-border/70 bg-popover/95 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100">
                       {canPin ? (
                         <Button
                           size="icon-xs"
@@ -209,15 +238,16 @@ export function MessageBubble({
                         </Button>
                       ) : null}
                       {canEdit ? (
-                        <Button size="icon-xs" variant="ghost" onClick={() => {
+                        <Button size="icon-xs" variant="ghost" aria-label="Edit message" onClick={() => {
                           setEditingId(message.id)
                           setEditDraft(parsed.text)
+                          setEditError(null)
                         }}>
                           <PencilIcon className="size-3.5" />
                         </Button>
                       ) : null}
                       {canDelete ? (
-                        <Button size="icon-xs" variant="ghost" onClick={() => onDeleteMessage(message)}>
+                        <Button size="icon-xs" variant="ghost" aria-label="Delete message" onClick={() => onDeleteMessage(message)}>
                           <Trash2Icon className="size-3.5" />
                         </Button>
                       ) : null}

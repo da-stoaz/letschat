@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useIsMobile } from '../../hooks/use-mobile'
 import { MonitorDownIcon, XIcon } from 'lucide-react'
 import { isHostedWebBuild } from '../../lib/tauri'
 import { normalizeServerUrl } from '../../lib/discovery'
@@ -23,9 +24,10 @@ function detectOs(): 'macos' | 'windows' | 'linux' {
  * persisted in localStorage so it stays gone for that browser.
  */
 export function DesktopAppBanner() {
+  const compact = useIsMobile()
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISS_KEY) === '1')
 
-  if (!isHostedWebBuild() || !WEB_CONNECT_URL || dismissed) return null
+  if (compact || !isHostedWebBuild() || !WEB_CONNECT_URL || dismissed) return null
 
   const downloadUrl = `${normalizeServerUrl(WEB_CONNECT_URL)}/downloads/${detectOs()}`
 

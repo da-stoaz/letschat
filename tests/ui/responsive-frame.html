@@ -1,0 +1,4 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Responsive fixture</title></head><body><div id="root"></div><script>
+// Keep every persisted store in memory; fixture actions never overwrite browser data.
+const memory=new Map();Object.defineProperty(window,'localStorage',{value:{getItem:key=>memory.get(key)??null,setItem:(key,value)=>memory.set(key,String(value)),removeItem:key=>memory.delete(key),clear:()=>memory.clear(),key:index=>[...memory.keys()][index]??null,get length(){return memory.size}}});
+</script><script type="module" src="./responsive.tsx"></script></body></html>

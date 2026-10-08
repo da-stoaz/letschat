@@ -11,7 +11,9 @@ import {
   VolumeXIcon,
 } from 'lucide-react'
 import {
+  assertActiveCallRoom,
   dmVoiceRoomKey,
+  isCallCancelled,
   leaveLiveKitDmVoice,
   leaveLiveKitVoice,
   listLivekitDevices,
@@ -218,19 +220,13 @@ export function ActiveCallCard({
   const voiceRoom = useVoiceSessionStore((s) => s.room)
   const joinedVoiceChannelId = useVoiceSessionStore((s) => s.joinedChannelId)
   const voiceJoining = useVoiceSessionStore((s) => s.joining)
-  const setVoiceRoom = useVoiceSessionStore((s) => s.setRoom)
-  const setJoinedVoiceChannelId = useVoiceSessionStore((s) => s.setJoinedChannelId)
-  const setVoiceJoining = useVoiceSessionStore((s) => s.setJoining)
   const setVoiceError = useVoiceSessionStore((s) => s.setError)
 
   const dmRoom = useDmVoiceSessionStore((s) => s.room)
   const joinedDmPartnerIdentity = useDmVoiceSessionStore((s) => s.joinedPartnerIdentity)
   const dmAnswered = useDmVoiceSessionStore((s) => s.answered)
   const dmJoining = useDmVoiceSessionStore((s) => s.joining)
-  const setDmRoom = useDmVoiceSessionStore((s) => s.setRoom)
-  const setJoinedDmPartnerIdentity = useDmVoiceSessionStore((s) => s.setJoinedPartnerIdentity)
   const setDmAnswered = useDmVoiceSessionStore((s) => s.setAnswered)
-  const setDmJoining = useDmVoiceSessionStore((s) => s.setJoining)
   const setDmError = useDmVoiceSessionStore((s) => s.setError)
 
   const participantsByChannel = useVoiceStore((s) => s.participantsByChannel)
@@ -494,12 +490,16 @@ export function ActiveCallCard({
     }
 
     try {
+      assertActiveCallRoom(activeRoom)
       await switchRoomDevice(activeRoom, kind, deviceId)
+      assertActiveCallRoom(activeRoom)
 
       // Re-bind active local tracks so server calls apply source changes instantly.
       if (kind === 'audioinput' && !muted) {
         await activeRoom.localParticipant.setMicrophoneEnabled(false)
+        assertActiveCallRoom(activeRoom)
         await activeRoom.localParticipant.setMicrophoneEnabled(true)
+        assertActiveCallRoom(activeRoom)
       }
       if (kind === 'videoinput' && sharingCamera) {
         await setLocalCameraEnabled(activeRoom, true, deviceId)
@@ -507,6 +507,8 @@ export function ActiveCallCard({
 
       setCurrentError(null)
     } catch (error) {
+      if (isCallCancelled(error)) return
+      try { assertActiveCallRoom(activeRoom) } catch { return }
       // One failed switch used to flip `audioOutputSwitchSupported` off for the
       // rest of the call and swallow the error, so the dropdown silently became
       // a dead "System" label and no later selection did anything — the control
@@ -539,34 +541,24 @@ export function ActiveCallCard({
     setError: setCurrentError,
     patchVoiceState,
     onLeaveRoom: async () => {
-      try {
-        if (mode === 'server' && joinedVoiceChannelId !== null) {
-          await leaveLiveKitVoice(joinedVoiceChannelId, voiceRoom)
-          setVoiceRoom(null)
-          setJoinedVoiceChannelId(null)
-          return
+      if (mode === 'server' && joinedVoiceChannelId !== null) {
+        await leaveLiveKitVoice(joinedVoiceChannelId, voiceRoom)
+        return
+      }
+      if (mode === 'dm' && joinedDmPartnerIdentity) {
+        const callDurationSeconds = getCallDurationSeconds(selfParticipant?.joinedAt)
+        await leaveLiveKitDmVoice(joinedDmPartnerIdentity, dmRoom)
+        if (callDurationSeconds !== null) {
+          await reducers
+            .sendDirectMessage(
+              joinedDmPartnerIdentity,
+              encodeDmSystemMessage('call_ended', {
+                durationSeconds: callDurationSeconds,
+                missed: !dmAnswered,
+              }),
+            )
+            .catch(() => undefined)
         }
-        if (mode === 'dm' && joinedDmPartnerIdentity) {
-          const callDurationSeconds = getCallDurationSeconds(selfParticipant?.joinedAt)
-          await leaveLiveKitDmVoice(joinedDmPartnerIdentity, dmRoom)
-          setDmRoom(null)
-          setJoinedDmPartnerIdentity(null)
-          setDmAnswered(false)
-          if (callDurationSeconds !== null) {
-            await reducers
-              .sendDirectMessage(
-                joinedDmPartnerIdentity,
-                encodeDmSystemMessage('call_ended', {
-                  durationSeconds: callDurationSeconds,
-                  missed: !dmAnswered,
-                }),
-              )
-              .catch(() => undefined)
-          }
-        }
-      } finally {
-        setVoiceJoining(false)
-        setDmJoining(false)
       }
     },
     leaveErrorMessage: 'Could not leave voice call.',
@@ -614,7 +606,7 @@ export function ActiveCallCard({
 
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1.5">
             <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={muted ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={onToggleMute}>
+              <Button size="icon-xs" variant={muted ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" aria-label={muted ? 'Unmute microphone' : 'Mute microphone'} aria-pressed={muted} onClick={onToggleMute}>
                 {muted ? <MicOffIcon className="size-4" /> : <MicIcon className="size-4" />}
               </Button>
               <DropdownMenu>
@@ -641,7 +633,7 @@ export function ActiveCallCard({
             </div>
 
             <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={deafened ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={onToggleDeafen}>
+              <Button size="icon-xs" variant={deafened ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" aria-label={deafened ? 'Unmute call audio' : 'Mute call audio'} aria-pressed={deafened} onClick={onToggleDeafen}>
                 {deafened ? <VolumeXIcon className="size-4" /> : <Volume2Icon className="size-4" />}
               </Button>
               <OutputDevicePicker
@@ -657,7 +649,7 @@ export function ActiveCallCard({
 
           <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1.5">
             <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={sharingCamera ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={onToggleCamera}>
+              <Button size="icon-xs" variant={sharingCamera ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" aria-label={sharingCamera ? 'Stop camera' : 'Start camera'} aria-pressed={sharingCamera} onClick={onToggleCamera}>
                 <VideoIcon className="size-4" />
               </Button>
               <DropdownMenu>
@@ -687,13 +679,15 @@ export function ActiveCallCard({
               size="icon-xs"
               variant="outline"
               className={cn('h-8 w-8', screenShareButtonClass)}
+              aria-label={sharingScreen ? 'Stop sharing screen' : 'Share screen'}
+              aria-pressed={sharingScreen}
               onClick={onToggleScreenShare}
               disabled={!hasScreenCapture}
             >
               <MonitorUpIcon className="size-4" />
             </Button>
 
-            <Button size="icon-xs" variant="destructive" className="h-8 w-8" onClick={onLeave}>
+            <Button size="icon-xs" variant="destructive" className="h-8 w-8" aria-label={connecting ? 'Cancel call' : 'End call'} onClick={onLeave}>
               <LogOutIcon className="size-4" />
             </Button>
           </div>

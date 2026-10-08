@@ -33,12 +33,12 @@ export function AttachmentPdfLightbox({ pdf, onClose }: AttachmentPdfLightboxPro
     <Dialog open={pdf !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="!inset-0 !top-0 !left-0 !z-[80] !h-screen !w-screen !max-w-none !translate-x-0 !translate-y-0 !rounded-none !border-0 !p-0 !sm:max-w-none bg-background"
+        className="attachment-lightbox !inset-0 !top-[var(--app-top,0px)] !left-0 !z-[80] !h-[var(--app-height,100dvh)] !w-screen !max-w-none !translate-x-0 !translate-y-0 !rounded-none !border-0 !pt-[env(safe-area-inset-top)] !pr-[env(safe-area-inset-right)] !pb-[env(safe-area-inset-bottom)] !pl-[env(safe-area-inset-left)] !sm:max-w-none bg-background"
       >
         <DialogTitle className="sr-only">PDF preview</DialogTitle>
 
-        <div className="relative h-full w-full bg-background">
-          <div className="absolute inset-x-0 top-0 z-20 flex items-center gap-2 border-b border-border/70 bg-background/95 px-3 py-2 backdrop-blur-sm sm:px-4">
+        <div className="flex h-full min-h-0 w-full flex-col bg-background">
+          <div className="z-20 flex shrink-0 items-center gap-2 border-b border-border/70 bg-background/95 px-3 py-2 backdrop-blur-sm sm:px-4">
             <p className="min-w-0 flex-1 truncate text-sm font-medium">{pdf?.fileName ?? 'PDF preview'}</p>
             <Button type="button" size="icon-sm" variant="ghost" onClick={onClose}>
               <XIcon className="size-5" />
@@ -46,7 +46,7 @@ export function AttachmentPdfLightbox({ pdf, onClose }: AttachmentPdfLightboxPro
             </Button>
           </div>
 
-          <div className="h-full w-full pt-12">
+          <div className="min-h-0 w-full flex-1">
             {pdf ? (
               <div className="relative h-full w-full">
                 {isLoading ? (
