@@ -4,6 +4,9 @@ import { ConnectionState, Room, Track } from 'livekit-client'
 import { reducers } from './spacetimedb'
 import { tauriCommands } from './tauri'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useVoiceSessionStore } from '../stores/voiceSessionStore'
+import { useDmVoiceSessionStore } from '../stores/dmVoiceSessionStore'
+import { toast } from 'sonner'
 import type { Identity } from '../types/domain'
 
 type LegacyGetUserMedia = (
@@ -407,11 +410,13 @@ async function setCameraEnabledWithFallback(room: Room, options: Array<VideoCapt
   let lastError: unknown = null
   for (const option of options) {
     try {
+      assertActiveCallRoom(room)
       if (option) {
         await room.localParticipant.setCameraEnabled(true, option)
       } else {
         await room.localParticipant.setCameraEnabled(true)
       }
+      assertActiveCallRoom(room)
       return
     } catch (error) {
       lastError = error
@@ -425,7 +430,7 @@ async function setCameraEnabledWithFallback(room: Room, options: Array<VideoCapt
   throw (lastError ?? new Error('Could not enable camera.'))
 }
 
-async function getUserMediaCameraTrackWithFallback(preferredDeviceId?: string): Promise<MediaStreamTrack> {
+async function getUserMediaCameraTrackWithFallback(room: Room, preferredDeviceId?: string): Promise<MediaStreamTrack> {
   if (!ensureMediaDevicesGetUserMedia()) {
     throw new Error(getCameraUnavailableReason())
   }
@@ -467,7 +472,14 @@ async function getUserMediaCameraTrackWithFallback(preferredDeviceId?: string): 
   let lastError: unknown = null
   for (const video of attempts) {
     try {
+      assertActiveCallRoom(room)
       const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false })
+      try {
+        assertActiveCallRoom(room)
+      } catch (error) {
+        stream.getTracks().forEach(track => track.stop())
+        throw error
+      }
       const [track, ...extraTracks] = stream.getVideoTracks()
       if (!track) {
         stream.getTracks().forEach((t) => t.stop())
@@ -479,6 +491,7 @@ async function getUserMediaCameraTrackWithFallback(preferredDeviceId?: string): 
       }
       return track
     } catch (error) {
+      if (isCallCancelled(error)) throw error
       lastError = error
     }
   }
@@ -487,14 +500,17 @@ async function getUserMediaCameraTrackWithFallback(preferredDeviceId?: string): 
 }
 
 async function publishManualCameraTrack(room: Room, preferredDeviceId?: string): Promise<void> {
-  const manualTrack = await getUserMediaCameraTrackWithFallback(preferredDeviceId)
+  const manualTrack = await getUserMediaCameraTrackWithFallback(room, preferredDeviceId)
 
   try {
+    assertActiveCallRoom(room)
     const existingPublication = room.localParticipant.getTrackPublication(Track.Source.Camera)
     if (existingPublication?.track) {
       await room.localParticipant.unpublishTrack(existingPublication.track, true)
+      assertActiveCallRoom(room)
     }
     await room.localParticipant.publishTrack(manualTrack, { source: Track.Source.Camera })
+    assertActiveCallRoom(room)
   } catch (error) {
     manualTrack.stop()
     throw error
@@ -504,6 +520,7 @@ async function publishManualCameraTrack(room: Room, preferredDeviceId?: string):
 async function waitForLocalCameraTrack(room: Room, timeoutMs = CAMERA_TRACK_WAIT_MS): Promise<boolean> {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
+    assertActiveCallRoom(room)
     const cameraPublication = room.localParticipant.getTrackPublication(Track.Source.Camera)
     if (cameraPublication?.videoTrack) {
       return true
@@ -518,16 +535,19 @@ export async function setLocalCameraEnabled(
   enabled: boolean,
   preferredDeviceId?: string,
 ): Promise<void> {
+  assertActiveCallRoom(room)
   if (!enabled) {
     await room.localParticipant.setCameraEnabled(false)
     return
   }
 
   const effectivePreferredDeviceId = preferredDeviceId ?? (await getPreferredVideoInputDeviceId())
+  assertActiveCallRoom(room)
   if (effectivePreferredDeviceId) {
     try {
       await switchRoomDevice(room, 'videoinput', effectivePreferredDeviceId)
-    } catch {
+    } catch (error) {
+      if (isCallCancelled(error)) throw error
       // Continue with fallback capture attempts if runtime rejects an explicit device switch.
     }
   }
@@ -544,6 +564,7 @@ export async function setLocalCameraEnabled(
       safeCaptureOptions,
     ])
   } catch (error) {
+    if (isCallCancelled(error)) throw error
     primaryEnableError = error
   }
 
@@ -565,32 +586,41 @@ export async function setLocalCameraEnabled(
   }
 }
 
-async function connectRoomWithFallback(livekitUrls: string[], token: string): Promise<Room> {
+async function connectRoomWithFallback(
+  livekitUrls: string[], token: string, attempt: CallAttempt,
+): Promise<Room> {
   let lastError: unknown = null
   for (const livekitUrl of livekitUrls) {
+    assertCurrentCall(attempt)
     const profile = connectProfileForUrl(livekitUrl)
     const room = new Room(profile.roomOptions)
+    attempt.room = room
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null
     try {
-      await Promise.race([
-        room.connect(livekitUrl, token, profile.connectOptions),
+      await waitForCallStep(attempt, Promise.race([
+        room.connect(livekitUrl, token, profile.connectOptions).then(() => {
+          // Some runtimes finish connect after disconnect was requested.
+          try { assertCurrentCall(attempt) } catch (error) { stopRoom(room); throw error }
+        }),
         new Promise<never>((_resolve, reject) => {
           timeoutHandle = setTimeout(() => {
             reject(new Error(`LiveKit connect timeout after ${CONNECT_WATCHDOG_MS}ms`))
           }, CONNECT_WATCHDOG_MS)
         }),
-      ])
+      ]))
       if (timeoutHandle) {
         clearTimeout(timeoutHandle)
         timeoutHandle = null
       }
+      assertCurrentCall(attempt)
       return room
     } catch (error) {
       if (timeoutHandle) {
         clearTimeout(timeoutHandle)
       }
       lastError = error
-      room.disconnect()
+      stopRoom(room)
+      if (isCallCancelled(error)) throw error
     }
   }
   throw (lastError ?? new Error('Failed to connect to LiveKit.'))
@@ -635,70 +665,247 @@ type ConnectLiveKitWithPresenceParams = {
   onSyncMutedState: (muted: boolean) => Promise<void>
 }
 
-// Bumped on every join attempt. A failed attempt must only clean up its OWN
-// presence: without this, a slow failure's cleanup lands after the user has
-// retried and deletes the successful attempt's row, leaving them connected to
-// LiveKit with no presence at all — "Joined" next to "0 participants", which is
-// unrecoverable until they leave and rejoin.
-let joinAttemptSeq = 0
+type CallTarget = { kind: 'channel'; id: number } | { kind: 'dm'; id: Identity }
+type CallAttempt = {
+  target: CallTarget
+  identity: Identity
+  epoch: number
+  params: ConnectLiveKitWithPresenceParams
+  room: Room | null
+  claimedPresence: boolean
+  cancellation: AbortController
+}
 
-async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresenceParams): Promise<Room> {
-  const rawLivekitUrl = await tauriCommands.getLivekitUrl()
-  const livekitUrls = buildLiveKitUrls(rawLivekitUrl)
-  const identity = useConnectionStore.getState().identity
-  if (!identity) {
-    throw new Error(params.identityErrorMessage)
+let activeCall: CallAttempt | null = null
+let callEpoch = 0
+let callWork: Promise<unknown> = Promise.resolve()
+const pendingLeaves = new Set<CallAttempt>()
+const CLEANUP_TOAST_ID = 'call-presence-cleanup'
+
+function queueCallWork<T>(work: () => Promise<T>): Promise<T> {
+  const result = callWork.then(work)
+  callWork = result.catch(() => undefined)
+  return result
+}
+
+export function isCallCancelled(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
+}
+
+function assertCurrentCall(attempt: CallAttempt): void {
+  if (activeCall !== attempt || attempt.epoch !== callEpoch ||
+    attempt.identity !== useConnectionStore.getState().identity) {
+    throw new DOMException('Call cancelled.', 'AbortError')
   }
+}
 
-  const attempt = ++joinAttemptSeq
-  let room: Room | null = null
+async function waitForCallStep<T>(attempt: CallAttempt, step: Promise<T>): Promise<T> {
+  let onCancel!: () => void
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    onCancel = () => reject(new DOMException('Call cancelled.', 'AbortError'))
+    attempt.cancellation.signal.addEventListener('abort', onCancel, { once: true })
+    if (attempt.cancellation.signal.aborted) onCancel()
+  })
+  try {
+    return await Promise.race([step, cancelled])
+  } finally {
+    attempt.cancellation.signal.removeEventListener('abort', onCancel)
+  }
+}
+
+function sameCall(left: CallTarget, right: CallTarget): boolean {
+  return left.kind === right.kind && String(left.id).toLowerCase() === String(right.id).toLowerCase()
+}
+
+function stopRoom(room: Room | null): void {
+  if (!room) return
+  // Stop capture synchronously: disconnect() and server cleanup can both await I/O.
+  for (const publication of room.localParticipant.trackPublications.values()) {
+    publication.track?.stop()
+  }
+  for (const participant of room.remoteParticipants.values()) {
+    for (const publication of participant.audioTrackPublications.values()) {
+      for (const element of publication.audioTrack?.detach() ?? []) {
+        element.pause()
+        element.srcObject = null
+      }
+    }
+  }
+  void room.disconnect().catch(error => console.error('[livekit] disconnect failed', error))
+}
+
+function clearLocalCalls(): CallAttempt | null {
+  const previous = activeCall
+  activeCall = null
+  previous?.cancellation.abort()
+  const rooms = new Set([previous?.room, useVoiceSessionStore.getState().room, useDmVoiceSessionStore.getState().room])
+  // Clear ownership before disconnect emits events; intentional leave has one cleanup owner.
+  useVoiceSessionStore.getState().reset()
+  useDmVoiceSessionStore.getState().reset()
+  for (const room of rooms) stopRoom(room ?? null)
+  return previous
+}
+
+/** Sign-out invalidates in-flight joins as well as already connected rooms. */
+export function resetCallSessions(): void {
+  callEpoch++
+  clearLocalCalls()
+  pendingLeaves.clear()
+  toast.dismiss(CLEANUP_TOAST_ID)
+}
+
+async function releasePresence(attempt: CallAttempt): Promise<void> {
+  if (!attempt.claimedPresence || attempt.epoch !== callEpoch ||
+    attempt.identity !== useConnectionStore.getState().identity) return
+  // A retry from an older call must never remove a newer call's presence.
+  if (activeCall !== attempt && activeCall?.claimedPresence && sameCall(activeCall.target, attempt.target)) {
+    pendingLeaves.delete(attempt)
+    attempt.claimedPresence = false
+    if (!pendingLeaves.size) toast.dismiss(CLEANUP_TOAST_ID)
+    return
+  }
+  try {
+    await attempt.params.onLeavePresence()
+    attempt.claimedPresence = false
+    pendingLeaves.delete(attempt)
+    if (!pendingLeaves.size) toast.dismiss(CLEANUP_TOAST_ID)
+  } catch (error) {
+    if (attempt.epoch !== callEpoch || attempt.identity !== useConnectionStore.getState().identity) return
+    pendingLeaves.add(attempt)
+    toast.error('Call ended on this device. Server cleanup is pending.', {
+      id: CLEANUP_TOAST_ID,
+      duration: Infinity,
+      action: { label: 'Retry', onClick: () => { void retryCallCleanup() } },
+    })
+    console.warn('[livekit] could not release call presence', error)
+  }
+}
+
+/** Retry after reconnect or an explicit user action; local media is already stopped. */
+export function retryCallCleanup(): Promise<void> {
+  return queueCallWork(async () => {
+    for (const attempt of pendingLeaves) await releasePresence(attempt)
+  })
+}
+
+function startCall(target: CallTarget, params: ConnectLiveKitWithPresenceParams): Promise<Room> {
+  const identity = useConnectionStore.getState().identity
+  if (!identity) return Promise.reject(new Error(params.identityErrorMessage))
+  const installedRoom = target.kind === 'channel' ? useVoiceSessionStore.getState().room : useDmVoiceSessionStore.getState().room
+  if (activeCall && sameCall(activeCall.target, target) && installedRoom === activeCall.room && activeCall.room?.state === ConnectionState.Connected) {
+    return Promise.resolve(activeCall.room)
+  }
+  const previous = clearLocalCalls()
+  const attempt: CallAttempt = {
+    target, params, identity, epoch: callEpoch, room: null, claimedPresence: false,
+    cancellation: new AbortController(),
+  }
+  activeCall = attempt
+  if (target.kind === 'channel') {
+    useVoiceSessionStore.setState({ joinedChannelId: target.id, joining: true })
+  } else {
+    useDmVoiceSessionStore.setState({ joinedPartnerIdentity: target.id, joining: true })
+  }
+  // Serializing presence writes prevents a late leave from deleting a newer join.
+  return queueCallWork(async () => {
+    if (previous) await releasePresence(previous)
+    try {
+      assertCurrentCall(attempt)
+      const room = await connectLiveKitWithPresence(params, attempt)
+      assertCurrentCall(attempt)
+      if (target.kind === 'channel') useVoiceSessionStore.setState({ room, joining: false })
+      else useDmVoiceSessionStore.setState({ room, joining: false, answered: false })
+      return room
+    } catch (error) {
+      stopRoom(attempt.room)
+      await releasePresence(attempt)
+      assertCurrentCall(attempt)
+      clearLocalCalls()
+      const message = error instanceof Error ? error.message : 'Could not join call.'
+      if (target.kind === 'channel') useVoiceSessionStore.getState().setError(message)
+      else useDmVoiceSessionStore.getState().setError(message)
+      throw error
+    }
+  })
+}
+
+function endCall(target: CallTarget, room: Room | null): Promise<void> {
+  // Ignore stale view handlers after switching calls, including rejoining the same room.
+  if (!activeCall || !sameCall(activeCall.target, target) || (room && activeCall.room !== room)) {
+    stopRoom(room)
+    return Promise.resolve()
+  }
+  const previous = clearLocalCalls()!
+  return queueCallWork(() => releasePresence(previous))
+}
+
+/** Media controls can finish after hang-up or a call switch. Never publish into that old room. */
+export function assertActiveCallRoom(room: Room): void {
+  if (!activeCall || activeCall.room !== room) {
+    stopRoom(room)
+    throw new DOMException('Call cancelled.', 'AbortError')
+  }
+  assertCurrentCall(activeCall)
+}
+
+async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresenceParams, attempt: CallAttempt): Promise<Room> {
+  const rawLivekitUrl = await waitForCallStep(attempt, tauriCommands.getLivekitUrl())
+  const livekitUrls = buildLiveKitUrls(rawLivekitUrl)
+  assertCurrentCall(attempt)
 
   // Presence MUST be claimed before minting the token: core-api authorises the
   // token against the SpacetimeDB presence row (LiveKitEndpoints.IssueToken ->
   // HasVoicePresenceAsync) so that nobody can mint a token for a room they
   // never joined. Minting first returns 403 "You are not a participant in this
   // voice room." — do not reorder these.
-  await params.onJoinPresence()
   try {
-    const token = await tauriCommands.generateLivekitToken(params.roomName, identity)
-    room = await connectRoomWithFallback(livekitUrls, token)
-  } catch (error) {
-    // Superseded by a newer attempt — that attempt owns the presence row now.
-    if (attempt === joinAttemptSeq) {
-      await params.onLeavePresence().catch(() => undefined)
+    await params.onJoinPresence()
+    attempt.claimedPresence = true
+    assertCurrentCall(attempt)
+    for (const previous of pendingLeaves) {
+      if (sameCall(previous.target, attempt.target)) await releasePresence(previous)
     }
-    room?.disconnect()
+    const token = await waitForCallStep(attempt, tauriCommands.generateLivekitToken(params.roomName, attempt.identity))
+    assertCurrentCall(attempt)
+    attempt.room = await connectRoomWithFallback(livekitUrls, token, attempt)
+  } catch (error) {
+    if (isCallCancelled(error)) throw error
     throw mapLiveKitConnectionError(error, livekitUrls)
   }
-
-  if (!room) {
-    await params.onLeavePresence().catch(() => undefined)
-    throw new Error('LiveKit room was not established.')
-  }
+  const room = attempt.room
+  assertCurrentCall(attempt)
 
   if (!supportsMicrophoneCapture()) {
     await params.onSyncMutedState(true).catch(() => undefined)
+    assertCurrentCall(attempt)
     return room
   }
 
   try {
-    await requestMicrophonePermission()
+    // A dismissed/ignored browser prompt must not block the next call. The
+    // permission helper still stops any stream it eventually receives.
+    await waitForCallStep(attempt, requestMicrophonePermission())
+    assertCurrentCall(attempt)
     await room.localParticipant.setMicrophoneEnabled(true)
+    assertCurrentCall(attempt)
     await params.onSyncMutedState(false).catch(() => undefined)
   } catch (error) {
+    if (isCallCancelled(error)) throw error
     await params.onSyncMutedState(true).catch(() => undefined)
     if (error instanceof Error && /(notallowederror|permission denied|permission dismissed)/i.test(error.message)) {
       console.warn(params.permissionDeniedWarning)
+      assertCurrentCall(attempt)
       return room
     }
     console.warn(params.micEnableWarning, error)
   }
 
+  assertCurrentCall(attempt)
   return room
 }
 
 export async function joinLiveKitVoice(channelId: number): Promise<Room> {
-  return connectLiveKitWithPresence({
+  return startCall({ kind: 'channel', id: channelId }, {
     roomName: String(channelId),
     identityErrorMessage: 'Cannot join voice: no local identity',
     permissionDeniedWarning: 'Microphone permission denied; joined voice in listen-only mode.',
@@ -715,7 +922,7 @@ export async function joinLiveKitDmVoice(partnerIdentity: Identity): Promise<Roo
     throw new Error('Cannot join DM voice: no local identity')
   }
   const roomName = `dm:${dmVoiceRoomKey(identity, partnerIdentity)}`
-  return connectLiveKitWithPresence({
+  return startCall({ kind: 'dm', id: partnerIdentity }, {
     roomName,
     identityErrorMessage: 'Cannot join DM voice: no local identity',
     permissionDeniedWarning: 'Microphone permission denied; joined DM voice in listen-only mode.',
@@ -727,13 +934,11 @@ export async function joinLiveKitDmVoice(partnerIdentity: Identity): Promise<Roo
 }
 
 export async function leaveLiveKitVoice(channelId: number, room: Room | null): Promise<void> {
-  await reducers.leaveVoiceChannel(channelId)
-  room?.disconnect()
+  await endCall({ kind: 'channel', id: channelId }, room)
 }
 
 export async function leaveLiveKitDmVoice(partnerIdentity: Identity, room: Room | null): Promise<void> {
-  await reducers.leaveDmVoice(partnerIdentity)
-  room?.disconnect()
+  await endCall({ kind: 'dm', id: partnerIdentity }, room)
 }
 
 export function useLiveKitRoom(room: Room | null) {

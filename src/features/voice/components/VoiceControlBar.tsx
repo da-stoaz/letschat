@@ -12,7 +12,7 @@ type VoiceControlBarProps = {
   hasScreenCapture: boolean
   error: string | null
   joinLabel?: string
-  onJoin: () => Promise<void> | void
+  onJoin?: () => Promise<void> | void
   onToggleMute: () => Promise<void> | void
   onToggleDeafen: () => Promise<void> | void
   onToggleCamera: () => Promise<void> | void
@@ -46,12 +46,12 @@ export function VoiceControlBar({
 
   return (
     <>
-      {!joined ? (
+      {!joined && onJoin ? (
         <Button disabled={connecting} onClick={onJoin}>
           <MicIcon className="size-4" />
           {connecting ? 'Joining...' : joinLabel}
         </Button>
-      ) : (
+      ) : joined ? (
         <>
           <Button variant={muted ? 'secondary' : 'outline'} onClick={onToggleMute}>
             {muted ? <MicOffIcon className="size-4" /> : <MicIcon className="size-4" />}
@@ -79,7 +79,7 @@ export function VoiceControlBar({
             Leave
           </Button>
         </>
-      )}
+      ) : null}
       {error ? <p className="w-full text-sm text-destructive">{error}</p> : null}
     </>
   )

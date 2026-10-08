@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo } from 'react'
 import { ConnectionState, type LocalParticipant, type RemoteParticipant } from 'livekit-client'
 import {
   dmVoiceRoomKey,
   getMicrophoneUnavailableReason,
-  joinLiveKitDmVoice,
   leaveLiveKitDmVoice,
   supportsMicrophoneCapture,
   supportsScreenCapture,
@@ -51,15 +50,11 @@ export function DmVoicePanel({
   const joinedPartnerIdentity = useDmVoiceSessionStore((s) => s.joinedPartnerIdentity)
   const joining = useDmVoiceSessionStore((s) => s.joining)
   const error = useDmVoiceSessionStore((s) => s.error)
-  const setRoom = useDmVoiceSessionStore((s) => s.setRoom)
-  const setJoinedPartnerIdentity = useDmVoiceSessionStore((s) => s.setJoinedPartnerIdentity)
   const answered = useDmVoiceSessionStore((s) => s.answered)
-  const setJoining = useDmVoiceSessionStore((s) => s.setJoining)
   const setAnswered = useDmVoiceSessionStore((s) => s.setAnswered)
   const setError = useDmVoiceSessionStore((s) => s.setError)
   const audioInputId = useMediaDeviceStore((s) => s.audioInputId)
   const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
-  const staleCleanupMarker = useRef<string | null>(null)
   const showInlineControls = useInlineCallControlsVisible()
 
   const roomKey = selfIdentity ? dmVoiceRoomKey(selfIdentity, partnerIdentity) : null
@@ -110,7 +105,7 @@ export function DmVoicePanel({
   )
 
   const joined = roomForPartner !== null && connectionState === ConnectionState.Connected
-  const connecting = joining || (roomForPartner !== null && connectionState === ConnectionState.Connecting)
+  const connecting = (joining && sameIdentity(partnerIdentity, joinedPartnerIdentity)) || (roomForPartner !== null && connectionState === ConnectionState.Connecting)
   const muted = selfParticipant?.muted ?? false
   const deafened = selfParticipant?.deafened ?? false
   const sharingCamera = selfParticipant?.sharingCamera ?? false
@@ -118,19 +113,6 @@ export function DmVoicePanel({
   const hasMicCapture = supportsMicrophoneCapture()
   const hasScreenCapture = supportsScreenCapture()
 
-  useEffect(() => {
-    // Only clean stale presence if we have no local room/session at all.
-    // Do not auto-leave while a room exists but is still connecting.
-    if (joining || roomForPartner !== null || !selfParticipant) {
-      staleCleanupMarker.current = null
-      return
-    }
-
-    const marker = `${partnerIdentity}:${selfParticipant.userIdentity}:${selfParticipant.joinedAt}`
-    if (staleCleanupMarker.current === marker) return
-    staleCleanupMarker.current = marker
-    void reducers.leaveDmVoice(partnerIdentity).catch(() => undefined)
-  }, [joining, partnerIdentity, roomForPartner, selfParticipant])
 
   useEffect(() => {
     if (!joined) return
@@ -183,9 +165,6 @@ export function DmVoicePanel({
     onLeaveRoom: async () => {
       const callDurationSeconds = getCallDurationSeconds(selfParticipant?.joinedAt)
       await leaveLiveKitDmVoice(partnerIdentity, roomForPartner)
-      setRoom(null)
-      setJoinedPartnerIdentity(null)
-      setAnswered(false)
       if (callDurationSeconds !== null) {
         await reducers
           .sendDirectMessage(
@@ -259,35 +238,6 @@ export function DmVoicePanel({
               sharingScreen={sharingScreen}
               hasScreenCapture={hasScreenCapture}
               error={error}
-              onJoin={async () => {
-                setError(null)
-                setJoining(true)
-                try {
-                  const shouldEmitCallStarted = participants.length === 0
-                  const existingRoom = useDmVoiceSessionStore.getState().room
-                  const existingPartner = useDmVoiceSessionStore.getState().joinedPartnerIdentity
-                  if (existingRoom && existingPartner && !sameIdentity(existingPartner, partnerIdentity)) {
-                    await leaveLiveKitDmVoice(existingPartner, existingRoom)
-                    setRoom(null)
-                    setJoinedPartnerIdentity(null)
-                  }
-
-                  const nextRoom = await joinLiveKitDmVoice(partnerIdentity)
-                  setRoom(nextRoom)
-                  setJoinedPartnerIdentity(partnerIdentity)
-                  setAnswered(false)
-                  if (shouldEmitCallStarted) {
-                    await reducers
-                      .sendDirectMessage(partnerIdentity, encodeDmSystemMessage('call_started'))
-                      .catch(() => undefined)
-                  }
-                } catch (e) {
-                  const message = e instanceof Error ? e.message : 'Could not join DM voice call.'
-                  setError(message)
-                } finally {
-                  setJoining(false)
-                }
-              }}
               onToggleMute={async () => {
                 await onToggleMute()
               }}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ConnectionState } from 'livekit-client'
 import { PhoneCallIcon, PhoneOffIcon, PanelBottomCloseIcon, PanelBottomOpenIcon, ServerIcon, CheckIcon, XIcon } from 'lucide-react'
-import { dmVoiceRoomKey, joinLiveKitDmVoice, leaveLiveKitDmVoice, useLiveKitRoom } from '../../lib/livekit'
+import { dmVoiceRoomKey, isCallCancelled, joinLiveKitDmVoice, leaveLiveKitDmVoice, useLiveKitRoom } from '../../lib/livekit'
 import { reducers } from '../../lib/spacetimedb'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useDmStore } from '../../stores/dmStore'
@@ -172,9 +172,6 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   const joinedPartnerIdentity = useDmVoiceSessionStore((s) => s.joinedPartnerIdentity)
   const dmJoining = useDmVoiceSessionStore((s) => s.joining)
   const dmAnswered = useDmVoiceSessionStore((s) => s.answered)
-  const setDmRoom = useDmVoiceSessionStore((s) => s.setRoom)
-  const setJoinedPartnerIdentity = useDmVoiceSessionStore((s) => s.setJoinedPartnerIdentity)
-  const setDmJoining = useDmVoiceSessionStore((s) => s.setJoining)
   const setDmAnswered = useDmVoiceSessionStore((s) => s.setAnswered)
   const messages = conversations[partnerIdentity] ?? EMPTY_DM_MESSAGES
   const partner = useUserPresentation(partnerIdentity)
@@ -228,7 +225,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
       : null
   const { connectionState } = useLiveKitRoom(roomForPartner)
   const joined = roomForPartner !== null && connectionState === ConnectionState.Connected
-  const connecting = dmJoining || (roomForPartner !== null && connectionState === ConnectionState.Connecting)
+  const connecting = (dmJoining && normalizeIdentity(joinedPartnerIdentity) === normalizeIdentity(partnerIdentity)) || (roomForPartner !== null && connectionState === ConnectionState.Connecting)
   const hasActiveCall = joined || connecting || voiceParticipants.length > 0
   // The call button already says "Joining…" / "Leave Call", so a badge repeating it
   // is noise sitting right next to its own label. Show the badge only for the one
@@ -267,12 +264,13 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
 
   const onPrimaryCallAction = async () => {
     try {
+      if (connecting) {
+        await leaveLiveKitDmVoice(partnerIdentity, roomForPartner)
+        return
+      }
       if (joined) {
         const callDurationSeconds = getCallDurationSeconds(selfVoiceParticipant?.joinedAt)
         await leaveLiveKitDmVoice(partnerIdentity, roomForPartner)
-        setDmRoom(null)
-        setJoinedPartnerIdentity(null)
-        setDmAnswered(false)
         if (callDurationSeconds !== null) {
           await reducers
             .sendDirectMessage(
@@ -287,26 +285,16 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         return
       }
 
-      setDmJoining(true)
       const shouldEmitCallStarted = voiceParticipants.length === 0
-      if (dmRoom && joinedPartnerIdentity && normalizeIdentity(joinedPartnerIdentity) !== normalizeIdentity(partnerIdentity)) {
-        await leaveLiveKitDmVoice(joinedPartnerIdentity, dmRoom)
-        setDmRoom(null)
-        setJoinedPartnerIdentity(null)
-      }
-      const nextRoom = await joinLiveKitDmVoice(partnerIdentity)
-      setDmRoom(nextRoom)
-      setJoinedPartnerIdentity(partnerIdentity)
-      setDmAnswered(false)
+      await joinLiveKitDmVoice(partnerIdentity)
       if (shouldEmitCallStarted) {
         await reducers.sendDirectMessage(partnerIdentity, encodeDmSystemMessage('call_started')).catch(() => undefined)
       }
       setCallPanelMinimized(false)
     } catch (callError) {
+      if (isCallCancelled(callError)) return
       const message = callError instanceof Error ? callError.message : 'Could not update DM call state.'
       toast.error(message)
-    } finally {
-      setDmJoining(false)
     }
   }
 
@@ -356,14 +344,13 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           <Button
             size="sm"
             variant={joined ? 'destructive' : 'default'}
-            aria-label={connecting ? 'Joining call' : joined ? 'Leave call' : 'Call'}
-            disabled={connecting}
+            aria-label={connecting ? 'Cancel call' : joined ? 'Leave call' : 'Call'}
             onClick={() => {
               void onPrimaryCallAction()
             }}
           >
-            {joined ? <PhoneOffIcon className="size-4" /> : <PhoneCallIcon className="size-4" />}
-            <span className="hidden sm:inline">{connecting ? 'Joining…' : joined ? 'Leave call' : 'Call'}</span>
+            {joined || connecting ? <PhoneOffIcon className="size-4" /> : <PhoneCallIcon className="size-4" />}
+            <span className="hidden sm:inline">{connecting ? 'Cancel' : joined ? 'Leave call' : 'Call'}</span>
           </Button>
           {hasActiveCall ? (
             <Button

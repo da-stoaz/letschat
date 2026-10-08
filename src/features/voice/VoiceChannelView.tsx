@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { LocalParticipant, RemoteParticipant } from 'livekit-client'
 import {
   getMicrophoneUnavailableReason,
+  isCallCancelled,
   joinLiveKitVoice,
   leaveLiveKitVoice,
   supportsMicrophoneCapture,
@@ -59,11 +60,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const joinedChannelId = useVoiceSessionStore((s) => s.joinedChannelId)
   const joining = useVoiceSessionStore((s) => s.joining)
   const error = useVoiceSessionStore((s) => s.error)
-  const setRoom = useVoiceSessionStore((s) => s.setRoom)
-  const setJoinedChannelId = useVoiceSessionStore((s) => s.setJoinedChannelId)
-  const setJoining = useVoiceSessionStore((s) => s.setJoining)
   const setError = useVoiceSessionStore((s) => s.setError)
-  const staleCleanupMarker = useRef<string | null>(null)
   const [isPanelFullscreen, setIsPanelFullscreen] = useState(false)
   const fullscreenDockHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showFullscreenDock, setShowFullscreenDock] = useState(false)
@@ -120,7 +117,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const audioInputId = useMediaDeviceStore((s) => s.audioInputId)
   const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
   const connectedToRoom = roomForChannel !== null && connectionState === ConnectionState.Connected
-  const connectingToRoom = joining || (roomForChannel !== null && connectionState === ConnectionState.Connecting)
+  const connectingToRoom = (joining && joinedChannelId === channelId) || (roomForChannel !== null && connectionState === ConnectionState.Connecting)
   const joined = connectedToRoom
   const showInlineControls = useInlineCallControlsVisible()
   const displayParticipants = !selfIdentity
@@ -164,25 +161,10 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
     onLeaveRoom: async () => {
       if (channelId === null) return
       await leaveLiveKitVoice(channelId, roomForChannel)
-      setRoom(null)
-      setJoinedChannelId(null)
     },
     leaveErrorMessage: 'Could not leave voice channel.',
   })
 
-  useEffect(() => {
-    // Only clean stale presence if we have no local room/session at all.
-    // Do not auto-leave while a room exists but is still connecting.
-    if (channelId === null || !selfIdentity || joining || roomForChannel !== null || selfParticipant === null) {
-      staleCleanupMarker.current = null
-      return
-    }
-
-    const marker = `${channelId}:${selfParticipant.userIdentity}:${selfParticipant.joinedAt}`
-    if (staleCleanupMarker.current === marker) return
-    staleCleanupMarker.current = marker
-    void reducers.leaveVoiceChannel(channelId).catch(() => undefined)
-  }, [channelId, selfIdentity, joining, roomForChannel, selfParticipant])
 
   useEffect(() => {
     if (!joined) return
@@ -286,22 +268,13 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
 
   const onJoin = async () => {
     if (channelId === null) return
-    setError(null)
-    setJoining(true)
     try {
-      if (room && joinedChannelId !== null && joinedChannelId !== channelId) {
-        await leaveLiveKitVoice(joinedChannelId, room)
-        setRoom(null)
-        setJoinedChannelId(null)
+      await joinLiveKitVoice(channelId)
+    } catch (error) {
+      if (!isCallCancelled(error)) {
+        // The shared session layer owns error and joining state.
+        console.warn('[voice] join failed', error)
       }
-      const nextRoom = await joinLiveKitVoice(channelId)
-      setRoom(nextRoom)
-      setJoinedChannelId(channelId)
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Could not join voice channel.'
-      setError(message)
-    } finally {
-      setJoining(false)
     }
   }
 
@@ -331,17 +304,16 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
           <Button
             size="sm"
             variant={joined ? 'destructive' : 'secondary'}
-            disabled={connectingToRoom}
             onClick={() => {
-              if (joined) {
+              if (joined || connectingToRoom) {
                 void onLeave()
                 return
               }
               void onJoin()
             }}
           >
-            {joined ? <PhoneOffIcon className="size-4" /> : <PhoneCallIcon className="size-4" />}
-            {connectingToRoom ? 'Joining...' : joined ? 'Leave' : 'Join Voice'}
+            {joined || connectingToRoom ? <PhoneOffIcon className="size-4" /> : <PhoneCallIcon className="size-4" />}
+            {connectingToRoom ? 'Cancel' : joined ? 'Leave' : 'Join Voice'}
           </Button>
         </div>
       </header>
