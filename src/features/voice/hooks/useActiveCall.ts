@@ -15,39 +15,57 @@ import { buildVoiceMediaTiles } from '../mediaTiles'
 import { encodeDmSystemMessage, getCallDurationSeconds } from '../../dm/systemMessages'
 import { useVoiceControlActions } from './useVoiceControlActions'
 import { useOngoingCallDuration } from './useOngoingCallDuration'
-import type { VoiceParticipant, DmVoiceParticipant } from '../../../types/domain'
+import type { Channel, Identity, VoiceParticipant, DmVoiceParticipant } from '../../../types/domain'
 
 const EMPTY: (VoiceParticipant | DmVoiceParticipant)[] = []
 const key = (identity: string) => identity.trim().toLowerCase()
 
-// Presentation observes the session; mounting or minimizing a view never owns it.
-export function useActiveCall() {
+export function callDetails(channel: Channel | undefined, partnerIdentity: Identity | null, displayName: string | undefined) {
+  if (partnerIdentity) return { title: displayName ?? 'Direct call', returnPath: `/app/dm/${partnerIdentity}`, conversationPath: `/app/dm/${partnerIdentity}` }
+  if (channel) return { title: channel.name, returnPath: `/app/${channel.serverId}/channels`, conversationPath: `/app/${channel.serverId}/${channel.id}` }
+  return { title: 'Voice call', returnPath: '/app/messages', conversationPath: null }
+}
+
+export function callStatus(connecting: boolean, state: ConnectionState, joined: boolean, calling: boolean) {
+  if (connecting) return 'Connecting…'
+  if (state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting) return 'Reconnecting…'
+  if (!joined) return 'Call ended'
+  return calling ? 'Calling…' : 'Connected'
+}
+
+function useCallSession() {
   const voice = useVoiceSessionStore()
   const dm = useDmVoiceSessionStore()
   const selfIdentity = useConnectionStore((s) => s.identity)
   const channels = useChannelsStore((s) => s.channelsByServer)
-  const users = useUsersStore((s) => s.byIdentity)
-  const members = useMembersStore((s) => s.membersByServer)
   const voiceParticipants = useVoiceStore((s) => s.participantsByChannel)
   const dmParticipants = useDmVoiceStore((s) => s.participantsByRoom)
-  const audioInputId = useMediaDeviceStore((s) => s.audioInputId)
-  const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
-  const setAnswered = dm.setAnswered
   const channelId = voice.joinedChannelId
   const partnerIdentity = dm.joinedPartnerIdentity
   const channel = Object.values(channels).flat().find((item) => item.id === channelId)
   const isDm = partnerIdentity !== null
-  const room = isDm ? dm.room : voice.room
+  const session = isDm ? dm : voice
   const active = channelId !== null || partnerIdentity !== null
   const roomKey = selfIdentity && partnerIdentity ? dmVoiceRoomKey(selfIdentity, partnerIdentity) : null
   const participants = isDm
     ? (roomKey ? dmParticipants[roomKey] ?? EMPTY : EMPTY)
     : (channelId !== null ? voiceParticipants[channelId] ?? EMPTY : EMPTY)
   const self = participants.find((p) => key(p.userIdentity) === key(selfIdentity ?? '')) ?? null
+  return { session, dm, channelId, partnerIdentity, channel, isDm, active, participants, selfIdentity, self }
+}
+
+// Presentation observes the session; mounting or minimizing a view never owns it.
+export function useActiveCall() {
+  const { session, dm, channelId, partnerIdentity, channel, isDm, active, participants, selfIdentity, self } = useCallSession()
+  const { room, setError } = session
+  const users = useUsersStore((s) => s.byIdentity)
+  const members = useMembersStore((s) => s.membersByServer)
+  const audioInputId = useMediaDeviceStore((s) => s.audioInputId)
+  const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
+  const setAnswered = dm.setAnswered
   const { localParticipant, remoteParticipants, activeSpeakerIds, connectionState } = useLiveKitRoom(room)
   const joined = room !== null && connectionState === ConnectionState.Connected
-  const connecting = (isDm ? dm.joining : voice.joining) || (room !== null && connectionState === ConnectionState.Connecting)
-  const setError = isDm ? dm.setError : voice.setError
+  const connecting = session.joining || (room !== null && connectionState === ConnectionState.Connecting)
   const hasScreenCapture = supportsScreenCapture()
   const muted = self?.muted ?? !room?.localParticipant.isMicrophoneEnabled
   const deafened = self?.deafened ?? false
@@ -106,12 +124,11 @@ export function useActiveCall() {
     })
   }, [participants, selfIdentity, localParticipant, remoteParticipants, activeSpeakerIds, names])
   const duration = useOngoingCallDuration(self?.joinedAt ?? null, joined)
-  const returnPath = partnerIdentity ? `/app/dm/${partnerIdentity}` : channel ? `/app/${channel.serverId}/channels` : '/app/messages'
   return {
     active, channelId, partnerIdentity, room, joined, connecting, muted, deafened, sharingCamera, sharingScreen,
-    hasScreenCapture, tiles, participants, returnPath, conversationPath: channel ? `/app/${channel.serverId}/${channel.id}` : partnerIdentity ? returnPath : null, duration, setError, error: isDm ? dm.error : voice.error ?? (!active ? dm.error : null),
-    title: partnerIdentity ? names.displayNameByIdentity.get(key(partnerIdentity)) ?? 'Direct call' : channel?.name ?? 'Voice call',
-    status: connecting ? 'Connecting…' : (connectionState === ConnectionState.Reconnecting || connectionState === ConnectionState.SignalReconnecting) ? 'Reconnecting…' : joined ? (isDm && !dm.answered ? 'Calling…' : 'Connected') : 'Call ended',
+    hasScreenCapture, tiles, participants, duration, setError, error: session.error ?? (!active ? dm.error : null),
+    ...callDetails(channel, partnerIdentity, names.displayNameByIdentity.get(key(partnerIdentity ?? ''))),
+    status: callStatus(connecting, connectionState, joined, isDm && !dm.answered),
     ...actions,
   }
 }

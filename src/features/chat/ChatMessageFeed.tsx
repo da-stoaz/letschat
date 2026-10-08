@@ -78,17 +78,17 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   onTogglePin,
   onLoadOlder,
 }, ref) {
-  const [historyLimit, setHistoryLimit] = useState(() => {
-    const saved = readingPositions.get(scopeKey)
-    return saved ? saved.historyLimit + Math.max(0, messages.length - saved.messageCount) : HISTORY_PAGE_SIZE
-  })
+  const [initialReading] = useState(() => readingPositions.get(scopeKey))
+  const [historyLimit, setHistoryLimit] = useState(() => initialReading
+    ? initialReading.historyLimit + Math.max(0, messages.length - initialReading.messageCount)
+    : HISTORY_PAGE_SIZE)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [highlightedId, setHighlightedId] = useState<number | null>(null)
   const [jumpRequest, setJumpRequest] = useState(0)
   const pendingJumpRef = useRef<number | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  const followBottom = useRef(readingPositions.get(scopeKey)?.followBottom ?? true)
-  const latestReading = useRef(readingPositions.get(scopeKey))
+  const followBottom = useRef(initialReading?.followBottom ?? true)
+  const latestReading = useRef(initialReading)
   const lastSentToken = useRef(scrollToBottomToken)
   const touchStartY = useRef<number | null>(null)
 

@@ -21,6 +21,7 @@ export async function submitComposer(
       if (!isCurrent()) return
       const entry = files[index]
       if (entry.attachment) continue
+      // oxlint-disable-next-line react-doctor/async-await-in-loop -- Persist each completed upload before starting the next; retries keep earlier attachments and stop on failure.
       const [attachment] = await uploadFiles([entry.file], uploadScope, (_file, stage) => {
         const stages = useComposerStore.getState().drafts[scopeKey]?.stages ?? {}
         update({ stages: { ...stages, [entry.id]: stage } })

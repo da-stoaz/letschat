@@ -784,6 +784,7 @@ async function releasePresence(attempt: CallAttempt): Promise<void> {
 /** Retry after reconnect or an explicit user action; local media is already stopped. */
 export function retryCallCleanup(): Promise<void> {
   return queueCallWork(async () => {
+    // oxlint-disable-next-line react-doctor/async-await-in-loop -- Presence writes share the serialized call queue so a late leave cannot delete a newer join.
     for (const attempt of pendingLeaves) await releasePresence(attempt)
   })
 }
@@ -863,6 +864,7 @@ async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresencePara
     attempt.claimedPresence = true
     assertCurrentCall(attempt)
     for (const previous of pendingLeaves) {
+      // oxlint-disable-next-line react-doctor/async-await-in-loop -- Clear obsolete ownership in order before minting the new call's token.
       if (sameCall(previous.target, attempt.target)) await releasePresence(previous)
     }
     const token = await waitForCallStep(attempt, tauriCommands.generateLivekitToken(params.roomName, attempt.identity))
