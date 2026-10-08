@@ -606,7 +606,7 @@ export function ActiveCallCard({
 
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1.5">
             <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={muted ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={onToggleMute}>
+              <Button size="icon-xs" variant={muted ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" aria-label={muted ? 'Unmute microphone' : 'Mute microphone'} aria-pressed={muted} onClick={onToggleMute}>
                 {muted ? <MicOffIcon className="size-4" /> : <MicIcon className="size-4" />}
               </Button>
               <DropdownMenu>
@@ -633,7 +633,7 @@ export function ActiveCallCard({
             </div>
 
             <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={deafened ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={onToggleDeafen}>
+              <Button size="icon-xs" variant={deafened ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" aria-label={deafened ? 'Unmute call audio' : 'Mute call audio'} aria-pressed={deafened} onClick={onToggleDeafen}>
                 {deafened ? <VolumeXIcon className="size-4" /> : <Volume2Icon className="size-4" />}
               </Button>
               <OutputDevicePicker
@@ -649,7 +649,7 @@ export function ActiveCallCard({
 
           <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1.5">
             <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={sharingCamera ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" onClick={onToggleCamera}>
+              <Button size="icon-xs" variant={sharingCamera ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" aria-label={sharingCamera ? 'Stop camera' : 'Start camera'} aria-pressed={sharingCamera} onClick={onToggleCamera}>
                 <VideoIcon className="size-4" />
               </Button>
               <DropdownMenu>
@@ -679,13 +679,15 @@ export function ActiveCallCard({
               size="icon-xs"
               variant="outline"
               className={cn('h-8 w-8', screenShareButtonClass)}
+              aria-label={sharingScreen ? 'Stop sharing screen' : 'Share screen'}
+              aria-pressed={sharingScreen}
               onClick={onToggleScreenShare}
               disabled={!hasScreenCapture}
             >
               <MonitorUpIcon className="size-4" />
             </Button>
 
-            <Button size="icon-xs" variant="destructive" className="h-8 w-8" onClick={onLeave}>
+            <Button size="icon-xs" variant="destructive" className="h-8 w-8" aria-label={connecting ? 'Cancel call' : 'End call'} onClick={onLeave}>
               <LogOutIcon className="size-4" />
             </Button>
           </div>

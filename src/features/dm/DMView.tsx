@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ConnectionState } from 'livekit-client'
-import { PhoneCallIcon, PhoneOffIcon, PanelBottomCloseIcon, PanelBottomOpenIcon, ServerIcon, CheckIcon, XIcon } from 'lucide-react'
-import { dmVoiceRoomKey, isCallCancelled, joinLiveKitDmVoice, leaveLiveKitDmVoice, useLiveKitRoom } from '../../lib/livekit'
+import { PhoneCallIcon, PanelBottomCloseIcon, PanelBottomOpenIcon, ServerIcon, CheckIcon, XIcon } from 'lucide-react'
+import { dmVoiceRoomKey, isCallCancelled, joinLiveKitDmVoice, useLiveKitRoom } from '../../lib/livekit'
 import { reducers } from '../../lib/spacetimedb'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useDmStore } from '../../stores/dmStore'
@@ -21,7 +22,6 @@ import {
   encodeDmSystemMessage,
   formatDmSystemMetadata,
   formatDmSystemPrimaryText,
-  getCallDurationSeconds,
   parseDmSystemMessage,
 } from './systemMessages'
 import { useOngoingCallDuration } from '../voice/hooks/useOngoingCallDuration'
@@ -143,6 +143,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   const scopeKey = `dm:${partnerIdentity.toLowerCase()}`
   const setError = (error: string | null) => useComposerStore.getState().update(scopeKey, { error })
   const scrollToBottomToken = useComposerStore(s => s.drafts[scopeKey]?.sent ?? 0)
+  const navigate = useNavigate()
   const isMobile = useIsMobile()
   const [callPanelMinimized, setCallPanelMinimized] = useState(!isMobile)
   // Adjust-state-during-render: reset the panel to its default whenever the
@@ -171,7 +172,6 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   const dmRoom = useDmVoiceSessionStore((s) => s.room)
   const joinedPartnerIdentity = useDmVoiceSessionStore((s) => s.joinedPartnerIdentity)
   const dmJoining = useDmVoiceSessionStore((s) => s.joining)
-  const dmAnswered = useDmVoiceSessionStore((s) => s.answered)
   const setDmAnswered = useDmVoiceSessionStore((s) => s.setAnswered)
   const messages = conversations[partnerIdentity] ?? EMPTY_DM_MESSAGES
   const partner = useUserPresentation(partnerIdentity)
@@ -225,19 +225,10 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
       : null
   const { connectionState } = useLiveKitRoom(roomForPartner)
   const joined = roomForPartner !== null && connectionState === ConnectionState.Connected
-  const connecting = (dmJoining && normalizeIdentity(joinedPartnerIdentity) === normalizeIdentity(partnerIdentity)) || (roomForPartner !== null && connectionState === ConnectionState.Connecting)
+  const connecting = (dmJoining && normalizeIdentity(joinedPartnerIdentity) === normalizeIdentity(partnerIdentity)) || (roomForPartner !== null && (connectionState === ConnectionState.Connecting || connectionState === ConnectionState.Reconnecting || connectionState === ConnectionState.SignalReconnecting))
   const hasActiveCall = joined || connecting || voiceParticipants.length > 0
-  // The call button already says "Joining…" / "Leave Call", so a badge repeating it
-  // is noise sitting right next to its own label. Show the badge only for the one
-  // state the button cannot express: a call already in progress that you are not in.
+  // Show incoming call status before the local session starts.
   const showStatusBadge = !connecting && !joined && voiceParticipants.length > 0
-  const selfVoiceParticipant = useMemo(
-    () =>
-      voiceParticipants.find(
-        (participant) => normalizeIdentity(participant.userIdentity) === normalizeIdentity(selfIdentity),
-      ) ?? null,
-    [selfIdentity, voiceParticipants],
-  )
   const remoteJoinedCount = useMemo(
     () =>
       voiceParticipants.filter(
@@ -264,29 +255,14 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
 
   const onPrimaryCallAction = async () => {
     try {
-      if (connecting) {
-        await leaveLiveKitDmVoice(partnerIdentity, roomForPartner)
+      if (joined || connecting) {
+        navigate('/app/call', { state: { returnTo: `/app/dm/${partnerIdentity}` } })
         return
       }
-      if (joined) {
-        const callDurationSeconds = getCallDurationSeconds(selfVoiceParticipant?.joinedAt)
-        await leaveLiveKitDmVoice(partnerIdentity, roomForPartner)
-        if (callDurationSeconds !== null) {
-          await reducers
-            .sendDirectMessage(
-              partnerIdentity,
-              encodeDmSystemMessage('call_ended', {
-                durationSeconds: callDurationSeconds,
-                missed: !dmAnswered,
-              }),
-            )
-            .catch(() => undefined)
-        }
-        return
-      }
-
       const shouldEmitCallStarted = voiceParticipants.length === 0
-      await joinLiveKitDmVoice(partnerIdentity)
+      const joiningCall = joinLiveKitDmVoice(partnerIdentity)
+      if (isMobile) navigate('/app/call', { state: { returnTo: `/app/dm/${partnerIdentity}` } })
+      await joiningCall
       if (shouldEmitCallStarted) {
         await reducers.sendDirectMessage(partnerIdentity, encodeDmSystemMessage('call_started')).catch(() => undefined)
       }
@@ -341,18 +317,17 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
           {showStatusBadge && !isMobile ? <Badge variant="outline">In call</Badge> : null}
-          <Button
+          {!isMobile && (joined || connecting) ? null : <Button
             size="sm"
-            variant={joined ? 'destructive' : 'default'}
-            aria-label={connecting ? 'Cancel call' : joined ? 'Leave call' : 'Call'}
+            aria-label={joined || connecting ? 'Show call' : showStatusBadge ? 'Answer call' : 'Call'}
             onClick={() => {
               void onPrimaryCallAction()
             }}
           >
-            {joined || connecting ? <PhoneOffIcon className="size-4" /> : <PhoneCallIcon className="size-4" />}
-            <span className="hidden sm:inline">{connecting ? 'Cancel' : joined ? 'Leave call' : 'Call'}</span>
-          </Button>
-          {hasActiveCall ? (
+            <PhoneCallIcon className="size-4" />
+            <span className="hidden sm:inline">{joined || connecting ? 'Show call' : showStatusBadge ? 'Answer' : 'Call'}</span>
+          </Button>}
+          {hasActiveCall && !isMobile ? (
             <Button
               type="button"
               size="sm"
@@ -367,9 +342,9 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         </div>
       </header>
 
-      {hasActiveCall && !callPanelMinimized ? (
-        <div className="border-b border-border/70 p-2">
-          <DmVoicePanel partnerIdentity={partnerIdentity} showHeader={false} />
+      {hasActiveCall && !isMobile && !callPanelMinimized ? (
+        <div className="min-h-0 shrink-0 border-b border-border/70 p-2">
+          <DmVoicePanel partnerIdentity={partnerIdentity} />
         </div>
       ) : null}
 

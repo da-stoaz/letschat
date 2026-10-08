@@ -121,6 +121,10 @@
   * {
     @apply border-border outline-ring/50;
     }
+  [data-slot='dropdown-menu-trigger']:focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--foreground) 70%, transparent);
+    outline-offset: -2px;
+  }
   html, body, #root {
     height: var(--app-height, 100dvh);
     overscroll-behavior: none;
@@ -159,11 +163,11 @@
 
   @media (max-width: 767px), (pointer: coarse) {
     button:not([role='switch']), [role='menuitem'], [role='tab'],
-    [data-slot='dropdown-menu-trigger'] {
+    [data-slot='dropdown-menu-trigger'], [data-slot='call-device-select'] {
       min-height: 44px;
       min-width: 44px;
     }
-    [data-slot='input'], [data-slot='textarea'] { font-size: 1rem; }
+    [data-slot='input'], [data-slot='textarea'], [data-slot='call-device-select'] { font-size: 1rem; }
     [data-slot='input'] { min-height: 44px; }
     .touch-visible { opacity: 1; }
     .message-content { font-size: 1rem; line-height: 1.5; }
@@ -245,7 +249,7 @@
   padding-left: max(var(--app-edge-padding, 0.25rem), env(safe-area-inset-left));
 }
 
-[data-slot='dialog-content']:not(.attachment-lightbox) {
+[data-slot='dialog-content']:not(.attachment-lightbox):not(.call-fullscreen) {
   top: calc(var(--app-top, 0px) + var(--app-height, 100dvh) / 2);
   max-height: calc(var(--app-height, 100dvh) - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   overflow-y: auto;
@@ -276,4 +280,42 @@
 
 [data-slot='popover-content'], [data-slot='dropdown-menu-content'] {
   max-width: calc(100vw - 1rem);
+}
+
+[data-slot='dialog-content'].call-fullscreen {
+  display: flex;
+  flex-direction: column;
+  top: var(--app-top, 0px);
+  left: 0;
+  width: 100%;
+  height: var(--app-height, 100dvh);
+  max-width: none;
+  max-height: none;
+  /* Tailwind's dialog centering uses the independent translate property. */
+  translate: none;
+  transform: none;
+  animation: none;
+  overflow: hidden;
+  border-radius: 0;
+  gap: 0;
+  --app-edge-padding: 0.5rem;
+}
+
+.call-fullscreen .call-spotlight {
+  container-type: size;
+  place-items: center;
+}
+
+.call-fullscreen .call-spotlight > div {
+  width: min(100%, calc(100cqh * 16 / 9), 75rem);
+  aspect-ratio: 16 / 9;
+}
+
+.call-fullscreen .call-spotlight + div > div {
+  margin-inline: auto;
+}
+
+.call-fullscreen .call-toolbar > div:first-child {
+  border: 0;
+  padding-top: 0;
 }

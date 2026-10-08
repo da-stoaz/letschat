@@ -30,6 +30,23 @@ function sameIdentity(left: string, right: string | null | undefined): boolean {
   return normalizeIdentityKey(left) === normalizeIdentityKey(right)
 }
 
+export function getParticipantVideoTrack(
+  participant: LocalParticipant | RemoteParticipant | null,
+  tileType: 'profile' | 'screen',
+) {
+  const publication = participant?.getTrackPublication(
+    tileType === 'screen' ? Track.Source.ScreenShare : Track.Source.Camera,
+  )
+  // Camera-off mutes the publication without removing its video track.
+  if (publication) return publication.isMuted ? null : publication.videoTrack ?? null
+  if (!participant || tileType === 'screen') return null
+  for (const fallback of participant.videoTrackPublications.values()) {
+    if (fallback.isMuted || fallback.source === Track.Source.Camera || fallback.source === Track.Source.ScreenShare) continue
+    if (fallback.videoTrack) return fallback.videoTrack
+  }
+  return null
+}
+
 export function buildVoiceMediaTiles<TParticipant extends VoiceRenderableParticipant>({
   participants,
   selfIdentity,
@@ -56,10 +73,10 @@ export function buildVoiceMediaTiles<TParticipant extends VoiceRenderablePartici
       mediaParticipant?.getTrackPublication(Track.Source.ScreenShareAudio)?.audioTrack,
     )
     const hasCameraVideoTrack = Boolean(
-      mediaParticipant?.getTrackPublication(Track.Source.Camera)?.videoTrack,
+      getParticipantVideoTrack(mediaParticipant, 'profile'),
     )
     const hasScreenVideoTrack = Boolean(
-      mediaParticipant?.getTrackPublication(Track.Source.ScreenShare)?.videoTrack,
+      getParticipantVideoTrack(mediaParticipant, 'screen'),
     )
 
     const micSpeaking = participantIsActiveSpeaker && hasMicrophoneTrack

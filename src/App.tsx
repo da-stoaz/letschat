@@ -9,6 +9,7 @@ import { useViewport } from './hooks/useViewport'
 import { AppIndexPage } from './pages/AppIndexPage'
 import { ServerChannelPage } from './pages/ServerChannelPage'
 import { ServerManagePage } from './pages/ServerManagePage'
+import { CallPage } from './pages/CallPage'
 import { DMPage } from './pages/DMPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { DiscoverPage } from './pages/DiscoverPage'
@@ -140,6 +141,7 @@ function App() {
         <Route index element={<AppIndexPage />} />
         <Route path="spaces" element={<NavigationPage />} />
         <Route path="messages" element={<NavigationPage />} />
+        <Route path="call" element={<CallPage />} />
         <Route path=":serverId/channels" element={<NavigationPage />} />
         <Route path="dm/:identity" element={<DMPage />} />
         <Route path="settings" element={<SettingsPage />} />

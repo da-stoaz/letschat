@@ -26,6 +26,7 @@ import { ComposeDmDialog } from './app-layout/ComposeDmDialog'
 import { LayoutModals, type MemberActionModal } from './app-layout/LayoutModals'
 import { MemberPanel } from './app-layout/MemberPanel'
 import { ActiveCallCard } from './app-layout/ActiveCallCard'
+import { MobileCallStrip } from '../features/voice/components/MobileCallStrip'
 import { CallAudioRenderer } from '../features/voice/components/CallAudioRenderer'
 import { AppRail } from './app-layout/AppRail'
 import { ChannelBar } from './app-layout/ChannelBar'
@@ -180,7 +181,6 @@ export function AppLayout() {
   const activeChannelId = Number(params.channelId ?? 0) || null
   const setActiveChannelId = useUiStore((s) => s.setActiveChannelId)
   const setActiveDmPartner = useUiStore((s) => s.setActiveDmPartner)
-  const setActiveCallDockVisible = useUiStore((s) => s.setActiveCallDockVisible)
   const clearUnread = useUiStore((s) => s.clearUnread)
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen)
   const role = useServerRole(activeServerId)
@@ -192,7 +192,7 @@ export function AppLayout() {
   // Settings and Discover are full-pane: no channel bar, collapsed two-column grid.
   const pathname = location.pathname.replace(/\/+$/, '')
   const isListPage = pathname === '/app/spaces' || pathname === '/app/messages' || /^\/app\/\d+\/channels\/?$/.test(location.pathname)
-  const isFullPanePage = isSettingsPage || isDiscoverPage || isListPage
+  const isFullPanePage = isSettingsPage || isDiscoverPage || isListPage || pathname === '/app/call'
   const { ref: layoutRef, width: layoutWidth } = useContainerWidth()
   const { channelWidth: displayedChannelWidth, membersInline } = paneWidths(layoutWidth, channelBarWidth, memberPanelWidth, isFullPanePage)
   const showMembers = rightPanelOpen && activeServerId !== null && activeChannelId !== null && !isServerManagePage
@@ -492,7 +492,7 @@ export function AppLayout() {
     dmVoiceRoom !== null ||
     voiceJoining ||
     dmVoiceJoining
-  const activeCallDockVisible = hasActiveCallDock && !isMobile
+  const activeCallDockVisible = hasActiveCallDock && !isMobile && !isFullPanePage
   const {
     activeSpeakerIds: roomActiveSpeakerIds,
     localParticipant: roomLocalParticipant,
@@ -522,10 +522,6 @@ export function AppLayout() {
     },
     [roomActiveSpeakerIds, roomLocalParticipant, roomRemoteParticipants],
   )
-
-  useEffect(() => {
-    setActiveCallDockVisible(activeCallDockVisible)
-  }, [activeCallDockVisible, setActiveCallDockVisible])
 
   useEffect(() => {
     void syncUnreadBadgeCount()
@@ -653,7 +649,7 @@ export function AppLayout() {
             isFullPanePage || isServerManagePage ? 'p-1.5 sm:p-2' : 'p-0',
           )}
         >
-          <Outlet context={{ channelBar, servers, countUnreadInServer, onCreateSpace: () => setShowCreateServer(true), onCompose: () => setShowComposeDm(true) }} />
+          <Outlet context={{ channelBar, servers, countUnreadInServer, activeCallDockVisible, onCreateSpace: () => setShowCreateServer(true), onCompose: () => setShowComposeDm(true) }} />
         </CardContent>
       </Card>
 
@@ -742,6 +738,7 @@ export function AppLayout() {
 
           {mainPane}
         </div>
+        <MobileCallStrip />
       </main>
 
       <Sheet open={showMembers && !membersInline} onOpenChange={(open) => { if (!open && useUiStore.getState().rightPanelOpen) useUiStore.getState().toggleRightPanel() }}>

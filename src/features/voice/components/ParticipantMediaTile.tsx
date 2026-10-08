@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { Track, type LocalParticipant, type RemoteParticipant, type TrackPublication } from 'livekit-client'
-import { Badge } from '@/components/ui/badge'
+import { Track, type LocalParticipant, type RemoteParticipant } from 'livekit-client'
+import { MicOffIcon, VolumeXIcon } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '../../../lib/utils'
 import { MonitorUpIcon } from 'lucide-react'
+import { getParticipantVideoTrack } from '../mediaTiles'
 
 type MediaParticipant = LocalParticipant | RemoteParticipant
 
@@ -32,21 +33,9 @@ function initials(value: string): string {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
 }
 
-function pickVideoPublication(
-  publications: Map<string, TrackPublication>,
-): TrackPublication | null {
-  for (const publication of publications.values()) {
-    if (!publication.videoTrack) continue
-    if (publication.source === Track.Source.ScreenShare || publication.source === Track.Source.Camera) continue
-    return publication
-  }
-  return null
-}
-
 export function ParticipantMediaTile({
   displayName,
   avatarUrl = null,
-  joinedAt,
   participant,
   tileType = 'profile',
   className,
@@ -58,15 +47,10 @@ export function ParticipantMediaTile({
   muted,
   deafened,
   sharingScreen,
-  sharingCamera,
 }: ParticipantMediaTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
-  const screenTrack = participant?.getTrackPublication(Track.Source.ScreenShare)?.videoTrack ?? null
-  const cameraTrack = participant?.getTrackPublication(Track.Source.Camera)?.videoTrack ?? null
-  const fallbackVideoTrack = participant ? pickVideoPublication(participant.videoTrackPublications)?.videoTrack ?? null : null
-  const primaryVideoTrack =
-    tileType === 'screen' ? screenTrack : cameraTrack ?? fallbackVideoTrack
+  const primaryVideoTrack = getParticipantVideoTrack(participant, tileType)
 
   // Remote audio is rendered by the app-shell-level CallAudioRenderer (so it
   // survives view navigation), not per-tile — keep this component video-only.
@@ -94,110 +78,26 @@ export function ParticipantMediaTile({
   const showActivity = tileType === 'screen' ? isScreenAudioActive : isSpeaking
 
   return (
-    <article
-      className={cn(
-        'group overflow-hidden rounded-xl border border-border/60',
-        showActivity &&
-          (tileType === 'screen'
-            ? 'border-sky-400/80 shadow-[0_0_0_1px_rgba(56,189,248,0.35)]'
-            : 'border-emerald-400/80 shadow-[0_0_0_1px_rgba(52,211,153,0.35)]'),
-        className,
-      )}
-    >
-      {showVideo ? (
-        <div className={cn('relative aspect-video overflow-hidden bg-black', stageClassName)}>
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            aria-label={tileType === 'screen' ? `${displayName} screen share` : `${displayName} camera`}
-            // Contain, never cover: the tile's shape follows the window, and cropping to
-            // it would show a different cutout than what is actually being transmitted.
-            className="h-full w-full bg-black object-contain"
-          >
-            {/* Live WebRTC video has no caption source; satisfies media-caption a11y rules. */}
-            <track kind="captions" />
-          </video>
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/65 via-black/5 to-black/30 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
-          <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between gap-2 p-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">
-                {tileType === 'screen' ? `${displayName} Screen` : displayName}
-              </p>
-              <p className="truncate text-[11px] text-white/80">
-                {joinedAt ? `Joined ${new Date(joinedAt).toLocaleTimeString()}` : 'Live'}
-              </p>
-            </div>
-            <div className="flex items-center gap-1">
-              {tileType === 'screen' && isScreenAudioActive ? (
-                <Badge className="h-5 border-white/30 bg-black/35 px-1.5 text-[10px] text-white">Audio</Badge>
-              ) : null}
-              {tileType !== 'screen' && isSpeaking ? (
-                <Badge className="h-5 border-white/30 bg-black/35 px-1.5 text-[10px] text-white">Speaking</Badge>
-              ) : null}
-              {muted ? <Badge className="h-5 border-white/30 bg-black/35 px-1.5 text-[10px] text-white">Muted</Badge> : null}
-              {deafened ? <Badge className="h-5 border-white/30 bg-black/35 px-1.5 text-[10px] text-white">Deaf</Badge> : null}
-              {sharingCamera ? <Badge className="h-5 border-white/30 bg-black/35 px-1.5 text-[10px] text-white">Camera</Badge> : null}
-              {isLocal ? (
-                <Badge variant="outline" className="h-5 border-white/40 bg-black/35 px-1.5 text-[10px] text-white">
-                  You
-                </Badge>
-              ) : null}
-            </div>
+    <article className={cn('flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-muted/10',
+      showActivity ? 'border-emerald-400/80' : 'border-border/60', className)}>
+      <div className={cn('relative aspect-video overflow-hidden', stageClassName)}>
+        {showVideo ? <video ref={videoRef} autoPlay playsInline muted
+          aria-label={tileType === 'screen' ? `${displayName} screen share` : `${displayName} camera`}
+          className="h-full w-full bg-black object-contain"><track kind="captions" /></video> : (
+          <div className="grid h-full min-h-0 place-items-center">
+            {tileType === 'profile' ? <Avatar className={cn('size-24 ring-1 ring-border/70', avatarClassName)}>
+              {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
+              <AvatarFallback className="text-2xl font-semibold">{initials(displayName)}</AvatarFallback>
+            </Avatar> : <div className="flex items-center gap-2 text-sm text-muted-foreground"><MonitorUpIcon className="size-5" />{sharingScreen ? 'Loading screen…' : 'No stream'}</div>}
           </div>
-        </div>
-      ) : (
-        <div className={cn('relative aspect-video bg-muted/10', stageClassName)}>
-          <div
-            className={cn(
-              'absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3 transition-opacity duration-150',
-              tileType === 'profile' ? 'pointer-events-none opacity-0 group-hover:opacity-100' : 'opacity-100',
-            )}
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold leading-none">
-                {tileType === 'screen' ? `${displayName} Screen` : displayName}
-              </p>
-              <p className="mt-1 truncate text-xs text-muted-foreground">
-                {joinedAt
-                  ? `Joined ${new Date(joinedAt).toLocaleTimeString()}`
-                  : tileType === 'screen'
-                    ? 'Live screen stream'
-                    : 'Participant'}
-              </p>
-            </div>
-            <div className="flex items-center gap-1">
-              {tileType === 'screen' && isScreenAudioActive ? (
-                <Badge className="h-5 px-1.5 text-[10px]">Audio</Badge>
-              ) : null}
-              {tileType !== 'screen' && isSpeaking ? (
-                <Badge className="h-5 px-1.5 text-[10px]">Speaking</Badge>
-              ) : null}
-              {muted ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Muted</Badge> : null}
-              {deafened ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Deaf</Badge> : null}
-              {sharingCamera ? <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Camera</Badge> : null}
-              {isLocal ? <Badge variant="outline" className="h-5 px-1.5 text-[10px]">You</Badge> : null}
-            </div>
-          </div>
-          <div className={cn('grid h-full place-items-center', tileType === 'screen' ? 'pt-10' : undefined)}>
-            {tileType === 'profile' ? (
-              <Avatar className={cn('size-36 shrink-0 ring-1 ring-border/70', avatarClassName)}>
-                {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
-                <AvatarFallback className="text-3xl font-semibold">{initials(displayName)}</AvatarFallback>
-              </Avatar>
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-center text-muted-foreground">
-                <MonitorUpIcon className="size-5" />
-                <p className="text-sm font-medium text-foreground">No active stream</p>
-                <p className="text-xs">
-                  {sharingScreen ? 'Screen stream is loading' : 'Start sharing to display content'}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
+      <div className="flex min-w-0 shrink-0 items-center gap-1.5 bg-background/70 px-2 py-1.5 text-xs">
+        <span className="min-w-0 flex-1 truncate">{displayName}{isLocal ? ' (you)' : ''}{tileType === 'screen' ? ' · Screen' : ''}</span>
+        {showActivity ? <span className="size-2 shrink-0 rounded-full bg-emerald-400" role="img" aria-label={tileType === 'screen' ? 'Screen audio active' : 'Speaking'} /> : null}
+        {muted && tileType === 'profile' ? <MicOffIcon className="size-3.5 shrink-0" aria-label="Microphone muted" /> : null}
+        {deafened ? <VolumeXIcon className="size-3.5 shrink-0" aria-label="Call audio muted" /> : null}
+      </div>
     </article>
   )
 }

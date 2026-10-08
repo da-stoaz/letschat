@@ -1,24 +1,139 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Responsive UI verification</title>
-<style>body{margin:16px;background:#27272a;color:white;font:14px system-ui}button{padding:8px;margin:3px}iframe{display:block;height:740px;border:1px solid #52525b;margin-top:12px;max-width:none}</style></head>
-<body><p>Isolated UI fixtures. No backend connection.</p><div id="widths"></div><div id="routes"></div><button id="image">Image preview</button><button id="matrix">Check all widths and routes</button><p id="matrix-report"></p><p id="report">Loading…</p>
-<iframe id="preview" title="LetsChat responsive preview" src="./responsive-frame.html" width="390"></iframe>
-<script>
- const frame=document.querySelector('iframe');
- for(const width of [320,390,430,768,844,1024,1440]){const button=document.createElement('button');button.textContent=width;button.onclick=()=>frame.width=width;document.querySelector('#widths').append(button)}
- for(const [label,path] of [['Spaces','/app/spaces'],['Channels','/app/1/channels'],['Conversation','/app/1/10'],['Messages','/app/messages'],['DM','/app/dm/friend'],['Friends','/app/dm/friends'],['Settings','/app/settings'],['Invalid channel','/app/1/999']]){const button=document.createElement('button');button.textContent=label;button.onclick=()=>frame.contentWindow.postMessage({path},location.origin);document.querySelector('#routes').append(button)}
- document.querySelector('#image').onclick=()=>frame.contentWindow.postMessage({preview:true},location.origin);
- document.querySelector('#matrix').onclick=async()=>{
- const paths=['/app/spaces','/app/1/channels','/app/1/10','/app/messages','/app/dm/friend','/app/dm/friends','/app/settings','/app/1/999'];
- const failures=[];let count=0;document.querySelector('#matrix-report').textContent='Checking…';
- for(const width of [320,390,430,768,844,1024,1440])for(const path of paths){
- frame.width=width;frame.contentWindow.postMessage({path},location.origin);await new Promise(resolve=>setTimeout(resolve,150));
- const doc=frame.contentDocument;const composer=doc.querySelector('textarea')?.getBoundingClientRect();
- if(doc.documentElement.scrollWidth>width)failures.push(`${width} ${path}: page overflow`);
- if(composer&&(composer.width<100||composer.right>width||composer.bottom>frame.contentWindow.innerHeight))failures.push(`${width} ${path}: composer clipped`);
- count++;}
- frame.width=390;frame.contentWindow.postMessage({path:'/app/1/10'},location.origin);
- document.querySelector('#matrix-report').textContent=failures.length?failures.join('; '):`${count} layout checks passed`;
- };
- window.addEventListener('message' ,event=>{if(event.origin===location.origin&&event.data.report)document.querySelector('#report').textContent=event.data.report});
-</script></body></html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Responsive UI verification</title>
+  <style>
+    body { margin: 16px; background: #27272a; color: white; font: 14px system-ui }
+    button, a { padding: 8px; margin: 3px }
+    a { color: #93c5fd }
+    button[aria-pressed=true] { outline: 2px solid #93c5fd }
+    button:disabled { opacity: .5 }
+    iframe { display: block; height: 740px; border: 1px solid #52525b; margin-top: 12px; max-width: none }
+  </style>
+</head>
+<body>
+  <div>
+    <button id="real" aria-pressed="true">Real app</button>
+    <button id="samples" aria-pressed="false">Sample data</button>
+    <a href="/app" target="_blank" rel="noopener">Open real app in a tab</a>
+  </div>
+  <p id="mode-description">Real app. Sign in with your normal account to test live calls.</p>
+  <div id="widths"></div>
+  <div id="sample-controls" hidden>
+    <div id="routes"></div>
+    <button id="image">Image preview</button>
+    <button id="matrix">Check sample layouts</button>
+  </div>
+  <button id="text-size">Larger text</button>
+  <p id="matrix-report"></p><p id="report"></p>
+  <iframe id="preview" title="LetsChat real app" src="/app" width="390" allow="microphone; camera; display-capture; autoplay; fullscreen"></iframe>
+  <script>
+    const frame = document.querySelector('iframe');
+    let sampleMode = false;
+    const sizes = [[320,568],[390,740],[430,740],[768,740],[844,390],[1024,740],[1440,740]];
+    const routes = [['Spaces','/app/spaces'],['Channels','/app/1/channels'],['Conversation','/app/1/10'],['Messages','/app/messages'],['DM','/app/dm/friend'],['Friends','/app/dm/friends'],['Settings','/app/settings'],['Invalid channel','/app/1/999'],['Call preview','/app/call'],['Voice channel','/app/1/12']];
+
+    function setSize(width, height) {
+      frame.width = width;
+      frame.style.height = `${height}px`;
+    }
+    function switchMode(samples) {
+      sampleMode = samples;
+      document.querySelector('#sample-controls').hidden = !samples;
+      document.querySelector('#real').setAttribute('aria-pressed', String(!samples));
+      document.querySelector('#samples').setAttribute('aria-pressed', String(samples));
+      document.querySelector('#mode-description').textContent = samples
+        ? 'Sample data only. Live calls are unavailable here; Call preview checks appearance. Choose Real app for functional testing.'
+        : 'Real app. Sign in with your normal account to test live calls.';
+      document.querySelector('#report').textContent = '';
+      document.querySelector('#matrix-report').textContent = '';
+      frame.title = samples ? 'LetsChat sample layouts' : 'LetsChat real app';
+      frame.src = samples ? './responsive-frame.html' : '/app';
+    }
+    document.querySelector('#real').onclick = () => switchMode(false);
+    document.querySelector('#samples').onclick = () => switchMode(true);
+    for (const [width,height] of sizes) {
+      const button = document.createElement('button');
+      button.textContent = width === 844 ? '844 · Landscape' : width;
+      button.onclick = () => setSize(width,height);
+      document.querySelector('#widths').append(button);
+    }
+    for (const [label,path] of routes) {
+      const button = document.createElement('button');
+      button.textContent = label;
+      button.onclick = () => frame.contentWindow.postMessage({path},location.origin);
+      document.querySelector('#routes').append(button);
+    }
+    document.querySelector('#text-size').onclick = () => {
+      const root = frame.contentDocument.documentElement;
+      root.style.fontSize = root.style.fontSize ? '' : '24px';
+    };
+    document.querySelector('#image').onclick = () => frame.contentWindow.postMessage({preview:true},location.origin);
+    document.querySelector('#matrix').onclick = async () => {
+      if (!sampleMode) return;
+      const failures = [];
+      let count = 0;
+      document.querySelector('#matrix-report').textContent = 'Checking sample layouts…';
+      for (const [width,height] of sizes) for (const [,path] of routes) {
+        if (!sampleMode) return;
+        setSize(width,height);
+        frame.contentWindow.postMessage({path},location.origin);
+        await new Promise(resolve => setTimeout(resolve,150));
+        if (!sampleMode) return;
+        const doc = frame.contentDocument;
+        const composer = doc.querySelector('textarea')?.getBoundingClientRect();
+        if (doc.documentElement.scrollWidth > width) failures.push(`${width} ${path}: page overflow`);
+        if (composer && (composer.width < 100 || composer.right > width || composer.bottom > height)) failures.push(`${width} ${path}: composer clipped`);
+        const end = doc.querySelector('button[aria-label="End call"]')?.getBoundingClientRect();
+        if (end && (end.left < 0 || end.top < 0 || end.bottom > height || end.right > width || (width < 768 && (end.width < 44 || end.height < 44)))) failures.push(`${width}x${height} ${path}: call controls clipped`);
+        if (path === '/app/1/12' && width >= 768) {
+          if (doc.querySelector('[aria-label="Call controls"]') || doc.querySelectorAll('button[aria-label="End call"]').length !== 1) failures.push(`${width}: duplicate or missing dock controls`);
+        }
+        count++;
+        if (path === '/app/call' && width >= 768) {
+          const standardHeight = doc.querySelector('[aria-label="Call devices and options"] button')?.getBoundingClientRect().height;
+          if ([...doc.querySelectorAll('[aria-label="Call controls"] button')].some(button => button.getBoundingClientRect().height !== standardHeight)) failures.push(`${width}: call buttons differ from standard button height`);
+          const expand = [...doc.querySelectorAll('button')].find(button => button.textContent.trim() === 'Fullscreen');
+          expand?.click();
+          await new Promise(resolve => setTimeout(resolve,200));
+          if (!sampleMode) return;
+          const popup = doc.querySelector('.call-fullscreen');
+          const bounds = popup?.getBoundingClientRect();
+          const devices = popup?.querySelector('[aria-label="Call devices and options"]')?.getBoundingClientRect();
+          if (!devices || devices.bottom > height || devices.right > width || popup?.querySelector('[data-slot="sheet-content"]')) failures.push(`${width}: desktop call options clipped or in a sheet`);
+          if (!bounds || Math.abs(bounds.left) > 1 || Math.abs(bounds.top) > 1 || Math.abs(bounds.width - width) > 1 || Math.abs(bounds.height - height) > 1) {
+            failures.push(`${width}x${height}: fullscreen does not fill the viewport`);
+          }
+          const hangUp = popup?.querySelector('button[aria-label="End call"]')?.getBoundingClientRect();
+          if (!hangUp || hangUp.left < 0 || hangUp.top < 0 || hangUp.right > width || hangUp.bottom > height) {
+            failures.push(`${width}x${height}: fullscreen controls clipped`);
+          }
+          for (const tile of popup?.querySelectorAll('.call-spotlight > div') ?? []) {
+            const rect = tile.getBoundingClientRect();
+            if (Math.abs(rect.width / rect.height - 16 / 9) > 0.02 || rect.bottom > (hangUp?.top ?? height)) failures.push(`${width}x${height}: fullscreen tile proportions or bounds`);
+          }
+          [...(popup?.querySelectorAll('button') ?? [])].find(button => button.textContent.trim() === 'Devices')?.click();
+          await new Promise(resolve => setTimeout(resolve,150));
+          const choices = doc.querySelector('[data-slot="popover-content"]');
+          const choicesBounds = choices?.getBoundingClientRect();
+          if (!choicesBounds || choicesBounds.top < 0 || choicesBounds.right > width || choicesBounds.bottom > height || choices.querySelectorAll('label').length !== 3) failures.push(`${width}x${height}: fullscreen device settings clipped or missing`);
+          doc.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape',bubbles:true}));
+          [...(popup?.querySelectorAll('button') ?? [])].find(button => button.textContent.trim() === 'Exit fullscreen')?.click();
+          await new Promise(resolve => setTimeout(resolve,150));
+          count++;
+        }
+      }
+      setSize(390,740);
+      frame.contentWindow.postMessage({path:'/app/1/10'},location.origin);
+      document.querySelector('#matrix-report').textContent = failures.length ? failures.join('; ') : `${count} sample layout checks passed`;
+    };
+    window.addEventListener('message', event => {
+      if (sampleMode && event.source === frame.contentWindow && event.origin === location.origin && event.data.report) {
+        document.querySelector('#report').textContent = event.data.report;
+      }
+    });
+  </script>
+</body>
+</html>

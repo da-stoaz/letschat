@@ -1,3 +1,6 @@
+import { CallPanel } from '../../src/features/voice/components/CallPanel'
+import { useActiveCall } from '../../src/features/voice/hooks/useActiveCall'
+import type { VoiceMediaTile } from '../../src/features/voice/components/VoiceMediaStage'
 import { AttachmentImageLightbox } from '../../src/features/chat/components/attachments/AttachmentImageLightbox'
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -22,8 +25,16 @@ import { useMembersStore } from '../../src/stores/membersStore'
 import { useFriendsStore } from '../../src/stores/friendsStore'
 import { useDmStore } from '../../src/stores/dmStore'
 import { useUiStore } from '../../src/stores/uiStore'
+import { useVoiceSessionStore } from '../../src/stores/voiceSessionStore'
 import { reducers } from '../../src/lib/spacetimedb'
+import { tauriCommands } from '../../src/lib/tauri'
 import '../../src/index.css'
+
+// This fixture has fake identities and no server session. Keep unsupported
+// call entry points away from the real URL/token/presence flow.
+tauriCommands.getLivekitUrl = async () => {
+  throw new Error('Sample data cannot join live calls. Choose Real app in the test toolbar to test calls.')
+}
 
 const now = new Date().toISOString()
 const me = { identity: 'self', username: 'alex', displayName: 'Alex', avatarUrl: null, createdAt: now, isAdmin: false }
@@ -34,6 +45,7 @@ useUsersStore.setState({ users: [me, friend], byIdentity: { self: me, friend } }
 useServersStore.setState({ servers: [{ id: 1, name: 'A space with a long name for testing', ownerIdentity: me.identity, invitePolicy: 'Everyone', iconUrl: null, createdAt: now, isDiscoverable: false, description: null, tags: [] }] })
 useChannelsStore.setState({ channelsByServer: { 1: [
   { id: 10, serverId: 1, name: 'general-with-a-long-channel-name', kind: 'Text', section: null, position: 0, moderatorOnly: false },
+  { id: 12, serverId: 1, name: 'Lounge', kind: 'Voice', section: null, position: 2, moderatorOnly: false },
   { id: 11, serverId: 1, name: 'announcements', kind: 'Announcement', section: null, position: 1, moderatorOnly: true },
 ] } })
 useMembersStore.getState().setServerMembers(1, [me, friend].map(user => ({ serverId: 1, userIdentity: user.identity, role: user === me ? 'Owner' : 'Member', joinedAt: now, timeoutUntil: null, user })))
@@ -54,6 +66,29 @@ reducers.editMessage = async (id, content) => {
   if (failEdit) { failEdit = false; throw new Error('Test save failure. Retry with Save.') }
   const messages = useMessagesStore.getState().messagesByChannel[10]
   useMessagesStore.getState().setChannelMessages(10, messages.map(message => message.id === id ? { ...message, content, editedAt: now } : message))
+}
+
+// Presentation-only fixture: these controls never connect to people or devices.
+function CallPreview({ docked = false }: { docked?: boolean }) {
+  useEffect(() => {
+    if (!docked) return
+    useVoiceSessionStore.setState({ joinedChannelId: 12 })
+    return () => useVoiceSessionStore.setState({ joinedChannelId: null })
+  }, [docked])
+  const base = useActiveCall()
+  const navigate = useNavigate()
+  const [muted, setMuted] = useState(false)
+  const [deafened, setDeafened] = useState(false)
+  const [sharingCamera, setSharingCamera] = useState(false)
+  const tiles: VoiceMediaTile[] = [
+    { key: 'self:profile', displayName: 'Alex', avatarUrl: null, participant: null, tileType: 'profile', isLocal: true, isSpeaking: false, isScreenAudioActive: false, muted, deafened, sharingCamera, sharingScreen: false, hasVisual: false, priority: 35 },
+    { key: 'friend:profile', displayName: 'Sam with a longer display name', avatarUrl: null, participant: null, tileType: 'profile', isLocal: false, isSpeaking: true, isScreenAudioActive: false, muted: false, deafened: false, sharingCamera: false, sharingScreen: false, hasVisual: false, priority: 70 },
+    { key: 'friend:screen', displayName: 'Sam with a longer display name', avatarUrl: null, participant: null, tileType: 'screen', isLocal: false, isSpeaking: false, isScreenAudioActive: true, muted: false, deafened: false, sharingCamera: false, sharingScreen: true, hasVisual: true, priority: 220 },
+  ]
+  return <CallPanel call={{ ...base, active: true, joined: true, connecting: false, title: 'Lounge with a long conversation name', status: 'Connected', duration: '2:31', tiles, muted, deafened, sharingCamera,
+    onToggleMute: async () => setMuted((value) => !value), onToggleDeafen: async () => setDeafened((value) => !value), onToggleCamera: async () => setSharingCamera((value) => !value),
+    onLeave: async () => navigate('/app/messages'),
+  }} onBack={() => navigate('/app/messages')} />
 }
 
 export function Fixture() {
@@ -81,6 +116,8 @@ export function Fixture() {
       <Route index element={<AppIndexPage />} />
       <Route path="spaces" element={<NavigationPage />} />
       <Route path="messages" element={<NavigationPage />} />
+      <Route path="call" element={<CallPreview />} />
+      <Route path="1/12" element={<CallPreview docked />} />
       <Route path=":serverId/channels" element={<NavigationPage />} />
       <Route path=":serverId/:channelId" element={<ServerChannelPage />} />
       <Route path="dm/:identity" element={<DMPage />} />
@@ -90,4 +127,4 @@ export function Fixture() {
 }
 
 document.documentElement.classList.add('dark')
-createRoot(document.getElementById('root')!).render(<QueryClientProvider client={new QueryClient()}><TooltipProvider><MemoryRouter initialEntries={['/app/spaces']}><Fixture /><Toaster /></MemoryRouter></TooltipProvider></QueryClientProvider>)
+createRoot(document.getElementById('root')!).render(<QueryClientProvider client={new QueryClient()}><TooltipProvider><MemoryRouter initialEntries={[new URLSearchParams(location.search).get('path') ?? '/app/spaces']}><Fixture /><Toaster /></MemoryRouter></TooltipProvider></QueryClientProvider>)
