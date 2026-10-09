@@ -19,8 +19,8 @@ const PAGE_SIZE = 100
 
 // In-flight guards, keyed by channel id / partner identity. Transient by
 // design: a rejected call clears its key, so the next scroll retries.
-const channelRequests = new Set<u64>()
-const dmRequests = new Set<Identity>()
+const channelRequests = new Map<u64, Promise<void>>()
+const dmRequests = new Map<Identity, Promise<void>>()
 
 function beforeTimestamp(sentAt: string): Timestamp {
   return Timestamp.fromDate(new Date(sentAt))
@@ -34,47 +34,74 @@ function beforeTimestamp(sentAt: string): Timestamp {
  * anything to page back from.
  */
 export async function loadOlderChannelMessages(channelId: u64): Promise<void> {
-  if (channelRequests.has(channelId)) return
+  const existing = channelRequests.get(channelId)
+  if (existing) return existing
 
   const store = useMessagesStore.getState()
   if (store.historyExhausted[channelId]) return
   const oldest = (store.messagesByChannel[channelId] ?? [])[0]
   if (!oldest) return
 
-  channelRequests.add(channelId)
-  try {
-    const rows = await callProcedure<DbRow[]>('loadOlderChannelMessages', {
-      channelId: BigInt(channelId),
-      before: beforeTimestamp(oldest.sentAt),
-      limit: PAGE_SIZE,
-    })
-    // A short page means the module had nothing more to give.
-    useMessagesStore.getState().prependOlderMessages(channelId, rows.map(mapMessage), rows.length < PAGE_SIZE)
-  } finally {
-    channelRequests.delete(channelId)
-  }
+  const pending = (async () => {
+    try {
+      const rows = await callProcedure<DbRow[]>('loadOlderChannelMessages', {
+        channelId: BigInt(channelId),
+        before: beforeTimestamp(oldest.sentAt),
+        limit: PAGE_SIZE,
+      })
+      // A short page means the module had nothing more to give.
+      useMessagesStore.getState().prependOlderMessages(channelId, rows.map(mapMessage), rows.length < PAGE_SIZE)
+    } finally {
+      channelRequests.delete(channelId)
+    }
+  })()
+  channelRequests.set(channelId, pending)
+  return pending
 }
 
 /** The DM equivalent of {@link loadOlderChannelMessages}, per conversation. */
 export async function loadOlderDirectMessages(partner: Identity): Promise<void> {
-  if (dmRequests.has(partner)) return
+  const existing = dmRequests.get(partner)
+  if (existing) return existing
 
   const store = useDmStore.getState()
   if (store.historyExhausted[partner]) return
   const oldest = (store.conversations[partner] ?? [])[0]
   if (!oldest) return
 
-  dmRequests.add(partner)
-  try {
-    const rows = await callProcedure<DbRow[]>('loadOlderDirectMessages', {
-      partner: toReducerIdentity(partner),
-      before: beforeTimestamp(oldest.sentAt),
-      limit: PAGE_SIZE,
-    })
-    useDmStore
-      .getState()
-      .prependOlderMessages(partner, rows.map(mapDirectMessage), rows.length < PAGE_SIZE)
-  } finally {
-    dmRequests.delete(partner)
+  const pending = (async () => {
+    try {
+      const rows = await callProcedure<DbRow[]>('loadOlderDirectMessages', {
+        partner: toReducerIdentity(partner),
+        before: beforeTimestamp(oldest.sentAt),
+        limit: PAGE_SIZE,
+      })
+      useDmStore
+        .getState()
+        .prependOlderMessages(partner, rows.map(mapDirectMessage), rows.length < PAGE_SIZE)
+    } finally {
+      dmRequests.delete(partner)
+    }
+  })()
+  dmRequests.set(partner, pending)
+  return pending
+}
+
+/** Pin previews must not change the history cursor or create holes in paging. */
+export async function loadPinnedChannelMessages(channelId: u64) {
+  const rows = await callProcedure<DbRow[]>('loadPinnedChannelMessages', { channelId: BigInt(channelId) })
+  return rows.map(mapMessage)
+}
+
+/** Page continuously so jumping to an old pin never skips intervening messages. */
+export async function loadChannelMessage(channelId: u64, messageId: number) {
+  while (!useMessagesStore.getState().messagesByChannel[channelId]?.some(row => row.id === messageId)) {
+    const store = useMessagesStore.getState()
+    if (store.historyExhausted[channelId]) throw new Error('This message is no longer available.')
+    const count = store.messagesByChannel[channelId]?.length ?? 0
+    await loadOlderChannelMessages(channelId)
+    if ((useMessagesStore.getState().messagesByChannel[channelId]?.length ?? 0) === count) {
+      throw new Error('Could not load this message. Please try again.')
+    }
   }
 }

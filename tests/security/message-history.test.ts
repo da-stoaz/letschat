@@ -123,6 +123,19 @@ describe('bounded message history', () => {
     expect(page).toEqual([])
   })
 
+  it('loads an older pin outside the subscription window only for a channel member', async () => {
+    const history = await ownerConn.procedures.loadOlderChannelMessages({
+      channelId: BigInt(channelId), before: newestPageCursor(), limit: TOTAL,
+    })
+    const oldest = await ownerConn.procedures.loadOlderChannelMessages({
+      channelId: BigInt(channelId), before: history[0].sentAt, limit: PAGE,
+    })
+    await owner.call('pin_message', [channelId, Number(oldest[0].id)])
+    const mine = await ownerConn.procedures.loadPinnedChannelMessages({ channelId: BigInt(channelId) })
+    expect(mine.map(row => row.content)).toEqual(['msg-1'])
+    expect(await outsiderConn.procedures.loadPinnedChannelMessages({ channelId: BigInt(channelId) })).toEqual([])
+  })
+
   it('scopes DM paging to the caller’s own conversation', async () => {
     const partner = await makeUser('hist_dm')
     await makeFriends(owner, partner)

@@ -80,7 +80,7 @@ export function ChatComposer({
   const lastTypingPulseMsRef = useRef(0)
   const touch = useTouchInput()
   const draft = useComposerStore(s => s.drafts[scopeKey] ?? EMPTY_DRAFT)
-  const { text: value, files: queuedFiles, stages: uploadStageByFileId, progress: uploadProgressByFileId, error: localError, submitting } = draft
+  const { text: value, files: queuedFiles, stages: uploadStageByFileId, progress: uploadProgressByFileId, error: localError, submitting, outgoing } = draft
   const updateDraft = (patch: Partial<typeof draft>) => useComposerStore.getState().update(scopeKey, patch)
   const setLocalError = (error: string | null) => updateDraft({ error })
   const setQueuedFiles = (update: (files: QueuedFile[]) => QueuedFile[]) => {
@@ -100,7 +100,7 @@ export function ChatComposer({
   }, [value])
 
   useEffect(() => {
-    if (!typingScopeKey || !typingIdentity || disabled || submitting) return
+    if (!typingScopeKey || !typingIdentity || disabled) return
     const hasContent = value.trim().length > 0
     const now = Date.now()
 
@@ -117,13 +117,13 @@ export function ChatComposer({
       emitTypingState(false)
       typingSentRef.current = false
     }
-  }, [disabled, emitTypingState, submitting, typingIdentity, typingScopeKey, value])
+  }, [disabled, emitTypingState, typingIdentity, typingScopeKey, value])
 
   useEffect(() => {
-    if ((!disabled && !submitting) || !typingSentRef.current) return
+    if (!disabled || !typingSentRef.current) return
     emitTypingState(false)
     typingSentRef.current = false
-  }, [disabled, submitting, emitTypingState])
+  }, [disabled, emitTypingState])
 
   useEffect(
     () => () => {
@@ -224,7 +224,6 @@ export function ChatComposer({
                     type="button"
                     className="ml-auto inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
                     onClick={() => {
-                      if (submitting) return
                       void cancelUpload(entry.file).catch(() => undefined)
                       setLocalError(null)
                       const current = useComposerStore.getState().drafts[scopeKey] ?? EMPTY_DRAFT
@@ -235,7 +234,6 @@ export function ChatComposer({
                       updateDraft({ files: current.files.filter(item => item.id !== entry.id), stages, progress })
 
                     }}
-                    disabled={submitting}
                     aria-label={`Remove ${entry.file.name}`}
                   >
                     <XIcon className="size-3.5" />
@@ -255,11 +253,24 @@ export function ChatComposer({
         </div>
       ) : null}
 
+      {outgoing && <div className="max-h-32 overflow-y-auto rounded-lg bg-muted/30 p-2 text-sm">
+        <p role="status" className="font-medium">{submitting ? 'Sending previous message…' : 'Previous message not sent'}</p>
+        {outgoing.text && <p className="line-clamp-2 break-words text-muted-foreground">{outgoing.text}</p>}
+        {outgoing.files.map(entry => <p key={entry.id} className="truncate text-xs text-muted-foreground">{entry.file.name} · {stageLabel(outgoing.stages[entry.id])} {outgoing.progress[entry.id] !== undefined ? `${Math.round(outgoing.progress[entry.id] * 100)}%` : ''}</p>)}
+        {outgoing.error && <>
+          <p role="alert" className="text-destructive">{outgoing.error}</p>
+          <div className="mt-1 flex gap-2">
+            <Button type="button" size="sm" disabled={disabled || submitting} onClick={() => void submitComposer(scopeKey, uploadScope, onSubmit, true)}>Retry previous message</Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => updateDraft({ outgoing: null })}>Discard failed message</Button>
+          </div>
+        </>}
+      </div>}
+
       <Textarea
         ref={textareaRef}
         value={value}
         onPaste={(event) => {
-          if (disabled || submitting) return
+          if (disabled) return
           const files = getClipboardFiles(event.clipboardData)
           if (files.length === 0) return
           // File clipboards can also contain filenames/URLs as text.
@@ -284,7 +295,7 @@ export function ChatComposer({
         maxLength={maxLength}
         aria-label={placeholder}
         placeholder={placeholder}
-        disabled={disabled || submitting}
+        disabled={disabled}
         className="min-h-10 max-h-[min(180px,calc(var(--app-height,100dvh)/4))] resize-none overflow-y-auto"
       />
       {disabled ? <p className="text-xs text-muted-foreground">{disabledHint}</p> : (helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null)}
@@ -293,7 +304,7 @@ export function ChatComposer({
           type="button"
           variant="outline"
           size="sm"
-          disabled={disabled || submitting}
+          disabled={disabled}
           onClick={() => fileInputRef.current?.click()}
         >
           <PaperclipIcon className="size-4" />
@@ -315,10 +326,10 @@ export function ChatComposer({
           type="submit"
           size="sm"
           className="ml-auto"
-          disabled={disabled || submitting || (value.trim().length === 0 && queuedFiles.length === 0)}
+          disabled={disabled || submitting || outgoing !== null || (value.trim().length === 0 && queuedFiles.length === 0)}
         >
           {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <SendHorizonalIcon className="size-4" />}
-          {submitting ? 'Sending…' : sendLabel}
+          {sendLabel}
         </Button>
       </div>
       {localError ? <p role="alert" className="text-sm text-destructive">{localError}</p> : null}

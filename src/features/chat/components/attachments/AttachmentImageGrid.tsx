@@ -33,18 +33,18 @@ export function AttachmentImageGrid({ items, onOpen, onRetry }: AttachmentImageG
 
       <div className="grid grid-cols-2 gap-1.5">
         {items.map((item, index) => (
-          <button
+          <div
             key={item.storageKey}
-            type="button"
             className={tileClassName(items.length, index)}
-            onClick={() => onOpen(index)}
           >
             {item.url ? (
+              <button type="button" className="h-full w-full" onClick={() => onOpen(index)} aria-label={`Preview ${item.fileName}`}>
               <img
                 src={item.url}
                 alt={item.fileName}
                 className="h-full w-full object-cover transition-transform duration-150 group-hover:scale-[1.015]"
               />
+              </button>
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-3 text-center">
                 {item.loading ? <Loader2Icon className="size-4 animate-spin text-muted-foreground" /> : <ImageIcon className="size-4 text-muted-foreground" />}
@@ -63,7 +63,7 @@ export function AttachmentImageGrid({ items, onOpen, onRetry }: AttachmentImageG
                 ) : null}
               </div>
             )}
-          </button>
+          </div>
         ))}
       </div>
     </div>

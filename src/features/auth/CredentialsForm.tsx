@@ -45,6 +45,8 @@ export function CredentialsForm({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [confirmTouched, setConfirmTouched] = useState(false)
+  const confirmMismatch = confirmTouched && confirmPassword !== password
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Only complain once the user has actually typed something in the field.
@@ -244,14 +246,18 @@ export function CredentialsForm({
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              onBlur={() => setConfirmTouched(true)}
+              aria-invalid={confirmMismatch}
+              aria-describedby={confirmMismatch ? 'auth-confirm-error' : undefined}
               minLength={PASSWORD_MIN_LENGTH}
               required
               placeholder="Confirm password"
               autoComplete="new-password"
             />
+            {confirmMismatch && <p id="auth-confirm-error" role="alert" className="text-sm text-destructive">Passwords do not match.</p>}
           </div>
         ) : null}
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
         <div className="flex items-center justify-end gap-2">
           <Button type="submit" className="min-w-36" disabled={submitting}>
             {mode === 'register' ? <UserRoundPlusIcon className="size-4" /> : <LogInIcon className="size-4" />}

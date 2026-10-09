@@ -21,6 +21,28 @@ use crate::views::RECENT_MESSAGE_WINDOW;
 /// Upper bound on one page, whatever the client asks for.
 const MAX_PAGE: usize = RECENT_MESSAGE_WINDOW;
 
+/// Pinned content is independent of the caller's recent history window.
+/// Match history authorization and never expose another channel's messages.
+#[spacetimedb::procedure]
+pub fn load_pinned_channel_messages(ctx: &mut ProcedureContext, channel_id: u64) -> Vec<Message> {
+    let caller = ctx.sender();
+    ctx.with_tx(|tx| {
+        if require_readable_account(tx, caller).is_err() {
+            return Vec::new();
+        }
+        let Some(channel) = tx.db.channel().id().find(channel_id) else {
+            return Vec::new();
+        };
+        if require_member_role(tx, channel.server_id, caller).is_err() {
+            return Vec::new();
+        }
+        tx.db.pinned_message().channel_id().filter(channel_id)
+            .filter_map(|pin| tx.db.message().id().find(pin.message_id))
+            .filter(|message| message.channel_id == channel_id && !message.deleted)
+            .collect()
+    })
+}
+
 fn page_size(limit: u32) -> usize {
     (limit as usize).clamp(1, MAX_PAGE)
 }

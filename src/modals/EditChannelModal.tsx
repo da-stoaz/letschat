@@ -141,9 +141,9 @@ export function EditChannelModal({
         />
       </div>
       <div className="space-y-2">
-        <Label>Section</Label>
+        <Label htmlFor="edit-channel-section">Section</Label>
         <Select value={sectionSelection} onValueChange={(value) => setSectionSelection(value ?? SECTION_NONE_VALUE)}>
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="edit-channel-section" className="w-full">
             <SelectValue>{sectionSelectionLabel(sectionSelection)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -157,12 +157,16 @@ export function EditChannelModal({
           </SelectContent>
         </Select>
         {sectionSelection === SECTION_NEW_VALUE ? (
+          <>
+          <Label htmlFor="edit-section-name">New section name</Label>
           <Input
+            id="edit-section-name"
             value={newSectionName}
             onChange={(event) => setNewSectionName(event.target.value)}
             maxLength={40}
             placeholder="Section name"
           />
+          </>
         ) : null}
       </div>
       <div className="flex items-center justify-between rounded-lg border border-border/70 bg-muted/25 px-3 py-2">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Track } from 'livekit-client'
 import { AWAY_AFTER_MS, type UserPresenceStatus } from '../hooks/useUserPresentation'
@@ -60,7 +60,6 @@ function ResizeHandle({
   max,
   direction,
   className,
-  onPointerDown,
   onResize,
 }: {
   label: string
@@ -69,9 +68,10 @@ function ResizeHandle({
   max: number
   direction: 1 | -1
   className: string
-  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
   onResize: (width: number) => void
 }) {
+  const cleanup = useRef<(() => void) | null>(null)
+  useEffect(() => () => cleanup.current?.(), [])
   return (
     <div
       role="separator"
@@ -85,7 +85,37 @@ function ResizeHandle({
         'group focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
         className,
       )}
-      onPointerDown={onPointerDown}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+        cleanup.current?.()
+        const target = event.currentTarget
+        const pointerId = event.pointerId
+        const startX = event.clientX
+        const previousCursor = document.body.style.cursor
+        const previousSelection = document.body.style.userSelect
+        const move = (next: PointerEvent) => {
+          if (next.pointerId === pointerId) onResize(width + (next.clientX - startX) * direction)
+        }
+        const finish = () => {
+          cleanup.current = null
+          target.removeEventListener('pointermove', move)
+          target.removeEventListener('pointerup', finish)
+          target.removeEventListener('pointercancel', finish)
+          target.removeEventListener('lostpointercapture', finish)
+          if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId)
+          document.body.style.cursor = previousCursor
+          document.body.style.userSelect = previousSelection
+        }
+        cleanup.current = finish
+        target.setPointerCapture(pointerId)
+        target.addEventListener('pointermove', move)
+        target.addEventListener('pointerup', finish)
+        target.addEventListener('pointercancel', finish)
+        target.addEventListener('lostpointercapture', finish)
+        document.body.style.cursor = 'col-resize'
+        document.body.style.userSelect = 'none'
+      }}
       onDoubleClick={() => onResize(min)}
       onKeyDown={(event) => {
         const step =
@@ -106,7 +136,7 @@ function ResizeHandle({
         }
       }}
     >
-      <div className="h-full w-full rounded-full bg-border/60 shadow-[0_0_0_1px_hsl(var(--background)/0.95)] transition-colors group-hover:bg-primary/55" />
+      <div className="pointer-events-none absolute left-1/2 h-full w-0.75 -translate-x-1/2 rounded-full bg-border/60 transition-colors group-hover:bg-primary/55" />
     </div>
   )
 }
@@ -537,53 +567,6 @@ export function AppLayout() {
     window.localStorage.setItem(MEMBER_PANEL_WIDTH_STORAGE_KEY, String(memberPanelWidth))
   }, [memberPanelWidth])
 
-  const onMemberPanelResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (isMobile) return
-    event.preventDefault()
-    const startX = event.clientX
-    const startWidth = memberPanelWidth
-
-    // Handle sits on the panel's left edge: dragging left widens it.
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      const delta = moveEvent.clientX - startX
-      setMemberPanelWidth(clampMemberPanelWidth(startWidth - delta))
-    }
-
-    const handlePointerUp = () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      document.body.style.removeProperty('cursor')
-      document.body.style.removeProperty('user-select')
-    }
-
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp, { once: true })
-  }, [memberPanelWidth, isMobile])
-
-  const onChannelBarResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (isMobile) return
-    event.preventDefault()
-    const startX = event.clientX
-    const startWidth = channelBarWidth
-
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      const delta = moveEvent.clientX - startX
-      setChannelBarWidth(clampChannelBarWidth(startWidth + delta))
-    }
-
-    const handlePointerUp = () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      document.body.style.removeProperty('cursor')
-      document.body.style.removeProperty('user-select')
-    }
-
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp, { once: true })
-  }, [channelBarWidth, isMobile])
-
   const channelBar = (
     <ChannelBar
       channelBarWidth={isListPage ? layoutWidth : displayedChannelWidth}
@@ -661,8 +644,7 @@ export function AppLayout() {
             min={MEMBER_PANEL_MIN_WIDTH}
             max={MEMBER_PANEL_MAX_WIDTH}
             direction={-1}
-            className="absolute left-0 top-3 z-20 h-[calc(100%-1.5rem)] w-0.75 cursor-col-resize max-md:hidden"
-            onPointerDown={onMemberPanelResizeStart}
+            className="absolute -left-1.5 top-3 z-20 h-[calc(100%-1.5rem)] w-3 cursor-col-resize max-md:hidden"
             onResize={(next) => setMemberPanelWidth(clampMemberPanelWidth(next))}
           />
           {memberPanel}
@@ -721,8 +703,7 @@ export function AppLayout() {
                   min={CHANNEL_BAR_MIN_WIDTH}
                   max={CHANNEL_BAR_MAX_WIDTH}
                   direction={1}
-                  className="absolute right-0 top-3 z-20 h-[calc(100%-1.5rem)] w-0.75 cursor-col-resize max-md:hidden"
-                  onPointerDown={onChannelBarResizeStart}
+                  className="absolute -right-1.5 top-3 z-20 h-[calc(100%-1.5rem)] w-3 cursor-col-resize max-md:hidden"
                   onResize={(next) => setChannelBarWidth(clampChannelBarWidth(next))}
                 />
               </div>

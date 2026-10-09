@@ -49,7 +49,7 @@ export function TimeoutMemberModal({ serverId, member, onClose }: MemberActionMo
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-1.5">
-        <Label>Duration</Label>
+        <Label htmlFor="timeout-duration">Duration</Label>
         <Select
           value={durationSelectValue}
           onValueChange={(v) => {
@@ -57,7 +57,7 @@ export function TimeoutMemberModal({ serverId, member, onClose }: MemberActionMo
             if (selected) setDurationSeconds(selected.value)
           }}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="timeout-duration" className="w-full">
             <span className="truncate font-medium">{selectedDurationLabel}</span>
             <SelectValue className="sr-only" />
           </SelectTrigger>
