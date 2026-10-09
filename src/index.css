@@ -162,6 +162,12 @@
   button:active:not(:disabled) { filter: brightness(0.9); }
 
   @media (max-width: 767px), (pointer: coarse) {
+    [data-slot='switch']::after {
+      inset-block: auto;
+      top: 50%;
+      height: 44px;
+      transform: translateY(-50%);
+    }
     button:not([role='switch']), [role='menuitem'], [role='tab'],
     [data-slot='dropdown-menu-trigger'], [data-slot='call-device-select'] {
       min-height: 44px;
@@ -196,9 +202,9 @@
 
   :root {
     --app-scrollbar-size: 8px;
-    --app-scrollbar-track: hsl(var(--background) / 0.18);
-    --app-scrollbar-thumb: hsl(var(--border) / 0.65);
-    --app-scrollbar-thumb-hover: hsl(var(--border) / 0.9);
+    --app-scrollbar-track: color-mix(in oklch, var(--background) 18%, transparent);
+    --app-scrollbar-thumb: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
+    --app-scrollbar-thumb-hover: color-mix(in oklch, var(--muted-foreground) 70%, transparent);
   }
 
   .app-scrollbar,
@@ -318,4 +324,19 @@
 .call-fullscreen .call-toolbar > div:first-child {
   border: 0;
   padding-top: 0;
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  [class*='bg-card/'] { background-color: var(--card) !important; }
+  [class*='bg-popover/'] { background-color: var(--popover) !important; }
+  [class*='bg-background/'] { background-color: var(--background) !important; }
+  [class*='bg-muted/'] { background-color: var(--muted) !important; }
+  [class*='backdrop-blur'] { backdrop-filter: none !important; }
+  .attachment-lightbox [class*='bg-black/'] { background-color: black !important; }
+  [data-slot='dialog-overlay'], [data-slot='sheet-overlay'] { background: rgb(0 0 0 / 65%); }
+}
+@media (prefers-contrast: more) {
+  :root { --border: oklch(0.5 0 0); --muted-foreground: oklch(0.35 0 0); }
+  .dark { --border: oklch(0.65 0 0); --muted-foreground: oklch(0.85 0 0); }
+  [class*='border-border/'] { border-color: var(--border) !important; }
 }

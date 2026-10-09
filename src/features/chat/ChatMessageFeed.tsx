@@ -323,9 +323,7 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
                   pinnedMessageIds={pinnedMessageIds}
                   onTogglePin={onTogglePin}
                   onEditMessage={onEditMessage ?? (() => undefined)}
-                  onDeleteMessage={(message) => {
-                    void onDeleteMessage(message)
-                  }}
+                  onDeleteMessage={onDeleteMessage}
                 />
               )}
             </div>

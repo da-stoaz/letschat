@@ -4,6 +4,7 @@ import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, MinusIcon, PlusIcon, R
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { downloadAttachment } from '@/lib/attachmentDownload'
+import { useReducedMotion } from '@/hooks/useReducedMotion'
 
 type PreviewImage = {
   url: string | null
@@ -28,6 +29,8 @@ function normalizeIndex(index: number, length: number): number {
 }
 
 export function AttachmentImageLightbox({ images, initialIndex, onClose }: AttachmentImageLightboxProps) {
+  const reducedMotion = useReducedMotion()
+  const animationTime = reducedMotion ? 0 : 200
   const [activeIndex, setActiveIndex] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
   const [zoomScale, setZoomScale] = useState(1)
@@ -88,6 +91,10 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
           centerOnInit
           limitToBounds
           centerZoomedOut
+          smooth={!reducedMotion}
+          zoomAnimation={{ disabled: reducedMotion }}
+          autoAlignment={{ animationTime, velocityAlignmentTime: animationTime }}
+          velocityAnimation={{ disabled: reducedMotion }}
           doubleClick={{ disabled: true }}
           wheel={{ step: 0.2 }}
           pinch={{ step: 5 }}
@@ -181,7 +188,7 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
                     size="icon-sm"
                     variant="ghost"
                     className="text-white hover:bg-white/15"
-                    onClick={() => zoomOut()}
+                    onClick={() => zoomOut(undefined, animationTime)}
                     disabled={zoomScale <= MIN_SCALE}
                   >
                     <MinusIcon className="size-4" />
@@ -193,7 +200,7 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
                     size="sm"
                     variant="ghost"
                     className="min-w-16 text-white hover:bg-white/15"
-                    onClick={() => resetTransform()}
+                    onClick={() => resetTransform(animationTime)}
                   >
                     <RotateCcwIcon className="size-4" />
                     Fit
@@ -204,7 +211,7 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
                     size="icon-sm"
                     variant="ghost"
                     className="text-white hover:bg-white/15"
-                    onClick={() => zoomIn()}
+                    onClick={() => zoomIn(undefined, animationTime)}
                     disabled={zoomScale >= MAX_SCALE}
                   >
                     <PlusIcon className="size-4" />

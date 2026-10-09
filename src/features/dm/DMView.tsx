@@ -368,6 +368,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           } catch (e) {
             const nextError = e instanceof Error ? e.message : 'Could not delete direct message.'
             setError(nextError)
+            throw e
           }
         }}
         scrollToBottomToken={scrollToBottomToken}

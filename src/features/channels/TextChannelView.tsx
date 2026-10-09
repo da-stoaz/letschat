@@ -175,6 +175,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
           } catch (e) {
             const messageText = e instanceof Error ? e.message : 'Could not delete message.'
             setError(messageText)
+            throw e
           }
         }}
         scrollToBottomToken={scrollToBottomToken}

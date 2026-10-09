@@ -1,5 +1,5 @@
 import { CompactBack } from '../../components/CompactBack'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   UserPlusIcon,
@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { PresenceDot } from '@/components/user/PresenceDot'
 import type { Friend, Identity } from '../../types/domain'
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog'
 
 type Tab = 'online' | 'all' | 'pending' | 'blocked'
 type PendingAction = 'accept' | 'decline' | 'remove' | 'cancel' | 'unblock'
@@ -93,6 +94,9 @@ export function FriendsView() {
   const [username, setUsername] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [removeTarget, setRemoveTarget] = useState<Identity | null>(null)
+  const removeTrigger = useRef<HTMLElement | null>(null)
+  const removePresentation = useUserPresentation(removeTarget ?? '')
   const [pendingByIdentity, setPendingByIdentity] = useState<Record<string, PendingAction>>({})
 
   const selfIdentity = useConnectionStore((s) => s.identity)
@@ -216,9 +220,7 @@ export function FriendsView() {
           size="icon"
           aria-label="Remove friend"
           disabled={action !== undefined}
-          onClick={() =>
-            runAction(identity, 'remove', () => reducers.removeFriend(identity), 'Could not remove friend.')
-          }
+          onClick={event => { removeTrigger.current = event.currentTarget; setRemoveTarget(identity) }}
         >
           <UserMinusIcon className="size-4" />
         </Button>
@@ -439,6 +441,13 @@ export function FriendsView() {
           </div>
         </ScrollArea>
       </Tabs>
+      <ConfirmActionDialog open={removeTarget !== null} title={`Remove ${removePresentation.displayName} as a friend?`}
+        returnFocus={removeTrigger}
+        action="Remove friend" description="You can send a new friend request later. Your existing conversation will remain."
+        onClose={() => setRemoveTarget(null)} onConfirm={async () => {
+          if (!removeTarget) return
+          await reducers.removeFriend(removeTarget)
+        }} />
     </section>
   )
 }
