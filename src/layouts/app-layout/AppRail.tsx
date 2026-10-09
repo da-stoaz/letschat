@@ -28,7 +28,6 @@ import { normalizeIdentity, serverInitials, userInitials } from './helpers'
 import { useServerRailStore, type ServerGroup } from '../../stores/serverRailStore'
 import type { RailItem } from '../../stores/serverRailStore'
 import type { Server } from '../../types/domain'
-import { OrganizeSpaces } from './OrganizeSpaces'
 
 interface QuickDmContact {
   identity: string
@@ -820,8 +819,6 @@ export function AppRail({
         ) : null}
 
         <div className="mt-auto" />
-
-        {servers.length > 0 ? <OrganizeSpaces servers={servers} /> : null}
 
         <Tooltip>
           <TooltipTrigger
