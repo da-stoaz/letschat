@@ -74,8 +74,10 @@ export function MessageBubble({
   const [editDraft, setEditDraft] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<RenderableMessage | null>(null)
   const deleteTrigger = useRef<HTMLElement | null>(null)
+  const article = useRef<HTMLElement | null>(null)
   const confirmDelete = (message: RenderableMessage, target: HTMLElement) => {
-    deleteTrigger.current = target.closest('article')?.querySelector<HTMLElement>('[aria-label="Message actions"], [aria-label="Delete message"]') ?? target
+    deleteTrigger.current = target.getAttribute('aria-label') === 'Delete message' ? target :
+      article.current?.querySelector<HTMLElement>(`[data-message-id="${message.id}"] [aria-label="Message actions"]`) ?? target
     setDeleteTarget(message)
   }
   const isSystemGroup =
@@ -110,14 +112,14 @@ export function MessageBubble({
           </span>
         </div>
         {firstMessage.systemMeta ? (
-          <p className="mt-1 text-center text-[11px] text-muted-foreground/80">{firstMessage.systemMeta}</p>
+          <p className="mt-1 text-center text-xs text-muted-foreground/80">{firstMessage.systemMeta}</p>
         ) : null}
       </article>
     )
   }
 
   return (
-    <article className="group/bubble rounded-lg px-3 py-1 transition-colors hover:bg-muted/35">
+    <article ref={article} className="group/bubble rounded-lg px-3 py-1 transition-colors hover:bg-muted/35">
       <div className="flex items-start gap-3.5">
         <Avatar className="mt-0.5 size-9 rounded-full">
           {sender.avatarUrl ? <AvatarImage src={sender.avatarUrl} alt={sender.displayName} /> : null}

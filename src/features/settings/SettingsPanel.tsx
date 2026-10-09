@@ -28,7 +28,7 @@ export function SettingsPanel() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="account">
+        <TabsContent value="account" keepMounted>
           <AccountTab />
         </TabsContent>
 

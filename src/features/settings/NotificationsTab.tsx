@@ -115,7 +115,7 @@ export function NotificationsTab() {
   }, 0)
 
   const renderNotificationToggleRow = (row: NotificationToggleRow) => (
-    <div key={row.event} className="flex items-center justify-between gap-3 py-1.5">
+    <div key={row.event} className="flex items-center justify-between gap-3 py-2 min-h-11">
       <div className="space-y-0.5">
         <Label htmlFor={`notification-${row.key}`} className="text-sm font-medium">{row.label}</Label>
         <p id={`notification-${row.key}-hint`} className="text-xs text-muted-foreground">{row.description}</p>
@@ -137,7 +137,7 @@ export function NotificationsTab() {
           <CardDescription>Choose between quiet mode and full awareness in one place.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/70 p-3">
+          <div className="flex min-h-11 items-center justify-between gap-3 py-2">
             <div className="space-y-1">
               <Label htmlFor="notifications-enabled" className="text-sm font-medium">Enable notifications</Label>
               <p id="notifications-enabled-hint" className="text-xs text-muted-foreground">Master switch for all desktop/browser notifications.</p>
@@ -166,7 +166,7 @@ export function NotificationsTab() {
             <CardTitle className="text-base">Priority Alerts</CardTitle>
             <CardDescription>Keep these on if you never want to miss direct attention.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-1 rounded-lg border border-border/70 bg-card/70 p-3">
+          <CardContent className="space-y-2">
             {priorityNotificationRows.map((row) => renderNotificationToggleRow(row))}
           </CardContent>
         </Card>
@@ -176,7 +176,7 @@ export function NotificationsTab() {
             <CardTitle className="text-base">Everything Else</CardTitle>
             <CardDescription>Lower-priority updates you can tune based on preference.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-1 rounded-lg border border-border/70 bg-card/70 p-3">
+          <CardContent className="space-y-2">
             {secondaryNotificationRows.map((row) => renderNotificationToggleRow(row))}
           </CardContent>
         </Card>
@@ -187,7 +187,7 @@ export function NotificationsTab() {
             <CardDescription>Control what is shown and when alerts are suppressed.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/70 p-3">
+            <div className="flex min-h-11 items-center justify-between gap-3 py-2">
               <div className="space-y-1">
                 <Label htmlFor="notification-previews" className="text-sm font-medium">Show message previews</Label>
                 <p id="notification-previews-hint" className="text-xs text-muted-foreground">Hide content in notification bodies when disabled.</p>

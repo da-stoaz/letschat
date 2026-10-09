@@ -799,7 +799,7 @@ export function AppRail({
                   >
                     <Avatar size="sm" className="rounded-full">
                       {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
-                      <AvatarFallback className="rounded-full bg-primary/10 text-[10px]">{userInitials(contact.label)}</AvatarFallback>
+                      <AvatarFallback className="rounded-full bg-primary/10 text-xs">{userInitials(contact.label)}</AvatarFallback>
                     </Avatar>
                     {unread > 0 ? (
                       <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">

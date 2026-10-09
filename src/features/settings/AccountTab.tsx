@@ -47,6 +47,8 @@ export function AccountTab() {
 
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? '')
+  const [savedProfile, setSavedProfile] = useState({ displayName: user?.displayName ?? '', avatarUrl: user?.avatarUrl ?? '' })
+  const dirty = displayName !== savedProfile.displayName || avatarUrl !== savedProfile.avatarUrl
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
@@ -143,6 +145,7 @@ export function AccountTab() {
               setIsSavingProfile(true)
               try {
                 await reducers.updateProfile(displayName || null, avatarUrl.trim())
+                setSavedProfile({ displayName, avatarUrl })
                 clearAvatarPreview()
                 toast.success('Profile updated')
               } catch (error) {
@@ -153,7 +156,7 @@ export function AccountTab() {
               }
             }}
           >
-            <div className="flex items-center gap-4 rounded-lg border border-border/70 bg-card/70 p-3">
+            <div className="flex items-center gap-4 py-1">
               {avatarSrc ? (
                 <Dialog>
                   <DialogTrigger
@@ -233,7 +236,13 @@ export function AccountTab() {
               />
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {dirty ? <p role="status" className="mr-auto text-sm text-muted-foreground">Unsaved changes</p> : null}
+              {dirty ? <Button type="button" variant="ghost" disabled={isSavingProfile || isUploadingAvatar} onClick={() => {
+                setDisplayName(savedProfile.displayName)
+                setAvatarUrl(savedProfile.avatarUrl)
+                clearAvatarPreview()
+              }}>Discard changes</Button> : null}
               <Button type="submit" disabled={isSavingProfile || isUploadingAvatar}>
                 {isSavingProfile ? 'Saving…' : 'Save Profile'}
               </Button>

@@ -63,11 +63,11 @@ try {
           <a href="/#product" class:list={["nav-link", active === "home" ? "nav-link-active" : "nav-link-idle"]}>Product</a>
           <a href="/roadmap" class:list={["nav-link", active === "roadmap" ? "nav-link-active" : "nav-link-idle"]}>Roadmap</a>
           <a href="/self-hosting" class:list={["nav-link", active === "self-hosting" ? "nav-link-active" : "nav-link-idle"]}>Self-Hosting</a>
-          <a href="/download" class="action-btn action-btn-primary">Download</a>
+          <a href="/download" aria-current={active === "download" ? "page" : undefined} class="action-btn action-btn-primary">Download</a>
         </div>
 
         <div class="mobile-actions">
-          <a href="/download" class="action-btn action-btn-primary">Download</a>
+          <a href="/download" aria-current={active === "download" ? "page" : undefined} class="action-btn action-btn-primary">Download</a>
           <button
             type="button"
             class="menu-toggle"
@@ -101,7 +101,11 @@ try {
     const panel = root.querySelector('[data-nav-panel]');
     if (!(toggle instanceof HTMLButtonElement) || !(panel instanceof HTMLElement)) return;
 
-    const close = () => {
+    const close = (reason?: 'escape' | 'resize') => {
+      if (reason === 'escape') toggle.focus();
+      else if (reason === 'resize' && panel.contains(document.activeElement)) {
+        root.querySelector<HTMLElement>('.desktop-nav [aria-current], .brand-logo-link')?.focus();
+      }
       root.classList.remove('is-open');
       toggle.setAttribute('aria-expanded', 'false');
     };
@@ -112,11 +116,18 @@ try {
     });
 
     panel.querySelectorAll('a').forEach((link) => {
-      link.addEventListener('click', close);
+      link.addEventListener('click', () => close());
+    });
+
+    root.addEventListener('keydown', (event) => {
+      if (event instanceof KeyboardEvent && event.key === 'Escape' && root.classList.contains('is-open')) {
+        event.preventDefault();
+        close('escape');
+      }
     });
 
     window.addEventListener('resize', () => {
-      if (window.innerWidth >= 1024) close();
+      if (window.innerWidth >= 1024) close('resize');
     });
   })();
 </script>

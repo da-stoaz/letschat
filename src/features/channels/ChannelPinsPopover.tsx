@@ -47,7 +47,7 @@ function PinRow({
       <button type="button" onClick={() => onJump(pin.messageId)} className="min-w-0 flex-1 text-left">
         <div className="flex items-center justify-between gap-2">
           <span className="truncate text-xs font-semibold">{author.displayName}</span>
-          <span className="shrink-0 text-[11px] text-muted-foreground">{formatTimestamp(pin.sentAt)}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">{formatTimestamp(pin.sentAt)}</span>
         </div>
         <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{preview}</p>
       </button>

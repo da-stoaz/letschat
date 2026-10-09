@@ -132,7 +132,7 @@ export function ServerTab({
               <CardDescription>Branding shown to members and on Discover.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 p-3.5">
+              <div className="flex flex-wrap items-start justify-between gap-3 py-1">
                 <div className="flex min-w-0 items-center gap-3">
                   <Avatar className="size-14 shrink-0 rounded-xl">
                     {server.iconUrl ? <AvatarImage src={server.iconUrl} alt={server.name} /> : null}

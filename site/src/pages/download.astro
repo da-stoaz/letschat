@@ -27,7 +27,7 @@ import { GITHUB_BASE } from "@/lib/site";
 
       <!-- macOS -->
       <div id="card-mac" data-platform="mac"
-           class="platform-card rounded-xl border border-border bg-card p-5 flex items-center justify-between gap-4 transition-colors">
+           class="platform-card rounded-xl border border-border bg-card p-5 flex flex-wrap items-center justify-between gap-4 transition-colors">
         <div class="flex items-center gap-4">
           <div class="platform-icon platform-icon-mac shrink-0" aria-hidden="true">
             <!-- Font Awesome Free 7.2.0 brand icon (CC BY 4.0) -->
@@ -40,18 +40,18 @@ import { GITHUB_BASE } from "@/lib/site";
             <p class="text-xs text-muted-foreground">Universal — Apple Silicon &amp; Intel</p>
           </div>
         </div>
-        <a href="#" data-asset="mac"
+        <div class="min-w-0"><a data-asset="mac" role="link" aria-disabled="true" tabindex="-1" aria-describedby="asset-status-mac"
            class="download-link shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-md bg-muted text-sm font-medium hover:bg-muted-hover transition-colors opacity-50 pointer-events-none">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
           <span>.dmg</span>
-        </a>
+        </a><p id="asset-status-mac" role="status" class="mt-1 max-w-40 text-xs text-muted-foreground">Checking availability…</p></div>
       </div>
 
       <!-- Windows x64 -->
       <div id="card-win-x64" data-platform="windows"
-           class="platform-card rounded-xl border border-border bg-card p-5 flex items-center justify-between gap-4 transition-colors">
+           class="platform-card rounded-xl border border-border bg-card p-5 flex flex-wrap items-center justify-between gap-4 transition-colors">
         <div class="flex items-center gap-4">
           <div class="platform-icon platform-icon-win shrink-0" aria-hidden="true">
             <!-- Font Awesome Free 7.2.0 brand icon (CC BY 4.0) -->
@@ -64,27 +64,27 @@ import { GITHUB_BASE } from "@/lib/site";
             <p class="text-xs text-muted-foreground">x64 — Intel &amp; AMD</p>
           </div>
         </div>
-        <div class="flex gap-2 shrink-0">
-          <a href="#" data-asset="windows-x64-msi"
+        <div class="flex flex-wrap gap-2 min-w-0">
+          <div class="min-w-0"><a data-asset="windows-x64-msi" role="link" aria-disabled="true" tabindex="-1" aria-describedby="asset-status-windows-x64-msi"
              class="download-link inline-flex items-center gap-2 px-4 py-2 rounded-md bg-muted text-sm font-medium hover:bg-muted-hover transition-colors opacity-50 pointer-events-none">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             <span>.msi</span>
-          </a>
-          <a href="#" data-asset="windows-x64-exe"
+          </a><p id="asset-status-windows-x64-msi" role="status" class="mt-1 max-w-40 text-xs text-muted-foreground">Checking availability…</p></div>
+          <div class="min-w-0"><a data-asset="windows-x64-exe" role="link" aria-disabled="true" tabindex="-1" aria-describedby="asset-status-windows-x64-exe"
              class="download-link inline-flex items-center gap-2 px-4 py-2 rounded-md bg-muted text-sm font-medium hover:bg-muted-hover transition-colors opacity-50 pointer-events-none">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             <span>.exe</span>
-          </a>
+          </a><p id="asset-status-windows-x64-exe" role="status" class="mt-1 max-w-40 text-xs text-muted-foreground">Checking availability…</p></div>
         </div>
       </div>
 
       <!-- Windows ARM -->
       <div id="card-win-arm" data-platform="windows-arm"
-           class="platform-card rounded-xl border border-border bg-card p-5 flex items-center justify-between gap-4 transition-colors">
+           class="platform-card rounded-xl border border-border bg-card p-5 flex flex-wrap items-center justify-between gap-4 transition-colors">
         <div class="flex items-center gap-4">
           <div class="platform-icon platform-icon-win shrink-0" aria-hidden="true">
             <!-- Font Awesome Free 7.2.0 brand icon (CC BY 4.0) -->
@@ -97,27 +97,27 @@ import { GITHUB_BASE } from "@/lib/site";
             <p class="text-xs text-muted-foreground">ARM64 — Snapdragon &amp; Surface</p>
           </div>
         </div>
-        <div class="flex gap-2 shrink-0">
-          <a href="#" data-asset="windows-arm-msi"
+        <div class="flex flex-wrap gap-2 min-w-0">
+          <div class="min-w-0"><a data-asset="windows-arm-msi" role="link" aria-disabled="true" tabindex="-1" aria-describedby="asset-status-windows-arm-msi"
              class="download-link inline-flex items-center gap-2 px-4 py-2 rounded-md bg-muted text-sm font-medium hover:bg-muted-hover transition-colors opacity-50 pointer-events-none">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             <span>.msi</span>
-          </a>
-          <a href="#" data-asset="windows-arm-exe"
+          </a><p id="asset-status-windows-arm-msi" role="status" class="mt-1 max-w-40 text-xs text-muted-foreground">Checking availability…</p></div>
+          <div class="min-w-0"><a data-asset="windows-arm-exe" role="link" aria-disabled="true" tabindex="-1" aria-describedby="asset-status-windows-arm-exe"
              class="download-link inline-flex items-center gap-2 px-4 py-2 rounded-md bg-muted text-sm font-medium hover:bg-muted-hover transition-colors opacity-50 pointer-events-none">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             <span>.exe</span>
-          </a>
+          </a><p id="asset-status-windows-arm-exe" role="status" class="mt-1 max-w-40 text-xs text-muted-foreground">Checking availability…</p></div>
         </div>
       </div>
 
       <!-- Linux -->
       <div id="card-linux" data-platform="linux"
-           class="platform-card rounded-xl border border-border bg-card p-5 flex items-center justify-between gap-4 transition-colors">
+           class="platform-card rounded-xl border border-border bg-card p-5 flex flex-wrap items-center justify-between gap-4 transition-colors">
         <div class="flex items-center gap-4">
           <div class="platform-icon platform-icon-linux shrink-0" aria-hidden="true">
             <!-- Font Awesome Free 7.2.0 brand icon (CC BY 4.0) -->
@@ -130,21 +130,21 @@ import { GITHUB_BASE } from "@/lib/site";
             <p class="text-xs text-muted-foreground">x64 — Ubuntu, Debian, &amp; AppImage</p>
           </div>
         </div>
-        <div class="flex gap-2 shrink-0">
-          <a href="#" data-asset="linux-deb"
+        <div class="flex flex-wrap gap-2 min-w-0">
+          <div class="min-w-0"><a data-asset="linux-deb" role="link" aria-disabled="true" tabindex="-1" aria-describedby="asset-status-linux-deb"
              class="download-link inline-flex items-center gap-2 px-4 py-2 rounded-md bg-muted text-sm font-medium hover:bg-muted-hover transition-colors opacity-50 pointer-events-none">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             <span>.deb</span>
-          </a>
-          <a href="#" data-asset="linux-appimage"
+          </a><p id="asset-status-linux-deb" role="status" class="mt-1 max-w-40 text-xs text-muted-foreground">Checking availability…</p></div>
+          <div class="min-w-0"><a data-asset="linux-appimage" role="link" aria-disabled="true" tabindex="-1" aria-describedby="asset-status-linux-appimage"
              class="download-link inline-flex items-center gap-2 px-4 py-2 rounded-md bg-muted text-sm font-medium hover:bg-muted-hover transition-colors opacity-50 pointer-events-none">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             <span>.AppImage</span>
-          </a>
+          </a><p id="asset-status-linux-appimage" role="status" class="mt-1 max-w-40 text-xs text-muted-foreground">Checking availability…</p></div>
         </div>
       </div>
 
@@ -174,8 +174,8 @@ import { GITHUB_BASE } from "@/lib/site";
 
   const MATCHERS: Record<string, RegExp> = {
     "mac":              /\.dmg$/i,
-    "windows-x64-msi": /[_-]x64[_-].*\.msi$|(?<!aarch64)(?<!arm64)\.msi$/i,
-    "windows-x64-exe": /[_-]x64[_-].*\.exe$|(?<!aarch64)(?<!arm64)(?<!setup)\.exe$|NSIS.*\.exe$/i,
+    "windows-x64-msi": /^(?!.*(?:aarch64|arm64)).*\.msi$/i,
+    "windows-x64-exe": /^(?!.*(?:aarch64|arm64)).*\.exe$/i,
     "windows-arm-msi": /aarch64.*\.msi$|arm64.*\.msi$/i,
     "windows-arm-exe": /aarch64.*\.exe$|arm64.*\.exe$/i,
     "linux-deb":        /\.deb$/i,
@@ -195,7 +195,7 @@ import { GITHUB_BASE } from "@/lib/site";
       badge?.classList.remove("is-loading");
       if (badgeValue) badgeValue.textContent = release.tag_name ?? "Unknown";
 
-      const assets: { name: string; browser_download_url: string }[] = release.assets;
+      const assets: { name: string; browser_download_url: string }[] = Array.isArray(release.assets) ? release.assets : [];
 
       for (const [key, pattern] of Object.entries(MATCHERS)) {
         const asset = assets.find((a) => pattern.test(a.name));
@@ -203,12 +203,17 @@ import { GITHUB_BASE } from "@/lib/site";
         if (link && asset) {
           link.href = asset.browser_download_url;
           link.classList.remove("opacity-50", "pointer-events-none");
+          link.removeAttribute("aria-disabled");
+          link.removeAttribute("tabindex");
         }
+        const status = document.getElementById(`asset-status-${key}`);
+        if (status) status.textContent = asset ? "" : "Not included in this release. Browse GitHub Releases.";
       }
 
       const ua = navigator.userAgent;
       let platformId: string | null = null;
-      if (/Mac/i.test(ua))        platformId = "card-mac";
+      if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.maxTouchPoints > 1 && /Mac/i.test(ua))) platformId = null;
+      else if (/Mac/i.test(ua))        platformId = "card-mac";
       else if (/Win/i.test(ua))   platformId = "card-win-x64";
       else if (/Linux/i.test(ua)) platformId = "card-linux";
 
@@ -220,7 +225,8 @@ import { GITHUB_BASE } from "@/lib/site";
     } catch {
       const badge = document.getElementById("version-badge");
       const badgeValue = document.getElementById("version-value");
-      badge?.classList.add("is-loading");
+      badge?.classList.remove("is-loading");
+      document.querySelectorAll<HTMLElement>('[id^="asset-status-"]').forEach(status => { status.textContent = "Availability unknown. Browse GitHub Releases."; });
       if (badgeValue) badgeValue.textContent = "Release unavailable";
       document.getElementById("release-error")?.classList.remove("hidden");
     }

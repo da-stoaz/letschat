@@ -14,7 +14,8 @@
 
 <div class="card">
     <form method="get" style="display:flex;gap:8px;flex-wrap:wrap">
-        <input class="input" name="q" value="@Model.Q" placeholder="Search username, display name or email"
+        <label for="admin-user-search" style="width:100%;font-weight:600">Search users</label>
+        <input id="admin-user-search" class="input" name="q" value="@Model.Q" placeholder="Search username, display name or email"
                style="flex:1;min-width:220px" autocapitalize="none" spellcheck="false">
         <button type="submit" class="btn btn-primary">Search</button>
         @if (!string.IsNullOrWhiteSpace(Model.Q))
