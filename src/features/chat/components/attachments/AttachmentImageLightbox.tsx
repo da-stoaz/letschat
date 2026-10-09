@@ -227,6 +227,8 @@ export function AttachmentImageLightbox({ images, initialIndex, onClose }: Attac
                           url: activeImage.url,
                           fileName: activeImage.fileName,
                         })
+                      } catch {
+                        // The shared download helper reports failures; keep the preview open.
                       } finally {
                         setIsSaving(false)
                       }

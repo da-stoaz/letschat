@@ -1,3 +1,4 @@
+import { CopyButton } from '@/components/CopyButton'
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
@@ -23,8 +24,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
 import {
-  CopyIcon,
-  CheckIcon,
   QrCodeIcon,
   LinkIcon,
   Trash2Icon,
@@ -88,21 +87,6 @@ function formatExpiry(expiresAt: string, now: number): string {
   return `${minutes}m`
 }
 
-function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false)
-  const copy = () => {
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }
-  return (
-    <Button type="button" variant="outline" size="sm" onClick={copy} className="shrink-0">
-      {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-      {copied ? 'Copied!' : label}
-    </Button>
-  )
-}
 
 interface InviteCardProps {
   invite: Invite

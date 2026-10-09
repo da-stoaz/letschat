@@ -40,8 +40,8 @@ type ServerTabProps = {
   onOpenDeleteServer: () => void
   onLeaveServer: () => void
   onUpdateInvitePolicy: (policy: ServerInvitePolicy) => void
-  onUpdateDiscovery: (isDiscoverable: boolean, description: string | null) => void
-  onUpdateTags: (tags: string[]) => void
+  onUpdateDiscovery: (isDiscoverable: boolean, description: string | null) => Promise<boolean>
+  onUpdateTags: (tags: string[]) => Promise<boolean>
 }
 
 export function ServerTab({
@@ -63,17 +63,24 @@ export function ServerTab({
   const [discoverable, setDiscoverable] = useState(server.isDiscoverable)
   const [description, setDescription] = useState(server.description ?? '')
 
-  const commitDiscovery = (isDiscoverable: boolean, desc: string) =>
-    onUpdateDiscovery(isDiscoverable, desc.trim().length > 0 ? desc.trim() : null)
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null)
+  const [tagsError, setTagsError] = useState<string | null>(null)
+  const commitDiscovery = async (isDiscoverable: boolean, desc: string) => {
+    setDiscoveryError(null)
+    if (!await onUpdateDiscovery(isDiscoverable, desc.trim() || null)) {
+      setDiscoverable(server.isDiscoverable)
+      setDiscoveryError('Could not save discovery settings. Your description is kept; try again.')
+    }
+  }
 
   const toggleDiscoverable = (value: boolean) => {
     setDiscoverable(value)
-    commitDiscovery(value, description)
+    void commitDiscovery(value, description)
   }
 
   const commitDescriptionIfChanged = () => {
     if (description.trim() !== (server.description ?? '').trim()) {
-      commitDiscovery(discoverable, description)
+      void commitDiscovery(discoverable, description)
     }
   }
 
@@ -81,19 +88,30 @@ export function ServerTab({
   const [tags, setTags] = useState<string[]>(server.tags)
   const [tagDraft, setTagDraft] = useState('')
 
-  const addTag = () => {
+  const addTag = async () => {
+    if (discoverySaving) return
     const tag = tagDraft.trim().toLowerCase().slice(0, TAG_MAX_LEN)
     setTagDraft('')
     if (!tag || tags.includes(tag) || tags.length >= MAX_TAGS) return
     const next = [...tags, tag]
     setTags(next)
-    onUpdateTags(next)
+    setTagsError(null)
+    if (!await onUpdateTags(next)) {
+      setTags(tags)
+      setTagsError('Could not save tags. Try again.')
+      setTagDraft(tag)
+    }
   }
 
-  const removeTag = (tag: string) => {
+  const removeTag = async (tag: string) => {
+    if (discoverySaving) return
     const next = tags.filter((t) => t !== tag)
     setTags(next)
-    onUpdateTags(next)
+    setTagsError(null)
+    if (!await onUpdateTags(next)) {
+      setTags(tags)
+      setTagsError('Could not save tags. Try again.')
+    }
   }
 
   return (
@@ -290,6 +308,10 @@ export function ServerTab({
                   </div>
                 </div>
 
+                {discoveryError && <div role="alert" className="space-y-2 text-sm text-destructive">
+                  <p>{discoveryError}</p>
+                  {description.trim() !== (server.description ?? '').trim() && <Button size="sm" variant="outline" disabled={discoverySaving} onClick={commitDescriptionIfChanged}>Retry description</Button>}
+                </div>}
                 <div className="space-y-1.5">
                   <p className="text-xs font-medium text-muted-foreground">Tags</p>
                   <div className="flex flex-wrap gap-1.5">
@@ -320,15 +342,16 @@ export function ServerTab({
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ',') {
                           e.preventDefault()
-                          addTag()
+                          void addTag()
                         }
                       }}
-                      onBlur={addTag}
+                      onBlur={() => void addTag()}
                       placeholder="Add a tag, then press Enter"
                       disabled={discoverySaving}
                       className="h-8 text-sm"
                     />
                   ) : null}
+                  {tagsError && <p role="alert" className="text-sm text-destructive">{tagsError}</p>}
                   <p className="text-[11px] text-muted-foreground">
                     Up to {MAX_TAGS} topic tags help people find this space on Discover.
                   </p>

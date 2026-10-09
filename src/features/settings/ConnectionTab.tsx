@@ -1,3 +1,4 @@
+import { CopyButton } from '@/components/CopyButton'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
@@ -6,7 +7,7 @@ import { useConnectionStore, type ConnectionStatus } from '../../stores/connecti
 import { isHostedWebBuild } from '../../lib/tauri'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { CopyIcon, CheckIcon, ChevronRightIcon, QrCodeIcon, ServerIcon, PlugZapIcon } from 'lucide-react'
+import { ChevronRightIcon, QrCodeIcon, ServerIcon, PlugZapIcon } from 'lucide-react'
 
 const STATUS_LABELS: Record<ConnectionStatus, string> = {
   connecting: 'Connecting…',
@@ -15,26 +16,6 @@ const STATUS_LABELS: Record<ConnectionStatus, string> = {
   error: 'Connection problem',
 }
 
-function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onClick={() => {
-        void navigator.clipboard.writeText(text).then(() => {
-          setCopied(true)
-          setTimeout(() => setCopied(false), 2000)
-        })
-      }}
-      className="shrink-0"
-    >
-      {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-      {copied ? 'Copied!' : label}
-    </Button>
-  )
-}
 
 /** One label/value row inside the technical-details disclosure. */
 function DetailRow({ label, value }: { label: string; value: string }) {

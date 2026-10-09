@@ -1,4 +1,5 @@
 import { isDesktopTauriRuntime, tauriCommands } from './tauri'
+import { toast } from 'sonner'
 
 export type AttachmentDownloadOptions = {
   url: string
@@ -108,9 +109,15 @@ async function downloadForTauri({
 }
 
 export async function downloadAttachment(options: AttachmentDownloadOptions): Promise<void> {
-  if (isDesktopTauriRuntime()) {
-    await downloadForTauri(options)
-    return
+  try {
+    if (isDesktopTauriRuntime()) {
+      await downloadForTauri(options)
+      return
+    }
+    await downloadForWeb(options)
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') return
+    toast.error(`Could not save ${options.fileName}`, { description: 'Please try Save again.' })
+    throw error
   }
-  await downloadForWeb(options)
 }

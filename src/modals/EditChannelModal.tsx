@@ -81,6 +81,7 @@ export function EditChannelModal({
   const [moderatorOnly, setModeratorOnly] = useState(currentModeratorOnly)
   const [sectionSelection, setSectionSelection] = useState<string>(initialSelection)
   const [newSectionName, setNewSectionName] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   return (
@@ -88,6 +89,8 @@ export function EditChannelModal({
       className="space-y-4"
       onSubmit={async (event) => {
         event.preventDefault()
+        if (submitting) return
+        setSubmitting(true)
         setError(null)
         try {
           if (sectionSelection === SECTION_NEW_VALUE && newSectionName.trim().length === 0) {
@@ -117,6 +120,8 @@ export function EditChannelModal({
         } catch (e) {
           const message = e instanceof Error ? e.message : 'Could not update channel.'
           setError(message)
+        } finally {
+          setSubmitting(false)
         }
       }}
     >
@@ -164,12 +169,12 @@ export function EditChannelModal({
         <Label htmlFor="edit-channel-mod-only">Moderator only</Label>
         <Switch id="edit-channel-mod-only" checked={moderatorOnly} onCheckedChange={setModeratorOnly} />
       </div>
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit">Save</Button>
+        <Button type="submit" disabled={submitting}>{submitting ? 'Saving…' : 'Save'}</Button>
       </div>
     </form>
   )

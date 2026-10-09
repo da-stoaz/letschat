@@ -56,6 +56,7 @@ export function CreateChannelModal({
   const [newSectionName, setNewSectionName] = useState('')
   const [kind, setKind] = useState<ChannelKind>('Text')
   const [moderatorOnly, setModeratorOnly] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   return (
@@ -63,6 +64,8 @@ export function CreateChannelModal({
       className="space-y-4"
       onSubmit={async (event) => {
         event.preventDefault()
+        if (submitting) return
+        setSubmitting(true)
         setError(null)
         try {
           if (sectionSelection === SECTION_NEW_VALUE && newSectionName.trim().length === 0) {
@@ -79,6 +82,8 @@ export function CreateChannelModal({
         } catch (e) {
           const message = e instanceof Error ? e.message : 'Could not create channel.'
           setError(message)
+        } finally {
+          setSubmitting(false)
         }
       }}
     >
@@ -140,12 +145,12 @@ export function CreateChannelModal({
         <Switch checked={moderatorOnly} onCheckedChange={setModeratorOnly} />
       </div>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit">Create</Button>
+        <Button type="submit" disabled={submitting}>{submitting ? 'Creating…' : 'Create'}</Button>
       </div>
     </form>
   )
