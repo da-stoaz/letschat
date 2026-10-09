@@ -99,6 +99,8 @@ export async function loadChannelMessage(channelId: u64, messageId: number) {
     const store = useMessagesStore.getState()
     if (store.historyExhausted[channelId]) throw new Error('This message is no longer available.')
     const count = store.messagesByChannel[channelId]?.length ?? 0
+    // Each page supplies the next cursor; parallel requests would fetch the same page.
+    // oxlint-disable-next-line react-doctor/async-await-in-loop -- Cursor-dependent pagination must stay sequential.
     await loadOlderChannelMessages(channelId)
     if ((useMessagesStore.getState().messagesByChannel[channelId]?.length ?? 0) === count) {
       throw new Error('Could not load this message. Please try again.')

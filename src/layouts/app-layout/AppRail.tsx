@@ -376,6 +376,119 @@ function SortableGroupedServer({ dndId, server, isActive, unreadCount, hasUnread
   )
 }
 
+function RailDirectMessages({
+  dmHomeActive, dmUnreadTotal, activeDmIdentity, quickDmContacts, onOpenDmHome,
+  onOpenDmCompose, onOpenDmContact, dmUnreadByIdentity, dmCallActiveByIdentity,
+}: Pick<AppRailProps, 'activeDmIdentity' | 'quickDmContacts' | 'onOpenDmHome' | 'onOpenDmCompose' | 'onOpenDmContact' | 'dmUnreadByIdentity' | 'dmCallActiveByIdentity'> & {
+  dmHomeActive: boolean
+  dmUnreadTotal: number
+}) {
+  return <>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant={dmHomeActive ? 'secondary' : 'ghost'}
+            size="icon"
+            className={`relative h-8 w-8 rounded-md ${dmHomeActive ? 'ring-1 ring-primary/70' : ''}`}
+            aria-label="Direct messages"
+            aria-current={dmHomeActive ? 'page' : undefined}
+            onClick={onOpenDmHome}
+          />
+        }
+      >
+        <MessageCircleIcon className="size-4" />
+        {dmUnreadTotal > 0 ? (
+          <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
+            {formatUnreadCount(dmUnreadTotal)}
+          </span>
+        ) : null}
+      </TooltipTrigger>
+      <TooltipContent side="right">DM Home</TooltipContent>
+    </Tooltip>
+
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-md" aria-label="New message" onClick={onOpenDmCompose} />
+        }
+      >
+        <MessageCircleIcon className="size-4" />
+        <span className="absolute -right-0.5 -top-0.5 grid size-3 place-items-center rounded-full bg-primary text-[10px] leading-none text-primary-foreground">+</span>
+      </TooltipTrigger>
+      <TooltipContent side="right">Compose DM</TooltipContent>
+    </Tooltip>
+
+    {quickDmContacts.length > 0 ? (
+      <div className="flex flex-col items-center gap-1 py-1">
+        {quickDmContacts.map((contact) => {
+          const unread = dmUnreadByIdentity[normalizeIdentity(contact.identity)] ?? 0
+          return (
+            <Tooltip key={contact.identity}>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`relative h-8 w-8 rounded-md ${activeDmIdentity === contact.identity ? 'ring-1 ring-primary/70' : ''}`}
+                    aria-label={`Message ${contact.label}`}
+                    aria-current={activeDmIdentity === contact.identity ? 'page' : undefined}
+                    onClick={() => onOpenDmContact(contact.identity)}
+                  />
+                }
+              >
+                <Avatar size="sm" className="rounded-full">
+                  {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
+                  <AvatarFallback className="rounded-full bg-primary/10 text-xs">{userInitials(contact.label)}</AvatarFallback>
+                </Avatar>
+                {unread > 0 ? (
+                  <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
+                    {formatUnreadCount(unread)}
+                  </span>
+                ) : null}
+                {dmCallActiveByIdentity[contact.identity] ? (
+                  <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
+                    <Volume2Icon className="size-2.5" />
+                  </span>
+                ) : null}
+              </TooltipTrigger>
+              <TooltipContent side="right">{contact.label}</TooltipContent>
+            </Tooltip>
+          )
+        })}
+      </div>
+    ) : null}
+  </>
+}
+
+function RailDragPreview({ activeDragServer, activeDragGroup, servers }: {
+  activeDragServer: Server | null
+  activeDragGroup: ServerGroup | null
+  servers: Server[]
+}) {
+  return (
+    activeDragServer ? (
+      <div className="opacity-80 shadow-lg rounded-lg">
+        <ServerAvatar server={activeDragServer} />
+      </div>
+    ) : activeDragGroup ? (
+      <div className="h-9 w-9 rounded-lg opacity-80 shadow-lg bg-muted border border-border grid grid-cols-2 gap-px p-0.5">
+        {activeDragGroup.serverIds.slice(0, 4).map((sid) => {
+          const s = servers.find((sv) => sv.id === sid)
+          return s ? (
+            <div key={sid} className="overflow-hidden rounded-sm">
+              <Avatar className="size-full rounded-none">
+                {s.iconUrl ? <AvatarImage src={s.iconUrl} alt="" draggable={false} /> : null}
+                <AvatarFallback className="rounded-none bg-primary/10 text-[6px]">{serverInitials(s.name)}</AvatarFallback>
+              </Avatar>
+            </div>
+          ) : <div key={sid} className="rounded-sm bg-muted/30" />
+        })}
+      </div>
+    ) : null
+  )
+}
+
 // ─── AppRail ──────────────────────────────────────────────────────────────────
 
 export function AppRail({
@@ -650,25 +763,7 @@ export function AppRail({
                 </SortableContext>
 
                 <DragOverlay dropAnimation={null}>
-                  {activeDragServer ? (
-                    <div className="opacity-80 shadow-lg rounded-lg">
-                      <ServerAvatar server={activeDragServer} />
-                    </div>
-                  ) : activeDragGroup ? (
-                    <div className="h-9 w-9 rounded-lg opacity-80 shadow-lg bg-muted border border-border grid grid-cols-2 gap-px p-0.5">
-                      {activeDragGroup.serverIds.slice(0, 4).map((sid) => {
-                        const s = servers.find((sv) => sv.id === sid)
-                        return s ? (
-                          <div key={sid} className="overflow-hidden rounded-sm">
-                            <Avatar className="size-full rounded-none">
-                              {s.iconUrl ? <AvatarImage src={s.iconUrl} alt="" draggable={false} /> : null}
-                              <AvatarFallback className="rounded-none bg-primary/10 text-[6px]">{serverInitials(s.name)}</AvatarFallback>
-                            </Avatar>
-                          </div>
-                        ) : <div key={sid} className="rounded-sm bg-muted/30" />
-                      })}
-                    </div>
-                  ) : null}
+                  <RailDragPreview activeDragServer={activeDragServer} activeDragGroup={activeDragGroup} servers={servers} />
                 </DragOverlay>
               </DndContext>
 
@@ -690,80 +785,9 @@ export function AppRail({
 
         <Separator className="my-0.5" />
 
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant={dmHomeActive ? 'secondary' : 'ghost'}
-                size="icon"
-                className={`relative h-8 w-8 rounded-md ${dmHomeActive ? 'ring-1 ring-primary/70' : ''}`}
-                aria-label="Direct messages"
-                aria-current={dmHomeActive ? 'page' : undefined}
-                onClick={onOpenDmHome}
-              />
-            }
-          >
-            <MessageCircleIcon className="size-4" />
-            {dmUnreadTotal > 0 ? (
-              <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
-                {formatUnreadCount(dmUnreadTotal)}
-              </span>
-            ) : null}
-          </TooltipTrigger>
-          <TooltipContent side="right">DM Home</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-md" aria-label="New message" onClick={onOpenDmCompose} />
-            }
-          >
-            <MessageCircleIcon className="size-4" />
-            <span className="absolute -right-0.5 -top-0.5 grid size-3 place-items-center rounded-full bg-primary text-[10px] leading-none text-primary-foreground">+</span>
-          </TooltipTrigger>
-          <TooltipContent side="right">Compose DM</TooltipContent>
-        </Tooltip>
-
-        {quickDmContacts.length > 0 ? (
-          <div className="flex flex-col items-center gap-1 py-1">
-            {quickDmContacts.map((contact) => {
-              const unread = dmUnreadByIdentity[normalizeIdentity(contact.identity)] ?? 0
-              return (
-                <Tooltip key={contact.identity}>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`relative h-8 w-8 rounded-md ${activeDmIdentity === contact.identity ? 'ring-1 ring-primary/70' : ''}`}
-                        aria-label={`Message ${contact.label}`}
-                        aria-current={activeDmIdentity === contact.identity ? 'page' : undefined}
-                        onClick={() => onOpenDmContact(contact.identity)}
-                      />
-                    }
-                  >
-                    <Avatar size="sm" className="rounded-full">
-                      {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
-                      <AvatarFallback className="rounded-full bg-primary/10 text-xs">{userInitials(contact.label)}</AvatarFallback>
-                    </Avatar>
-                    {unread > 0 ? (
-                      <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
-                        {formatUnreadCount(unread)}
-                      </span>
-                    ) : null}
-                    {dmCallActiveByIdentity[contact.identity] ? (
-                      <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
-                        <Volume2Icon className="size-2.5" />
-                      </span>
-                    ) : null}
-                  </TooltipTrigger>
-                  <TooltipContent side="right">{contact.label}</TooltipContent>
-                </Tooltip>
-              )
-            })}
-          </div>
-        ) : null}
+        <RailDirectMessages dmHomeActive={dmHomeActive} dmUnreadTotal={dmUnreadTotal} activeDmIdentity={activeDmIdentity}
+          quickDmContacts={quickDmContacts} onOpenDmHome={onOpenDmHome} onOpenDmCompose={onOpenDmCompose}
+          onOpenDmContact={onOpenDmContact} dmUnreadByIdentity={dmUnreadByIdentity} dmCallActiveByIdentity={dmCallActiveByIdentity} />
 
         <div className="mt-auto" />
 

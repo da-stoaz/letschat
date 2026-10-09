@@ -21,7 +21,7 @@ Browser checks use Chrome and the isolated sample fixture unless explicitly stat
 
 The initial implementation covered all 25 findings across ten commits. Each P1 received checks before its initial commit; subsequent implementation blocks contain at most five findings, with checks between blocks. Finding 4 received an additional checked follow-up to navigate directly to the resolved space. Later user-requested corrections are recorded below and in the status table.
 
-The app and site production builds, TypeScript, and full ESLint pass. Latest suites: **159 frontend checks**, **108 backend security checks**, and **212 API tests** passed. Chrome sample layout matrix: **89 passed**. The additive pinned-content and invite-destination procedures compiled, and bindings were generated with the matching 2.10.1 CLI.
+The app and site production builds, TypeScript, and full ESLint pass. Latest suites: **160 frontend checks**, **108 backend security checks**, and **212 API tests** passed. Chrome sample layout matrix: **89 passed**. The additive pinned-content and invite-destination procedures compiled, and bindings were generated with the matching 2.10.1 CLI.
 
 PR version check: v1.4.0 was already merged and released, so this follow-up is bumped to **v1.4.1** across the client, native shell, server, Core API, and both Rust lockfiles. Forward-version and consistency checks passed; all 159 frontend tests and the native release build passed again at v1.4.1.
 
@@ -50,3 +50,11 @@ Removed the Join call button's hardcoded 48px height. It now uses the shared 32p
 ### Leave button hover reveal
 
 Both active-call card layouts now expand the Leave button on fine-pointer hover or focus. Its right edge stays anchored while the icon moves left and the label reveals from left to right over 220ms. Leaving reverses the same transition; reduced motion uses the existing near-instant transition rule. Connecting calls reveal “Cancel” instead. Added desktop expansion/collapse checks for label clipping, icon movement, bounds, and anchoring. Chrome hover was visually inspected and all 89 sample layout checks passed. TypeScript, full ESLint, production build, and native release build passed; the native executable was rebuilt without replacing the installed app.
+
+### PR React Doctor feedback
+
+History requests now own their loading/error state by request ID, use ownership-aware completion updates, and invalidate pending ownership on unmount. Access/discovery and tag settings have dedicated components; rail DM shortcuts and the drag preview are separate render components, preserving the drag handlers. Removed the redundant status role from the rail fixture's native output element.
+
+Kept history pagination sequential because each completed page supplies the next cursor. The single await carries a scoped React Doctor suppression explaining that dependency, and a new regression check verifies that the second request waits and uses the first page's cursor. Also made the two test-only script extractors case-insensitive to address CodeQL feedback.
+
+Local React Doctor 0.9.17 scan against `origin/main`: **zero new errors or warnings**. TypeScript, full ESLint, all 160 frontend tests, production build, and native release build passed. An isolated Chrome check passed single-flight history, failure/retry, successful completion, and stale scope isolation; discovery and tag save retry were checked after the component extraction. All 89 layout checks and ten rail drag gestures passed again in Chrome. Temporary review fixtures were removed after verification.

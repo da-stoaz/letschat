@@ -80,17 +80,26 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   onLoadOlder,
   historyExhausted = false,
 }, ref) {
-  const [loadingHistory, setLoadingHistory] = useState(false)
-  const [historyError, setHistoryError] = useState<string | null>(null)
-  const historyRequest = useRef(false)
+  const [historyState, setHistoryState] = useState<{ requestId: symbol | null; loading: boolean; error: string | null }>({ requestId: null, loading: false, error: null })
+  const { loading: loadingHistory, error: historyError } = historyState
+  const historyRequest = useRef<symbol | null>(null)
+  useEffect(() => () => { historyRequest.current = null }, [])
   const requestOlder = async () => {
     if (!onLoadOlder || historyExhausted || historyRequest.current) return
-    historyRequest.current = true
-    setLoadingHistory(true)
-    setHistoryError(null)
+    const requestId = Symbol()
+    historyRequest.current = requestId
+    setHistoryState({ requestId, loading: true, error: null })
     try { await onLoadOlder() }
-    catch { setHistoryError('Could not load older messages.') }
-    finally { historyRequest.current = false; setLoadingHistory(false) }
+    catch {
+      if (historyRequest.current === requestId) {
+        setHistoryState(current => current.requestId === requestId ? { ...current, error: 'Could not load older messages.' } : current)
+      }
+    } finally {
+      if (historyRequest.current === requestId) {
+        historyRequest.current = null
+        setHistoryState(current => current.requestId === requestId ? { ...current, loading: false } : current)
+      }
+    }
   }
   const [initialReading] = useState(() => readingPositions.get(scopeKey))
   const [historyLimit, setHistoryLimit] = useState(() => initialReading

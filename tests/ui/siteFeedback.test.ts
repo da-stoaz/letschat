@@ -4,7 +4,7 @@ import ts from 'typescript'
 import { expect, it } from 'vitest'
 
 const download = readFileSync('site/src/pages/download.astro', 'utf8')
-const script = download.match(/<script>([\s\S]*?)<\/script>/)![1]
+const script = download.match(/<script>([\s\S]*?)<\/script>/i)![1]
 const keys = ['mac', 'windows-x64-msi', 'windows-x64-exe', 'windows-arm-msi', 'windows-arm-exe', 'linux-deb', 'linux-appimage']
 function element() {
   const classes = new Set<string>()
@@ -54,7 +54,7 @@ it('explains a release fetch failure for every format', async () => {
 })
 
 it('keeps all desktop choices for mobile and unknown instance visitors', () => {
-  const source = readFileSync('core-api/src/CoreApi/Pages/Index.cshtml', 'utf8').match(/<script>([\s\S]*?)<\/script>/)![1]
+  const source = readFileSync('core-api/src/CoreApi/Pages/Index.cshtml', 'utf8').match(/<script>([\s\S]*?)<\/script>/i)![1]
   for (const [userAgent, touches, expected] of [
     ['iPhone Mac OS', 5, null], ['Android Linux', 5, null], ['Macintosh', 5, null],
     ['Unknown', 0, null], ['Macintosh', 0, 'macos'], ['Windows NT', 0, 'windows'], ['Linux x86_64', 0, 'linux'],

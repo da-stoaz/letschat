@@ -108,7 +108,7 @@ export function RailDragFixture() {
         <button disabled={busy} onClick={() => void run(checks)}>Check rail drag gestures</button>
         <button disabled={busy} onClick={() => void run(() => preview('after'))}>Preview insertion bar</button>
         <button disabled={busy} onClick={() => void run(() => preview('center'))}>Preview grouping dot</button>
-      </div><output role="status">{result}</output>
+      </div><output>{result}</output>
       <pre aria-label="Rail order">{JSON.stringify({ order, groups }, null, 2)}</pre>
     </section>
   </main>
