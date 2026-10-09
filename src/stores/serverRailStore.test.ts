@@ -14,3 +14,13 @@ it('keeps an ungrouped space in the rail, whether the group survives or dissolve
   expect(group.serverIds).toEqual([2, 1])
   expect(useServerRailStore.getState().order.filter(item => typeof item === 'number')).toEqual([3, 4])
 })
+
+it('creates a folder at the target position when dragging from either side', () => {
+  for (const source of [1, 4]) {
+    const store = useServerRailStore.getState()
+    store.setOrderAndGroups([1, 2, 3, 4], {})
+    store.createGroup(source, 2)
+    const group = Object.values(useServerRailStore.getState().groups)[0]
+    expect(useServerRailStore.getState().order).toEqual(source === 1 ? [group.id, 3, 4] : [1, group.id, 3])
+  }
+})

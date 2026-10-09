@@ -90,9 +90,9 @@ export const useServerRailStore = create<ServerRailState>()(
             serverIds: [targetServerId, sourceServerId],
             collapsed: false,
           }
-          const newOrder = state.order.filter((item) => item !== sourceServerId && item !== targetServerId)
-          const targetIndex = state.order.findIndex((item) => item === targetServerId)
-          newOrder.splice(Math.max(0, targetIndex), 0, id)
+          const newOrder = state.order.filter((item) => item !== sourceServerId)
+          const targetIndex = newOrder.indexOf(targetServerId)
+          newOrder.splice(Math.max(0, targetIndex), targetIndex < 0 ? 0 : 1, id)
           return { order: newOrder, groups: { ...state.groups, [id]: group } }
         }),
 
