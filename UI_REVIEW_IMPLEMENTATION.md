@@ -44,3 +44,7 @@ The same ten checks passed in an isolated macOS Tauri WebView with sample data, 
 ### Join call button sizing
 
 Removed the Join call button's hardcoded 48px height. It now uses the shared 32px desktop button height; the existing mobile/coarse-pointer rule retains a 44px touch target. Added an idle voice channel to the sample fixture so the layout matrix checks the real Join call button's height and bounds at every viewport. Chrome: all 81 sample layout checks passed, with desktop and mobile appearance visually inspected. TypeScript, full ESLint, production build, and the native release build (`tauri build --no-bundle`) passed. The native executable was rebuilt; the installed app was not replaced.
+
+### Leave button hover reveal
+
+Both active-call card layouts now expand the Leave button on fine-pointer hover or focus. Its right edge stays anchored while the icon moves left and the label reveals from left to right over 220ms. Leaving reverses the same transition; reduced motion uses the existing near-instant transition rule. Connecting calls reveal “Cancel” instead. Added desktop expansion/collapse checks for label clipping, icon movement, bounds, and anchoring. Chrome hover was visually inspected and all 89 sample layout checks passed. TypeScript, full ESLint, production build, and native release build passed; the native executable was rebuilt without replacing the installed app.

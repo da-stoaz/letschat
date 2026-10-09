@@ -98,6 +98,18 @@
         }
         if (path === '/app/1/12' && width >= 768) {
           if (doc.querySelector('[aria-label="Call controls"]') || doc.querySelectorAll('button[aria-label="End call"]').length !== 1) failures.push(`${width}: duplicate or missing dock controls`);
+          const leave = doc.querySelector('.call-leave-button');
+          const collapsed = leave?.getBoundingClientRect();
+          const iconLeft = leave?.querySelector('svg')?.getBoundingClientRect().left;
+          leave?.focus({preventScroll:true});
+          await new Promise(resolve => setTimeout(resolve,250));
+          const expanded = leave?.getBoundingClientRect();
+          const label = leave?.querySelector('.call-leave-label > span');
+          if (!expanded || !collapsed || expanded.width <= collapsed.width || Math.abs(expanded.right - collapsed.right) > 1 || leave.querySelector('svg').getBoundingClientRect().left >= iconLeft || label.clientWidth < label.scrollWidth || expanded.left < 0 || expanded.bottom > height) failures.push(`${width}: Leave label expansion or anchoring`);
+          leave?.blur();
+          await new Promise(resolve => setTimeout(resolve,250));
+          if (!collapsed || Math.abs(leave.getBoundingClientRect().width - collapsed.width) > 1) failures.push(`${width}: Leave label collapse`);
+          count += 2;
         }
         count++;
         if (path === '/app/call' && width >= 768) {

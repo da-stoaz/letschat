@@ -161,6 +161,20 @@
   button, a, [role='menuitem'] { touch-action: manipulation; }
   button:active:not(:disabled) { filter: brightness(0.9); }
 
+  .call-leave-label {
+    display: grid;
+    grid-template-columns: 0fr;
+    transition: grid-template-columns 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .call-leave-label > span {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .call-leave-button:focus .call-leave-label { grid-template-columns: 1fr; }
+  @media (hover: hover) and (pointer: fine) {
+    .call-leave-button:hover .call-leave-label { grid-template-columns: 1fr; }
+  }
+
   @media (max-width: 767px), (pointer: coarse) {
     [data-slot='switch']::after {
       inset-block: auto;

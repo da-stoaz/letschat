@@ -687,8 +687,9 @@ export function ActiveCallCard({
               <MonitorUpIcon className="size-4" />
             </Button>
 
-            <Button size="icon-xs" variant="destructive" className="h-8 w-8" aria-label={connecting ? 'Cancel call' : 'End call'} onClick={onLeave}>
-              <LogOutIcon className="size-4" />
+            <Button size="icon-xs" variant="destructive" className="call-leave-button h-8 w-auto gap-0 p-0" aria-label={connecting ? 'Cancel call' : 'End call'} onClick={onLeave}>
+              <span className="flex h-full w-[calc(2rem-2px)] shrink-0 items-center justify-center"><LogOutIcon className="size-4" /></span>
+              <span className="call-leave-label" aria-hidden="true"><span><span className="block pr-2">{connecting ? 'Cancel' : 'Leave'}</span></span></span>
             </Button>
           </div>
 
@@ -817,8 +818,9 @@ export function ActiveCallCard({
           >
             <MonitorUpIcon className="size-5" />
           </Button>
-          <Button size="icon-sm" variant="destructive" onClick={onLeave}>
-            <LogOutIcon className="size-5" />
+          <Button size="icon-sm" variant="destructive" className="call-leave-button w-auto gap-0 p-0" aria-label={connecting ? 'Cancel call' : 'End call'} onClick={onLeave}>
+            <span className="flex h-full w-[calc(1.75rem-2px)] shrink-0 items-center justify-center"><LogOutIcon className="size-5" /></span>
+            <span className="call-leave-label" aria-hidden="true"><span><span className="block pr-2">{connecting ? 'Cancel' : 'Leave'}</span></span></span>
           </Button>
         </div>
 
