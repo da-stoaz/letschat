@@ -83,6 +83,9 @@
         await new Promise(resolve => setTimeout(resolve,150));
         if (!sampleMode) return;
         const doc = frame.contentDocument;
+        if (width >= 768 && ['/app/spaces', '/app/messages', '/app/1/channels'].includes(path)) {
+          if (doc.querySelector('nav[aria-label="Conversations"]') || !doc.querySelector('[aria-label="Resize channel bar"]')) failures.push(`${width} ${path}: compact list shown on desktop`);
+        }
         const composer = doc.querySelector('textarea')?.getBoundingClientRect();
         if (doc.documentElement.scrollWidth > width) failures.push(`${width} ${path}: page overflow`);
         if (composer && (composer.width < 100 || composer.right > width || composer.bottom > height)) failures.push(`${width} ${path}: composer clipped`);

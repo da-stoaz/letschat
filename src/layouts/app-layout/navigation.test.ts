@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appHomePath, paneWidths, parentListPath } from './navigation'
+import { appHomePath, desktopListPath, paneWidths, parentListPath } from './navigation'
 
 describe('responsive navigation', () => {
   it('opens lists on compact screens and retains the preferred desktop space', () => {
@@ -8,6 +8,14 @@ describe('responsive navigation', () => {
     expect(appHomePath(false, [1, 2], 2)).toBe('/app/2')
     expect(appHomePath(false, [1, 2], 3)).toBe('/app/1')
     expect(appHomePath(false, [], null)).toBe('/app/dm/friends')
+  })
+
+  it('replaces compact list routes with their desktop destinations', () => {
+    expect(desktopListPath('/app/spaces', [1, 2], 2)).toBe('/app/2')
+    expect(desktopListPath('/app/spaces', [1, 2], 3)).toBe('/app/1')
+    expect(desktopListPath('/app/spaces', [], null)).toBe('/app/dm/friends')
+    expect(desktopListPath('/app/messages', [1, 2], 2)).toBe('/app/dm/friends')
+    expect(desktopListPath('/app/1/channels', [1, 2], 2)).toBe('/app/1')
   })
 
   it.each([

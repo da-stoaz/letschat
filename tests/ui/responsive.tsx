@@ -119,6 +119,7 @@ export function Fixture() {
       <Route path="call" element={<CallPreview />} />
       <Route path="1/12" element={<CallPreview docked />} />
       <Route path=":serverId/channels" element={<NavigationPage />} />
+      <Route path=":serverId" element={<ServerChannelPage />} />
       <Route path=":serverId/:channelId" element={<ServerChannelPage />} />
       <Route path="dm/:identity" element={<DMPage />} />
       <Route path="settings" element={<SettingsPage />} />

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Link, NavLink, useLocation, useOutletContext } from 'react-router-dom'
+import { Link, Navigate, NavLink, useLocation, useOutletContext } from 'react-router-dom'
 import { CompassIcon, MoreHorizontalIcon, PlusIcon, SettingsIcon, ArrowLeftIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -7,6 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { serverInitials } from '../layouts/app-layout/helpers'
 import type { Server } from '../types/domain'
+import { useServersStore } from '../stores/serversStore'
+import { desktopListPath } from '../layouts/app-layout/navigation'
 
 export interface NavigationContext {
   channelBar: ReactNode
@@ -33,11 +35,15 @@ function SpacesList({ servers, countUnreadInServer }: Pick<NavigationContext, 's
 export function NavigationPage() {
   const { channelBar, servers, countUnreadInServer, onCreateSpace, onCompose } = useOutletContext<NavigationContext>()
   const isMobile = useIsMobile()
+  const activeServerId = useServersStore(s => s.activeServerId)
   const { pathname: routePath } = useLocation()
   const pathname = routePath.replace(/\/+$/, '')
   const spaces = pathname === '/app/spaces'
   const messages = pathname === '/app/messages'
   const conversations = spaces || messages
+  if (!isMobile) {
+    return <Navigate to={desktopListPath(pathname, servers.map(server => server.id), activeServerId)} replace />
+  }
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col">
       <div className="min-h-0 flex-1">
