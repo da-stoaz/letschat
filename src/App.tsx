@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
 import { AuthPage } from './pages/AuthPage'
+import { authReturnPath } from './features/auth/returnPath'
 import { InvitePage } from './pages/InvitePage'
 import { SetupPage } from './pages/SetupPage'
 import { NavigationPage } from './pages/NavigationPage'
@@ -134,7 +135,7 @@ function App() {
       <Route path="/setup" element={isConfigured ? <Navigate to="/" replace /> : <SetupPage />} />
       <Route path="/join" element={<WebJoinPage />} />
       <Route path="/" element={<Navigate to={user ? '/app' : '/auth'} replace />} />
-      <Route path="/auth" element={user ? <Navigate to="/app" replace /> : <AuthPage />} />
+      <Route path="/auth" element={user ? <Navigate to={authReturnPath(location.search)} replace /> : <AuthPage />} />
       <Route path="/invite/:token" element={<InvitePage />} />
 
       <Route path="/app" element={user ? <AppLayout /> : <Navigate to="/auth" replace />}>
