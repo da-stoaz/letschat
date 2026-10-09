@@ -32,6 +32,7 @@ const { code, label } = Astro.props;
     </button>
   </div>
   <pre><code>{code}</code></pre>
+  <p data-copy-status role="status" class="text-xs px-4" aria-live="polite"></p>
 </figure>
 
 <script>
@@ -44,8 +45,10 @@ const { code, label } = Astro.props;
     const code = block?.querySelector("code")?.textContent ?? "";
     if (!code) return;
 
+    let copied = false;
     try {
       await navigator.clipboard.writeText(code);
+      copied = true;
     } catch {
       // Fallback for non-secure contexts / older engines.
       const ta = document.createElement("textarea");
@@ -55,13 +58,20 @@ const { code, label } = Astro.props;
       document.body.appendChild(ta);
       ta.select();
       try {
-        document.execCommand("copy");
+        copied = document.execCommand("copy");
       } catch {
-        /* give up silently */
+        copied = false;
       }
       ta.remove();
     }
 
+    if (!copied) {
+      const status = block?.querySelector('[data-copy-status]');
+      if (status) status.textContent = 'Could not copy. Select the code and copy it manually.';
+      return;
+    }
+    const status = block?.querySelector('[data-copy-status]');
+    if (status) status.textContent = 'Copied to clipboard.';
     btn.classList.add("is-copied");
     const text = btn.querySelector(".copy-text");
     if (text) text.textContent = "Copied";
@@ -74,7 +84,7 @@ const { code, label } = Astro.props;
 
 <style>
   .code-block {
-    margin: 0 0.25 rem 0.75rem 0;
+    margin: 0 0.25rem 0.75rem 0;
     border-radius: 0.8rem;
     border: 1px solid oklch(1 0 0 / 0.12);
     background: oklch(0.115 0.008 250);

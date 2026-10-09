@@ -1,38 +1,39 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { reducers } from '../lib/spacetimedb'
+import { acceptInvite } from '../features/auth/acceptInvite'
+import { useSelfStore } from '../stores/selfStore'
 import { useServersStore } from '../stores/serversStore'
-import { useConnectionStore } from '../stores/connectionStore'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ServerIcon, CheckIcon, XIcon, LoaderCircleIcon } from 'lucide-react'
 
 export function InvitePage() {
   const { token = '' } = useParams()
+  return <InviteLanding key={token} token={token} />
+}
+
+function InviteLanding({ token }: { token: string }) {
   const navigate = useNavigate()
   const [status, setStatus] = useState<'idle' | 'joining' | 'joined' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const selfIdentity = useConnectionStore((s) => s.identity)
-  const isAuthenticated = Boolean(selfIdentity)
+  const isAuthenticated = useSelfStore((s) => Boolean(s.user))
+  const [joinedServerId, setJoinedServerId] = useState<number | null>(null)
+  const membershipReady = useServersStore(s => s.servers.some(server => server.id === joinedServerId))
+  useEffect(() => {
+    if (status === 'joined' && joinedServerId !== null && membershipReady) {
+      navigate(`/app/${joinedServerId}/channels`, { replace: true })
+    }
+  }, [status, joinedServerId, membershipReady, navigate])
 
   const handleJoin = async () => {
+    if (!isAuthenticated || status === 'joining') return
     setStatus('joining')
     setErrorMsg(null)
     try {
-      await reducers.useInvite(token)
+      const serverId = await acceptInvite(token)
+      setJoinedServerId(serverId)
       setStatus('joined')
 
-      // Wait a moment for the sync to propagate, then redirect
-      setTimeout(() => {
-        const servers = useServersStore.getState().servers
-        // Find the server we just joined (last added)
-        if (servers.length > 0) {
-          const latest = servers[servers.length - 1]
-          navigate(`/app/${latest.id}`)
-        } else {
-          navigate('/app')
-        }
-      }, 800)
     } catch (e) {
       setStatus('error')
       setErrorMsg(e instanceof Error ? e.message : 'Failed to join space.')
@@ -60,14 +61,14 @@ export function InvitePage() {
             </div>
 
             {status === 'joined' && (
-              <div className="flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 p-3 text-green-600 dark:text-green-400 text-sm">
+              <div role="status" className="flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 p-3 text-green-600 dark:text-green-400 text-sm">
                 <CheckIcon className="size-4 shrink-0" />
-                Joined! Redirecting…
+                Joined! Waiting for your space to sync…
               </div>
             )}
 
             {status === 'error' && errorMsg && (
-              <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-destructive text-sm">
+              <div role="alert" className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-destructive text-sm">
                 <XIcon className="size-4 shrink-0" />
                 {errorMsg}
               </div>
@@ -80,13 +81,13 @@ export function InvitePage() {
                 <p className="text-sm text-muted-foreground text-center mb-1">
                   You need to be signed in to join a space.
                 </p>
-                <Button className="w-full" onClick={() => navigate(`/auth?redirect=/invite/${token}`)}>
+                <Button className="w-full" onClick={() => navigate(`/auth?redirect=${encodeURIComponent(`/invite/${token}`)}`)}>
                   Sign in to join
                 </Button>
               </>
             ) : status === 'joined' ? (
-              <Button className="w-full" variant="secondary" onClick={() => navigate('/app')}>
-                Go to app
+              <Button className="w-full" variant="secondary" onClick={() => navigate('/app/spaces')}>
+                Open spaces
               </Button>
             ) : (
               <Button
@@ -107,10 +108,10 @@ export function InvitePage() {
                 )}
               </Button>
             )}
-            <Button variant="ghost" className="w-full text-muted-foreground" onClick={() => navigate('/app')}>
+            {status !== 'joined' && <Button variant="ghost" className="w-full text-muted-foreground" onClick={() => navigate('/app')}>
               <XIcon className="size-4" />
               Decline
-            </Button>
+            </Button>}
           </CardFooter>
         </Card>
 

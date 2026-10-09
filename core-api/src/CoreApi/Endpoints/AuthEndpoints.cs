@@ -806,7 +806,7 @@ public static class AuthEndpoints
         var encodedToken = System.Net.WebUtility.HtmlEncode(token);
         var errorHtml = error is null
             ? ""
-            : $"""<p style="color:#dc2626;font-size:14px;margin:0 0 16px">{System.Net.WebUtility.HtmlEncode(error)}</p>""";
+            : $"""<p role="alert" style="color:#dc2626;font-size:14px;margin:0 0 16px">{System.Net.WebUtility.HtmlEncode(error)}</p>""";
         var html =
             $"""
              <!doctype html>
@@ -826,14 +826,14 @@ public static class AuthEndpoints
                  {errorHtml}
                  <input type="hidden" name="userId" value="{encodedUserId}">
                  <input type="hidden" name="token" value="{encodedToken}">
-                 <label style="display:block;font-size:13px;color:#374151;margin:0 0 6px">New password</label>
-                 <input type="password" name="password" required autofocus
+                 <label for="new-password" style="display:block;font-size:13px;color:#374151;margin:0 0 6px">New password</label>
+                 <input id="new-password" type="password" name="password" autocomplete="new-password" required autofocus aria-describedby="password-hint"
                         minlength="8" maxlength="{Validation.MaxPasswordLength}"
                         style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:15px;margin:0 0 6px;
                                border:1px solid #d1d5db;border-radius:8px">
-                 <p style="color:#6b7280;font-size:12px;margin:0 0 16px">8–{Validation.MaxPasswordLength} characters.</p>
-                 <label style="display:block;font-size:13px;color:#374151;margin:0 0 6px">Confirm password</label>
-                 <input type="password" name="confirmPassword" required
+                 <p id="password-hint" style="color:#6b7280;font-size:12px;margin:0 0 16px">8–{Validation.MaxPasswordLength} characters.</p>
+                 <label for="confirm-password" style="display:block;font-size:13px;color:#374151;margin:0 0 6px">Confirm password</label>
+                 <input id="confirm-password" type="password" name="confirmPassword" autocomplete="new-password" required
                         minlength="8" maxlength="{Validation.MaxPasswordLength}"
                         style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:15px;margin:0 0 20px;
                                border:1px solid #d1d5db;border-radius:8px">

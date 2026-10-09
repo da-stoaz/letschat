@@ -1,3 +1,6 @@
+import { useQuery } from '@tanstack/react-query'
+import { loadPinnedChannelMessages } from '../../lib/spacetimedb/history'
+import { useConnectionStore } from '../../stores/connectionStore'
 import { useMemo, useState } from 'react'
 import { PinIcon, PinOffIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -44,7 +47,7 @@ function PinRow({
       <button type="button" onClick={() => onJump(pin.messageId)} className="min-w-0 flex-1 text-left">
         <div className="flex items-center justify-between gap-2">
           <span className="truncate text-xs font-semibold">{author.displayName}</span>
-          <span className="shrink-0 text-[11px] text-muted-foreground">{formatTimestamp(pin.sentAt)}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">{formatTimestamp(pin.sentAt)}</span>
         </div>
         <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{preview}</p>
       </button>
@@ -64,6 +67,7 @@ function PinRow({
 }
 
 export function ChannelPinsPopover({
+  channelId,
   pins,
   messages,
   canModerate,
@@ -73,6 +77,7 @@ export function ChannelPinsPopover({
   mobileOpen = false,
   onMobileOpenChange,
 }: {
+  channelId: number
   pins: PinnedMessage[]
   compact?: boolean
   mobileOpen?: boolean
@@ -89,8 +94,16 @@ export function ChannelPinsPopover({
     else setDesktopOpen(next)
   }
 
+  const identity = useConnectionStore(s => s.identity)
+  const pinContent = useQuery({
+    queryKey: ['pinned-content', identity, channelId, pins.map(pin => pin.messageId).join(',')],
+    queryFn: () => loadPinnedChannelMessages(channelId),
+    enabled: open && pins.some(pin => !messages.some(message => message.id === pin.messageId)),
+    retry: false,
+  })
+
   const resolved = useMemo<ResolvedPin[]>(() => {
-    const byId = new Map(messages.map((message) => [message.id, message]))
+    const byId = new Map([...(pinContent.data ?? []), ...messages].map((message) => [message.id, message]))
     const rows: ResolvedPin[] = []
     for (const pin of pins) {
       const message = byId.get(pin.messageId)
@@ -106,11 +119,14 @@ export function ChannelPinsPopover({
       })
     }
     return rows
-  }, [pins, messages])
+  }, [pins, messages, pinContent.data])
 
   const content = <>
         <div className="max-h-72 overflow-y-auto app-scrollbar">
-          {resolved.length === 0 ? (
+          {pinContent.isFetching && <p role="status" className="p-2 text-sm text-muted-foreground">Loading pinned messages…</p>}
+          {pinContent.isError && <div role="alert" className="p-2 text-sm text-destructive">Could not load pinned messages. <Button size="sm" variant="outline" onClick={() => void pinContent.refetch()}>Retry</Button></div>}
+          {resolved.length < pins.length && !pinContent.isFetching && !pinContent.isError && <p className="p-2 text-sm text-muted-foreground">Some pinned content is unavailable.</p>}
+          {pins.length === 0 ? (
             <p className="px-2 py-4 text-center text-xs text-muted-foreground">
               No pinned messages yet.
             </p>

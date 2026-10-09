@@ -10,6 +10,11 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const ArchiveReplicationStatus = __t.object("ArchiveReplicationStatus", {
+  canDelete: __t.bool(),
+});
+export type ArchiveReplicationStatus = __Infer<typeof ArchiveReplicationStatus>;
+
 export const ArchiveService = __t.object("ArchiveService", {
   id: __t.u8(),
   serviceIdentity: __t.identity(),

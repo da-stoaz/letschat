@@ -56,6 +56,7 @@ export function CreateChannelModal({
   const [newSectionName, setNewSectionName] = useState('')
   const [kind, setKind] = useState<ChannelKind>('Text')
   const [moderatorOnly, setModeratorOnly] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   return (
@@ -63,6 +64,8 @@ export function CreateChannelModal({
       className="space-y-4"
       onSubmit={async (event) => {
         event.preventDefault()
+        if (submitting) return
+        setSubmitting(true)
         setError(null)
         try {
           if (sectionSelection === SECTION_NEW_VALUE && newSectionName.trim().length === 0) {
@@ -79,6 +82,8 @@ export function CreateChannelModal({
         } catch (e) {
           const message = e instanceof Error ? e.message : 'Could not create channel.'
           setError(message)
+        } finally {
+          setSubmitting(false)
         }
       }}
     >
@@ -93,9 +98,9 @@ export function CreateChannelModal({
       </div>
 
       <div className="space-y-2">
-        <Label>Section</Label>
+        <Label htmlFor="create-channel-section">Section</Label>
         <Select value={sectionSelection} onValueChange={(value) => setSectionSelection(value ?? SECTION_NONE_VALUE)}>
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="create-channel-section" className="w-full">
             <SelectValue>{sectionSelectionLabel(sectionSelection)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -109,19 +114,23 @@ export function CreateChannelModal({
           </SelectContent>
         </Select>
         {sectionSelection === SECTION_NEW_VALUE ? (
+          <>
+          <Label htmlFor="create-section-name">New section name</Label>
           <Input
+            id="create-section-name"
             value={newSectionName}
             onChange={(event) => setNewSectionName(event.target.value)}
             maxLength={40}
             placeholder="Section name"
           />
+          </>
         ) : null}
       </div>
 
       <div className="space-y-2">
-        <Label>Channel type</Label>
+        <Label htmlFor="create-channel-type">Channel type</Label>
         <Select value={kind} onValueChange={(value) => setKind(value as ChannelKind)}>
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="create-channel-type" className="w-full">
             <SelectValue placeholder="Select channel type" />
           </SelectTrigger>
           <SelectContent>
@@ -134,18 +143,18 @@ export function CreateChannelModal({
 
       <div className="flex items-center justify-between rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
         <div>
-          <p className="text-sm font-medium">Moderator only</p>
+          <Label htmlFor="create-channel-mod-only">Moderator only</Label>
           <p className="text-xs text-muted-foreground">Restrict posting/joining to moderators and owners.</p>
         </div>
-        <Switch checked={moderatorOnly} onCheckedChange={setModeratorOnly} />
+        <Switch id="create-channel-mod-only" checked={moderatorOnly} onCheckedChange={setModeratorOnly} />
       </div>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit">Create</Button>
+        <Button type="submit" disabled={submitting}>{submitting ? 'Creating…' : 'Create'}</Button>
       </div>
     </form>
   )

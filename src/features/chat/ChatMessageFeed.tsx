@@ -63,7 +63,8 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
    * subscription only carries a recent window, so this is where the next page
    * of older history gets fetched.
    */
-  onLoadOlder?: () => void
+  onLoadOlder?: () => Promise<void>
+  historyExhausted?: boolean
 }>(function ChatMessageFeed({
   scopeKey,
   messages,
@@ -77,7 +78,29 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   pinnedMessageIds = null,
   onTogglePin,
   onLoadOlder,
+  historyExhausted = false,
 }, ref) {
+  const [historyState, setHistoryState] = useState<{ requestId: symbol | null; loading: boolean; error: string | null }>({ requestId: null, loading: false, error: null })
+  const { loading: loadingHistory, error: historyError } = historyState
+  const historyRequest = useRef<symbol | null>(null)
+  useEffect(() => () => { historyRequest.current = null }, [])
+  const requestOlder = async () => {
+    if (!onLoadOlder || historyExhausted || historyRequest.current) return
+    const requestId = Symbol()
+    historyRequest.current = requestId
+    setHistoryState({ requestId, loading: true, error: null })
+    try { await onLoadOlder() }
+    catch {
+      if (historyRequest.current === requestId) {
+        setHistoryState(current => current.requestId === requestId ? { ...current, error: 'Could not load older messages.' } : current)
+      }
+    } finally {
+      if (historyRequest.current === requestId) {
+        historyRequest.current = null
+        setHistoryState(current => current.requestId === requestId ? { ...current, loading: false } : current)
+      }
+    }
+  }
   const [initialReading] = useState(() => readingPositions.get(scopeKey))
   const [historyLimit, setHistoryLimit] = useState(() => initialReading
     ? initialReading.historyLimit + Math.max(0, messages.length - initialReading.messageCount)
@@ -280,7 +303,7 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
             if (historyLimit >= sortedMessages.length) {
               // Everything the client holds is on screen — ask for the next
               // page from the module.
-              onLoadOlder?.()
+              if (!historyError) void requestOlder()
             } else {
               setHistoryLimit((previous) => Math.min(sortedMessages.length, previous + HISTORY_PAGE_SIZE))
             }
@@ -288,6 +311,9 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
         }}
       >
         <div>
+          {loadingHistory && <p role="status" className="p-2 text-center text-sm text-muted-foreground">Loading older messages…</p>}
+          {historyError && <div role="alert" className="p-2 text-center text-sm text-destructive">{historyError} <Button variant="outline" size="sm" onClick={() => void requestOlder()}>Retry</Button></div>}
+          {historyExhausted && historyLimit >= sortedMessages.length && <p className="p-2 text-center text-xs text-muted-foreground">Beginning of conversation</p>}
           {feedItems.map((item) => (
             <div key={item.key}>
               {item.type === 'date' ? (
@@ -306,9 +332,7 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
                   pinnedMessageIds={pinnedMessageIds}
                   onTogglePin={onTogglePin}
                   onEditMessage={onEditMessage ?? (() => undefined)}
-                  onDeleteMessage={(message) => {
-                    void onDeleteMessage(message)
-                  }}
+                  onDeleteMessage={onDeleteMessage}
                 />
               )}
             </div>

@@ -33,7 +33,7 @@
     const frame = document.querySelector('iframe');
     let sampleMode = false;
     const sizes = [[320,568],[390,740],[430,740],[768,740],[844,390],[1024,740],[1440,740]];
-    const routes = [['Spaces','/app/spaces'],['Channels','/app/1/channels'],['Conversation','/app/1/10'],['Messages','/app/messages'],['DM','/app/dm/friend'],['Friends','/app/dm/friends'],['Settings','/app/settings'],['Invalid channel','/app/1/999'],['Call preview','/app/call'],['Voice channel','/app/1/12']];
+    const routes = [['Spaces','/app/spaces'],['Channels','/app/1/channels'],['Conversation','/app/1/10'],['Messages','/app/messages'],['DM','/app/dm/friend'],['Friends','/app/dm/friends'],['Settings','/app/settings'],['Invalid channel','/app/1/999'],['Call preview','/app/call'],['Voice channel','/app/1/12'],['Join call','/app/1/13']];
 
     function setSize(width, height) {
       frame.width = width;
@@ -83,13 +83,33 @@
         await new Promise(resolve => setTimeout(resolve,150));
         if (!sampleMode) return;
         const doc = frame.contentDocument;
+        if (width >= 768 && ['/app/spaces', '/app/messages', '/app/1/channels'].includes(path)) {
+          if (doc.querySelector('nav[aria-label="Conversations"]') || !doc.querySelector('[aria-label="Resize channel bar"]')) failures.push(`${width} ${path}: compact list shown on desktop`);
+        }
         const composer = doc.querySelector('textarea')?.getBoundingClientRect();
         if (doc.documentElement.scrollWidth > width) failures.push(`${width} ${path}: page overflow`);
         if (composer && (composer.width < 100 || composer.right > width || composer.bottom > height)) failures.push(`${width} ${path}: composer clipped`);
         const end = doc.querySelector('button[aria-label="End call"]')?.getBoundingClientRect();
         if (end && (end.left < 0 || end.top < 0 || end.bottom > height || end.right > width || (width < 768 && (end.width < 44 || end.height < 44)))) failures.push(`${width}x${height} ${path}: call controls clipped`);
+        if (path === '/app/1/13') {
+          const join = [...doc.querySelectorAll('button')].find(button => button.textContent.trim() === 'Join call')?.getBoundingClientRect();
+          const expectedHeight = width < 768 || frame.contentWindow.matchMedia('(pointer: coarse)').matches ? 44 : 32;
+          if (!join || join.height !== expectedHeight || join.right > width || join.bottom > height) failures.push(`${width}x${height}: Join call sizing or bounds`);
+        }
         if (path === '/app/1/12' && width >= 768) {
           if (doc.querySelector('[aria-label="Call controls"]') || doc.querySelectorAll('button[aria-label="End call"]').length !== 1) failures.push(`${width}: duplicate or missing dock controls`);
+          const leave = doc.querySelector('.call-leave-button');
+          const collapsed = leave?.getBoundingClientRect();
+          const iconLeft = leave?.querySelector('svg')?.getBoundingClientRect().left;
+          leave?.focus({preventScroll:true});
+          await new Promise(resolve => setTimeout(resolve,250));
+          const expanded = leave?.getBoundingClientRect();
+          const label = leave?.querySelector('.call-leave-label > span');
+          if (!expanded || !collapsed || expanded.width <= collapsed.width || Math.abs(expanded.right - collapsed.right) > 1 || leave.querySelector('svg').getBoundingClientRect().left >= iconLeft || label.clientWidth < label.scrollWidth || expanded.left < 0 || expanded.bottom > height) failures.push(`${width}: Leave label expansion or anchoring`);
+          leave?.blur();
+          await new Promise(resolve => setTimeout(resolve,250));
+          if (!collapsed || Math.abs(leave.getBoundingClientRect().width - collapsed.width) > 1) failures.push(`${width}: Leave label collapse`);
+          count += 2;
         }
         count++;
         if (path === '/app/call' && width >= 768) {

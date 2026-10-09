@@ -125,6 +125,8 @@ import UseInviteReducer from "./use_invite_reducer";
 // Import all procedure arg schemas
 import * as LoadOlderChannelMessagesProcedure from "./load_older_channel_messages_procedure";
 import * as LoadOlderDirectMessagesProcedure from "./load_older_direct_messages_procedure";
+import * as LoadPinnedChannelMessagesProcedure from "./load_pinned_channel_messages_procedure";
+import * as ResolveInviteServerProcedure from "./resolve_invite_server_procedure";
 
 // Import all table schema definitions
 import ArchiveBansRow from "./archive_bans_table";
@@ -138,6 +140,7 @@ import ArchiveJoinRequestsRow from "./archive_join_requests_table";
 import ArchiveMessagesRow from "./archive_messages_table";
 import ArchivePinnedMessagesRow from "./archive_pinned_messages_table";
 import ArchiveReadStatesRow from "./archive_read_states_table";
+import ArchiveReplicationStatusRow from "./archive_replication_status_table";
 import ArchiveServerMembersRow from "./archive_server_members_table";
 import ArchiveServersRow from "./archive_servers_table";
 import ArchiveServiceRow from "./archive_service_table";
@@ -267,6 +270,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, ArchiveReadStatesRow),
+  archiveReplicationStatus: __table({
+    name: 'archive_replication_status',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ArchiveReplicationStatusRow),
   archiveServerMembers: __table({
     name: 'archive_server_members',
     indexes: [
@@ -525,6 +535,8 @@ const reducersSchema = __reducers(
 const proceduresSchema = __procedures(
   __procedureSchema("load_older_channel_messages", LoadOlderChannelMessagesProcedure.params, LoadOlderChannelMessagesProcedure.returnType),
   __procedureSchema("load_older_direct_messages", LoadOlderDirectMessagesProcedure.params, LoadOlderDirectMessagesProcedure.returnType),
+  __procedureSchema("load_pinned_channel_messages", LoadPinnedChannelMessagesProcedure.params, LoadPinnedChannelMessagesProcedure.returnType),
+  __procedureSchema("resolve_invite_server", ResolveInviteServerProcedure.params, ResolveInviteServerProcedure.returnType),
 );
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {
@@ -555,6 +567,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "archive_pinned_messages": Omit<typeof tablesSchema.schemaType.tables["archivePinnedMessages"], "accessorName"> & { readonly accessorName: "archive_pinned_messages" };
     /** @deprecated Use `archiveReadStates` instead. This alias will be removed in the next major version. */
     readonly "archive_read_states": Omit<typeof tablesSchema.schemaType.tables["archiveReadStates"], "accessorName"> & { readonly accessorName: "archive_read_states" };
+    /** @deprecated Use `archiveReplicationStatus` instead. This alias will be removed in the next major version. */
+    readonly "archive_replication_status": Omit<typeof tablesSchema.schemaType.tables["archiveReplicationStatus"], "accessorName"> & { readonly accessorName: "archive_replication_status" };
     /** @deprecated Use `archiveServerMembers` instead. This alias will be removed in the next major version. */
     readonly "archive_server_members": Omit<typeof tablesSchema.schemaType.tables["archiveServerMembers"], "accessorName"> & { readonly accessorName: "archive_server_members" };
     /** @deprecated Use `archiveServers` instead. This alias will be removed in the next major version. */
@@ -632,6 +646,7 @@ const tableAccessorAliases = {
   "archive_messages": "archiveMessages",
   "archive_pinned_messages": "archivePinnedMessages",
   "archive_read_states": "archiveReadStates",
+  "archive_replication_status": "archiveReplicationStatus",
   "archive_server_members": "archiveServerMembers",
   "archive_servers": "archiveServers",
   "archive_users": "archiveUsers",
@@ -701,6 +716,8 @@ export type DbView = __DbViewBase & {
   readonly "archive_pinned_messages": __DbViewBase["archivePinnedMessages"];
   /** @deprecated Use `archiveReadStates` instead. This alias will be removed in the next major version. */
   readonly "archive_read_states": __DbViewBase["archiveReadStates"];
+  /** @deprecated Use `archiveReplicationStatus` instead. This alias will be removed in the next major version. */
+  readonly "archive_replication_status": __DbViewBase["archiveReplicationStatus"];
   /** @deprecated Use `archiveServerMembers` instead. This alias will be removed in the next major version. */
   readonly "archive_server_members": __DbViewBase["archiveServerMembers"];
   /** @deprecated Use `archiveServers` instead. This alias will be removed in the next major version. */
@@ -777,6 +794,8 @@ export type Tables = __TablesBase & {
   readonly "archive_pinned_messages": __TablesBase["archivePinnedMessages"];
   /** @deprecated Use `archiveReadStates` instead. This alias will be removed in the next major version. */
   readonly "archive_read_states": __TablesBase["archiveReadStates"];
+  /** @deprecated Use `archiveReplicationStatus` instead. This alias will be removed in the next major version. */
+  readonly "archive_replication_status": __TablesBase["archiveReplicationStatus"];
   /** @deprecated Use `archiveServerMembers` instead. This alias will be removed in the next major version. */
   readonly "archive_server_members": __TablesBase["archiveServerMembers"];
   /** @deprecated Use `archiveServers` instead. This alias will be removed in the next major version. */

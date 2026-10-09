@@ -129,27 +129,31 @@ export function ServerManagePage() {
   }
 
   const updateDiscovery = async (isDiscoverable: boolean, description: string | null) => {
-    if (!isOwner || !server) return
+    if (!isOwner || !server) return false
     setDiscoverySaving(true)
     try {
       await reducers.setServerDiscovery(server.id, isDiscoverable, description)
       toast.success('Discovery settings updated')
+      return true
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not update discovery settings.'
       toast.error('Failed to update discovery', { description: message })
+      return false
     } finally {
       setDiscoverySaving(false)
     }
   }
 
   const updateTags = async (tags: string[]) => {
-    if (!isOwner || !server) return
+    if (!isOwner || !server) return false
     setDiscoverySaving(true)
     try {
       await reducers.setServerTags(server.id, tags)
+      return true
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not update tags.'
       toast.error('Failed to update tags', { description: message })
+      return false
     } finally {
       setDiscoverySaving(false)
     }
@@ -328,12 +332,8 @@ export function ServerManagePage() {
                 onUpdateInvitePolicy={(value) => {
                   void updateInvitePolicy(value)
                 }}
-                onUpdateDiscovery={(isDiscoverable, description) => {
-                  void updateDiscovery(isDiscoverable, description)
-                }}
-                onUpdateTags={(tags) => {
-                  void updateTags(tags)
-                }}
+                onUpdateDiscovery={updateDiscovery}
+                onUpdateTags={updateTags}
               />
             </TabsContent>
           </Tabs>

@@ -3,6 +3,7 @@
     bool On(string prefix) => prefix == "/admin"
         ? path == "/admin"
         : path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+    string? Current(string prefix) => On(prefix) ? (path.Equals(prefix, StringComparison.OrdinalIgnoreCase) ? "page" : "location") : null;
 }
 <!doctype html>
 <html lang="en">
@@ -15,12 +16,12 @@
 <body>
     <header class="admin-header">
         <div class="admin-brand">Lets<span class="accent">Chat</span> Admin</div>
-        <nav class="admin-nav">
-            <a href="/admin" class="@(On("/admin") ? "active" : "")">Dashboard</a>
-            <a href="/admin/users" class="@(On("/admin/users") ? "active" : "")">Users</a>
-            <a href="/admin/pending" class="@(On("/admin/pending") ? "active" : "")">Pending</a>
-            <a href="/admin/config" class="@(On("/admin/config") ? "active" : "")">Configuration</a>
-            <a href="/admin/audit" class="@(On("/admin/audit") ? "active" : "")">Audit log</a>
+        <nav class="admin-nav" aria-label="Administration">
+            <a href="/admin" aria-current="@(Current("/admin"))" class="@(On("/admin") ? "active" : "")">Dashboard</a>
+            <a href="/admin/users" aria-current="@(Current("/admin/users"))" class="@(On("/admin/users") ? "active" : "")">Users</a>
+            <a href="/admin/pending" aria-current="@(Current("/admin/pending"))" class="@(On("/admin/pending") ? "active" : "")">Pending</a>
+            <a href="/admin/config" aria-current="@(Current("/admin/config"))" class="@(On("/admin/config") ? "active" : "")">Configuration</a>
+            <a href="/admin/audit" aria-current="@(Current("/admin/audit"))" class="@(On("/admin/audit") ? "active" : "")">Audit log</a>
         </nav>
         <div class="admin-user">
             <span class="muted small">@User.Identity?.Name</span>

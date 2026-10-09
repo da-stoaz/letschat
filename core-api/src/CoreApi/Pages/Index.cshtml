@@ -23,14 +23,11 @@
             </a>
             @if (Model.HasAnyInstaller)
             {
-                <a id="download"
-                   class="btn btn-secondary"
-                   href="/downloads/macos"
-                   data-download-macos="/downloads/macos"
-                   data-download-windows="/downloads/windows"
-                   data-download-linux="/downloads/linux">
-                    Get the app for <span data-platform-label>your device</span>
-                </a>
+                <div id="desktop-downloads" class="cta" aria-label="Desktop downloads">
+                    <a class="btn btn-secondary" data-download="macos" href="/downloads/macos">Get the app for macOS</a>
+                    <a class="btn btn-secondary" data-download="windows" href="/downloads/windows">Get the app for Windows</a>
+                    <a class="btn btn-secondary" data-download="linux" href="/downloads/linux">Get the app for Linux</a>
+                </div>
             }
             else
             {
@@ -54,28 +51,14 @@
 <script>
     (function () {
         var ua = (navigator.userAgent || '').toLowerCase();
-        var os =
-            /mac|iphone|ipad|ipod/.test(ua) ? 'macos' :
-            /win/.test(ua) ? 'windows' :
-            /linux/.test(ua) ? 'linux' :
-            null;
-        var label =
-            os === 'macos' ? 'macOS' :
-            os === 'windows' ? 'Windows' :
-            os === 'linux' ? 'Linux' :
-            'your device';
-
-        document.querySelectorAll('[data-platform-label]').forEach(function (el) {
-            el.textContent = label;
-        });
-
-        // Swap the download CTA's href to the detected OS so the click lands
-        // on the right /downloads/{os} resolver. Defaults to /downloads/macos
-        // for unknown user agents (the most common share-target visitor).
+        // Mobile and unknown platforms keep all desktop choices visible.
+        var mobile = /android|iphone|ipad|ipod|mobile/.test(ua) ||
+            (/mac/.test(ua) && navigator.maxTouchPoints > 1);
+        var os = mobile ? null : /mac/.test(ua) ? 'macos' :
+            /win/.test(ua) ? 'windows' : /linux/.test(ua) ? 'linux' : null;
         if (os) {
-            var dl = document.getElementById('download');
-            var attr = dl && dl.getAttribute('data-download-' + os);
-            if (dl && attr) dl.setAttribute('href', attr);
+            var match = document.querySelector('[data-download="' + os + '"]');
+            if (match) match.classList.add('btn-primary');
         }
     })();
 </script>

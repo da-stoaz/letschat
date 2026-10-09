@@ -90,9 +90,9 @@ export const useServerRailStore = create<ServerRailState>()(
             serverIds: [targetServerId, sourceServerId],
             collapsed: false,
           }
-          const newOrder = state.order.filter((item) => item !== sourceServerId && item !== targetServerId)
-          const targetIndex = state.order.findIndex((item) => item === targetServerId)
-          newOrder.splice(Math.max(0, targetIndex), 0, id)
+          const newOrder = state.order.filter((item) => item !== sourceServerId)
+          const targetIndex = newOrder.indexOf(targetServerId)
+          newOrder.splice(Math.max(0, targetIndex), targetIndex < 0 ? 0 : 1, id)
           return { order: newOrder, groups: { ...state.groups, [id]: group } }
         }),
 
@@ -109,10 +109,13 @@ export const useServerRailStore = create<ServerRailState>()(
       removeFromGroup: (serverId, groupId) =>
         set((state) => {
           const g = state.groups[groupId]
-          if (!g) return state
+          if (!g || !g.serverIds.includes(serverId)) return state
           const remaining = g.serverIds.filter((id) => id !== serverId)
           if (remaining.length >= 2) {
-            return { groups: { ...state.groups, [groupId]: { ...g, serverIds: remaining } } }
+            const idx = state.order.indexOf(groupId)
+            const order = [...state.order]
+            order.splice(idx + 1, 0, serverId)
+            return { order, groups: { ...state.groups, [groupId]: { ...g, serverIds: remaining } } }
           }
           // Dissolve: put survivors back in order where group was
           const idx = state.order.indexOf(groupId)
@@ -120,7 +123,7 @@ export const useServerRailStore = create<ServerRailState>()(
           const after = state.order.slice(idx < 0 ? state.order.length : idx + 1)
           const groups = { ...state.groups }
           delete groups[groupId]
-          return { order: [...before, ...remaining, ...after], groups }
+          return { order: [...before, ...remaining, serverId, ...after], groups }
         }),
 
       toggleGroupCollapsed: (groupId) =>

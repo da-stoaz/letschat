@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { PhoneCallIcon, PhoneMissedIcon, PhoneOffIcon, PencilIcon, PinIcon, PinOffIcon, Trash2Icon, MoreHorizontalIcon, Loader2Icon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useTouchInput } from '../../hooks/useTouchInput'
 import { shouldSubmitOnEnter } from '../chat/submitComposer'
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -41,7 +42,7 @@ interface MessageBubbleProps {
   pinnedMessageIds?: Set<number> | null
   onTogglePin?: (message: RenderableMessage, pinned: boolean) => void
   onEditMessage: (message: RenderableMessage, newContent: string) => Promise<void> | void
-  onDeleteMessage: (message: RenderableMessage) => void
+  onDeleteMessage: (message: RenderableMessage) => Promise<void> | void
 }
 
 function sameIdentity(left: string, right: string | null): boolean {
@@ -71,6 +72,14 @@ export function MessageBubble({
   const firstMessage = group.messages[0]
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<RenderableMessage | null>(null)
+  const deleteTrigger = useRef<HTMLElement | null>(null)
+  const article = useRef<HTMLElement | null>(null)
+  const confirmDelete = (message: RenderableMessage, target: HTMLElement) => {
+    deleteTrigger.current = target.getAttribute('aria-label') === 'Delete message' ? target :
+      article.current?.querySelector<HTMLElement>(`[data-message-id="${message.id}"] [aria-label="Message actions"]`) ?? target
+    setDeleteTarget(message)
+  }
   const isSystemGroup =
     group.messages.length > 0 &&
     group.messages.every((message) => Boolean(message.systemKind))
@@ -103,14 +112,14 @@ export function MessageBubble({
           </span>
         </div>
         {firstMessage.systemMeta ? (
-          <p className="mt-1 text-center text-[11px] text-muted-foreground/80">{firstMessage.systemMeta}</p>
+          <p className="mt-1 text-center text-xs text-muted-foreground/80">{firstMessage.systemMeta}</p>
         ) : null}
       </article>
     )
   }
 
   return (
-    <article className="group/bubble rounded-lg px-3 py-1 transition-colors hover:bg-muted/35">
+    <article ref={article} className="group/bubble rounded-lg px-3 py-1 transition-colors hover:bg-muted/35">
       <div className="flex items-start gap-3.5">
         <Avatar className="mt-0.5 size-9 rounded-full">
           {sender.avatarUrl ? <AvatarImage src={sender.avatarUrl} alt={sender.displayName} /> : null}
@@ -221,7 +230,7 @@ export function MessageBubble({
                       <DropdownMenuContent align="end" className="w-44">
                         {canEdit ? <DropdownMenuItem onClick={() => { setEditingId(message.id); setEditDraft(parsed.text); setEditError(null) }}><PencilIcon />Edit message</DropdownMenuItem> : null}
                         {canPin ? <DropdownMenuItem onClick={() => onTogglePin?.(message, !isPinned)}>{isPinned ? <PinOffIcon /> : <PinIcon />}{isPinned ? 'Unpin message' : 'Pin message'}</DropdownMenuItem> : null}
-                        {canDelete ? <DropdownMenuItem variant="destructive" onClick={() => onDeleteMessage(message)}><Trash2Icon />Delete message</DropdownMenuItem> : null}
+                        {canDelete ? <DropdownMenuItem variant="destructive" onClick={event => confirmDelete(message, event.currentTarget)}><Trash2Icon />Delete message</DropdownMenuItem> : null}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   ) : null}
@@ -247,7 +256,7 @@ export function MessageBubble({
                         </Button>
                       ) : null}
                       {canDelete ? (
-                        <Button size="icon-xs" variant="ghost" aria-label="Delete message" onClick={() => onDeleteMessage(message)}>
+                        <Button size="icon-xs" variant="ghost" aria-label="Delete message" onClick={event => confirmDelete(message, event.currentTarget)}>
                           <Trash2Icon className="size-3.5" />
                         </Button>
                       ) : null}
@@ -259,6 +268,10 @@ export function MessageBubble({
           </div>
         </div>
       </div>
+      <ConfirmActionDialog open={deleteTarget !== null} title="Delete message?" action="Delete message"
+        returnFocus={deleteTrigger}
+        description={`This cannot be undone. ${deleteTarget ? parseMessageAttachments(deleteTarget.content).text.slice(0, 160) : ''}`}
+        onClose={() => setDeleteTarget(null)} onConfirm={() => { if (deleteTarget) return onDeleteMessage(deleteTarget) }} />
     </article>
   )
 }

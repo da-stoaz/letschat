@@ -9,7 +9,7 @@ import { usePinsStore } from '../../stores/pinsStore'
 import { useUiStore } from '../../stores/uiStore'
 import { useServerRole } from '../../hooks/useServerRole'
 import { warnOnce } from '../../lib/devWarnings'
-import { loadOlderChannelMessages } from '../../lib/spacetimedb/history'
+import { loadChannelMessage, loadOlderChannelMessages } from '../../lib/spacetimedb/history'
 import { ChatMessageFeed, type ChatMessageFeedHandle } from '../chat/ChatMessageFeed'
 import { useComposerStore } from '../../stores/composerStore'
 import { CompactBack } from '../../components/CompactBack'
@@ -18,6 +18,7 @@ import { ChannelMessageSearch } from './ChannelMessageSearch'
 import { ChannelPinsPopover } from './ChannelPinsPopover'
 import { composeMessageWithAttachments } from '../chat/attachmentPayload'
 import type { Message, PinnedMessage, u64 } from '../../types/domain'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useIsMobile } from '../../hooks/use-mobile'
@@ -33,8 +34,21 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const setError = (error: string | null) => useComposerStore.getState().update(scopeKey, { error })
   const scrollToBottomToken = useComposerStore(s => s.drafts[scopeKey]?.sent ?? 0)
   const feedRef = useRef<ChatMessageFeedHandle>(null)
-  const jumpToMessageId = (messageId: number) => {
-    feedRef.current?.jumpToMessage(messageId)
+  const [jumpTarget, setJumpTarget] = useState<{ id: number } | null>(null)
+  const handledJump = useRef<typeof jumpTarget>(null)
+  const jumpToMessageId = async (messageId: number) => {
+    if (channelId === null) return
+    try {
+      if (!useMessagesStore.getState().messagesByChannel[channelId]?.some(row => row.id === messageId)) {
+        toast.message('Loading message…', { id: 'pin-jump' })
+        await loadChannelMessage(channelId, messageId)
+      }
+      setJumpTarget({ id: messageId })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not load message.', { id: 'pin-jump' })
+      return
+    }
+    toast.dismiss('pin-jump')
   }
 
   const selfIdentity = useConnectionStore((s) => s.identity)
@@ -46,6 +60,13 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
   const unreadByChannel = useUiStore((s) => s.unreadByChannel)
   const toggleRightPanel = useUiStore((s) => s.toggleRightPanel)
   const messages = channelId === null ? EMPTY_MESSAGES : (messagesByChannel[channelId] ?? EMPTY_MESSAGES)
+  const historyExhausted = useMessagesStore(s => channelId !== null && Boolean(s.historyExhausted[channelId]))
+  useEffect(() => {
+    if (jumpTarget !== null && handledJump.current !== jumpTarget && messages.some(row => row.id === jumpTarget.id)) {
+      feedRef.current?.jumpToMessage(jumpTarget.id)
+      handledJump.current = jumpTarget
+    }
+  }, [jumpTarget, messages])
   const pins = channelId === null ? EMPTY_PINS : (pinsByChannel[channelId] ?? EMPTY_PINS)
   const pinnedMessageIds = useMemo(() => new Set(pins.map((pin) => pin.messageId)), [pins])
 
@@ -112,6 +133,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
           </DropdownMenu> : null}
           <ChannelMessageSearch compact={compact} mobileOpen={panel === 'search'} onMobileOpenChange={(open) => { if (!open) setPanel(null) }} messages={messages} onJump={jumpToMessageId} />
           <ChannelPinsPopover
+            channelId={channelId}
             compact={compact}
             mobileOpen={panel === 'pins'}
             onMobileOpenChange={(open) => { if (!open) setPanel(null) }}
@@ -138,7 +160,8 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
         ref={feedRef}
         scopeKey={`channel:${channelId}`}
         messages={messages}
-        onLoadOlder={channelId === null ? undefined : () => void loadOlderChannelMessages(channelId)}
+        onLoadOlder={() => loadOlderChannelMessages(channelId)}
+        historyExhausted={historyExhausted}
         selfIdentity={selfIdentity}
         unreadCount={unreadCount}
         canDeleteAny={canModerate}
@@ -152,6 +175,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
           } catch (e) {
             const messageText = e instanceof Error ? e.message : 'Could not delete message.'
             setError(messageText)
+            throw e
           }
         }}
         scrollToBottomToken={scrollToBottomToken}

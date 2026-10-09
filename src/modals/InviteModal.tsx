@@ -1,3 +1,4 @@
+import { CopyButton } from '@/components/CopyButton'
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
@@ -23,8 +24,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
 import {
-  CopyIcon,
-  CheckIcon,
   QrCodeIcon,
   LinkIcon,
   Trash2Icon,
@@ -88,21 +87,6 @@ function formatExpiry(expiresAt: string, now: number): string {
   return `${minutes}m`
 }
 
-function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false)
-  const copy = () => {
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }
-  return (
-    <Button type="button" variant="outline" size="sm" onClick={copy} className="shrink-0">
-      {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-      {copied ? 'Copied!' : label}
-    </Button>
-  )
-}
 
 interface InviteCardProps {
   invite: Invite
@@ -429,6 +413,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                     )}
 
                     <Input
+                      aria-label="Search invite recipients"
                       value={recipientQuery}
                       onChange={(event) => setRecipientQuery(event.target.value)}
                       placeholder={selectedRecipients.length > 0 ? 'Add another username...' : 'Type username or display name...'}
@@ -511,7 +496,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                 </div>
               )}
 
-              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
 
               <div className="flex items-center justify-end pt-1">
                 <Button type="button" variant="outline" onClick={onClose}>
@@ -533,7 +518,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Expires after</Label>
+                    <Label htmlFor="invite-expiry" className="text-xs">Expires after</Label>
                     <Select
                       value={expirySelectValue}
                       onValueChange={(v) => {
@@ -543,7 +528,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                         setExpirySeconds(selected?.value)
                       }}
                     >
-                      <SelectTrigger className="h-8 w-full text-xs">
+                      <SelectTrigger id="invite-expiry" className="h-8 w-full text-xs">
                         <span className="truncate font-medium">{selectedExpiryLabel}</span>
                         <SelectValue className="sr-only" />
                       </SelectTrigger>
@@ -562,8 +547,9 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Max uses</Label>
+                    <Label htmlFor="invite-max-uses" className="text-xs">Max uses</Label>
                     <Input
+                      id="invite-max-uses"
                       type="number"
                       min={1}
                       placeholder="Unlimited"
@@ -575,7 +561,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                 </div>
               </div>
 
-              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
 
               <div className="flex items-center justify-end gap-2 pt-1">
                 <Button type="button" variant="outline" onClick={onClose}>
@@ -624,7 +610,7 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
                   </div>
                 </ScrollArea>
               )}
-              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
               <div className="mt-1 flex justify-end gap-2">
                 {invites.some((i) => new Date(i.expiresAt).getTime() <= now) && (
                   <Button

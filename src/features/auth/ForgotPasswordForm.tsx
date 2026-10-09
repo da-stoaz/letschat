@@ -22,6 +22,7 @@ export function ForgotPasswordForm({
   defaultEmail?: string
   onBack: () => void
 }) {
+  const [error, setError] = useState<string | null>(null)
   const [email, setEmail] = useState(defaultEmail)
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent'>('idle')
 
@@ -51,13 +52,15 @@ export function ForgotPasswordForm({
       onSubmit={async (event) => {
         event.preventDefault()
         if (status === 'sending' || !email.trim()) return
+        setError(null)
         setStatus('sending')
         try {
           await authServiceForgotPassword(email.trim())
+          setStatus('sent')
         } catch {
-          // Generic by design — never reveal whether the address exists.
+          setStatus('idle')
+          setError('Could not request a reset link. Please try again.')
         }
-        setStatus('sent')
       }}
     >
       <p className="text-sm text-muted-foreground">
@@ -79,6 +82,7 @@ export function ForgotPasswordForm({
           autoComplete="email"
         />
       </div>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex items-center justify-between gap-2">
         <Button type="button" variant="ghost" className="gap-1.5" onClick={onBack}>
           <ArrowLeftIcon className="size-4" />

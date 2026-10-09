@@ -13,22 +13,22 @@ export function SettingsPanel() {
       </header>
 
       <Tabs defaultValue="account" className="space-y-3">
-        <TabsList className="max-w-full overflow-x-auto">
-          <TabsTrigger value="account" className="shrink-0">
+        <TabsList className="max-w-full justify-start overflow-x-auto">
+          <TabsTrigger value="account" className="flex-none">
             <UserRoundIcon className="size-3.5" />
             Account
           </TabsTrigger>
-          <TabsTrigger value="connection" className="shrink-0">
+          <TabsTrigger value="connection" className="flex-none">
             <ServerIcon className="size-3.5" />
             Connection
           </TabsTrigger>
-          <TabsTrigger value="notifications" className="shrink-0">
+          <TabsTrigger value="notifications" className="flex-none">
             <BellIcon className="size-3.5" />
             Notifications
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="account">
+        <TabsContent value="account" keepMounted>
           <AccountTab />
         </TabsContent>
 

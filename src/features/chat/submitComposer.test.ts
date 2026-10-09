@@ -76,3 +76,22 @@ it('uses explicit submission for touch and ignores composition and shifted Enter
   expect(shouldSubmitOnEnter('Enter', false, true, false)).toBe(false)
   expect(shouldSubmitOnEnter('Enter', true, false, false)).toBe(false)
 })
+
+it('keeps new typing and attachments when the outgoing message fails and is retried', async () => {
+  const store = useComposerStore.getState()
+  store.update('channel:1', { text: 'Outgoing' })
+  let reject!: (error: Error) => void
+  const pending = submitComposer('channel:1', { kind: 'channel', channelId: 1 }, () => new Promise<void>((_, fail) => { reject = fail }))
+  const file = new File(['new'], 'new.txt')
+  store.update('channel:1', { text: 'New draft', files: [{ id: 'new', file }] })
+  reject(new Error('Offline'))
+  await pending
+  expect(useComposerStore.getState().drafts['channel:1'].outgoing?.text).toBe('Outgoing')
+  const send = vi.fn()
+  await submitComposer('channel:1', { kind: 'channel', channelId: 1 }, send, true)
+  expect(send).toHaveBeenCalledWith({ text: 'Outgoing', attachments: [] })
+  const current = useComposerStore.getState().drafts['channel:1']
+  expect(current.text).toBe('New draft')
+  expect(current.files[0].file).toBe(file)
+  expect(current.outgoing).toBeNull()
+})

@@ -17,7 +17,9 @@ export default async function setup(): Promise<void> {
   // than shell input.
   execFileSync(
     'spacetime',
-    ['publish', '--server', BASE, DB, '--module-path', 'server', '--delete-data', '--yes'],
+    ['publish', '--server', BASE, DB,
+      ...(process.env.STDB_MODULE_BIN ? ['--bin-path', process.env.STDB_MODULE_BIN] : ['--module-path', 'server']),
+      '--delete-data', '--yes'],
     { stdio: 'inherit', cwd: process.cwd() },
   )
 

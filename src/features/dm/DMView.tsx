@@ -141,6 +141,7 @@ function isDeletedForViewer(message: DirectMessage, selfIdentity: string | null)
 
 export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
   const scopeKey = `dm:${partnerIdentity.toLowerCase()}`
+  const historyExhausted = useDmStore(s => Boolean(s.historyExhausted[partnerIdentity]))
   const setError = (error: string | null) => useComposerStore.getState().update(scopeKey, { error })
   const scrollToBottomToken = useComposerStore(s => s.drafts[scopeKey]?.sent ?? 0)
   const navigate = useNavigate()
@@ -352,7 +353,8 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
         key={scopeKey}
         scopeKey={scopeKey}
         messages={renderMessages}
-        onLoadOlder={() => void loadOlderDirectMessages(partnerIdentity)}
+        onLoadOlder={() => loadOlderDirectMessages(partnerIdentity)}
+        historyExhausted={historyExhausted}
         selfIdentity={selfIdentity}
         canDeleteAny
         allowEditOwn
@@ -366,6 +368,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
           } catch (e) {
             const nextError = e instanceof Error ? e.message : 'Could not delete direct message.'
             setError(nextError)
+            throw e
           }
         }}
         scrollToBottomToken={scrollToBottomToken}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { authReturnPath } from '../features/auth/returnPath'
 import { CheckCircle2Icon, PlugZapIcon } from 'lucide-react'
 import { useSelfStore } from '../stores/selfStore'
 import { ConnectionTab } from '../features/settings/ConnectionTab'
@@ -29,6 +30,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
  */
 export function AuthPage() {
   const navigate = useNavigate()
+  const { search } = useLocation()
   const user = useSelfStore((s) => s.user)
 
   const [view, setView] = useState<'credentials' | 'forgot'>('credentials')
@@ -49,8 +51,8 @@ export function AuthPage() {
   const [loginNotice, setLoginNotice] = useState<LoginNotice | null>(null)
 
   useEffect(() => {
-    if (user) navigate('/app', { replace: true })
-  }, [navigate, user])
+    if (user) navigate(authReturnPath(search), { replace: true })
+  }, [navigate, search, user])
 
   useEmailConfirmationPoll({
     pending: pendingRegistration,

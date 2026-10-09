@@ -42,10 +42,11 @@ const friend = { ...me, identity: 'friend', username: 'sam', displayName: 'Sam w
 useConnectionStore.setState({ identity: me.identity, status: 'connected', synced: true })
 useSelfStore.setState({ user: me })
 useUsersStore.setState({ users: [me, friend], byIdentity: { self: me, friend } })
-useServersStore.setState({ servers: [{ id: 1, name: 'A space with a long name for testing', ownerIdentity: me.identity, invitePolicy: 'Everyone', iconUrl: null, createdAt: now, isDiscoverable: false, description: null, tags: [] }] })
+useServersStore.setState({ servers: ['A space with a long name for testing', 'Design team', 'Weekend plans'].map((name, index) => ({ id: index + 1, name, ownerIdentity: me.identity, invitePolicy: 'Everyone', iconUrl: null, createdAt: now, isDiscoverable: false, description: null, tags: [] })) })
 useChannelsStore.setState({ channelsByServer: { 1: [
   { id: 10, serverId: 1, name: 'general-with-a-long-channel-name', kind: 'Text', section: null, position: 0, moderatorOnly: false },
   { id: 12, serverId: 1, name: 'Lounge', kind: 'Voice', section: null, position: 2, moderatorOnly: false },
+  { id: 13, serverId: 1, name: 'Quiet room', kind: 'Voice', section: null, position: 3, moderatorOnly: false },
   { id: 11, serverId: 1, name: 'announcements', kind: 'Announcement', section: null, position: 1, moderatorOnly: true },
 ] } })
 useMembersStore.getState().setServerMembers(1, [me, friend].map(user => ({ serverId: 1, userIdentity: user.identity, role: user === me ? 'Owner' : 'Member', joinedAt: now, timeoutUntil: null, user })))
@@ -119,6 +120,7 @@ export function Fixture() {
       <Route path="call" element={<CallPreview />} />
       <Route path="1/12" element={<CallPreview docked />} />
       <Route path=":serverId/channels" element={<NavigationPage />} />
+      <Route path=":serverId" element={<ServerChannelPage />} />
       <Route path=":serverId/:channelId" element={<ServerChannelPage />} />
       <Route path="dm/:identity" element={<DMPage />} />
       <Route path="settings" element={<SettingsPage />} />

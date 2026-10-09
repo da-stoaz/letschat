@@ -28,6 +28,7 @@ import { normalizeIdentity, serverInitials, userInitials } from './helpers'
 import { useServerRailStore, type ServerGroup } from '../../stores/serverRailStore'
 import type { RailItem } from '../../stores/serverRailStore'
 import type { Server } from '../../types/domain'
+import { railDropTarget, type RailDropTarget } from './railDropTarget'
 
 interface QuickDmContact {
   identity: string
@@ -62,8 +63,9 @@ function formatUnreadCount(value: number): string {
   return String(Math.max(0, value))
 }
 
-// Items don't shift during group-intent drags — only the overlay moves
+// Keep drop targets fixed; only the drag overlay moves.
 const noopStrategy: SortingStrategy = () => null
+const noLayoutAnimation = () => false
 
 // ─── Flat list helpers ────────────────────────────────────────────────────────
 
@@ -149,7 +151,7 @@ function ServerAvatar({ server, size = 'md' }: { server: Server; size?: 'sm' | '
   const cls = size === 'sm' ? 'size-8 rounded-md' : 'size-9 rounded-lg'
   return (
     <Avatar className={cls}>
-      {server.iconUrl ? <AvatarImage src={server.iconUrl} alt={server.name} /> : null}
+      {server.iconUrl ? <AvatarImage src={server.iconUrl} alt="" draggable={false} /> : null}
       <AvatarFallback className={`${size === 'sm' ? 'rounded-md' : 'rounded-lg'} bg-primary/10 text-xs`}>
         {serverInitials(server.name)}
       </AvatarFallback>
@@ -180,7 +182,7 @@ interface TopServerProps {
 }
 
 function SortableTopServer({ dndId, server, isActive, unreadCount, hasUnread, hasVoice, isGroupTarget, onClick }: TopServerProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId, animateLayoutChanges: noLayoutAnimation })
   return (
     <div
       ref={setNodeRef}
@@ -196,15 +198,19 @@ function SortableTopServer({ dndId, server, isActive, unreadCount, hasUnread, ha
               className={[
                 'relative h-9 w-9 rounded-lg transition-[ring,transform] duration-150',
                 isActive ? 'ring-1 ring-primary/70' : '',
-                isGroupTarget ? 'ring-2 ring-cyan-400 scale-110' : '',
+                isGroupTarget ? 'ring-2 ring-cyan-400' : '',
               ].join(' ')}
               onClick={onClick}
               {...attributes}
               {...listeners}
+              style={{ touchAction: 'none' }}
+              aria-label={server.name}
+              aria-current={isActive ? 'page' : undefined}
             />
           }
         >
           <ServerAvatar server={server} />
+          {isGroupTarget ? <span data-rail-drop="group" aria-hidden="true" className="pointer-events-none absolute -right-1 -top-1 z-10 size-2.5 rounded-full bg-cyan-400 ring-2 ring-card" /> : null}
           {hasUnread ? (
             <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
               {formatUnreadCount(unreadCount)}
@@ -249,7 +255,7 @@ function SortableGroupHeader({
   isExpanded,
   onToggleCollapse,
 }: GroupHeaderProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId, animateLayoutChanges: noLayoutAnimation })
   const groupServers = group.serverIds.map((id) => servers.find((s) => s.id === id)).filter(Boolean) as Server[]
 
   return (
@@ -267,11 +273,14 @@ function SortableGroupHeader({
               className={[
                 'relative h-9 w-9 rounded-lg transition-[ring,transform] duration-150',
                 hasActiveServer ? 'ring-1 ring-primary/70' : '',
-                isGroupTarget ? 'ring-2 ring-cyan-400 scale-110' : '',
+                isGroupTarget ? 'ring-2 ring-cyan-400' : '',
               ].join(' ')}
               onClick={onToggleCollapse}
               {...attributes}
               {...listeners}
+              style={{ touchAction: 'none' }}
+              aria-label={group.label}
+              aria-expanded={isExpanded}
             />
           }
         >
@@ -279,7 +288,7 @@ function SortableGroupHeader({
             {groupServers.slice(0, 4).map((s) => (
               <div key={s.id} className="overflow-hidden rounded-sm">
                 <Avatar className="size-full rounded-none">
-                  {s.iconUrl ? <AvatarImage src={s.iconUrl} alt={s.name} /> : null}
+                  {s.iconUrl ? <AvatarImage src={s.iconUrl} alt="" draggable={false} /> : null}
                   <AvatarFallback className="rounded-none bg-primary/10 text-[6px]">{serverInitials(s.name)}</AvatarFallback>
                 </Avatar>
               </div>
@@ -288,6 +297,7 @@ function SortableGroupHeader({
               <div key={i} className="rounded-sm bg-muted/30" />
             ))}
           </div>
+          {isGroupTarget ? <span data-rail-drop="group" aria-hidden="true" className="pointer-events-none absolute -right-1 -top-1 z-10 size-2.5 rounded-full bg-cyan-400 ring-2 ring-card" /> : null}
           {hasAnyUnread ? (
             <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
               {formatUnreadCount(totalUnread)}
@@ -320,7 +330,7 @@ interface GroupedServerProps {
 }
 
 function SortableGroupedServer({ dndId, server, isActive, unreadCount, hasUnread, hasVoice, isGroupTarget, isLast, onClick }: GroupedServerProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId, animateLayoutChanges: noLayoutAnimation })
   return (
     <div
       ref={setNodeRef}
@@ -336,15 +346,19 @@ function SortableGroupedServer({ dndId, server, isActive, unreadCount, hasUnread
               className={[
                 'relative h-8 w-8 rounded-md transition-[ring,transform] duration-150',
                 isActive ? 'ring-1 ring-primary/70' : '',
-                isGroupTarget ? 'ring-2 ring-cyan-400 scale-110' : '',
+                isGroupTarget ? 'ring-2 ring-cyan-400' : '',
               ].join(' ')}
               onClick={onClick}
               {...attributes}
               {...listeners}
+              style={{ touchAction: 'none' }}
+              aria-label={server.name}
+              aria-current={isActive ? 'page' : undefined}
             />
           }
         >
           <ServerAvatar server={server} size="sm" />
+          {isGroupTarget ? <span data-rail-drop="group" aria-hidden="true" className="pointer-events-none absolute -right-1 -top-1 z-10 size-2.5 rounded-full bg-cyan-400 ring-2 ring-card" /> : null}
           {hasUnread ? (
             <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
               {formatUnreadCount(unreadCount)}
@@ -359,6 +373,119 @@ function SortableGroupedServer({ dndId, server, isActive, unreadCount, hasUnread
         <TooltipContent side="right">{server.name}</TooltipContent>
       </Tooltip>
     </div>
+  )
+}
+
+function RailDirectMessages({
+  dmHomeActive, dmUnreadTotal, activeDmIdentity, quickDmContacts, onOpenDmHome,
+  onOpenDmCompose, onOpenDmContact, dmUnreadByIdentity, dmCallActiveByIdentity,
+}: Pick<AppRailProps, 'activeDmIdentity' | 'quickDmContacts' | 'onOpenDmHome' | 'onOpenDmCompose' | 'onOpenDmContact' | 'dmUnreadByIdentity' | 'dmCallActiveByIdentity'> & {
+  dmHomeActive: boolean
+  dmUnreadTotal: number
+}) {
+  return <>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant={dmHomeActive ? 'secondary' : 'ghost'}
+            size="icon"
+            className={`relative h-8 w-8 rounded-md ${dmHomeActive ? 'ring-1 ring-primary/70' : ''}`}
+            aria-label="Direct messages"
+            aria-current={dmHomeActive ? 'page' : undefined}
+            onClick={onOpenDmHome}
+          />
+        }
+      >
+        <MessageCircleIcon className="size-4" />
+        {dmUnreadTotal > 0 ? (
+          <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
+            {formatUnreadCount(dmUnreadTotal)}
+          </span>
+        ) : null}
+      </TooltipTrigger>
+      <TooltipContent side="right">DM Home</TooltipContent>
+    </Tooltip>
+
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-md" aria-label="New message" onClick={onOpenDmCompose} />
+        }
+      >
+        <MessageCircleIcon className="size-4" />
+        <span className="absolute -right-0.5 -top-0.5 grid size-3 place-items-center rounded-full bg-primary text-[10px] leading-none text-primary-foreground">+</span>
+      </TooltipTrigger>
+      <TooltipContent side="right">Compose DM</TooltipContent>
+    </Tooltip>
+
+    {quickDmContacts.length > 0 ? (
+      <div className="flex flex-col items-center gap-1 py-1">
+        {quickDmContacts.map((contact) => {
+          const unread = dmUnreadByIdentity[normalizeIdentity(contact.identity)] ?? 0
+          return (
+            <Tooltip key={contact.identity}>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`relative h-8 w-8 rounded-md ${activeDmIdentity === contact.identity ? 'ring-1 ring-primary/70' : ''}`}
+                    aria-label={`Message ${contact.label}`}
+                    aria-current={activeDmIdentity === contact.identity ? 'page' : undefined}
+                    onClick={() => onOpenDmContact(contact.identity)}
+                  />
+                }
+              >
+                <Avatar size="sm" className="rounded-full">
+                  {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
+                  <AvatarFallback className="rounded-full bg-primary/10 text-xs">{userInitials(contact.label)}</AvatarFallback>
+                </Avatar>
+                {unread > 0 ? (
+                  <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
+                    {formatUnreadCount(unread)}
+                  </span>
+                ) : null}
+                {dmCallActiveByIdentity[contact.identity] ? (
+                  <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
+                    <Volume2Icon className="size-2.5" />
+                  </span>
+                ) : null}
+              </TooltipTrigger>
+              <TooltipContent side="right">{contact.label}</TooltipContent>
+            </Tooltip>
+          )
+        })}
+      </div>
+    ) : null}
+  </>
+}
+
+function RailDragPreview({ activeDragServer, activeDragGroup, servers }: {
+  activeDragServer: Server | null
+  activeDragGroup: ServerGroup | null
+  servers: Server[]
+}) {
+  return (
+    activeDragServer ? (
+      <div className="opacity-80 shadow-lg rounded-lg">
+        <ServerAvatar server={activeDragServer} />
+      </div>
+    ) : activeDragGroup ? (
+      <div className="h-9 w-9 rounded-lg opacity-80 shadow-lg bg-muted border border-border grid grid-cols-2 gap-px p-0.5">
+        {activeDragGroup.serverIds.slice(0, 4).map((sid) => {
+          const s = servers.find((sv) => sv.id === sid)
+          return s ? (
+            <div key={sid} className="overflow-hidden rounded-sm">
+              <Avatar className="size-full rounded-none">
+                {s.iconUrl ? <AvatarImage src={s.iconUrl} alt="" draggable={false} /> : null}
+                <AvatarFallback className="rounded-none bg-primary/10 text-[6px]">{serverInitials(s.name)}</AvatarFallback>
+              </Avatar>
+            </div>
+          ) : <div key={sid} className="rounded-sm bg-muted/30" />
+        })}
+      </div>
+    ) : null
   )
 }
 
@@ -394,23 +521,21 @@ export function AppRail({
   const dmUnreadTotal = countUnreadInDm()
   const dmHomeActive = !isSettingsActive && !activeServerId && !activeDmIdentity
 
-  const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const [tempCollapsedGroupId, setTempCollapsedGroupId] = useState<string | null>(null)
-  const [dropSortTarget, setDropSortTarget] = useState<{ overId: string; insertBefore: boolean } | null>(null)
+  const [dropTarget, setDropTarget] = useState<RailDropTarget | null>(null)
+  const dropTargetRef = useRef<RailDropTarget | null>(null)
+  const dragOverId = dropTarget?.intent === 'group' ? dropTarget.overId : null
+  const dropSortTarget = dropTarget?.intent === 'sort' ? dropTarget : null
 
   const pointerYRef = useRef<number>(0)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const flatIdsRef = useRef<string[]>([])
-  // Tracks which over-item we've locked into group mode for — cleared when over-item changes
-  const groupLockRef = useRef<string | null>(null)
-  // Shadow of dragIntent/dragOverId for use inside callbacks without stale closures
-  const dragIntentRef = useRef<'sort' | 'group'>('sort')
 
   useEffect(() => {
+    // Record coordinates before dnd-kit's document-level sensor handles the move.
     const handler = (e: PointerEvent) => { pointerYRef.current = e.clientY }
-    window.addEventListener('pointermove', handler, { passive: true })
-    return () => window.removeEventListener('pointermove', handler)
+    document.addEventListener('pointermove', handler, { capture: true, passive: true })
+    return () => document.removeEventListener('pointermove', handler, true)
   }, [])
 
   const expandedGroupIds = useMemo(() => {
@@ -426,80 +551,27 @@ export function AppRail({
     [order, groups, expandedGroupIds],
   )
 
-  useEffect(() => { flatIdsRef.current = flatIds }, [flatIds])
-
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
+
+  const clearDrag = useCallback(() => {
+    dropTargetRef.current = null
+    setDropTarget(null)
+    setActiveDragId(null)
+    setTempCollapsedGroupId(null)
+  }, [])
 
   const handleDragStart = useCallback((e: DragStartEvent) => {
     const id = String(e.active.id)
     setActiveDragId(id)
-    setDragOverId(null)
-    setDropSortTarget(null)
-    dragIntentRef.current = 'sort'
-    groupLockRef.current = null
+    dropTargetRef.current = null
+    setDropTarget(null)
     if (id.startsWith('g:')) setTempCollapsedGroupId(id.slice(2))
   }, [])
 
   const handleDragMove = useCallback((e: DragMoveEvent) => {
-    const clear = () => {
-      dragIntentRef.current = 'sort'
-      groupLockRef.current = null
-      setDragOverId(null)
-      setDropSortTarget(null)
-    }
-
-    if (!e.over) { clear(); return }
-
-    const overId = String(e.over.id)
-    const activeId = String(e.active.id)
-    if (overId === activeId) { clear(); return }
-
-    const canGroup =
-      (activeId.startsWith('s:') || activeId.startsWith('sg:')) &&
-      (overId.startsWith('s:') || overId.startsWith('g:') || overId.startsWith('sg:'))
-
-    // Reset group lock when the over item changes
-    if (groupLockRef.current !== null && groupLockRef.current !== overId) {
-      groupLockRef.current = null
-    }
-
-    let newIntent: 'sort' | 'group' = 'sort'
-    if (canGroup) {
-      if (groupLockRef.current === overId) {
-        // Already locked to this item — stay in group mode
-        newIntent = 'group'
-      } else {
-        const overRect = e.over.rect
-        const itemCenter = overRect.top + overRect.height / 2
-        const distFromCenter = Math.abs(pointerYRef.current - itemCenter) / (overRect.height / 2)
-        if (distFromCenter < 0.5) {
-          groupLockRef.current = overId
-          newIntent = 'group'
-        }
-      }
-    }
-
-    if (newIntent !== dragIntentRef.current) {
-      dragIntentRef.current = newIntent
-    }
-
-    if (newIntent === 'group') {
-      setDragOverId(overId)
-      setDropSortTarget(null)
-      return
-    }
-
-    // Sort mode — insert a spacer before/after the over item
-    setDragOverId(null)
-    const ids = flatIdsRef.current
-    const overIndex = ids.indexOf(overId)
-    const activeIndex = ids.indexOf(activeId)
-    if (overIndex !== -1 && activeIndex !== -1 && overIndex !== activeIndex) {
-      const insertBefore = pointerYRef.current < e.over.rect.top + e.over.rect.height / 2
-      setDropSortTarget({ overId, insertBefore })
-      return
-    }
-    setDropSortTarget(null)
+    const target = e.over ? railDropTarget(String(e.active.id), String(e.over.id), e.over.rect, pointerYRef.current) : null
+    dropTargetRef.current = target
+    setDropTarget(target)
   }, [])
 
   const handleDragEnd = useCallback((e: DragEndEvent) => {
@@ -507,19 +579,13 @@ export function AppRail({
     const activeId = String(active.id)
     const overId = over ? String(over.id) : null
 
-    const intent = dragIntentRef.current
-    dragIntentRef.current = 'sort'
-    groupLockRef.current = null
-    setDragOverId(null)
-    setDropSortTarget(null)
-    setActiveDragId(null)
-    setTempCollapsedGroupId(null)
-
-    if (!overId || activeId === overId) return
+    const target = dropTargetRef.current
+    clearDrag()
+    if (!overId || activeId === overId || !target || target.overId !== overId) return
 
     const state = useServerRailStore.getState()
 
-    if (intent === 'group') {
+    if (target.intent === 'group') {
       let sourceServerId: number | null = null
       let sourceGroupId: string | null = null
       if (activeId.startsWith('s:')) {
@@ -546,15 +612,13 @@ export function AppRail({
       return
     }
 
-    // Sort intent — use pointer Y to determine insert before/after the over item
+    // Commit the same position shown by the insertion bar.
     const currentFlatIds = buildFlatIds(state.order, state.groups, expandedGroupIds)
     const oldIndex = currentFlatIds.indexOf(activeId)
     const overIndex = currentFlatIds.indexOf(overId)
     if (oldIndex === -1 || overIndex === -1 || oldIndex === overIndex) return
 
-    const overCenterY = over!.rect.top + over!.rect.height / 2
-    const insertBefore = pointerYRef.current < overCenterY
-    const newIndex = insertBefore
+    const newIndex = target.insertBefore
       ? (oldIndex < overIndex ? overIndex - 1 : overIndex)
       : (oldIndex > overIndex ? overIndex + 1 : overIndex)
 
@@ -562,7 +626,7 @@ export function AppRail({
     const newFlat = arrayMove(currentFlatIds, oldIndex, newIndex)
     const { order: newOrder, groups: newGroups } = flatToHierarchical(newFlat, state.groups, expandedGroupIds)
     state.setOrderAndGroups(newOrder, newGroups)
-  }, [expandedGroupIds])
+  }, [expandedGroupIds, clearDrag])
 
   const activeDragServer = useMemo(() => {
     if (!activeDragId) return null
@@ -577,8 +641,8 @@ export function AppRail({
   }, [activeDragId, groups])
 
   const dropSpacer = (
-    <div key="drop-spacer" className="w-full flex items-center" style={{ height: 10 }}>
-      <div className="h-0.5 w-full rounded-full bg-primary/70" />
+    <div key="drop-spacer" data-rail-drop="sort" className="pointer-events-none relative w-full">
+      <div className="absolute -top-1 h-0.5 w-full rounded-full bg-primary" />
     </div>
   )
 
@@ -666,11 +730,13 @@ export function AppRail({
                 variant="secondary"
                 size="icon"
                 className={`relative mt-0.5 h-9 w-9 rounded-lg ${isDiscoverActive ? 'ring-1 ring-primary/70' : ''}`}
+                aria-label="Discover spaces"
+                aria-current={isDiscoverActive ? 'page' : undefined}
                 onClick={onOpenDiscover}
               />
             }
           >
-            <img src={stealthChatLogo} alt="StealthChat" className="h-6 w-6 object-contain" />
+            <img src={stealthChatLogo} alt="" className="h-6 w-6 object-contain" />
           </TooltipTrigger>
           <TooltipContent side="right">Discover Spaces</TooltipContent>
         </Tooltip>
@@ -688,32 +754,16 @@ export function AppRail({
                 collisionDetection={closestCenter}
                 onDragStart={handleDragStart}
                 onDragMove={handleDragMove}
+                onDragOver={handleDragMove}
                 onDragEnd={handleDragEnd}
+                onDragCancel={clearDrag}
               >
                 <SortableContext items={flatIds} strategy={noopStrategy}>
                   {renderList()}
                 </SortableContext>
 
                 <DragOverlay dropAnimation={null}>
-                  {activeDragServer ? (
-                    <div className="opacity-80 shadow-lg rounded-lg">
-                      <ServerAvatar server={activeDragServer} />
-                    </div>
-                  ) : activeDragGroup ? (
-                    <div className="h-9 w-9 rounded-lg opacity-80 shadow-lg bg-muted border border-border grid grid-cols-2 gap-px p-0.5">
-                      {activeDragGroup.serverIds.slice(0, 4).map((sid) => {
-                        const s = servers.find((sv) => sv.id === sid)
-                        return s ? (
-                          <div key={sid} className="overflow-hidden rounded-sm">
-                            <Avatar className="size-full rounded-none">
-                              {s.iconUrl ? <AvatarImage src={s.iconUrl} alt={s.name} /> : null}
-                              <AvatarFallback className="rounded-none bg-primary/10 text-[6px]">{serverInitials(s.name)}</AvatarFallback>
-                            </Avatar>
-                          </div>
-                        ) : <div key={sid} className="rounded-sm bg-muted/30" />
-                      })}
-                    </div>
-                  ) : null}
+                  <RailDragPreview activeDragServer={activeDragServer} activeDragGroup={activeDragGroup} servers={servers} />
                 </DragOverlay>
               </DndContext>
 
@@ -721,7 +771,7 @@ export function AppRail({
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg border border-dashed border-border/70" onClick={onOpenCreateServer} />
+                      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg border border-dashed border-border/70" aria-label="Create space" onClick={onOpenCreateServer} />
                     }
                   >
                     <PlusIcon className="size-4" />
@@ -735,76 +785,9 @@ export function AppRail({
 
         <Separator className="my-0.5" />
 
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant={dmHomeActive ? 'secondary' : 'ghost'}
-                size="icon"
-                className={`relative h-8 w-8 rounded-md ${dmHomeActive ? 'ring-1 ring-primary/70' : ''}`}
-                onClick={onOpenDmHome}
-              />
-            }
-          >
-            <MessageCircleIcon className="size-4" />
-            {dmUnreadTotal > 0 ? (
-              <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
-                {formatUnreadCount(dmUnreadTotal)}
-              </span>
-            ) : null}
-          </TooltipTrigger>
-          <TooltipContent side="right">DM Home</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-md" onClick={onOpenDmCompose} />
-            }
-          >
-            <MessageCircleIcon className="size-4" />
-            <span className="absolute -right-0.5 -top-0.5 grid size-3 place-items-center rounded-full bg-primary text-[10px] leading-none text-primary-foreground">+</span>
-          </TooltipTrigger>
-          <TooltipContent side="right">Compose DM</TooltipContent>
-        </Tooltip>
-
-        {quickDmContacts.length > 0 ? (
-          <div className="flex flex-col items-center gap-1 py-1">
-            {quickDmContacts.map((contact) => {
-              const unread = dmUnreadByIdentity[normalizeIdentity(contact.identity)] ?? 0
-              return (
-                <Tooltip key={contact.identity}>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`relative h-8 w-8 rounded-md ${activeDmIdentity === contact.identity ? 'ring-1 ring-primary/70' : ''}`}
-                        onClick={() => onOpenDmContact(contact.identity)}
-                      />
-                    }
-                  >
-                    <Avatar size="sm" className="rounded-full">
-                      {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt={contact.label} /> : null}
-                      <AvatarFallback className="rounded-full bg-primary/10 text-[10px]">{userInitials(contact.label)}</AvatarFallback>
-                    </Avatar>
-                    {unread > 0 ? (
-                      <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[9px] font-semibold leading-4 text-cyan-950 shadow-md">
-                        {formatUnreadCount(unread)}
-                      </span>
-                    ) : null}
-                    {dmCallActiveByIdentity[contact.identity] ? (
-                      <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-emerald-950 shadow-md">
-                        <Volume2Icon className="size-2.5" />
-                      </span>
-                    ) : null}
-                  </TooltipTrigger>
-                  <TooltipContent side="right">{contact.label}</TooltipContent>
-                </Tooltip>
-              )
-            })}
-          </div>
-        ) : null}
+        <RailDirectMessages dmHomeActive={dmHomeActive} dmUnreadTotal={dmUnreadTotal} activeDmIdentity={activeDmIdentity}
+          quickDmContacts={quickDmContacts} onOpenDmHome={onOpenDmHome} onOpenDmCompose={onOpenDmCompose}
+          onOpenDmContact={onOpenDmContact} dmUnreadByIdentity={dmUnreadByIdentity} dmCallActiveByIdentity={dmCallActiveByIdentity} />
 
         <div className="mt-auto" />
 
@@ -815,6 +798,8 @@ export function AppRail({
                 variant={isSettingsActive ? 'secondary' : 'ghost'}
                 size="icon"
                 className={`mb-0.5 h-9 w-9 rounded-lg ${isSettingsActive ? 'ring-1 ring-primary/70' : ''}`}
+                aria-label="Settings"
+                aria-current={isSettingsActive ? 'page' : undefined}
                 onClick={onOpenSettings}
               />
             }

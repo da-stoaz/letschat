@@ -17,14 +17,14 @@ export default defineConfig({
         resolve: { alias: { '@': new URL('./src', import.meta.url).pathname } },
         test: {
           name: 'unit',
-          include: ['src/**/*.test.ts'],
+          include: ['src/**/*.test.ts', 'tests/ui/**/*.test.ts'],
           environment: 'node',
         },
       },
       {
         test: {
           name: 'security',
-          include: ['tests/**/*.test.ts'],
+          include: ['tests/security/**/*.test.ts'],
           globalSetup: ['./tests/security/global-setup.ts'],
           // The tests share one database, so run files sequentially for determinism.
           fileParallelism: false,
