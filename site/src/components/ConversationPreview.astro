@@ -1,0 +1,57 @@
+---
+const messages = [
+  { initials: 'SA', name: 'Sam', time: '10:18', text: 'Saturday walk? I found a new trail by the lake.' },
+  { initials: 'AL', name: 'Alex', time: '10:20', text: 'Count me in. I’ll bring coffee ☕' },
+  { initials: 'JO', name: 'Jo', time: '10:21', text: 'Perfect. Let’s plan the route in the Lounge.' },
+];
+---
+
+<figure class="conversation-preview" aria-label="Example LetsChat conversation">
+  <div class="preview-shell">
+    <aside class="preview-sidebar" aria-label="Example space channels">
+      <p class="preview-space">Weekend plans</p>
+      <p class="preview-section">Channels</p>
+      <p class="preview-channel selected"># general</p>
+      <p class="preview-channel"># photos</p>
+      <p class="preview-channel">♫ Lounge</p>
+    </aside>
+    <div class="preview-conversation">
+      <div class="preview-header"><strong># general</strong><span>Weekend plans</span></div>
+      <div class="preview-messages">
+        <p class="preview-date">Today</p>
+        {messages.map(message => <div class="preview-message">
+          <span class="preview-avatar" aria-hidden="true">{message.initials}</span>
+          <div><p class="preview-sender"><strong>{message.name}</strong><span>{message.time}</span></p><p>{message.text}</p></div>
+        </div>)}
+        <div class="preview-call"><span aria-hidden="true">♫</span><span><strong>Lounge</strong><br />Sam and Jo are in voice</span></div>
+        <div class="preview-composer" aria-hidden="true">Message #general<span>＋</span></div>
+      </div>
+    </div>
+  </div>
+  <figcaption>Example conversation · Text channels and a place to talk</figcaption>
+</figure>
+
+<style>
+  .conversation-preview { margin: 0; min-width: 0; }
+  .preview-shell { display: flex; overflow: hidden; border: 1px solid var(--border); border-radius: 1rem; background: var(--background); box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 25%); }
+  .preview-sidebar { flex: 0 0 9rem; padding: 1.25rem 0.75rem; background: var(--card); border-right: 1px solid var(--border); }
+  .preview-space { font-size: 0.875rem; font-weight: 600; margin: 0 0 1.5rem; }
+  .preview-section { font-size: 0.75rem; color: var(--muted-foreground); margin-bottom: 0.75rem; }
+  .preview-channel { font-size: 0.875rem; padding: 0.5rem; margin: 0.25rem 0; border-radius: 0.375rem; color: var(--muted-foreground); }
+  .selected { background: var(--muted); color: var(--foreground); font-weight: 500; }
+  .preview-conversation { flex: 1; min-width: 0; }
+  .preview-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; padding: 1rem; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
+  .preview-header span, .preview-date, .preview-sender span { color: var(--muted-foreground); font-size: 0.75rem; }
+  .preview-messages { padding: 1rem; }
+  .preview-date { text-align: center; margin: 0 0 1.25rem; }
+  .preview-message { display: flex; gap: 0.75rem; margin-bottom: 1.25rem; font-size: 0.875rem; line-height: 1.5; }
+  .preview-message > div { min-width: 0; overflow-wrap: anywhere; }
+  .preview-message p { margin: 0; }
+  .preview-avatar { display: grid; place-items: center; flex: 0 0 2rem; height: 2rem; border-radius: 50%; background: var(--muted); color: var(--foreground); font-size: 0.75rem; }
+  .preview-sender { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; margin-bottom: 0.25rem !important; }
+  .preview-call { display: flex; align-items: center; gap: 0.75rem; padding-block: 0.75rem; color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.5; }
+  .preview-call strong { color: var(--foreground); font-size: 0.875rem; }
+  .preview-composer { display: flex; justify-content: space-between; gap: 1rem; margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 0.5rem; font-size: 0.875rem; color: var(--muted-foreground); }
+  figcaption { margin-top: 0.75rem; font-size: 0.75rem; line-height: 1.5; color: var(--muted-foreground); text-align: center; }
+  @media (max-width: 600px) { .preview-sidebar { display: none; } }
+</style>

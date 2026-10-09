@@ -2,6 +2,7 @@
 import Layout from "@/layouts/Layout.astro";
 import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
+import ConversationPreview from "@/components/ConversationPreview.astro";
 import {
   GITHUB_BASE,
   GITHUB_OWNER,
@@ -41,12 +42,12 @@ try {
           </p>
 
           <h1 class="text-5xl sm:text-6xl xl:text-7xl font-semibold tracking-tight leading-[1.04] mb-5">
-            Own your team chat.
-            <span class="text-gradient">Keep your stack.</span>
+            <span class="block">Own your team chat.</span>
+            <span class="block text-gradient">Keep your people close.</span>
           </h1>
 
           <p class="text-lg text-muted-foreground leading-relaxed max-w-xl mb-7">
-            LetsChat combines messaging, voice, video, notifications, and role-based moderation in one desktop client while you keep operational control over data and deployment.
+            Talk with your team, share files, and jump into a voice or video call. Your conversations live on a server you control.
           </p>
 
           <div class="flex flex-col sm:flex-row gap-3 mb-8">
@@ -82,82 +83,44 @@ try {
         </div>
 
         <div class="relative z-10 lg:pl-6">
-          <div class="product-stage">
-            <div class="product-stage-main">
-              <img src="/product-main.png" alt="LetsChat product visual" class="w-full h-auto block" />
-              <div class="product-tag">Desktop client</div>
-            </div>
-            <div class="product-stage-mini product-stage-mini-left">
-              <img src="/product-voice.png" alt="Voice and video controls visual" class="w-full h-full object-cover" />
-              <div class="product-tag">Voice and video</div>
-            </div>
-            <div class="product-stage-mini product-stage-mini-right">
-              <img src="/product-infra.png" alt="Infrastructure visual" class="w-full h-full object-cover" />
-              <div class="product-tag">Infra control</div>
-            </div>
-          </div>
+          <ConversationPreview />
         </div>
       </div>
     </section>
 
     <section id="features" class="max-w-7xl mx-auto px-5 sm:px-6 py-16 space-y-8">
       <div>
-        <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mb-3">Feature set that actually matters</h2>
+        <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mb-3">A place for everyday conversations</h2>
         <p class="text-muted-foreground max-w-3xl">
-          These are current product capabilities reflected in the codebase and operator flow, not placeholder marketing bullets.
+          Keep plans, quick questions, and time together in one place.
         </p>
       </div>
 
       <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         <article class="feature-card">
           <h3>Audio and video communication</h3>
-          <p>Always-on voice channels, DM voice sessions, camera toggles, screen sharing controls, and device selection for mic, camera, and output.</p>
+          <p>Drop into a voice channel or call a friend. Turn on your camera or share your screen when talking is easier than typing.</p>
         </article>
         <article class="feature-card">
           <h3>Notifications with control</h3>
-          <p>Event-level notification toggles, preview privacy mode, test notification flow, quiet hours, and runtime permission handling.</p>
+          <p>Choose which events reach you, hide message previews, and set quiet hours when you need time away.</p>
         </article>
         <article class="feature-card">
           <h3>Licensing and transparency</h3>
-          <p>Open source under {LICENSE_NAME}, public release notes, explicit breaking-change tracking, and GitHub-native feedback channels.</p>
+          <p>Read the source under {LICENSE_NAME}, follow release notes, and help shape what comes next.</p>
         </article>
         <article class="feature-card">
-          <h3>Operational ownership</h3>
-          <p>Self-host deployment paths, discovery endpoint support, and composable service topology for auth, media, storage, and realtime state.</p>
+          <h3>Your conversations, your server</h3>
+          <p>Run LetsChat for your group on your own server. The self-hosting guide walks you through getting started.</p>
         </article>
         <article class="feature-card">
           <h3>Moderation and access controls</h3>
-          <p>Server roles, invite policies, member moderation actions, and permission-aware channel/server management flows.</p>
+          <p>Invite your people, decide who can manage the space, and give moderators the tools to keep conversations welcoming.</p>
         </article>
         <article class="feature-card">
-          <h3>Desktop-first performance model</h3>
-          <p>Tauri-based app footprint with native integrations for OS notifications, badge updates, and desktop lifecycle behavior.</p>
+          <h3>At home on your desktop</h3>
+          <p>Stay connected with desktop notifications and unread badges on macOS, Windows, and Linux.</p>
         </article>
-      </div>
-    </section>
-
-    <section class="max-w-7xl mx-auto px-5 sm:px-6 py-4">
-      <div class="gallery-shell">
-        <div class="gallery-text">
-          <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-3">Product visuals</h2>
-          <p class="text-sm text-muted-foreground leading-relaxed">
-            The current build emphasizes desktop identity, communication controls, and infrastructure ownership in one cohesive interface language.
-          </p>
-        </div>
-        <div class="gallery-grid">
-          <figure>
-            <img src="/product-main.png" alt="LetsChat core product image" />
-            <figcaption>Core product identity</figcaption>
-          </figure>
-          <figure>
-            <img src="/product-voice.png" alt="LetsChat communication controls visual" />
-            <figcaption>Communication controls</figcaption>
-          </figure>
-          <figure>
-            <img src="/product-infra.png" alt="LetsChat infrastructure visual" />
-            <figcaption>Deployment and operations focus</figcaption>
-          </figure>
-        </div>
       </div>
     </section>
 
@@ -186,12 +149,12 @@ try {
             </tr>
             <tr>
               <td>Deployment model</td>
-              <td>Self-hosted with operator-controlled topology.</td>
+              <td>Run on a server you control.</td>
               <td>Managed SaaS with no self-hosted core option.</td>
             </tr>
             <tr>
               <td>Audio and video stack</td>
-              <td>Integrated voice/video flows with LiveKit-based media path.</td>
+              <td>Voice channels, video calls, and screen sharing.</td>
               <td>Mature managed voice/video ecosystem.</td>
             </tr>
             <tr>
@@ -263,7 +226,8 @@ try {
   const btn = document.getElementById("hero-download-btn");
   if (btn) {
     const ua = navigator.userAgent;
-    if (/Mac/i.test(ua)) btn.textContent = "Download for macOS";
+    if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.maxTouchPoints > 1 && /Mac/i.test(ua))) btn.textContent = "Download desktop app";
+    else if (/Mac/i.test(ua)) btn.textContent = "Download for macOS";
     else if (/Win/i.test(ua)) btn.textContent = "Download for Windows";
     else if (/Linux/i.test(ua)) btn.textContent = "Download for Linux";
   }
@@ -307,75 +271,6 @@ try {
     line-height: 1.4;
   }
 
-  .product-stage {
-    position: relative;
-    min-height: 430px;
-    border-radius: 1.4rem;
-    border: 1px solid oklch(1 0 0 / 0.12);
-    background:
-      linear-gradient(160deg, oklch(0.2 0.01 245 / 0.9), oklch(0.15 0.01 245 / 0.92)),
-      radial-gradient(700px 320px at 90% 10%, oklch(0.77 0.1 210 / 0.16), transparent 65%);
-    box-shadow: 0 30px 70px oklch(0 0 0 / 0.35);
-    overflow: hidden;
-    padding: 1.2rem;
-  }
-
-  .product-stage-main {
-    position: relative;
-    border-radius: 1rem;
-    border: 1px solid oklch(1 0 0 / 0.14);
-    background: oklch(0.16 0.01 250 / 0.9);
-    padding: 1rem;
-    width: 78%;
-    margin-left: auto;
-    box-shadow: 0 16px 38px oklch(0 0 0 / 0.28);
-  }
-
-  .product-stage-main img {
-    border-radius: 0.8rem;
-    border: 1px solid oklch(1 0 0 / 0.1);
-  }
-
-  .product-stage-mini {
-    position: absolute;
-    width: 42%;
-    border-radius: 0.95rem;
-    border: 1px solid oklch(1 0 0 / 0.14);
-    background: oklch(0.16 0.01 250 / 0.9);
-    padding: 0.7rem;
-    box-shadow: 0 16px 30px oklch(0 0 0 / 0.24);
-  }
-
-  .product-stage-mini img {
-    border-radius: 0.7rem;
-    border: 1px solid oklch(1 0 0 / 0.08);
-    aspect-ratio: 1/1;
-  }
-
-  .product-stage-mini-left {
-    left: 1rem;
-    bottom: 1rem;
-  }
-
-  .product-stage-mini-right {
-    left: 19%;
-    top: 1.2rem;
-  }
-
-  .product-tag {
-    position: absolute;
-    left: 0.7rem;
-    bottom: 0.7rem;
-    font-size: 0.67rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: oklch(0.9 0.02 240);
-    background: oklch(0.16 0.01 250 / 0.82);
-    border: 1px solid oklch(1 0 0 / 0.18);
-    border-radius: 999px;
-    padding: 0.22rem 0.55rem;
-  }
-
   .feature-card {
     border: 1px solid oklch(1 0 0 / 0.13);
     border-radius: 1rem;
@@ -396,42 +291,6 @@ try {
     color: var(--color-muted-foreground);
     font-size: 0.84rem;
     line-height: 1.55;
-  }
-
-  .gallery-shell {
-    border: 1px solid oklch(1 0 0 / 0.12);
-    border-radius: 1.15rem;
-    padding: 1.2rem;
-    background:
-      linear-gradient(170deg, oklch(0.2 0.01 245 / 0.95), oklch(0.16 0.01 245 / 0.93));
-  }
-
-  .gallery-grid {
-    display: grid;
-    gap: 0.9rem;
-    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-    margin-top: 1rem;
-  }
-
-  .gallery-grid figure {
-    margin: 0;
-    border-radius: 0.9rem;
-    border: 1px solid oklch(1 0 0 / 0.12);
-    background: oklch(0.16 0.01 245 / 0.9);
-    overflow: hidden;
-  }
-
-  .gallery-grid img {
-    width: 100%;
-    display: block;
-    aspect-ratio: 1.15 / 1;
-    object-fit: cover;
-  }
-
-  .gallery-grid figcaption {
-    padding: 0.55rem 0.75rem 0.7rem;
-    font-size: 0.75rem;
-    color: var(--color-muted-foreground);
   }
 
   .compare-head {
@@ -545,41 +404,4 @@ try {
     color: var(--color-foreground);
   }
 
-  @media (max-width: 1024px) {
-    .product-stage {
-      min-height: 380px;
-    }
-
-    .product-stage-main {
-      width: 82%;
-    }
-  }
-
-  @media (max-width: 720px) {
-    .product-stage {
-      min-height: 320px;
-      padding: 0.8rem;
-    }
-
-    .product-stage-main {
-      width: 86%;
-      padding: 0.7rem;
-    }
-
-    .product-stage-mini {
-      width: 44%;
-      padding: 0.45rem;
-    }
-
-    .product-stage-mini-right {
-      left: 12%;
-      top: 0.8rem;
-    }
-
-    .product-stage-mini-left {
-      left: 0.7rem;
-      bottom: 0.7rem;
-    }
-  }
 </style>
-
