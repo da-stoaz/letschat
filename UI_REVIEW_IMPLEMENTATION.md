@@ -21,7 +21,9 @@ Browser checks use Chrome and the isolated sample fixture unless explicitly stat
 
 The initial implementation covered all 25 findings across ten commits. Each P1 received checks before its initial commit; subsequent implementation blocks contain at most five findings, with checks between blocks. Finding 4 received an additional checked follow-up to navigate directly to the resolved space. Later user-requested corrections are recorded below and in the status table.
 
-The app and site production builds, TypeScript, and full ESLint pass. Latest suites: **156 frontend checks**, **108 backend security checks**, and **212 API tests** passed. Chrome sample layout matrix: **74 passed**. The additive pinned-content and invite-destination procedures compiled, and bindings were generated with the matching 2.10.1 CLI.
+The app and site production builds, TypeScript, and full ESLint pass. Latest suites: **159 frontend checks**, **108 backend security checks**, and **212 API tests** passed. Chrome sample layout matrix: **89 passed**. The additive pinned-content and invite-destination procedures compiled, and bindings were generated with the matching 2.10.1 CLI.
+
+PR version check: v1.4.0 was already merged and released, so this follow-up is bumped to **v1.4.1** across the client, native shell, server, Core API, and both Rust lockfiles. Forward-version and consistency checks passed; all 159 frontend tests and the native release build passed again at v1.4.1.
 
 Ship the SpacetimeDB module with the client because pin previews and invite acceptance call the new procedures. Only isolated disposable review databases were published/reset; no existing development or production database was touched. Binding generation and backend tests used the raw compiled WASM because the local optimizer emitted invalid WASM. The storage-fence test now honors the same optional `STDB_MODULE_BIN` override as suite setup; the default source-build path remains unchanged.
 
