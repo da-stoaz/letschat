@@ -9,6 +9,7 @@ import { type Infer as __Infer } from "spacetimedb";
 import * as LoadOlderChannelMessagesProcedure from "../load_older_channel_messages_procedure";
 import * as LoadOlderDirectMessagesProcedure from "../load_older_direct_messages_procedure";
 import * as LoadPinnedChannelMessagesProcedure from "../load_pinned_channel_messages_procedure";
+import * as ResolveInviteServerProcedure from "../resolve_invite_server_procedure";
 
 export type LoadOlderChannelMessagesArgs = __Infer<typeof LoadOlderChannelMessagesProcedure.params>;
 export type LoadOlderChannelMessagesResult = __Infer<typeof LoadOlderChannelMessagesProcedure.returnType>;
@@ -16,4 +17,6 @@ export type LoadOlderDirectMessagesArgs = __Infer<typeof LoadOlderDirectMessages
 export type LoadOlderDirectMessagesResult = __Infer<typeof LoadOlderDirectMessagesProcedure.returnType>;
 export type LoadPinnedChannelMessagesArgs = __Infer<typeof LoadPinnedChannelMessagesProcedure.params>;
 export type LoadPinnedChannelMessagesResult = __Infer<typeof LoadPinnedChannelMessagesProcedure.returnType>;
+export type ResolveInviteServerArgs = __Infer<typeof ResolveInviteServerProcedure.params>;
+export type ResolveInviteServerResult = __Infer<typeof ResolveInviteServerProcedure.returnType>;
 

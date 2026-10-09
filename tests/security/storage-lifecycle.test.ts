@@ -246,7 +246,13 @@ describe('fresh database storage fence', () => {
   it('refuses a rebuild until the init fence is released', () => {
     execFileSync(
       'spacetime',
-      ['publish', '--server', BASE, freshDb, '--module-path', 'server', '--delete-data', '--yes'],
+      [
+        'publish', '--server', BASE, freshDb,
+        ...(process.env.STDB_MODULE_BIN
+          ? ['--bin-path', process.env.STDB_MODULE_BIN]
+          : ['--module-path', 'server']),
+        '--delete-data', '--yes',
+      ],
       { stdio: 'ignore' },
     )
     try {

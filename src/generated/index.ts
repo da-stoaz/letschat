@@ -126,6 +126,7 @@ import UseInviteReducer from "./use_invite_reducer";
 import * as LoadOlderChannelMessagesProcedure from "./load_older_channel_messages_procedure";
 import * as LoadOlderDirectMessagesProcedure from "./load_older_direct_messages_procedure";
 import * as LoadPinnedChannelMessagesProcedure from "./load_pinned_channel_messages_procedure";
+import * as ResolveInviteServerProcedure from "./resolve_invite_server_procedure";
 
 // Import all table schema definitions
 import ArchiveBansRow from "./archive_bans_table";
@@ -535,6 +536,7 @@ const proceduresSchema = __procedures(
   __procedureSchema("load_older_channel_messages", LoadOlderChannelMessagesProcedure.params, LoadOlderChannelMessagesProcedure.returnType),
   __procedureSchema("load_older_direct_messages", LoadOlderDirectMessagesProcedure.params, LoadOlderDirectMessagesProcedure.returnType),
   __procedureSchema("load_pinned_channel_messages", LoadPinnedChannelMessagesProcedure.params, LoadPinnedChannelMessagesProcedure.returnType),
+  __procedureSchema("resolve_invite_server", ResolveInviteServerProcedure.params, ResolveInviteServerProcedure.returnType),
 );
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {

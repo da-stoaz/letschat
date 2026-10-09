@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { Identity, Timestamp } from 'spacetimedb'
 import { DbConnection } from '../../src/generated'
-import { BASE, DB, createChannel, createServer, makeFriends, makeUser, type TestUser } from './harness'
+import { BASE, DB, createChannel, createServer, makeFriends, makeUser, none, some, type TestUser } from './harness'
 
 // `my_channel_messages` / `my_direct_messages` used to return every message of
 // every channel of every space the caller belonged to, with no bound at all
@@ -74,6 +74,25 @@ afterAll(() => {
 })
 
 describe('bounded message history', () => {
+  it('resolves the intended invite before single-use consumption, independently of existing spaces', async () => {
+    const target = await createServer(owner)
+    await createServer(outsider)
+    await createServer(outsider)
+    await owner.call('create_invite', [target, none, some(1), []])
+    const { rows } = await owner.sql('SELECT token, server_id FROM my_invites')
+    const token = String(rows.find(row => Number(row.server_id) === target)!.token)
+    expect(await outsiderConn.procedures.resolveInviteServer({ token })).toBe(BigInt(target))
+    expect(await outsiderConn.procedures.resolveInviteServer({ token: 'unknown' })).toBeUndefined()
+    await outsider.call('use_invite', [token])
+    expect(await outsiderConn.procedures.resolveInviteServer({ token })).toBeUndefined()
+    const joined = await outsider.sql('SELECT id FROM my_servers')
+    expect(joined.rows.map(row => Number(row.id))).toContain(target)
+
+    await owner.call('create_invite', [target, none, none, [owner.username]])
+    const restricted = await owner.sql('SELECT token, server_id FROM my_invites')
+    const restrictedToken = String(restricted.rows.find(row => Number(row.server_id) === target)!.token)
+    expect(await outsiderConn.procedures.resolveInviteServer({ token: restrictedToken })).toBeUndefined()
+  })
   it('caps the subscription view at the recent window', async () => {
     const { rows, error } = await owner.sql('SELECT id FROM my_channel_messages')
     expect(error).toBeNull()

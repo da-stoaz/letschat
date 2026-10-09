@@ -1,24 +1,37 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { reducers } from '../lib/spacetimedb'
+import { acceptInvite } from '../features/auth/acceptInvite'
 import { useSelfStore } from '../stores/selfStore'
+import { useServersStore } from '../stores/serversStore'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ServerIcon, CheckIcon, XIcon, LoaderCircleIcon } from 'lucide-react'
 
 export function InvitePage() {
   const { token = '' } = useParams()
+  return <InviteLanding key={token} token={token} />
+}
+
+function InviteLanding({ token }: { token: string }) {
   const navigate = useNavigate()
   const [status, setStatus] = useState<'idle' | 'joining' | 'joined' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const isAuthenticated = useSelfStore((s) => Boolean(s.user))
+  const [joinedServerId, setJoinedServerId] = useState<number | null>(null)
+  const membershipReady = useServersStore(s => s.servers.some(server => server.id === joinedServerId))
+  useEffect(() => {
+    if (status === 'joined' && joinedServerId !== null && membershipReady) {
+      navigate(`/app/${joinedServerId}/channels`, { replace: true })
+    }
+  }, [status, joinedServerId, membershipReady, navigate])
 
   const handleJoin = async () => {
     if (!isAuthenticated || status === 'joining') return
     setStatus('joining')
     setErrorMsg(null)
     try {
-      await reducers.useInvite(token)
+      const serverId = await acceptInvite(token)
+      setJoinedServerId(serverId)
       setStatus('joined')
 
     } catch (e) {
@@ -50,7 +63,7 @@ export function InvitePage() {
             {status === 'joined' && (
               <div role="status" className="flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 p-3 text-green-600 dark:text-green-400 text-sm">
                 <CheckIcon className="size-4 shrink-0" />
-                Joined! Your new space will appear in Spaces.
+                Joined! Waiting for your space to sync…
               </div>
             )}
 

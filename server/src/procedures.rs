@@ -21,6 +21,27 @@ use crate::views::RECENT_MESSAGE_WINDOW;
 /// Upper bound on one page, whatever the client asks for.
 const MAX_PAGE: usize = RECENT_MESSAGE_WINDOW;
 
+/// Resolve a bearer invite before use_invite can consume a single-use token.
+/// Only its destination ID is returned; the reducer still authorizes joining.
+#[spacetimedb::procedure]
+pub fn resolve_invite_server(ctx: &mut ProcedureContext, token: String) -> Option<u64> {
+    let caller = ctx.sender();
+    ctx.with_tx(|tx| {
+        require_readable_account(tx, caller).ok()?;
+        let invite = tx.db.invite().token().find(&token)?;
+        if tx.timestamp > invite.expires_at || invite.max_uses.is_some_and(|max| invite.use_count >= max) {
+            return None;
+        }
+        if !invite.allowed_usernames.is_empty() {
+            let user = tx.db.user().identity().find(caller)?;
+            if !invite.allowed_usernames.contains(&user.username.trim().to_lowercase()) {
+                return None;
+            }
+        }
+        tx.db.server().id().find(invite.server_id).map(|server| server.id)
+    })
+}
+
 /// Pinned content is independent of the caller's recent history window.
 /// Match history authorization and never expose another channel's messages.
 #[spacetimedb::procedure]
