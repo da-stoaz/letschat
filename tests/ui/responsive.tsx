@@ -46,6 +46,7 @@ useServersStore.setState({ servers: ['A space with a long name for testing', 'De
 useChannelsStore.setState({ channelsByServer: { 1: [
   { id: 10, serverId: 1, name: 'general-with-a-long-channel-name', kind: 'Text', section: null, position: 0, moderatorOnly: false },
   { id: 12, serverId: 1, name: 'Lounge', kind: 'Voice', section: null, position: 2, moderatorOnly: false },
+  { id: 13, serverId: 1, name: 'Quiet room', kind: 'Voice', section: null, position: 3, moderatorOnly: false },
   { id: 11, serverId: 1, name: 'announcements', kind: 'Announcement', section: null, position: 1, moderatorOnly: true },
 ] } })
 useMembersStore.getState().setServerMembers(1, [me, friend].map(user => ({ serverId: 1, userIdentity: user.identity, role: user === me ? 'Owner' : 'Member', joinedAt: now, timeoutUntil: null, user })))

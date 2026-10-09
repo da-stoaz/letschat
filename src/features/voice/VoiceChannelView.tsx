@@ -44,6 +44,6 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   return <section className="flex h-full min-h-0 flex-col gap-2 p-2 sm:p-3">
     <header className="flex shrink-0 items-center gap-2"><CompactBack /><h2 className="min-w-0 truncate font-semibold">{channel?.name ?? 'Voice channel'}</h2></header>
     <VoiceMediaStage tiles={tiles} emptyStateText="No one is here yet" />
-    <div className="shrink-0 border-t pt-2"><Button className="h-12 w-full sm:w-auto" disabled={channelId === null} onClick={() => void onJoin()}><PhoneCallIcon />Join call</Button></div>
+    <div className="shrink-0 border-t pt-2"><Button className="w-full sm:w-auto" disabled={channelId === null} onClick={() => void onJoin()}><PhoneCallIcon />Join call</Button></div>
   </section>
 }
