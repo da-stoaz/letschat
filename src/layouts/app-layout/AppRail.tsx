@@ -201,6 +201,8 @@ function SortableTopServer({ dndId, server, isActive, unreadCount, hasUnread, ha
               onClick={onClick}
               {...attributes}
               {...listeners}
+              aria-label={server.name}
+              aria-current={isActive ? 'page' : undefined}
             />
           }
         >
@@ -272,6 +274,8 @@ function SortableGroupHeader({
               onClick={onToggleCollapse}
               {...attributes}
               {...listeners}
+              aria-label={group.label}
+              aria-expanded={isExpanded}
             />
           }
         >
@@ -341,6 +345,8 @@ function SortableGroupedServer({ dndId, server, isActive, unreadCount, hasUnread
               onClick={onClick}
               {...attributes}
               {...listeners}
+              aria-label={server.name}
+              aria-current={isActive ? 'page' : undefined}
             />
           }
         >
@@ -666,11 +672,13 @@ export function AppRail({
                 variant="secondary"
                 size="icon"
                 className={`relative mt-0.5 h-9 w-9 rounded-lg ${isDiscoverActive ? 'ring-1 ring-primary/70' : ''}`}
+                aria-label="Discover spaces"
+                aria-current={isDiscoverActive ? 'page' : undefined}
                 onClick={onOpenDiscover}
               />
             }
           >
-            <img src={stealthChatLogo} alt="StealthChat" className="h-6 w-6 object-contain" />
+            <img src={stealthChatLogo} alt="" className="h-6 w-6 object-contain" />
           </TooltipTrigger>
           <TooltipContent side="right">Discover Spaces</TooltipContent>
         </Tooltip>
@@ -721,7 +729,7 @@ export function AppRail({
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg border border-dashed border-border/70" onClick={onOpenCreateServer} />
+                      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg border border-dashed border-border/70" aria-label="Create space" onClick={onOpenCreateServer} />
                     }
                   >
                     <PlusIcon className="size-4" />
@@ -742,6 +750,8 @@ export function AppRail({
                 variant={dmHomeActive ? 'secondary' : 'ghost'}
                 size="icon"
                 className={`relative h-8 w-8 rounded-md ${dmHomeActive ? 'ring-1 ring-primary/70' : ''}`}
+                aria-label="Direct messages"
+                aria-current={dmHomeActive ? 'page' : undefined}
                 onClick={onOpenDmHome}
               />
             }
@@ -759,7 +769,7 @@ export function AppRail({
         <Tooltip>
           <TooltipTrigger
             render={
-              <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-md" onClick={onOpenDmCompose} />
+              <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-md" aria-label="New message" onClick={onOpenDmCompose} />
             }
           >
             <MessageCircleIcon className="size-4" />
@@ -780,6 +790,8 @@ export function AppRail({
                         variant="ghost"
                         size="icon"
                         className={`relative h-8 w-8 rounded-md ${activeDmIdentity === contact.identity ? 'ring-1 ring-primary/70' : ''}`}
+                        aria-label={`Message ${contact.label}`}
+                        aria-current={activeDmIdentity === contact.identity ? 'page' : undefined}
                         onClick={() => onOpenDmContact(contact.identity)}
                       />
                     }
@@ -815,6 +827,8 @@ export function AppRail({
                 variant={isSettingsActive ? 'secondary' : 'ghost'}
                 size="icon"
                 className={`mb-0.5 h-9 w-9 rounded-lg ${isSettingsActive ? 'ring-1 ring-primary/70' : ''}`}
+                aria-label="Settings"
+                aria-current={isSettingsActive ? 'page' : undefined}
                 onClick={onOpenSettings}
               />
             }
