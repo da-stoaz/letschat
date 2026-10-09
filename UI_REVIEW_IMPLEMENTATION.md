@@ -5,6 +5,7 @@ Started 2026-10-09. Tracks [APPLE_DESIGN_UI_REVIEW.md](APPLE_DESIGN_UI_REVIEW.md
 | Findings | Status | Checks |
 | --- | --- | --- |
 | 1 | Implemented | TypeScript; Chrome desktop accessibility tree: named rail actions, full space/contact names |
-| 2–25 | Pending | |
+| 2 | Implemented | TypeScript; Chrome accessibility tree: all ten notification switches have distinct names |
+| 3–25 | Pending | |
 
 Browser checks use Chrome and the isolated sample fixture unless explicitly stated otherwise. Live backend and native Tauri checks are recorded separately when available.
