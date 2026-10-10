@@ -6,6 +6,10 @@ import { tauriCommands } from './tauri'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { useDmVoiceSessionStore } from '../stores/dmVoiceSessionStore'
+import { useServerConfigStore } from '../stores/serverConfigStore'
+import { useVoiceStore } from '../stores/voiceStore'
+import { useDmVoiceStore } from '../stores/dmVoiceStore'
+import { clearCallReload, saveCallReload, takeCallReload, type CallTarget, type CallAudioState } from '../features/voice/callReload'
 import { toast } from 'sonner'
 import type { Identity } from '../types/domain'
 
@@ -663,9 +667,9 @@ type ConnectLiveKitWithPresenceParams = {
   onJoinPresence: () => Promise<void>
   onLeavePresence: () => Promise<void>
   onSyncMutedState: (muted: boolean) => Promise<void>
+  initiallyMuted: boolean
 }
 
-type CallTarget = { kind: 'channel'; id: number } | { kind: 'dm'; id: Identity }
 type CallAttempt = {
   target: CallTarget
   identity: Identity
@@ -748,10 +752,45 @@ function clearLocalCalls(): CallAttempt | null {
 
 /** Sign-out invalidates in-flight joins as well as already connected rooms. */
 export function resetCallSessions(): void {
+  clearCallReload()
   callEpoch++
   clearLocalCalls()
   pendingLeaves.clear()
   toast.dismiss(CLEANUP_TOAST_ID)
+}
+
+/** Snapshot before the SDK's unload handler disconnects the room. */
+export function prepareCallReload(): void {
+  const attempt = activeCall
+  const config = useServerConfigStore.getState().config
+  if (!attempt?.room || attempt.room.state === ConnectionState.Disconnected || !config) return
+  const installedRoom = attempt.target.kind === 'channel' ? useVoiceSessionStore.getState().room : useDmVoiceSessionStore.getState().room
+  if (installedRoom !== attempt.room) return
+  const participants = attempt.target.kind === 'channel'
+    ? useVoiceStore.getState().participantsByChannel[attempt.target.id]
+    : useDmVoiceStore.getState().participantsByRoom[dmVoiceRoomKey(attempt.identity, attempt.target.id)]
+  const self = participants?.find(participant => normalizeIdentityKey(participant.userIdentity) === normalizeIdentityKey(attempt.identity))
+  saveCallReload(attempt.target, {
+    muted: !attempt.room.localParticipant.isMicrophoneEnabled,
+    deafened: self?.deafened ?? false,
+  }, attempt.identity, config)
+  // Clear ownership before disconnect events fire. The old database socket's
+  // server-side disconnect cleanup removes only its own presence rows.
+  clearLocalCalls()
+}
+
+export async function restoreCallAfterReload(): Promise<void> {
+  const { identity } = useConnectionStore.getState()
+  const config = useServerConfigStore.getState().config
+  if (!identity || !config) return
+  const saved = takeCallReload(identity, config)
+  if (!saved || activeCall) return
+  try {
+    if (saved.target.kind === 'channel') await joinLiveKitVoice(saved.target.id, saved)
+    else await joinLiveKitDmVoice(saved.target.id, saved)
+  } catch (error) {
+    if (!isCallCancelled(error)) toast.error('Could not rejoin the call after reload. Join the call again to retry.')
+  }
 }
 
 async function releasePresence(attempt: CallAttempt): Promise<void> {
@@ -790,6 +829,7 @@ export function retryCallCleanup(): Promise<void> {
 }
 
 function startCall(target: CallTarget, params: ConnectLiveKitWithPresenceParams): Promise<Room> {
+  clearCallReload()
   const identity = useConnectionStore.getState().identity
   if (!identity) return Promise.reject(new Error(params.identityErrorMessage))
   const installedRoom = target.kind === 'channel' ? useVoiceSessionStore.getState().room : useDmVoiceSessionStore.getState().room
@@ -836,6 +876,7 @@ function endCall(target: CallTarget, room: Room | null): Promise<void> {
     stopRoom(room)
     return Promise.resolve()
   }
+  clearCallReload()
   const previous = clearLocalCalls()!
   return queueCallWork(() => releasePresence(previous))
 }
@@ -877,7 +918,7 @@ async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresencePara
   const room = attempt.room
   assertCurrentCall(attempt)
 
-  if (!supportsMicrophoneCapture()) {
+  if (params.initiallyMuted || !supportsMicrophoneCapture()) {
     await params.onSyncMutedState(true).catch(() => undefined)
     assertCurrentCall(attempt)
     return room
@@ -906,7 +947,7 @@ async function connectLiveKitWithPresence(params: ConnectLiveKitWithPresencePara
   return room
 }
 
-export async function joinLiveKitVoice(channelId: number): Promise<Room> {
+export async function joinLiveKitVoice(channelId: number, audio: CallAudioState = { muted: false, deafened: false }): Promise<Room> {
   return startCall({ kind: 'channel', id: channelId }, {
     roomName: String(channelId),
     identityErrorMessage: 'Cannot join voice: no local identity',
@@ -914,11 +955,12 @@ export async function joinLiveKitVoice(channelId: number): Promise<Room> {
     micEnableWarning: 'Could not enable microphone automatically; joined voice in listen-only mode.',
     onJoinPresence: () => reducers.joinVoiceChannel(channelId),
     onLeavePresence: () => reducers.leaveVoiceChannel(channelId),
-    onSyncMutedState: (muted) => reducers.updateVoiceState(channelId, muted, false, false, false),
+    onSyncMutedState: (muted) => reducers.updateVoiceState(channelId, muted, audio.deafened, false, false),
+    initiallyMuted: audio.muted,
   })
 }
 
-export async function joinLiveKitDmVoice(partnerIdentity: Identity): Promise<Room> {
+export async function joinLiveKitDmVoice(partnerIdentity: Identity, audio: CallAudioState = { muted: false, deafened: false }): Promise<Room> {
   const identity = useConnectionStore.getState().identity
   if (!identity) {
     throw new Error('Cannot join DM voice: no local identity')
@@ -931,7 +973,8 @@ export async function joinLiveKitDmVoice(partnerIdentity: Identity): Promise<Roo
     micEnableWarning: 'Could not enable microphone automatically; joined DM voice in listen-only mode.',
     onJoinPresence: () => reducers.joinDmVoice(partnerIdentity),
     onLeavePresence: () => reducers.leaveDmVoice(partnerIdentity),
-    onSyncMutedState: (muted) => reducers.updateDmVoiceState(partnerIdentity, muted, false, false, false),
+    onSyncMutedState: (muted) => reducers.updateDmVoiceState(partnerIdentity, muted, audio.deafened, false, false),
+    initiallyMuted: audio.muted,
   })
 }
 
