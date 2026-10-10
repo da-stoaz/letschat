@@ -13,6 +13,7 @@ import { useVoiceSessionStore } from '../../../stores/voiceSessionStore'
 import { useVoiceStore } from '../../../stores/voiceStore'
 import { useKrispNoiseFilter } from '../hooks/useKrispNoiseFilter'
 import { watchAudioPlayback } from '../audioPlayback'
+import { remoteAudioTracks } from '../remoteAudioTracks'
 
 type PlaybackReporter = (key: string, retry: (() => void) | null) => void
 
@@ -100,20 +101,10 @@ function RoomAudioSinks({
 }) {
   const { remoteParticipants } = useLiveKitRoom(room)
 
-  const sinks = useMemo(() => {
-    const collected: Array<{ key: string; track: RemoteAudioTrack }> = []
-    for (const participant of remoteParticipants) {
-      for (const publication of participant.audioTrackPublications.values()) {
-        const track = publication.audioTrack
-        if (!track) continue
-        collected.push({
-          key: `${participant.identity}:${publication.trackSid}`,
-          track: track as RemoteAudioTrack,
-        })
-      }
-    }
-    return collected
-  }, [remoteParticipants])
+  const sinks = useMemo(
+    () => remoteAudioTracks(remoteParticipants, room?.localParticipant.identity),
+    [remoteParticipants, room],
+  )
 
   const volume = deafened ? 0 : 1
 

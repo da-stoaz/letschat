@@ -156,7 +156,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
       </header>
 
       <ChatMessageFeed
-        key={scopeKey}
+        key={`feed:${scopeKey}`}
         ref={feedRef}
         scopeKey={`channel:${channelId}`}
         messages={messages}
@@ -196,7 +196,7 @@ export function TextChannelView({ channelId }: { channelId: u64 | null }) {
       />
 
       <ChatComposer
-        key={scopeKey}
+        key={`composer:${scopeKey}`}
         scopeKey={scopeKey}
         disabled={readOnlyForMember}
         placeholder={readOnlyForMember ? 'This channel is read-only for members' : `Message #${channel?.name ?? 'channel'}`}

@@ -350,7 +350,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
       ) : null}
 
       <ChatMessageFeed
-        key={scopeKey}
+        key={`feed:${scopeKey}`}
         scopeKey={scopeKey}
         messages={renderMessages}
         onLoadOlder={() => loadOlderDirectMessages(partnerIdentity)}
@@ -383,7 +383,7 @@ export function DMView({ partnerIdentity }: { partnerIdentity: Identity }) {
       )}
 
       <ChatComposer
-        key={scopeKey}
+        key={`composer:${scopeKey}`}
         scopeKey={scopeKey}
         placeholder={`Message @${partner.username}`}
         uploadScope={{ kind: 'dm', partner: partner.username }}
