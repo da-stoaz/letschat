@@ -28,3 +28,8 @@ against an HTTPS instance: portrait and landscape, keyboard opening/closing,
 multiline input and IME, text zoom, image/PDF/video previews, upload retries, normal
 browser Back/Forward and refresh/deep links, plus reduced motion. Separately verify
 existing calls and pane resizing in the Tauri app.
+
+Open `/tests/ui/chat-history.html` for the conversation reconciliation regression
+check. It switches between populated and empty channels, then repeatedly rerenders
+a DM. Every step must report PASS with exactly one message feed and no duplicate
+message IDs. It uses the real channel/DM views with isolated in-memory storage.
