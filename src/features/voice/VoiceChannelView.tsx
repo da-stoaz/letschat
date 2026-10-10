@@ -6,6 +6,7 @@ import { useIsMobile } from '../../hooks/use-mobile'
 import { useChannelsStore } from '../../stores/channelsStore'
 import { useMembersStore } from '../../stores/membersStore'
 import { useVoiceStore } from '../../stores/voiceStore'
+import { useVoiceSessionStore } from '../../stores/voiceSessionStore'
 import { isCallCancelled, joinLiveKitVoice } from '../../lib/livekit'
 import type { u64 } from '../../types/domain'
 import { useActiveCall } from './hooks/useActiveCall'
@@ -21,6 +22,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   const channels = useChannelsStore((s) => s.channelsByServer)
   const members = useMembersStore((s) => s.membersByServer)
   const participants = useVoiceStore((s) => s.participantsByChannel)
+  const error = useVoiceSessionStore((s) => s.error)
   const channel = Object.values(channels).flat().find((item) => item.id === channelId)
   const returnTo = channel ? `/app/${channel.serverId}/channels` : '/app/spaces'
   if (channelId !== null && call.channelId === channelId) return <CallPanel call={call} onBack={() => navigate(returnTo)} />
@@ -43,6 +45,7 @@ export function VoiceChannelView({ channelId }: { channelId: u64 | null }) {
   }
   return <section className="flex h-full min-h-0 flex-col gap-2 p-2 sm:p-3">
     <header className="flex shrink-0 items-center gap-2"><CompactBack /><h2 className="min-w-0 truncate font-semibold">{channel?.name ?? 'Voice channel'}</h2></header>
+    {error ? <p role="alert" className="shrink-0 text-sm break-words text-destructive">{error}</p> : null}
     <VoiceMediaStage tiles={tiles} emptyStateText="No one is here yet" />
     <div className="shrink-0 border-t pt-2"><Button className="w-full sm:w-auto" disabled={channelId === null} onClick={() => void onJoin()}><PhoneCallIcon />Join call</Button></div>
   </section>

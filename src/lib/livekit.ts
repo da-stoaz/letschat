@@ -648,7 +648,7 @@ function mapLiveKitConnectionError(error: unknown, livekitUrls: string[]): Error
   }
   if (error instanceof Error && error.message.toLowerCase().includes('pc connection')) {
     return new Error(
-      `Could not establish peer connection. Signal URL ${livekitUrls[0]} responded, but ICE failed. Verify LiveKit TCP 7881 and UDP 7882 mappings (plus UDP 7881 if enabled).`,
+      `Could not establish the call's media connection. Signalling at ${livekitUrls[0]} responded, but ICE failed.`,
       { cause: error },
     )
   }

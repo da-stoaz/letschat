@@ -1,6 +1,7 @@
 import { describe, it, expect, afterAll, beforeAll } from 'vitest'
+import { Identity } from 'spacetimedb'
 import { DbConnection } from '../../src/generated'
-import { BASE, DB, createServer, makeOpenJoinable, makeUser, none, ownerSql, type TestUser } from './harness'
+import { BASE, DB, createServer, makeFriends, makeOpenJoinable, makeUser, none, ownerSql, type TestUser } from './harness'
 
 // Voice presence is connection-scoped: rows record the SpacetimeDB connection
 // that claimed them, and the module's `client_disconnected` lifecycle reducer
@@ -132,6 +133,31 @@ describe('voice presence — connection lifecycle', () => {
     }
 
     expect(await until(() => voiceRowCount(secondVoiceChannelId) === 0)).toBe(true)
+  })
+
+  it.each(['channel', 'dm'] as const)('a stale %s leave cannot delete a newer connection’s participation', async kind => {
+    const friend = kind === 'dm' ? await makeUser('vlate') : null
+    if (friend) await makeFriends(owner, friend)
+    const old = await connect(owner.token)
+    const current = await connect(owner.token)
+    const join = (socket: DbConnection) => friend
+      ? socket.reducers.joinDmVoice({ otherIdentity: Identity.fromString(friend.identity) })
+      : socket.reducers.joinVoiceChannel({ channelId: BigInt(voiceChannelId) })
+    const leave = (socket: DbConnection) => friend
+      ? socket.reducers.leaveDmVoice({ otherIdentity: Identity.fromString(friend.identity) })
+      : socket.reducers.leaveVoiceChannel({ channelId: BigInt(voiceChannelId) })
+    const query = friend ? 'SELECT user_identity FROM my_dm_voice_participants' : `SELECT user_identity FROM my_voice_participants WHERE channel_id = ${voiceChannelId}`
+    try {
+      await join(old)
+      await join(current)
+      await leave(old)
+      expect((await owner.sql(query)).rows, 'a delayed leave from another connection must preserve the row used to authorize the new call').toHaveLength(1)
+      await leave(current)
+      expect((await owner.sql(query)).rows).toHaveLength(0)
+    } finally {
+      old.disconnect()
+      current.disconnect()
+    }
   })
 
   // BUG_ANALYSIS B11: kick removed the target's voice presence, ban did not, so

@@ -302,7 +302,11 @@ services:
     # docker-compose.dev.yml), and LETSCHAT_VERSION cannot roll it back.
     image: livekit/livekit-server:v1.13.5
     container_name: letschat-livekit
-    networks: [default, proxy]
+    # One media interface: ICE must advertise the same interface Docker forwards
+    # the published ports to. With two NICs, external-IP discovery can choose
+    # the other NIC and signalling still works while every ICE check times out.
+    # core-api, cloudflared and Caddy already share proxy.
+    networks: [proxy]
     command: --config /etc/livekit.yaml
     environment:
       # The API key pair, from the same .env values core-api signs voice tokens

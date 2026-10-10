@@ -149,10 +149,14 @@ pub fn on_client_disconnected(ctx: &ReducerContext) {
 #[spacetimedb::reducer]
 pub fn leave_voice_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), String> {
     require_account(ctx)?;
-    ctx.db
-        .voice_participant()
-        .voice_key()
-        .delete(voice_key(channel_id, ctx.sender()));
+    let key = voice_key(channel_id, ctx.sender());
+    if let Some(row) = ctx.db.voice_participant().voice_key().find(&key)
+        && (row.connection_id.is_none() || row.connection_id == ctx.connection_id())
+    {
+        // A previous device can finish leaving after another device has joined.
+        // Its cleanup must not delete the new connection's token authorization.
+        ctx.db.voice_participant().voice_key().delete(key);
+    }
     Ok(())
 }
 

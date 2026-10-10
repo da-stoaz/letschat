@@ -17,6 +17,9 @@ import { ChannelBarShell } from './ChannelBarShell'
 import type { ServerChannelBarProps } from './types'
 import type { Channel } from '../../../types/domain'
 import { serverInitials } from '../helpers'
+import { useVoiceSessionStore } from '../../../stores/voiceSessionStore'
+import { useLiveKitRoom } from '../../../lib/livekit'
+import { callConnection } from '../../../features/voice/callConnection'
 
 const EMPTY_ACTIVE_SPEAKERS = new Set<string>()
 
@@ -48,6 +51,10 @@ export function ServerChannelBar({
   onToggleChannelMute,
   onSelectChannel,
 }: ServerChannelBarProps) {
+  const room = useVoiceSessionStore((s) => s.room)
+  const joining = useVoiceSessionStore((s) => s.joining)
+  const { connectionState } = useLiveKitRoom(room)
+  const { status } = callConnection(connectionState, joining)
   const ownerCannotLeave = role === 'Owner'
   const canAccessServerPanel = role === 'Owner' || role === 'Moderator'
   const canInvite =
@@ -149,7 +156,7 @@ export function ServerChannelBar({
                     channel={channel}
                     active={activeChannelId === channel.id}
                     participants={participantsByChannel[channel.id] ?? []}
-                    selfJoined={joinedVoiceChannelId === channel.id}
+                    connectionStatus={joinedVoiceChannelId === channel.id ? status : null}
                     activeSpeakerIdentityKeys={joinedVoiceChannelId === channel.id ? activeSpeakerIdentityKeys : EMPTY_ACTIVE_SPEAKERS}
                     muted={isChannelMuted(channel.id)}
                     memberProfileByIdentity={memberProfileByIdentity}

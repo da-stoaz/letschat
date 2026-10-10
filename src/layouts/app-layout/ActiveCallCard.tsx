@@ -36,6 +36,7 @@ import { useVoiceStore } from '../../stores/voiceStore'
 import { normalizeIdentity } from './helpers'
 import { encodeDmSystemMessage, getCallDurationSeconds } from '../../features/dm/systemMessages'
 import { useVoiceControlActions } from '../../features/voice/hooks/useVoiceControlActions'
+import { callConnection } from '../../features/voice/callConnection'
 import { CallLatencyBadge } from '../../features/voice/components/CallLatencyBadge'
 import { NoiseFilterToggle } from '../../features/voice/components/NoiseFilterToggle'
 import { Badge } from '@/components/ui/badge'
@@ -64,11 +65,6 @@ const EMPTY_VOICE_PARTICIPANTS: Array<{
 }> = []
 
 type CallMode = 'server' | 'dm'
-
-function getStatusLabel(connected: boolean, connecting: boolean): string {
-  if (connecting) return 'Connecting'
-  return connected ? 'Connected' : 'Not connected'
-}
 
 function selectInitialDevice(
   explicitDeviceId: string | null,
@@ -321,8 +317,7 @@ export function ActiveCallCard({
   // answer, so there is nothing to re-probe and nothing to flip off.
   const audioOutputSwitchSupported = useMemo(() => supportsAudioOutputSwitching(), [])
 
-  const connected = connectionState === ConnectionState.Connected
-  const connecting = (mode === 'server' ? voiceJoining : dmJoining) || connectionState === ConnectionState.Connecting
+  const { connected, connecting, status: statusLabel } = callConnection(connectionState, mode === 'server' ? voiceJoining : dmJoining)
   const muted = selfParticipant?.muted ?? false
   const deafened = selfParticipant?.deafened ?? false
   const sharingCamera = selfParticipant?.sharingCamera ?? false
@@ -564,7 +559,6 @@ export function ActiveCallCard({
     leaveErrorMessage: 'Could not leave voice call.',
   })
 
-  const statusLabel = getStatusLabel(connected, connecting)
   const micLabel = shortLabel(selectedDeviceLabel(audioInputId, audioInputs, 'Mic'))
   const cameraLabel = shortLabel(selectedDeviceLabel(videoInputId, videoInputs, 'Camera'))
   const outputLabel = shortLabel(selectedDeviceLabel(audioOutputId, audioOutputs, 'Output'))

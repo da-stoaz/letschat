@@ -765,6 +765,14 @@ Two exceptions where the order DOES matter:
 
 ## Operations Basics
 
+Before pulling a release, update the checkout (or deployment files) to that
+release as well as `LETSCHAT_VERSION`. Image pulls do not update Compose files
+or mounted configuration. In **1.4.2**, this includes the LiveKit network fix in
+`docker-compose.prod.base.yml`: LiveKit uses only `proxy`, which is also shared
+by core-api and both supported proxies. The normal `up -d` below recreates it
+with the corrected network; active calls are interrupted during recreation.
+No firewall changes, database reset, or hand-edited network override is needed.
+
 Tunnel update cycle:
 
 ```bash

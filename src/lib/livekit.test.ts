@@ -95,6 +95,18 @@ beforeEach(async () => {
 })
 
 describe('call ownership and recovery', () => {
+  it.each(['channel', 'dm'] as const)('retains the %s ICE failure after cleaning up the failed join', async kind => {
+    const cause = new Error('could not establish pc connection')
+    mocks.connect.mockRejectedValue(cause)
+    const error = await (kind === 'channel' ? joinLiveKitVoice(42) : joinLiveKitDmVoice('partner')).catch(error => error)
+    expect(error.cause).toBe(cause)
+    expect(error.message).toContain('ICE failed')
+    expect(error.message).not.toMatch(/7881|7882/)
+    const session = kind === 'channel' ? useVoiceSessionStore.getState() : useDmVoiceSessionStore.getState()
+    expect(session).toMatchObject({ room: null, joining: false, error: error.message })
+    expect(kind === 'channel' ? mocks.leaveVoice : mocks.leaveDm).toHaveBeenCalledOnce()
+  })
+
   it('claims presence before minting the authorized token for channel and DM calls', async () => {
     await joinLiveKitVoice(42)
     expect(mocks.order.slice(0, 3)).toEqual(['join:42', 'token:42', 'connect'])

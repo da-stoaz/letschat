@@ -70,10 +70,12 @@ pub fn join_dm_voice(ctx: &ReducerContext, other_identity: Identity) -> Result<(
 pub fn leave_dm_voice(ctx: &ReducerContext, other_identity: Identity) -> Result<(), String> {
     require_account(ctx)?;
     let room_key = dm_room_key(ctx.sender(), other_identity);
-    ctx.db
-        .dm_voice_participant()
-        .dm_voice_key()
-        .delete(dm_voice_key(&room_key, ctx.sender()));
+    let key = dm_voice_key(&room_key, ctx.sender());
+    if let Some(row) = ctx.db.dm_voice_participant().dm_voice_key().find(&key)
+        && (row.connection_id.is_none() || row.connection_id == ctx.connection_id())
+    {
+        ctx.db.dm_voice_participant().dm_voice_key().delete(key);
+    }
     Ok(())
 }
 

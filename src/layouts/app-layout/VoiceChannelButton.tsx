@@ -10,7 +10,7 @@ interface VoiceChannelButtonProps {
   channel: Channel
   active: boolean
   participants: VoiceParticipant[]
-  selfJoined: boolean
+  connectionStatus: string | null
   activeSpeakerIdentityKeys: Set<string>
   muted: boolean
   memberProfileByIdentity: Map<string, { label: string; avatarUrl: string | null }>
@@ -22,7 +22,7 @@ export function VoiceChannelButton({
   channel,
   active,
   participants,
-  selfJoined,
+  connectionStatus,
   activeSpeakerIdentityKeys,
   muted,
   memberProfileByIdentity,
@@ -43,9 +43,9 @@ export function VoiceChannelButton({
         <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
             <span className="truncate">{channel.name}</span>
-            {selfJoined ? (
+            {connectionStatus ? (
               <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
-                Joined
+                {connectionStatus}
               </Badge>
             ) : null}
           </div>

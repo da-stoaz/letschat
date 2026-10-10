@@ -1,0 +1,27 @@
+name: Voice transport
+
+on:
+  pull_request:
+    paths:
+      - 'src/lib/livekit*'
+      - 'tests/rtc/**'
+      - 'docker-compose.prod.*.yml'
+      - 'livekit/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/voice-transport.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  media:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Real Chrome and LiveKit — UDP and TCP audio
+        run: bun --no-env-file tests/rtc/run.ts

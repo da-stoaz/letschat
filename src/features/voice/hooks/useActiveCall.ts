@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { ConnectionState, type LocalParticipant, type RemoteParticipant } from 'livekit-client'
+import { type LocalParticipant, type RemoteParticipant } from 'livekit-client'
 import { dmVoiceRoomKey, leaveLiveKitDmVoice, leaveLiveKitVoice, supportsScreenCapture, useLiveKitRoom } from '../../../lib/livekit'
 import { reducers } from '../../../lib/spacetimedb'
 import { useConnectionStore } from '../../../stores/connectionStore'
@@ -15,6 +15,7 @@ import { buildVoiceMediaTiles } from '../mediaTiles'
 import { encodeDmSystemMessage, getCallDurationSeconds } from '../../dm/systemMessages'
 import { useVoiceControlActions } from './useVoiceControlActions'
 import { useOngoingCallDuration } from './useOngoingCallDuration'
+import { callConnection } from '../callConnection'
 import type { Channel, Identity, VoiceParticipant, DmVoiceParticipant } from '../../../types/domain'
 
 const EMPTY: (VoiceParticipant | DmVoiceParticipant)[] = []
@@ -24,13 +25,6 @@ export function callDetails(channel: Channel | undefined, partnerIdentity: Ident
   if (partnerIdentity) return { title: displayName ?? 'Direct call', returnPath: `/app/dm/${partnerIdentity}`, conversationPath: `/app/dm/${partnerIdentity}` }
   if (channel) return { title: channel.name, returnPath: `/app/${channel.serverId}/channels`, conversationPath: `/app/${channel.serverId}/${channel.id}` }
   return { title: 'Voice call', returnPath: '/app/messages', conversationPath: null }
-}
-
-export function callStatus(connecting: boolean, state: ConnectionState, joined: boolean, calling: boolean) {
-  if (connecting) return 'Connecting…'
-  if (state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting) return 'Reconnecting…'
-  if (!joined) return 'Call ended'
-  return calling ? 'Calling…' : 'Connected'
 }
 
 function useCallSession() {
@@ -64,8 +58,7 @@ export function useActiveCall() {
   const videoInputId = useMediaDeviceStore((s) => s.videoInputId)
   const setAnswered = dm.setAnswered
   const { localParticipant, remoteParticipants, activeSpeakerIds, connectionState } = useLiveKitRoom(room)
-  const joined = room !== null && connectionState === ConnectionState.Connected
-  const connecting = session.joining || (room !== null && connectionState === ConnectionState.Connecting)
+  const { connected: joined, connecting, status } = callConnection(connectionState, session.joining)
   const hasScreenCapture = supportsScreenCapture()
   const muted = self?.muted ?? !room?.localParticipant.isMicrophoneEnabled
   const deafened = self?.deafened ?? false
@@ -128,7 +121,7 @@ export function useActiveCall() {
     active, channelId, partnerIdentity, room, joined, connecting, muted, deafened, sharingCamera, sharingScreen,
     hasScreenCapture, tiles, participants, duration, setError, error: session.error ?? (!active ? dm.error : null),
     ...callDetails(channel, partnerIdentity, names.displayNameByIdentity.get(key(partnerIdentity ?? ''))),
-    status: callStatus(connecting, connectionState, joined, isDm && !dm.answered),
+    status: joined && isDm && !dm.answered ? 'Calling…' : status,
     ...actions,
   }
 }
