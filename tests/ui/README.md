@@ -33,3 +33,12 @@ Open `/tests/ui/chat-history.html` for the conversation reconciliation regressio
 check. It switches between populated and empty channels, then repeatedly rerenders
 a DM. Every step must report PASS with exactly one message feed and no duplicate
 message IDs. It uses the real channel/DM views with isolated in-memory storage.
+
+Run `bunx vite --config tests/ui/call-reload.vite.ts` and open
+`http://127.0.0.1:5174/tests/ui/call-reload.html`. Its dedicated Vite config
+replaces LiveKit with a transport fake, leaving the normal app server unchanged.
+Click **Reload this fixture**, and expect PASS
+with one restored muted call. Repeat the reload, then click **Hang up and reload**
+and expect PASS with no restored call. This exercises the real call controller,
+lifecycle hook, unload events and tab session storage with simulated transport;
+it opens no microphone and sends no backend requests.

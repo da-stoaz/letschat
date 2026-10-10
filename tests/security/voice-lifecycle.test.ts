@@ -135,6 +135,37 @@ describe('voice presence — connection lifecycle', () => {
     expect(await until(() => voiceRowCount(secondVoiceChannelId) === 0)).toBe(true)
   })
 
+  it('can reclaim its slot in a full channel while the pre-reload socket is still open', async () => {
+    const serverId = await createServer(owner)
+    await makeOpenJoinable(owner, serverId)
+    const { rows } = await owner.sql(`SELECT id FROM my_channels WHERE server_id = ${serverId} AND name = 'General'`)
+    const channelId = BigInt(Number(rows[0].id))
+    const sockets: DbConnection[] = []
+    try {
+      const old = await connect(owner.token)
+      sockets.push(old)
+      await old.reducers.joinVoiceChannel({ channelId })
+      for (let i = 0; i < 14; i++) {
+        const user = await makeUser('full_voice')
+        await user.call('join_discoverable_server', [serverId])
+        const socket = await connect(user.token)
+        sockets.push(socket)
+        await socket.reducers.joinVoiceChannel({ channelId })
+      }
+      expect(voiceRowCount(Number(channelId))).toBe(15)
+      const newcomer = await makeUser('full_new')
+      await newcomer.call('join_discoverable_server', [serverId])
+      await expect(newcomer.call('join_voice_channel', [Number(channelId)])).rejects.toThrow(/full/)
+      const resumed = await connect(owner.token)
+      sockets.push(resumed)
+      await expect(resumed.reducers.joinVoiceChannel({ channelId })).resolves.toBeUndefined()
+      old.disconnect()
+      expect(voiceRowCount(Number(channelId))).toBe(15)
+    } finally {
+      for (const socket of sockets) socket.disconnect()
+    }
+  })
+
   it.each(['channel', 'dm'] as const)('a stale %s leave cannot delete a newer connection’s participation', async kind => {
     const friend = kind === 'dm' ? await makeUser('vlate') : null
     if (friend) await makeFriends(owner, friend)
