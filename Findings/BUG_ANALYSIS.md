@@ -15,6 +15,25 @@ Die Einstufung der Schwere ist eine Einschätzung, keine gemessene Größe.
 
 ---
 
+## Dependency-Snapshot und verbleibende Sicherheitsrisiken
+
+Übernommen am 2026-10-11; **kein neuer Scan**. Beim Dependency-Refresh vom
+2026-09-16 wurden Web-App, statische Site, Rust, .NET, Tauri und SpacetimeDB
+aktualisiert. Laut damaligem Stand waren `bun audit`, das `npm audit` der Site
+und NuGets transitiver Vulnerability-Scan ohne Befund; `quinn-proto` war mit
+`0.11.18` gepatcht.
+
+Ein Cargo-Alert blieb damals offen: Tauri 2s Linux-GTK-Stack verwendete
+`glib 0.18.5`; der Fix in `glib 0.20` war mit dieser Kette nicht kompatibel.
+Tauri 3 war zu diesem Zeitpunkt prerelease; ein Alpha-Upgrade allein für diese
+transitive Abhängigkeit wurde verworfen. Beim nächsten stabilen Tauri-Upgrade
+Kompatibilität und Alert erneut prüfen. Aktuelle Versionen und Remediation stehen
+in den [Dependabot-Alerts](https://github.com/da-stoaz/letschat/security/dependabot).
+
+Der bisherige Code-Review-Stand vom 2026-09-24 meldete keine offenen S1-/S2-Befunde.
+Das schließt dokumentierte Rest-Risiken nicht aus: insbesondere fehlgeschlagene
+Revokations-Pushes, lesende Views und Token-Speicherung in [A4](#a4).
+
 ## Schweregrade
 
 | Grad | Bedeutung |
@@ -221,10 +240,17 @@ Verifiziert gegen eine echte SpacetimeDB-Instanz: 7 neue Fälle in
 `tests/security/token-revocation.test.ts`, die alle gegen das ungepatchte Modul
 fehlschlagen, plus 6 core-api-Tests.
 
-**Rest-Lücke:** Ein widerrufenes Token kann über `/sql` weiterhin die `my_*`-Views
-**lesen** — Views sind keine Reducer und liegen nicht auf dem `require_account`-Pfad.
-Schreibzugriff ist vollständig unterbunden. Der `localStorage`-Aspekt bleibt ebenfalls
-offen (siehe [E4](#e4): CSP nur im Report-Only-Modus).
+**Rest-Lücken (konsolidiert am 2026-10-11):** Ist SpacetimeDB beim Push einer
+Passwort- oder Statusänderung nicht erreichbar, greift die HTTP-Revokation sofort,
+eine bereits verbundene Chat-Sitzung kann aber bis zur erfolgreichen Synchronisierung
+weiter Reducer aufrufen. Der Fehler wird geloggt; Betreiber sollten die
+Statusänderung nach Wiederherstellung wiederholen.
+
+Read-only-`my_*`-Views durchlaufen die Reducer-Revokationsprüfung nicht. Der öffentliche
+Chat-Edge blockiert `/sql`; das ersetzt keine Revokationsprüfung für abonnierte Views.
+Schreibzugriff ist nach erfolgreichem Push unterbunden. Application- und
+SpacetimeDB-Tokens liegen weiterhin auch im Desktop-Webview in `localStorage`, nicht
+im OS-Keychain. Die gehostete Web-CSP wird inzwischen erzwungen ([E4](#e4)).
 
 ---
 
@@ -2008,9 +2034,10 @@ SpacetimeDB 2.5, die vollständigen Service- und Daten-Grenzen, zentrale Request
 Deployment-Topologie und die passende Testmatrix. Erledigte Feature-Lücken wurden
 entfernt.
 
-Zusätzlich trennen `README.md`, `SECURITY.md` und dieses Register ihre Rollen klar:
-Architektur beschreibt den Ist-Zustand, `SECURITY.md` die einzuhaltenden
-Vertrauensgrenzen und diese Datei die offenen bzw. verifizierten Befunde.
+Seit der Dokumentationskonsolidierung am 2026-10-11 beschreibt
+[`CODEBASE.md`](../CODEBASE.md) Architektur, Vertrauensgrenzen, Sicherheitsinvarianten
+und Review-Regeln. Dieses Register enthält offene bzw. verifizierte Befunde;
+[`README.md`](../README.md) bleibt der Einstieg für Setup und Befehle.
 
 ---
 

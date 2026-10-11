@@ -26,8 +26,8 @@ The service also synchronizes account access state and selected instance
 settings into the SpacetimeDB module. Chat messages, memberships, and reducer
 authorization remain owned by `server/`, not this service.
 
-See the repository [`SECURITY.md`](../SECURITY.md) for the required trust
-boundaries and [`CODEBASE.md`](../CODEBASE.md) for end-to-end flows.
+See [`CODEBASE.md`](../CODEBASE.md#trust-boundaries) for the required trust
+boundaries and [end-to-end flows](../CODEBASE.md#core-request-flows).
 
 ## Project layout
 

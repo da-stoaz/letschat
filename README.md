@@ -20,7 +20,7 @@ production backend is `core-api`. The removed Rust `auth-service` is only
 relevant to historical migrations.
 
 For data ownership, request flows, and trust boundaries, see
-[`CODEBASE.md`](CODEBASE.md) and [`SECURITY.md`](SECURITY.md).
+[`CODEBASE.md`](CODEBASE.md).
 
 ## Local development
 
@@ -80,9 +80,8 @@ ports directly.
 
 | Document | Purpose |
 |---|---|
-| [`CODEBASE.md`](CODEBASE.md) | Current architecture and repository map |
-| [`SECURITY.md`](SECURITY.md) | Security model, invariants, and review workflow |
-| [`BUG_ANALYSIS.md`](BUG_ANALYSIS.md) | Finding register and remediation status |
+| [`CODEBASE.md`](CODEBASE.md) | Architecture, repository map, security boundaries, and review workflow |
+| [`BUG_ANALYSIS.md`](Findings/BUG_ANALYSIS.md) | Finding register and remediation status |
 | [`DEPLOYMENT.md`](DEPLOYMENT.md) | Production deployment and operations |
 | [`core-api/README.md`](core-api/README.md) | Control-plane API development and configuration |
-| [`CLAUDE.md`](CLAUDE.md) | Repository-specific implementation guidance |
+| [`Agents.md`](Agents.md) | Repository-specific implementation and UI guidance |

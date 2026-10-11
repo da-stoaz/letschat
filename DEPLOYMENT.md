@@ -7,9 +7,9 @@ Full tutorial (beginner step-by-step):
 
 Use this file as a compact operator reference.
 
-The deployment invariants and known residual risks are summarized in
-[`SECURITY.md`](SECURITY.md). The tracked code findings live in
-[`BUG_ANALYSIS.md`](BUG_ANALYSIS.md).
+The deployment invariants are summarized in
+[`CODEBASE.md`](CODEBASE.md#deployment-invariants). Tracked findings and residual
+risks live in [`BUG_ANALYSIS.md`](Findings/BUG_ANALYSIS.md).
 
 > **Backend service:** production runs **`core-api`** (.NET / ASP.NET Core
 > Identity + PostgreSQL). The legacy Rust `auth-service` has been **removed**
