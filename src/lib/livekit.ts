@@ -248,6 +248,7 @@ function isLoopbackLivekitUrl(livekitUrl: string): boolean {
 
 function connectProfileForUrl(livekitUrl: string): ConnectProfile {
   const base: ConnectProfile = {
+    roomOptions: { adaptiveStream: true, dynacast: true },
     connectOptions: {
       peerConnectionTimeout: CONNECT_TIMEOUT_MS,
       websocketTimeout: CONNECT_TIMEOUT_MS,

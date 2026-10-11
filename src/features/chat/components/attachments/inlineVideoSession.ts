@@ -31,14 +31,16 @@ export function attachInlineVideo(
   const error = () => { if (!disposed) options.onError?.() }
   video.addEventListener('error', error)
   video.addEventListener('loadedmetadata', seek)
-  if (options.hls && !video.canPlayType('application/vnd.apple.mpegurl')) {
+  if (options.hls) {
     void import('hls.js').then(({ default: Hls }) => {
       if (disposed) return
       if (!Hls.isSupported()) {
-        video.src = options.originalUrl ?? url
+        video.src = video.canPlayType('application/vnd.apple.mpegurl') ? url : options.originalUrl ?? url
         play()
         return
       }
+      // Chrome can report native HLS support yet reject our MPEG-TS streams.
+      // Prefer hls.js when MSE is available; native HLS remains the fallback.
       const hls = new Hls({ startPosition: startAt, maxBufferLength: 30, maxMaxBufferLength: 60, capLevelToPlayerSize: true })
       destroyHls = () => hls.destroy()
       hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) { hls.destroy(); destroyHls = undefined; error() } })

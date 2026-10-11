@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { attachInlineVideo } from './inlineVideoSession'
 
-const hlsMock = vi.hoisted(() => ({ created: 0, destroyed: 0, events: new Map<string, (...args: unknown[]) => void>() }))
+const hlsMock = vi.hoisted(() => ({ supported: true, created: 0, destroyed: 0, events: new Map<string, (...args: unknown[]) => void>() }))
 vi.mock('hls.js', () => ({ default: class {
   static Events = { ERROR: 'error', MANIFEST_PARSED: 'manifest' }
-  static isSupported() { return true }
+  static isSupported() { return hlsMock.supported }
   constructor() { hlsMock.created++ }
   on(event: string, handler: (...args: unknown[]) => void) { hlsMock.events.set(event, handler) }
   loadSource() {}
@@ -48,6 +48,7 @@ let observerCallback: ((entries: Array<{ isIntersecting: boolean }>) => void) | 
 describe('attachInlineVideo', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    hlsMock.supported = true
     hlsMock.created = 0
     hlsMock.destroyed = 0
     hlsMock.events.clear()
@@ -139,16 +140,38 @@ describe('attachInlineVideo', () => {
     teardown()
   })
 
-  it('uses native HLS without loading hls.js and exposes blocked autoplay', async () => {
+  it('prefers hls.js even when Chrome reports native HLS support', async () => {
+    const video = new FakeVideo()
+    video.canPlayType = () => 'maybe'
+    const teardown = attachInlineVideo(video as unknown as HTMLVideoElement, '/master.m3u8', 0, vi.fn(), { hls: true })
+    await vi.dynamicImportSettled()
+    expect(hlsMock.created).toBe(1)
+    expect(video.src).toBe('')
+    hlsMock.events.get('manifest')?.()
+    expect(video.plays).toBe(1)
+    teardown()
+  })
+
+  it('falls back to native HLS without MSE and exposes blocked autoplay', async () => {
+    hlsMock.supported = false
     const video = new FakeVideo()
     video.canPlayType = () => 'probably'
     video.play = () => Promise.reject(new Error('blocked'))
     const blocked = vi.fn()
     const teardown = attachInlineVideo(video as unknown as HTMLVideoElement, '/master.m3u8', 10, vi.fn(), { hls: true, onBlocked: blocked })
-    await Promise.resolve()
+    await vi.dynamicImportSettled()
     expect(video.src).toBe('/master.m3u8')
     expect(hlsMock.created).toBe(0)
     expect(blocked).toHaveBeenCalledOnce()
+    teardown()
+  })
+
+  it('uses the original when neither HLS playback path is supported', async () => {
+    hlsMock.supported = false
+    const video = new FakeVideo()
+    const teardown = attachInlineVideo(video as unknown as HTMLVideoElement, '/master.m3u8', 0, vi.fn(), { hls: true, originalUrl: '/original.mp4' })
+    await vi.dynamicImportSettled()
+    expect(video.src).toBe('/original.mp4')
     teardown()
   })
 
