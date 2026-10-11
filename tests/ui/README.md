@@ -33,3 +33,19 @@ Open `/tests/ui/chat-history.html` for the conversation reconciliation regressio
 check. It switches between populated and empty channels, then repeatedly rerenders
 a DM. Every step must report PASS with exactly one message feed and no duplicate
 message IDs. It uses the real channel/DM views with isolated in-memory storage.
+
+Open `/tests/ui/noise-filter.html` and click **Run audio verification**. This uses
+real RNNoise WASM, a real LiveKit local audio track and two local WebRTC peers.
+Add `?deepfilter` to measure DeepFilterNet3 instead. Each run also switches to the
+other model and back, verifying the WebRTC sender uses the selected processor.
+It generates fan-like noise at 44.1 kHz, measures it at the remote receiver with
+the filter off/on, and requires at least 10 dB reduction plus a working bypass.
+Add `?broadband` to repeat with broadband noise (at least 3 dB / half the noise
+energy). Add `?local` to measure the processor directly without WebRTC/ICE. It uses no microphone, backend,
+Cloud service, or audible playback. Headless Chromium may need
+`--disable-features=WebRtcHideLocalIpsWithMdns` for the two local peers to resolve
+each other's ICE candidates. After PASS, use both noise buttons to check the
+popover, toggle, active style, Escape/focus return and narrow-screen positioning.
+The Audio settings card uses the same persisted controls; confirm model changes
+are reflected in both places and switching off hides the filter selection.
+A synthetic signal check does not replace a headset/speech quality test.
