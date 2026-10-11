@@ -1,7 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Room } from 'livekit-client'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { useDmVoiceSessionStore } from '../stores/dmVoiceSessionStore'
+import { useServerConfigStore } from '../stores/serverConfigStore'
+import { useVoiceStore } from '../stores/voiceStore'
+import { reducers } from './spacetimedb'
 
 const mocks = vi.hoisted(() => ({
   identity: 'identity-abc' as string | null,
@@ -41,8 +44,9 @@ vi.mock('livekit-client', () => {
   class FakeRoom {
     state = 'disconnected'
     localParticipant = {
+      isMicrophoneEnabled: false,
       trackPublications: new Map([['mic', { track: { stop: vi.fn(() => mocks.order.push('stopCapture')) } }]]),
-      setMicrophoneEnabled: vi.fn(async () => {}),
+      setMicrophoneEnabled: vi.fn(async (enabled: boolean) => { this.localParticipant.isMicrophoneEnabled = enabled }),
       setCameraEnabled: vi.fn(async () => {}),
     }
     remoteParticipants = new Map([['remote', {
@@ -72,6 +76,7 @@ const {
   joinLiveKitVoice, joinLiveKitDmVoice, leaveLiveKitVoice, leaveLiveKitDmVoice,
   resetCallSessions, retryCallCleanup,
   setLocalCameraEnabled,
+  prepareCallReload, restoreCallAfterReload,
 } = await import('./livekit')
 
 function deferred<T = void>() {
@@ -92,6 +97,96 @@ beforeEach(async () => {
   mocks.order.length = 0
   mocks.rooms.length = 0
   mocks.token.mockResolvedValue('livekit-token')
+})
+
+describe('call reload recovery', () => {
+  beforeEach(() => {
+    const memory = new Map<string, string>()
+    vi.stubGlobal('sessionStorage', {
+      getItem: (key: string) => memory.get(key) ?? null,
+      setItem: (key: string, value: string) => memory.set(key, value),
+      removeItem: (key: string) => memory.delete(key),
+    })
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ type: 'reload' } as PerformanceNavigationTiming])
+    useServerConfigStore.setState({ config: {
+      authServiceUrl: 'https://auth.example.test', spacetimedbDatabase: 'letschat',
+      spacetimedbUri: 'wss://db.example.test', livekitUrl: 'wss://rtc.example.test',
+    } })
+  })
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+  it.each(['channel', 'dm'] as const)('rejoins a %s call once with fresh presence and token after reload', async kind => {
+    const old = await (kind === 'channel' ? joinLiveKitVoice(42) : joinLiveKitDmVoice('partner'))
+    mocks.order.length = 0
+    prepareCallReload()
+    prepareCallReload() // beforeunload and pagehide must retain the same snapshot.
+    expect(old.disconnect).toHaveBeenCalled()
+    expect(mocks.leaveVoice).not.toHaveBeenCalled()
+    expect(mocks.leaveDm).not.toHaveBeenCalled()
+    await Promise.all([restoreCallAfterReload(), restoreCallAfterReload()])
+    expect(mocks.rooms).toHaveLength(2)
+    const session = kind === 'channel' ? useVoiceSessionStore.getState() : useDmVoiceSessionStore.getState()
+    expect(session.room).toBe(mocks.rooms[1])
+    expect(mocks.order.filter(step => step.startsWith('join:'))).toHaveLength(1)
+    expect(mocks.order.indexOf('connect')).toBeGreaterThan(mocks.order.findIndex(step => step.startsWith('token:')))
+    expect(session.room!.localParticipant.setMicrophoneEnabled).not.toHaveBeenCalled()
+  })
+
+  it('keeps a muted/deafened call muted without requesting microphone permission', async () => {
+    const old = await joinLiveKitVoice(42)
+    useVoiceStore.setState({ participantsByChannel: { 42: [{ userIdentity: mocks.identity!, deafened: true } as never] } })
+    Object.defineProperty(old.localParticipant, 'isMicrophoneEnabled', { configurable: true, writable: true, value: false })
+    prepareCallReload()
+    const getUserMedia = vi.fn()
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } })
+    await restoreCallAfterReload()
+    expect(getUserMedia).not.toHaveBeenCalled()
+    expect(mocks.rooms[1].localParticipant.setMicrophoneEnabled).not.toHaveBeenCalled()
+    expect(reducers.updateVoiceState).toHaveBeenLastCalledWith(42, true, true, false, false)
+    useVoiceStore.setState({ participantsByChannel: {} })
+  })
+
+  it('restores an enabled microphone without restoring camera or screen capture', async () => {
+    const old = await joinLiveKitVoice(42)
+    Object.defineProperty(old.localParticipant, 'isMicrophoneEnabled', { configurable: true, writable: true, value: true })
+    prepareCallReload()
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop() {} }] })) } })
+    await restoreCallAfterReload()
+    expect(mocks.rooms[1].localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true)
+    expect(mocks.rooms[1].localParticipant.setCameraEnabled).not.toHaveBeenCalled()
+  })
+
+  it.each(['account', 'host', 'database', 'navigation', 'signout'] as const)('does not restore after %s changes', async change => {
+    await joinLiveKitVoice(42)
+    prepareCallReload()
+    if (change === 'account') mocks.identity = 'another-account'
+    if (change === 'host') useServerConfigStore.setState(s => ({ config: { ...s.config!, authServiceUrl: 'https://other.test' } }))
+    if (change === 'database') useServerConfigStore.setState(s => ({ config: { ...s.config!, spacetimedbDatabase: 'other' } }))
+    if (change === 'navigation') vi.mocked(performance.getEntriesByType).mockReturnValue([{ type: 'navigate' } as PerformanceNavigationTiming])
+    if (change === 'signout') resetCallSessions()
+    await restoreCallAfterReload()
+    expect(mocks.rooms).toHaveLength(1)
+  })
+
+  it('does not replace a new user-selected call with the saved call', async () => {
+    await joinLiveKitVoice(42)
+    prepareCallReload()
+    const current = await joinLiveKitDmVoice('partner')
+    await restoreCallAfterReload()
+    expect(mocks.rooms).toHaveLength(2)
+    expect(useDmVoiceSessionStore.getState().room).toBe(current)
+  })
+
+  it('clears a denied restore and reports it without retrying or leaving another session', async () => {
+    await joinLiveKitVoice(42)
+    prepareCallReload()
+    mocks.joinVoice.mockRejectedValueOnce(new Error('channel is moderator-only'))
+    await restoreCallAfterReload()
+    await restoreCallAfterReload()
+    expect(mocks.joinVoice).toHaveBeenCalledTimes(2)
+    expect(mocks.leaveVoice).not.toHaveBeenCalled()
+    expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining('Could not rejoin'))
+  })
 })
 
 describe('call ownership and recovery', () => {

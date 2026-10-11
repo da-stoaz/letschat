@@ -84,6 +84,23 @@ pub(crate) fn require_member_role(
     has_member_role(ctx, server_id, user_identity).ok_or_else(|| "not a server member".to_string())
 }
 
+pub(crate) fn can_read_channel(channel: &Channel, role: &Role) -> bool {
+    !channel.moderator_only || matches!(role, Role::Owner | Role::Moderator)
+}
+
+pub(crate) fn require_channel_access(
+    ctx: &ReducerContext,
+    channel: &Channel,
+    caller: Identity,
+) -> Result<(), String> {
+    let role = has_member_role(ctx, channel.server_id, caller)
+        .ok_or_else(|| "not a member of this channel server".to_string())?;
+    assert_or_err(
+        can_read_channel(channel, &role),
+        "channel is moderator-only",
+    )
+}
+
 pub(crate) fn require_mod_or_owner(
     ctx: &ReducerContext,
     server_id: u64,

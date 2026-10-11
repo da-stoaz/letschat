@@ -1,0 +1,4 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Call reload regression</title></head><body><div id="root"></div><script>
+const memory = new Map();
+Object.defineProperty(window, 'localStorage', { value: { getItem: key => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, String(value)), removeItem: key => memory.delete(key) } });
+</script><script type="module" src="./call-reload.tsx"></script></body></html>

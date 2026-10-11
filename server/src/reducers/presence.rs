@@ -1,7 +1,7 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err, find_channel, find_friend_row, has_member_role, require_account,
+    assert_or_err, find_channel, find_friend_row, require_account, require_channel_access,
 };
 use crate::schema::*;
 
@@ -24,8 +24,7 @@ fn parse_dm_scope(scope_key: &str) -> Option<(Identity, Identity)> {
 fn ensure_scope_allowed(ctx: &ReducerContext, scope_key: &str) -> Result<(), String> {
     if let Some(channel_id) = parse_channel_scope(scope_key) {
         let channel_row = find_channel(ctx, channel_id)?;
-        let is_member = has_member_role(ctx, channel_row.server_id, ctx.sender()).is_some();
-        return assert_or_err(is_member, "not a member of this channel server");
+        return require_channel_access(ctx, &channel_row, ctx.sender());
     }
 
     if let Some((a, b)) = parse_dm_scope(scope_key) {
