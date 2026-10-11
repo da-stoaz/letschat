@@ -1,5 +1,12 @@
 export type AttachmentKind = 'image' | 'video' | 'audio' | 'file'
 
+export function isTextAttachment(mimeType: string, fileName: string): boolean {
+  const mime = mimeType.split(';')[0].trim().toLowerCase()
+  return mime.startsWith('text/') ||
+    /^application\/(json|[\w.+-]+\+json|xml|[\w.+-]+\+xml|javascript|x-javascript|yaml|x-yaml|toml)$/.test(mime) ||
+    /\.(txt|text|md|markdown|html?|css|csv|tsv|log|json|jsonl|xml|ya?ml|toml|ini|cfg|conf|js|jsx|ts|tsx|py|rs|sh|sql)$/i.test(fileName)
+}
+
 export function getAttachmentKind(mimeType: string): AttachmentKind {
   if (mimeType.startsWith('image/')) return 'image'
   if (mimeType.startsWith('video/')) return 'video'

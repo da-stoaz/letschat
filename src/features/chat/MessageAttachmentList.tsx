@@ -4,10 +4,11 @@ import { AttachmentImageLightbox } from './components/attachments/AttachmentImag
 import { AttachmentImageGrid, type AttachmentImageGridItem } from './components/attachments/AttachmentImageGrid'
 import { AttachmentListItem } from './components/attachments/AttachmentListItem'
 import { AttachmentPdfLightbox } from './components/attachments/AttachmentPdfLightbox'
+import { AttachmentTextPreview } from './components/attachments/AttachmentTextPreview'
 import { getAttachmentKind, videoThumbnailKey } from './components/attachments/attachmentUtils'
 import { useAttachmentResolver } from './components/attachments/useAttachmentResolver'
 
-type PreviewPdf = {
+type PreviewFile = {
   url: string
   fileName: string
 }
@@ -27,7 +28,8 @@ function dedupeAttachments(attachments: ChatMessageAttachment[]): ChatMessageAtt
 
 export function MessageAttachmentList({ messageKey, attachments }: { messageKey: string; attachments: ChatMessageAttachment[] }) {
   const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null)
-  const [previewPdf, setPreviewPdf] = useState<PreviewPdf | null>(null)
+  const [previewPdf, setPreviewPdf] = useState<PreviewFile | null>(null)
+  const [previewText, setPreviewText] = useState<PreviewFile | null>(null)
   const uniqueAttachments = useMemo(() => dedupeAttachments(attachments), [attachments])
   const { getResolution, retry } = useAttachmentResolver(uniqueAttachments)
   const imageAttachments = useMemo(
@@ -87,6 +89,7 @@ export function MessageAttachmentList({ messageKey, attachments }: { messageKey:
               setPreviewImageIndex(index >= 0 ? index : 0)
             }}
             onOpenPdf={setPreviewPdf}
+            onOpenText={setPreviewText}
           />
         ))}
       </div>
@@ -97,6 +100,7 @@ export function MessageAttachmentList({ messageKey, attachments }: { messageKey:
         onClose={() => setPreviewImageIndex(null)}
       />
       <AttachmentPdfLightbox key={previewPdf?.url ?? 'no-pdf'} pdf={previewPdf} onClose={() => setPreviewPdf(null)} />
+      {previewText ? <AttachmentTextPreview key={previewText.url} file={previewText} onClose={() => setPreviewText(null)} /> : null}
     </>
   )
 }
