@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { reducers } from '../lib/spacetimedb'
-import { leaveLiveKitVoice, leaveLiveKitDmVoice, retryCallCleanup } from '../lib/livekit'
+import { leaveLiveKitVoice, leaveLiveKitDmVoice, retryCallCleanup, prepareCallReload, restoreCallAfterReload } from '../lib/livekit'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useDmVoiceSessionStore } from '../stores/dmVoiceSessionStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
@@ -14,7 +14,7 @@ import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 // whose compare-local-session-against-replicated-rows policies could disagree
 // with each other across lag and flap join/leave forever.
 //
-// What's left are two deterministic, event-driven handlers. Neither reads
+// What's left are deterministic, event-driven handlers. None reads
 // replicated data to decide a write, which is the property that makes an
 // oscillation impossible:
 //
@@ -22,11 +22,29 @@ import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 //  2. SpacetimeDB reconnected → the new connection owns no rows, so re-assert
 //     the call the user is still in, once. (A module republish or a dropped
 //     socket lands here.)
+//  3. Page reload → snapshot the current call before unload, then reclaim
+//     presence and reconnect after the new page's initial sync.
 
 export function useVoiceLifecycle(): void {
   const connectionStatus = useConnectionStore((s) => s.status)
+  const synced = useConnectionStore((s) => s.synced)
+  const identity = useConnectionStore((s) => s.identity)
   const room = useVoiceSessionStore((s) => s.room)
   const dmRoom = useDmVoiceSessionStore((s) => s.room)
+
+  useEffect(() => {
+    // Capture runs before LiveKit's own beforeunload/pagehide disconnect.
+    window.addEventListener('beforeunload', prepareCallReload, true)
+    window.addEventListener('pagehide', prepareCallReload, true)
+    return () => {
+      window.removeEventListener('beforeunload', prepareCallReload, true)
+      window.removeEventListener('pagehide', prepareCallReload, true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (connectionStatus === 'connected' && synced && identity) void restoreCallAfterReload()
+  }, [connectionStatus, synced, identity])
 
   useEffect(() => {
     if (!room) return

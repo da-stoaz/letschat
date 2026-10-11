@@ -1,8 +1,8 @@
 use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::helpers::{
-    assert_or_err, find_channel, find_friend_row, has_member_role, normalize_identity_string,
-    ordered_pair, require_account,
+    assert_or_err, find_channel, find_friend_row, normalize_identity_string, ordered_pair,
+    require_account, require_channel_access,
 };
 use crate::schema::*;
 
@@ -36,10 +36,7 @@ pub fn mark_channel_read(ctx: &ReducerContext, channel_id: u64) -> Result<(), St
     let channel_row = find_channel(ctx, channel_id)?;
     // A primary-key lookup, not a walk over every member of the space on each
     // read (BUG_ANALYSIS C10).
-    assert_or_err(
-        has_member_role(ctx, channel_row.server_id, ctx.sender()).is_some(),
-        "not a member of this channel server",
-    )?;
+    require_channel_access(ctx, &channel_row, ctx.sender())?;
 
     upsert_read_state(ctx, format!("channel:{channel_id}"));
     Ok(())

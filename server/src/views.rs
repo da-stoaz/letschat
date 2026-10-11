@@ -3,6 +3,7 @@ use std::ops::Bound;
 
 use spacetimedb::{Identity, SpacetimeType, Timestamp, ViewContext};
 
+use crate::helpers::can_read_channel;
 use crate::schema::{
     Ban, Block, Channel, DirectMessage, DmServerInvite, DmVoiceParticipant, Friend, FriendStatus,
     Invite, JoinRequest, Message, PinnedMessage, PresenceState, ReadState, Role, Server,
@@ -146,6 +147,7 @@ pub fn my_presence_states(ctx: &ViewContext) -> Vec<PresenceState> {
 pub fn my_typing_states(ctx: &ViewContext) -> Vec<TypingState> {
     let me = ctx.sender();
     let me_normalized = normalize_identity(&me.to_string());
+    let visible_channels: HashSet<u64> = my_channels(ctx).iter().map(|channel| channel.id).collect();
 
     let joined_server_ids: HashSet<u64> = ctx
         .db
@@ -193,17 +195,15 @@ pub fn my_typing_states(ctx: &ViewContext) -> Vec<TypingState> {
                 continue;
             }
 
-            if row.user_identity == me {
-                rows.push(row);
+            if let Some(channel_id) = parse_channel_scope(&row.scope_key) {
+                if visible_channels.contains(&channel_id) {
+                    rows.push(row);
+                }
                 continue;
             }
 
-            if let Some(channel_id) = parse_channel_scope(&row.scope_key) {
-                if let Some(channel_row) = ctx.db.channel().id().find(channel_id) {
-                    if joined_server_ids.contains(&channel_row.server_id) {
-                        rows.push(row);
-                    }
-                }
+            if row.user_identity == me {
+                rows.push(row);
                 continue;
             }
 
@@ -224,7 +224,15 @@ pub fn my_typing_states(ctx: &ViewContext) -> Vec<TypingState> {
 
 #[spacetimedb::view(accessor = my_read_states, public)]
 pub fn my_read_states(ctx: &ViewContext) -> Vec<ReadState> {
-    ctx.db.read_state().by_user().filter(ctx.sender()).collect()
+    let visible_channels: HashSet<u64> = my_channels(ctx).iter().map(|channel| channel.id).collect();
+    ctx.db
+        .read_state()
+        .by_user()
+        .filter(ctx.sender())
+        .filter(|row| {
+            parse_channel_scope(&row.scope_key).is_none_or(|id| visible_channels.contains(&id))
+        })
+        .collect()
 }
 
 // ─── Space-scoped views (replace the formerly-public base tables) ──────────────
@@ -279,29 +287,23 @@ pub fn discover_server_member_counts(ctx: &ViewContext) -> Vec<DiscoverServerMem
         .collect()
 }
 
-/// Channel messages for spaces the caller is a member of.
+/// Channel messages only for channels the caller may see.
 #[spacetimedb::view(accessor = my_channel_messages, public)]
 pub fn my_channel_messages(ctx: &ViewContext) -> Vec<Message> {
-    let mine = my_server_ids(ctx);
     let mut rows = Vec::<Message>::new();
-    for server_id in &mine {
-        for channel in ctx.db.channel().server_id().filter(*server_id) {
-            let history: Vec<Message> = ctx.db.message().channel_id().filter(channel.id).collect();
-            rows.extend(newest(history, |message| message.sent_at));
-        }
+    for channel in my_channels(ctx) {
+        let history: Vec<Message> = ctx.db.message().channel_id().filter(channel.id).collect();
+        rows.extend(newest(history, |message| message.sent_at));
     }
     rows
 }
 
-/// Pinned messages for channels in spaces the caller is a member of.
+/// Pinned messages only for channels the caller may see.
 #[spacetimedb::view(accessor = my_pinned_messages, public)]
 pub fn my_pinned_messages(ctx: &ViewContext) -> Vec<PinnedMessage> {
-    let mine = my_server_ids(ctx);
     let mut rows = Vec::<PinnedMessage>::new();
-    for server_id in &mine {
-        for channel in ctx.db.channel().server_id().filter(*server_id) {
-            rows.extend(ctx.db.pinned_message().channel_id().filter(channel.id));
-        }
+    for channel in my_channels(ctx) {
+        rows.extend(ctx.db.pinned_message().channel_id().filter(channel.id));
     }
     rows
 }
@@ -387,26 +389,29 @@ pub fn my_dm_server_invites(ctx: &ViewContext) -> Vec<DmServerInvite> {
     rows
 }
 
-/// Channels for spaces the caller is a member of.
+/// Channels for joined spaces, with moderator-only metadata restricted to the
+/// space's owner and moderators. Section names are carried by these rows too.
 #[spacetimedb::view(accessor = my_channels, public)]
 pub fn my_channels(ctx: &ViewContext) -> Vec<Channel> {
-    let mine = my_server_ids(ctx);
     let mut rows = Vec::<Channel>::new();
-    for server_id in &mine {
-        rows.extend(ctx.db.channel().server_id().filter(*server_id));
+    for member in ctx.db.server_member().user_identity().filter(ctx.sender()) {
+        rows.extend(
+            ctx.db
+                .channel()
+                .server_id()
+                .filter(member.server_id)
+                .filter(|channel| can_read_channel(channel, &member.role)),
+        );
     }
     rows
 }
 
-/// Voice presence for channels in spaces the caller is a member of.
+/// Voice presence only for channels the caller may see.
 #[spacetimedb::view(accessor = my_voice_participants, public)]
 pub fn my_voice_participants(ctx: &ViewContext) -> Vec<VoiceParticipant> {
-    let mine = my_server_ids(ctx);
     let mut rows = Vec::<VoiceParticipant>::new();
-    for server_id in &mine {
-        for channel in ctx.db.channel().server_id().filter(*server_id) {
-            rows.extend(ctx.db.voice_participant().channel_id().filter(channel.id));
-        }
+    for channel in my_channels(ctx) {
+        rows.extend(ctx.db.voice_participant().channel_id().filter(channel.id));
     }
     rows
 }

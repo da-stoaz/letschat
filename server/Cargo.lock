@@ -577,7 +577,7 @@ dependencies = [
 
 [[package]]
 name = "letschat_server"
-version = "1.4.3"
+version = "1.4.5"
 dependencies = [
  "base64",
  "jsonwebtoken",

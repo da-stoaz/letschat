@@ -14,7 +14,7 @@ use std::collections::HashSet;
 
 use spacetimedb::{Identity, ProcedureContext, Timestamp, TxContext, log};
 
-use crate::helpers::require_member_role;
+use crate::helpers::require_channel_access;
 use crate::schema::*;
 use crate::views::RECENT_MESSAGE_WINDOW;
 
@@ -54,7 +54,7 @@ pub fn load_pinned_channel_messages(ctx: &mut ProcedureContext, channel_id: u64)
         let Some(channel) = tx.db.channel().id().find(channel_id) else {
             return Vec::new();
         };
-        if require_member_role(tx, channel.server_id, caller).is_err() {
+        if require_channel_access(tx, &channel, caller).is_err() {
             return Vec::new();
         }
         tx.db.pinned_message().channel_id().filter(channel_id)
@@ -128,7 +128,7 @@ pub fn load_older_channel_messages(
                 .id()
                 .find(channel_id)
                 .ok_or_else(|| "channel not found".to_string())?;
-            require_member_role(tx, channel.server_id, caller)?;
+            require_channel_access(tx, &channel, caller)?;
 
             let history: Vec<Message> = tx.db.message().channel_id().filter(channel_id).collect();
             Ok(older_than(history, before, |message| message.sent_at, take))

@@ -31,6 +31,9 @@ pub fn join_voice_channel(ctx: &ReducerContext, channel_id: u64) -> Result<(), S
         .voice_participant()
         .channel_id()
         .filter(channel_id)
+        // A reload may rejoin before the previous socket's row is removed.
+        // Replacing your own presence does not consume another slot.
+        .filter(|participant| participant.user_identity != ctx.sender())
         .count();
     assert_or_err(participant_count < 15, "voice channel is full")?;
 
