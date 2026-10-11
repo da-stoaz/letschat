@@ -32,6 +32,7 @@ export class NoiseFilterProcessor implements TrackProcessor<Track.Kind.Audio, Au
     const context = new AudioContext({ sampleRate: 48_000, sinkId: { type: 'none' } } as AudioContextOptions)
     this.context = context
     try {
+      // oxlint-disable-next-line react-doctor/async-defer-await -- resume() updates context.state; the guard must wait for it before checking whether audio can run.
       const [wasmBinary] = await Promise.all([loadModel(), context.audioWorklet.addModule(workletUrl), context.resume()])
       if (context.state !== 'running') throw new Error('Audio processing could not start.')
       const node = new RnnoiseWorkletNode(context, { wasmBinary, maxChannels: 1 })
