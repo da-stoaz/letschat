@@ -1,7 +1,8 @@
-import { BellIcon, ServerIcon, UserRoundIcon } from 'lucide-react'
+import { AudioLinesIcon, BellIcon, ServerIcon, UserRoundIcon } from 'lucide-react'
 import { AccountTab } from './AccountTab'
 import { ConnectionTab } from './ConnectionTab'
 import { NotificationsTab } from './NotificationsTab'
+import { AudioTab } from './AudioTab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export function SettingsPanel() {
@@ -26,6 +27,10 @@ export function SettingsPanel() {
             <BellIcon className="size-3.5" />
             Notifications
           </TabsTrigger>
+          <TabsTrigger value="audio" className="flex-none">
+            <AudioLinesIcon className="size-3.5" />
+            Audio
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="account" keepMounted>
@@ -38,6 +43,9 @@ export function SettingsPanel() {
 
         <TabsContent value="notifications">
           <NotificationsTab />
+        </TabsContent>
+        <TabsContent value="audio">
+          <AudioTab />
         </TabsContent>
       </Tabs>
     </section>

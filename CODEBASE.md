@@ -149,6 +149,17 @@ specific limits and download resume remain in `.claude/plans/object-storage.md`.
 room scope. Media then travels through LiveKit; app-visible join/leave and
 control state is maintained through the SpacetimeDB module.
 
+Noise suppression runs locally on the microphone through lazily loaded RNNoise
+(default) or DeepFilterNet3 AudioWorklets at 48 kHz. The model selection persists
+in Audio settings and is also available from the call popover. Both models' assets
+ship with the client; no Cloud license, external model host or cross-origin
+isolation is required. DeepFilterNet's model/WASM only loads when selected; its
+worklet reports model readiness, runtime errors and sustained CPU overload. The
+app-shell owner reapplies the selected model when the microphone changes or the
+user switches filters, restores raw audio on failure, and reports runtime status
+separately from the persisted preference. Each processor owns and closes its
+AudioContext so its WASM memory can be released after switching or hanging up.
+
 ### Instance administration and space discovery
 
 ASP.NET Core Identity's `Admin` role is authoritative for human instance
