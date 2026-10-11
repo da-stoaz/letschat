@@ -1,5 +1,7 @@
 import { useCallback } from 'react'
 import type { RemoteParticipant, Room } from 'livekit-client'
+import { screenShareOptions } from '../../../lib/screenShare'
+import { useMediaDeviceStore } from '../../../stores/mediaDeviceStore'
 import {
   assertActiveCallRoom,
   isCallCancelled,
@@ -120,10 +122,12 @@ export function useVoiceControlActions({
         setError('Screen sharing APIs are unavailable in this runtime.')
         return
       }
-      const nextScreen = !selfState.sharingScreen
-      await room.localParticipant.setScreenShareEnabled(nextScreen)
+      const nextScreen = !room.localParticipant.isScreenShareEnabled
+      const preferences = useMediaDeviceStore.getState()
+      const options = screenShareOptions(preferences.screenShareQuality, preferences.screenShareAudio)
+      await room.localParticipant.setScreenShareEnabled(nextScreen, options.capture, options.publish)
       assertActiveCallRoom(room)
-      await patchVoiceState({ sharingScreen: nextScreen })
+      await patchVoiceState({ sharingScreen: room.localParticipant.isScreenShareEnabled })
     } catch (error) {
       if (isCallCancelled(error)) return
       try { assertActiveCallRoom(room) } catch { return }

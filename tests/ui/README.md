@@ -58,3 +58,16 @@ popover, toggle, active style, Escape/focus return and narrow-screen positioning
 The Audio settings card uses the same persisted controls; confirm model changes
 are reflected in both places and switching off hides the filter selection.
 A synthetic signal check does not replace a headset/speech quality test.
+
+Open `/tests/ui/screen-share.html` for screen-sharing options and a synthetic
+video check. Click **Share screen**, choose a resolution/frame rate in the
+combined menu, then click **Choose what to share**.
+The fixture passes capture options through
+the real LiveKit SDK and sends the generated video between two local WebRTC
+peers with the selected encoder limits. PASS requires received FPS to reach at
+least 65% of the selected target. It never captures a real screen or microphone
+and uses no backend. It verifies the video encoding path, not LiveKit server
+layer switching; test that separately with two clients on a real instance.
+Confirm Escape returns focus to the share button and quality choices work with
+arrow keys. In a call, the same button stops an active share directly. Actual
+window/display selection is handled by the browser's native sharing dialog.

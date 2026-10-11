@@ -5,7 +5,6 @@ import {
   LogOutIcon,
   MicIcon,
   MicOffIcon,
-  MonitorUpIcon,
   VideoIcon,
   Volume2Icon,
   VolumeXIcon,
@@ -39,6 +38,7 @@ import { useVoiceControlActions } from '../../features/voice/hooks/useVoiceContr
 import { callConnection } from '../../features/voice/callConnection'
 import { CallLatencyBadge } from '../../features/voice/components/CallLatencyBadge'
 import { NoiseFilterToggle } from '../../features/voice/components/NoiseFilterToggle'
+import { ScreenShareMenu } from '../../features/voice/components/ScreenShareMenu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -321,7 +321,7 @@ export function ActiveCallCard({
   const muted = selfParticipant?.muted ?? false
   const deafened = selfParticipant?.deafened ?? false
   const sharingCamera = selfParticipant?.sharingCamera ?? false
-  const sharingScreen = selfParticipant?.sharingScreen ?? false
+  const sharingScreen = activeRoom?.localParticipant.isScreenShareEnabled ?? false
   const hasScreenCapture = supportsScreenCapture()
   const screenShareButtonClass = cn(
     'transition-all duration-150',
@@ -669,17 +669,13 @@ export function ActiveCallCard({
               </DropdownMenu>
             </div>
 
-            <Button
+            <ScreenShareMenu
               size="icon-xs"
-              variant="outline"
               className={cn('h-8 w-8', screenShareButtonClass)}
-              aria-label={sharingScreen ? 'Stop sharing screen' : 'Share screen'}
-              aria-pressed={sharingScreen}
-              onClick={onToggleScreenShare}
-              disabled={!hasScreenCapture}
-            >
-              <MonitorUpIcon className="size-4" />
-            </Button>
+              sharing={sharingScreen}
+              onToggle={onToggleScreenShare}
+              disabled={!connected || !hasScreenCapture}
+            />
 
             <Button size="icon-xs" variant="destructive" className="call-leave-button h-8 w-auto gap-0 p-0" aria-label={connecting ? 'Cancel call' : 'End call'} onClick={onLeave}>
               <span className="flex h-full w-[calc(2rem-2px)] shrink-0 items-center justify-center"><LogOutIcon className="size-4" /></span>
@@ -803,15 +799,13 @@ export function ActiveCallCard({
             </DropdownMenu>
           </div>
 
-          <Button
+          <ScreenShareMenu
             size="icon-sm"
-            variant="outline"
             className={screenShareButtonClass}
-            onClick={onToggleScreenShare}
-            disabled={!hasScreenCapture}
-          >
-            <MonitorUpIcon className="size-5" />
-          </Button>
+            sharing={sharingScreen}
+            onToggle={onToggleScreenShare}
+            disabled={!connected || !hasScreenCapture}
+          />
           <Button size="icon-sm" variant="destructive" className="call-leave-button w-auto gap-0 p-0" aria-label={connecting ? 'Cancel call' : 'End call'} onClick={onLeave}>
             <span className="flex h-full w-[calc(1.75rem-2px)] shrink-0 items-center justify-center"><LogOutIcon className="size-5" /></span>
             <span className="call-leave-label" aria-hidden="true"><span><span className="block pr-2">{connecting ? 'Cancel' : 'Leave'}</span></span></span>

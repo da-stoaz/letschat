@@ -149,6 +149,18 @@ specific limits and download resume remain in `.claude/plans/object-storage.md`.
 room scope. Media then travels through LiveKit; app-visible join/leave and
 control state is maintained through the SpacetimeDB module.
 
+Screen-sharing options persist with media-device preferences and are shared by
+channel and direct calls. Auto permits up to 1080p/60 FPS with balanced network
+adaptation; explicit 720p/30, 720p/60, 1080p/15, 1080p/30 and 1080p/60 profiles
+set both capture and encoding limits. 60 FPS profiles prioritize frame rate,
+while slower profiles preserve resolution. VP8 simulcast provides lower layers;
+adaptive subscriptions and dynacast avoid sending unused quality layers.
+Screen audio is opt-in, uses stereo Opus at up to 96 kbit/s without speech
+processing, and depends on the capture source/browser's audio support.
+The screen-share button opens one menu for quality and audio, then opens the
+browser's native source picker for window/screen selection. While sharing,
+the same button stops directly.
+
 Noise suppression runs locally on the microphone through lazily loaded RNNoise
 (default) or DeepFilterNet3 AudioWorklets at 48 kHz. The model selection persists
 in Audio settings and is also available from the call popover. Both models' assets

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MonitorUpIcon, Settings2Icon, Volume2Icon, VolumeXIcon } from 'lucide-react'
+import { Settings2Icon, Volume2Icon, VolumeXIcon } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -8,6 +8,7 @@ import { assertActiveCallRoom, isCallCancelled, listLivekitDevices, setLocalCame
 import { useMediaDeviceStore } from '../../../stores/mediaDeviceStore'
 import type { ActiveCall } from '../hooks/useActiveCall'
 import { NoiseFilterToggle } from './NoiseFilterToggle'
+import { ScreenShareMenu } from './ScreenShareMenu'
 
 type DeviceKind = 'audioinput' | 'audiooutput' | 'videoinput'
 type Devices = Record<DeviceKind, { deviceId: string; label: string }[]>
@@ -62,7 +63,7 @@ export function CallOptions({ call, open, onOpenChange, inline = false, collapse
         <div aria-label={inline ? 'Call devices and options' : undefined} role={inline ? 'group' : undefined} className={cn('min-h-0', inline ? 'flex flex-wrap items-end justify-center gap-3' : 'space-y-4 overflow-y-auto px-4 pb-4')}>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" disabled={!call.joined} aria-pressed={call.deafened} onClick={() => void call.onToggleDeafen()}>{call.deafened ? <VolumeXIcon /> : <Volume2Icon />}{call.deafened ? 'Unmute call audio' : 'Mute call audio'}</Button>
-            {call.hasScreenCapture ? <Button variant="outline" disabled={!call.joined} aria-pressed={call.sharingScreen} onClick={() => void call.onToggleScreenShare()}><MonitorUpIcon />{call.sharingScreen ? 'Stop sharing screen' : 'Share screen'}</Button> : null}
+            {call.hasScreenCapture ? <ScreenShareMenu size="default" showLabel disabled={!call.joined} sharing={call.sharingScreen} onToggle={call.onToggleScreenShare} /> : null}
             <NoiseFilterToggle compact />
           </div>
           {collapseDevices ? <Popover>
