@@ -23,7 +23,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import stealthChatLogo from '../../../src-tauri/icons/stealthchat-nobg.png'
 import { normalizeIdentity, serverInitials, userInitials } from './helpers'
 import { useServerRailStore, type ServerGroup } from '../../stores/serverRailStore'
 import type { RailItem } from '../../stores/serverRailStore'
@@ -736,7 +735,7 @@ export function AppRail({
               />
             }
           >
-            <img src={stealthChatLogo} alt="" className="h-6 w-6 object-contain" />
+            <img src="/letschat-logo.png" alt="" className="h-6 w-6 object-contain" />
           </TooltipTrigger>
           <TooltipContent side="right">Discover Spaces</TooltipContent>
         </Tooltip>
