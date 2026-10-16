@@ -166,8 +166,10 @@ and returns processing status or a one-hour, video-scoped playlist grant.
 Segments use private MinIO signed URLs; no account token appears in a media
 URL. Grants have the same one-hour access window as downloads and survive API
 restarts/replicas sharing `JWT_SECRET`. The web player renews before expiry.
-The web CSP includes the API host in `media-src` for native HLS in Safari;
-other supported browsers load hls.js only when playback is requested.
+The web CSP includes the API host in `media-src` for native HLS fallback.
+The player loads hls.js only when streaming playback is requested and prefers
+it where supported: Chrome can report native HLS support but reject MPEG-TS
+streams. Browsers without MSE use native HLS when available.
 
 The player displays a poster until the first frame, retries pending posters,
 and fits the media to its aspect ratio and viewport height. Pop out moves

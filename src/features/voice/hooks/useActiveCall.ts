@@ -63,7 +63,7 @@ export function useActiveCall() {
   const muted = self?.muted ?? !room?.localParticipant.isMicrophoneEnabled
   const deafened = self?.deafened ?? false
   const sharingCamera = self?.sharingCamera ?? false
-  const sharingScreen = self?.sharingScreen ?? false
+  const sharingScreen = room?.localParticipant.isScreenShareEnabled ?? false
 
   useEffect(() => {
     if (!joined) return
