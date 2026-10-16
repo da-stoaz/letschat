@@ -193,6 +193,25 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 builder.Services.AddSingleton<MailSendLimiter>();
 builder.Services.AddRateLimiter(rateLimiter =>
 {
+    rateLimiter.GlobalLimiter = PartitionedRateLimiter.CreateChained(
+        PartitionedRateLimiter.Create<HttpContext, string>(context =>
+            context.Request.Path.StartsWithSegments("/auth")
+                ? RateLimitPartition.GetTokenBucketLimiter(
+                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new TokenBucketRateLimiterOptions
+                    {
+                        TokenLimit = 20, TokensPerPeriod = 5,
+                        ReplenishmentPeriod = TimeSpan.FromSeconds(1), QueueLimit = 0,
+                    })
+                : RateLimitPartition.GetNoLimiter("other")),
+        PartitionedRateLimiter.Create<HttpContext, string>(context =>
+            HttpMethods.IsPost(context.Request.Method) && context.Request.Path.Value is
+                "/auth/login" or "/auth/register" or "/auth/link" or "/auth/change-password" or
+                "/auth/reset-password" or "/auth/correct-registration-email" or "/admin/login"
+                ? RateLimitPartition.GetConcurrencyLimiter("password-work",
+                    _ => new ConcurrencyLimiterOptions { PermitLimit = 4, QueueLimit = 0 })
+                : RateLimitPartition.GetNoLimiter("other")));
+
     void AddPerIpPolicy(string policy, int multiplier) =>
         rateLimiter.AddPolicy(policy, httpContext =>
         {
@@ -219,6 +238,9 @@ builder.Services.AddRateLimiter(rateLimiter =>
     {
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.HttpContext.Response.ContentType = "application/json";
+        var seconds = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+            ? Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds)) : 1;
+        context.HttpContext.Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         await context.HttpContext.Response.WriteAsync(
             JsonSerializer.Serialize(new { error = "Too many requests. Please try again later." }),
             cancellationToken);
@@ -226,7 +248,7 @@ builder.Services.AddRateLimiter(rateLimiter =>
 });
 
 builder.Services.AddCors(cors => cors.AddDefaultPolicy(policy =>
-    policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+    policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("Retry-After")));
 
 builder.Services.AddRazorPages();
 

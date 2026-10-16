@@ -22,7 +22,7 @@ public sealed class SmtpEmailSender(SystemConfigService config, ILogger<SmtpEmai
         message.From.Add(new MailboxAddress(settings.EmailFromName, settings.EmailFromAddress));
         message.To.Add(MailboxAddress.Parse(toAddress));
         message.Subject = subject;
-        message.Body = new BodyBuilder { HtmlBody = htmlBody }.ToMessageBody();
+        message.Body = EmailTemplates.CreateMessageBody(htmlBody);
 
         using var client = new SmtpClient();
         var socketOptions = settings.SmtpUseStartTls

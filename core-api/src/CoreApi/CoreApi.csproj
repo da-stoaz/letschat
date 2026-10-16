@@ -6,11 +6,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- Kept in lock-step with package.json by scripts/bump-version.ts.
          CI can still override at build time via -p:Version=x.y.z. -->
-    <Version>1.5.0</Version>
+    <Version>1.6.0</Version>
     <!-- Dev-only secrets (e.g. SPACETIMEDB_SERVICE_TOKEN) live in user-secrets,
          not in committed appsettings. Loaded automatically in Development. -->
     <UserSecretsId>letschat-core-api</UserSecretsId>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot/img/letschat-logo.png" LogicalName="letschat-logo.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="4.0.103.3" />

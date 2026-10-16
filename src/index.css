@@ -121,6 +121,10 @@
   * {
     @apply border-border outline-ring/50;
     }
+  /* Shared default for native buttons and custom button primitives. */
+  :where(button, [role='button'], input[type='button'], input[type='submit'], input[type='reset']):not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+    cursor: pointer;
+  }
   [data-slot='dropdown-menu-trigger']:focus-visible {
     outline: 2px solid color-mix(in oklab, var(--foreground) 70%, transparent);
     outline-offset: -2px;

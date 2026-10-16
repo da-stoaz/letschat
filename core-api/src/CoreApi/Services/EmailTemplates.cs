@@ -1,4 +1,5 @@
 using System.Net;
+using MimeKit;
 
 namespace CoreApi.Services;
 
@@ -14,6 +15,18 @@ namespace CoreApi.Services;
 /// </summary>
 public static class EmailTemplates
 {
+    private const string LogoContentId = "letschat-logo";
+
+    public static MimeEntity CreateMessageBody(string htmlBody)
+    {
+        var builder = new BodyBuilder { HtmlBody = htmlBody };
+        using var logo = typeof(EmailTemplates).Assembly.GetManifestResourceStream("letschat-logo.png")
+            ?? throw new InvalidOperationException("The embedded LetsChat email logo is missing.");
+        var image = builder.LinkedResources.Add("letschat-logo.png", logo, new ContentType("image", "png"));
+        image.ContentId = LogoContentId;
+        return builder.ToMessageBody();
+    }
+
     private const string FontStack =
         "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
@@ -129,6 +142,8 @@ public static class EmailTemplates
                                border:1px solid #e4e7ec;box-shadow:0 1px 2px rgba(16,24,40,0.04);">
                    <tr>
                      <td style="padding:30px 36px 0 36px;font-family:{FontStack};">
+                       <img src="cid:{LogoContentId}" alt="LetsChat logo" width="48" height="48"
+                            style="display:block;width:48px;height:48px;border:0;margin:0 0 12px 0;">
                        <span style="font-size:19px;font-weight:700;letter-spacing:-0.01em;color:#4f46e5;">
                          Lets<span style="color:#0ea5e9;">Chat</span>
                        </span>

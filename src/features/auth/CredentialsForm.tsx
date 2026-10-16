@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { LogInIcon, UserRoundPlusIcon } from 'lucide-react'
 import { loginWithPassword } from '../../lib/spacetimedb'
 import {
@@ -48,6 +48,7 @@ export function CredentialsForm({
   const [confirmTouched, setConfirmTouched] = useState(false)
   const confirmMismatch = confirmTouched && confirmPassword !== password
   const [submitting, setSubmitting] = useState(false)
+  const busy = useRef(false)
   const [error, setError] = useState<string | null>(null)
   // Only complain once the user has actually typed something in the field.
   const passwordLengthHint = password.length > 0 ? passwordLengthError(password) : null
@@ -71,7 +72,8 @@ export function CredentialsForm({
         className="space-y-4"
         onSubmit={async (event) => {
           event.preventDefault()
-          if (submitting) return
+          if (busy.current) return
+          busy.current = true
           setError(null)
           setSubmitting(true)
           try {
@@ -153,6 +155,7 @@ export function CredentialsForm({
               setError(message)
             }
           } finally {
+            busy.current = false
             setSubmitting(false)
           }
         }}

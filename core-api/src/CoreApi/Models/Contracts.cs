@@ -30,6 +30,9 @@ public sealed record RegisterResponse(string Status, AuthResponse? Auth, string?
 /// </summary>
 public sealed record ResendConfirmationRequest(string? Email = null, string? Username = null);
 
+public sealed record CorrectRegistrationEmailRequest(string Username, string Password, string Email);
+public sealed record CorrectRegistrationEmailResponse(string Email, bool ConfirmationSent);
+
 /// <summary>
 /// Kicks off the password-reset flow. Always answered generically so the
 /// endpoint can't be used to probe which addresses have accounts.

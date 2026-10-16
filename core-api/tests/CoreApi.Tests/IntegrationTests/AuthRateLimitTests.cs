@@ -20,6 +20,7 @@ public sealed class AuthRateLimitTests
     private sealed class CapturingEmailSender : IEmailSender
     {
         public List<string> Sent { get; } = [];
+        public TestClock Clock { get; } = new();
 
         public Task SendAsync(string toAddress, string subject, string htmlBody, CancellationToken ct = default)
         {
@@ -36,6 +37,7 @@ public sealed class AuthRateLimitTests
             {
                 services.RemoveAll<IEmailSender>();
                 services.AddSingleton<IEmailSender>(mail);
+                services.AddSingleton<TimeProvider>(mail.Clock);
             }));
         await factory.Services.GetRequiredService<SystemConfigService>().UpdateAsync(c =>
         {
@@ -83,9 +85,13 @@ public sealed class AuthRateLimitTests
         var client = factory.CreateClient();
         var budget = 3 * AuthEndpoints.LoginRateLimitMultiplier;
 
-        for (var i = 0; i < budget; i++)
-            Assert.Equal(HttpStatusCode.Unauthorized, (await Login(client, $"nobody_{i}", "wrong-password-1")).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await Login(client, "nobody_last", "wrong-password-1")).StatusCode);
+        // The short burst limit should now reject spraying before the long
+        // window is exhausted, even when every username is different.
+        var responses = await Task.WhenAll(Enumerable.Range(0, budget)
+            .Select(i => Login(client, $"nobody_{i}", "wrong-password-1")));
+        Assert.Contains(responses, response => response.StatusCode == HttpStatusCode.TooManyRequests);
+        Assert.All(responses.Where(response => response.StatusCode == HttpStatusCode.TooManyRequests),
+            response => Assert.NotNull(response.Headers.RetryAfter));
     }
 
     [Fact]
@@ -97,7 +103,10 @@ public sealed class AuthRateLimitTests
         Assert.Equal(HttpStatusCode.OK, (await Register(client, "rl_mail")).StatusCode);
 
         for (var i = 0; i < MailSendLimiter.MailsPerAccountPerHour + 2; i++)
+        {
             Assert.Equal(HttpStatusCode.OK, (await Forgot(client, "rl_mail@test.local")).StatusCode);
+            mail.Clock.Advance(TimeSpan.FromSeconds(MailSendLimiter.CooldownSeconds));
+        }
 
         Assert.Equal(MailSendLimiter.MailsPerAccountPerHour, mail.Sent.Count);
     }

@@ -23,6 +23,7 @@ public sealed class ResendConfirmationTests : IClassFixture<LetsChatWebApplicati
     private sealed class CapturingEmailSender : IEmailSender
     {
         public List<string> Sent { get; } = [];
+        public TestClock Clock { get; } = new();
 
         public Task SendAsync(string toAddress, string subject, string htmlBody, CancellationToken ct = default)
         {
@@ -56,6 +57,7 @@ public sealed class ResendConfirmationTests : IClassFixture<LetsChatWebApplicati
             {
                 services.RemoveAll<IEmailSender>();
                 services.AddSingleton<IEmailSender>(sender);
+                services.AddSingleton<TimeProvider>(sender.Clock);
             });
         });
         return (factory, sender);
@@ -77,6 +79,10 @@ public sealed class ResendConfirmationTests : IClassFixture<LetsChatWebApplicati
             client, "/auth/resend-confirmation", new { username = "resend_user" });
 
         Assert.Equal(HttpStatusCode.OK, resend.StatusCode);
+        Assert.Single(sender.Sent); // The initial email reserves the cooldown too.
+        sender.Clock.Advance(TimeSpan.FromSeconds(MailSendLimiter.InitialCooldownSeconds));
+        await LetsChatWebApplicationFactory.PostJsonAsync(
+            client, "/auth/resend-confirmation", new { username = "resend_user" });
         Assert.Equal(2, sender.Sent.Count); // confirmation re-sent
         Assert.All(sender.Sent, to => Assert.Equal("resend@test.local", to));
     }

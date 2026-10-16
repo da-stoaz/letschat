@@ -83,7 +83,7 @@ public sealed class VideoPlaybackTests
         var master = await client.GetAsync(masterPath);
         Assert.Equal("application/vnd.apple.mpegurl", master.Content.Headers.ContentType?.MediaType);
         Assert.True(master.Headers.CacheControl?.NoStore);
-        Assert.Contains("RESOLUTION=1280x720\nv0.m3u8", await master.Content.ReadAsStringAsync());
+        Assert.Contains("RESOLUTION=1280x720\nv0.m3u8", (await master.Content.ReadAsStringAsync()).ReplaceLineEndings("\n"));
         var variant = await client.GetStringAsync(masterPath.Replace("master.m3u8", "v0.m3u8"));
         Assert.Contains(VideoPlayback.Prefix(key) + "v0_00000.ts", variant);
         Assert.Contains("X-Amz-Signature", variant);

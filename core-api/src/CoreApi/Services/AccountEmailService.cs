@@ -12,8 +12,45 @@ namespace CoreApi.Services;
 public sealed class AccountEmailService(
     UserManager<ApplicationUser> users,
     IEmailSender email,
-    ServiceOptions options)
+    ServiceOptions options,
+    AccountAccessService access,
+    ILogger<AccountEmailService> logger)
 {
+    // The caller must authorize the change (admin, or password-verified pending
+    // registration). Save address, token revocation and confirmation state in
+    // one optimistic-concurrency-checked write so stale requests cannot undo it.
+    public async Task<bool> ChangeAddressAsync(ApplicationUser user, string email)
+    {
+        email = Validation.NormalizeEmail(email);
+        if (email.Length > 256) throw ApiException.BadRequest("Email address is too long.");
+        if (string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase))
+            throw ApiException.BadRequest("Enter a different email address.");
+        if (await users.FindByEmailAsync(email) is { } owner && owner.Id != user.Id)
+            throw ApiException.Conflict("That email address is unavailable.");
+
+        user.Email = email;
+        user.EmailConfirmed = false;
+        user.SecurityStamp = Guid.NewGuid().ToString();
+        user.TokenGeneration++;
+        user.UpdatedAtUtc = DateTime.UtcNow;
+        if (user.Status == AccountStatus.EmailVerified) user.Status = AccountStatus.Registered;
+        var result = await users.UpdateAsync(user);
+        if (!result.Succeeded)
+            throw ApiException.Conflict("Could not update the email address. Reload and try again.");
+
+        await access.SyncAsync(user);
+        try
+        {
+            await SendConfirmationEmailAsync(user);
+            return true;
+        }
+        catch (EmailDeliveryException ex)
+        {
+            logger.LogWarning(ex, "Email address updated, but confirmation delivery failed for {UserId}", user.Id);
+            return false;
+        }
+    }
+
     public async Task SendConfirmationEmailAsync(ApplicationUser user)
     {
         if (string.IsNullOrWhiteSpace(user.Email))

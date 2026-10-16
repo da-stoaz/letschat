@@ -14,7 +14,7 @@ export function SettingsPanel() {
       </header>
 
       <Tabs defaultValue="account" className="space-y-3">
-        <TabsList className="max-w-full justify-start overflow-x-auto">
+        <TabsList className="max-w-full flex-wrap justify-start">
           <TabsTrigger value="account" className="flex-none">
             <UserRoundIcon className="size-3.5" />
             Account

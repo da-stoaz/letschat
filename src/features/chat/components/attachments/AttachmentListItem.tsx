@@ -3,7 +3,7 @@ import { DownloadIcon, ExternalLinkIcon, FileIcon, ImageIcon, Loader2Icon, Music
 import { Button } from '@/components/ui/button'
 import { downloadAttachment } from '@/lib/attachmentDownload'
 import type { ChatMessageAttachment } from '@/types/attachments'
-import { formatFileSize, getAttachmentKind } from './attachmentUtils'
+import { formatFileSize, getAttachmentKind, isTextAttachment } from './attachmentUtils'
 import { useVideoPlayerStore } from '@/stores/videoPlayerStore'
 import { videoThumbnailKey } from './attachmentUtils'
 import { videoSize } from './videoPresentation'
@@ -18,10 +18,7 @@ type AttachmentListItemProps = {
   onRetry: (storageKey: string) => void
   onOpenImage: (image: { url: string; fileName: string }) => void
   onOpenPdf: (pdf: { url: string; fileName: string }) => void
-}
-
-function openUrl(url: string): void {
-  window.open(url, '_blank', 'noopener,noreferrer')
+  onOpenText: (text: { url: string; fileName: string }) => void
 }
 
 // Keyed on the storage key, not the sender-written MIME type or file name:
@@ -31,7 +28,7 @@ function isPdfAttachment(attachment: ChatMessageAttachment): boolean {
   return attachment.storageKey.toLowerCase().endsWith('.pdf')
 }
 
-export function AttachmentListItem({ originId, attachment, resolution, thumbnailUrl, onRetry, onOpenImage, onOpenPdf }: AttachmentListItemProps) {
+export function AttachmentListItem({ originId, attachment, resolution, thumbnailUrl, onRetry, onOpenImage, onOpenPdf, onOpenText }: AttachmentListItemProps) {
   const cancelDownloadRef = useRef<(() => Promise<void>) | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const canOpen = Boolean(resolution.url)
@@ -69,6 +66,8 @@ export function AttachmentListItem({ originId, attachment, resolution, thumbnail
   const [downloadProgressFraction, setDownloadProgressFraction] = useState<number | null>(null)
   const kind = getAttachmentKind(attachment.mimeType)
   const isPdf = isPdfAttachment(attachment)
+  const isText = kind === 'file' && isTextAttachment(attachment.mimeType, attachment.fileName)
+  const hasPreview = kind === 'image' || kind === 'video' || isPdf || isText
   const hasDownloadProgress = isSaving && downloadProgressFraction !== null
   const downloadPercent = hasDownloadProgress ? Math.round(downloadProgressFraction * 100) : null
 
@@ -154,30 +153,32 @@ export function AttachmentListItem({ originId, attachment, resolution, thumbnail
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!canOpen}
-            onClick={() => {
-              if (!resolution.url) return
-              if (kind === 'image') {
-                onOpenImage({ url: resolution.url, fileName: attachment.fileName })
-                return
-              }
-              if (kind === 'video') {
-                popOut()
-                return
-              }
-              if (isPdf) {
-                onOpenPdf({ url: resolution.url, fileName: attachment.fileName })
-                return
-              }
-              openUrl(resolution.url)
-            }}
-          >
-            <ExternalLinkIcon className="size-4" />
-            {kind === 'video' ? 'Pop out' : kind === 'image' || isPdf ? 'Preview' : 'Open'}
-          </Button>
+          {hasPreview ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canOpen}
+              onClick={() => {
+                if (!resolution.url) return
+                if (kind === 'image') {
+                  onOpenImage({ url: resolution.url, fileName: attachment.fileName })
+                  return
+                }
+                if (kind === 'video') {
+                  popOut()
+                  return
+                }
+                if (isPdf) {
+                  onOpenPdf({ url: resolution.url, fileName: attachment.fileName })
+                  return
+                }
+                if (isText) onOpenText({ url: resolution.url, fileName: attachment.fileName })
+              }}
+            >
+              <ExternalLinkIcon className="size-4" />
+              {kind === 'video' ? 'Pop out' : 'Preview'}
+            </Button>
+          ) : null}
 
           <Button
             size="sm"

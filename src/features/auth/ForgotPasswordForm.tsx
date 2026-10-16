@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ArrowLeftIcon, MailCheckIcon } from 'lucide-react'
 import { authServiceForgotPassword } from '../../lib/authService'
 import { Button } from '@/components/ui/button'
@@ -25,6 +25,7 @@ export function ForgotPasswordForm({
   const [error, setError] = useState<string | null>(null)
   const [email, setEmail] = useState(defaultEmail)
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent'>('idle')
+  const busy = useRef(false)
 
   if (status === 'sent') {
     return (
@@ -51,7 +52,8 @@ export function ForgotPasswordForm({
       className="space-y-4"
       onSubmit={async (event) => {
         event.preventDefault()
-        if (status === 'sending' || !email.trim()) return
+        if (busy.current || !email.trim()) return
+        busy.current = true
         setError(null)
         setStatus('sending')
         try {
@@ -60,6 +62,8 @@ export function ForgotPasswordForm({
         } catch {
           setStatus('idle')
           setError('Could not request a reset link. Please try again.')
+        } finally {
+          busy.current = false
         }
       }}
     >
