@@ -64,9 +64,10 @@ public sealed class AccountEnumerationTests
         Assert.Equal(a.GetProperty("status").GetString(), b.GetProperty("status").GetString());
         Assert.NotEqual(a.GetProperty("identity").GetString(), b.GetProperty("identity").GetString());
 
-        Assert.Equal(2, mail.Sent.Count);
-        Assert.Equal("You already have a LetsChat account", mail.Sent[1].Subject);
-        Assert.Equal("taken@test.local", mail.Sent[1].To);
+        // The first confirmation starts the cooldown; a duplicate registration
+        // must not immediately trigger another mail or reveal that it was held.
+        Assert.Single(mail.Sent);
+        Assert.Equal("taken@test.local", mail.Sent[0].To);
     }
 
     [Fact]

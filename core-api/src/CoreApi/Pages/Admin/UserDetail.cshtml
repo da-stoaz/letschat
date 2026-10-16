@@ -36,6 +36,28 @@
 </div>
 
 <div class="card">
+    <h2>Email</h2>
+    <form method="post" action="/admin/users/@id?handler=ChangeEmail">
+        @Html.AntiForgeryToken()
+        <div class="field">
+            <label for="email">Email address</label>
+            <input class="input" id="email" name="Email" type="email" value="@Model.Email"
+                   autocapitalize="none" spellcheck="false" autocomplete="off" required maxlength="256" />
+            <p class="muted small">Changing the address requires a new email confirmation and signs out existing sessions. The username and chat history stay unchanged.</p>
+        </div>
+        <button type="submit" class="btn">Change email</button>
+    </form>
+    @if (!Model.Target.EmailConfirmed)
+    {
+        <form method="post" action="/admin/users/@id?handler=SendConfirmation">
+            @Html.AntiForgeryToken()
+            <p class="muted small">Email is not confirmed.</p>
+            <button type="submit" class="btn">Resend confirmation email</button>
+        </form>
+    }
+</div>
+
+<div class="card">
     <h2>Actions</h2>
     <div class="btn-row">
         @if (Model.Target.Status == AccountStatus.EmailVerified)

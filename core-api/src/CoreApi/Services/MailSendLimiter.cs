@@ -1,4 +1,4 @@
-using System.Threading.RateLimiting;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CoreApi.Services;
 
@@ -13,24 +13,32 @@ namespace CoreApi.Services;
 /// ponytail: process-local, like the SystemConfigService cache (F2); needs a
 /// shared store only if core-api ever runs as several replicas.
 /// </remarks>
-public sealed class MailSendLimiter : IDisposable
+public sealed class MailSendLimiter(IMemoryCache cache, TimeProvider? clock = null)
 {
     public const int MailsPerAccountPerHour = 3;
+    public const int CooldownSeconds = 60;
+    public const int InitialCooldownSeconds = 30;
+    private readonly object gate = new();
 
-    private readonly PartitionedRateLimiter<string> _limiter =
-        PartitionedRateLimiter.Create<string, string>(accountId =>
-            RateLimitPartition.GetFixedWindowLimiter(accountId, _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = MailsPerAccountPerHour,
-                Window = TimeSpan.FromHours(1),
-                QueueLimit = 0,
-            }));
-
-    public bool TryAcquire(string accountId)
+    public bool TryAcquire(string accountId, bool initialConfirmation = false, bool correctingAddress = false)
     {
-        using var lease = _limiter.AttemptAcquire(accountId);
-        return lease.IsAcquired;
+        // Serialize the short read/check/reserve step, never the mail delivery.
+        // A rejected attempt does not extend the cooldown.
+        lock (gate)
+        {
+            var now = (clock ?? TimeProvider.System).GetUtcNow();
+            var key = (nameof(MailSendLimiter), accountId);
+            var sent = cache.Get<Queue<(DateTimeOffset At, bool Initial)>>(key) ?? new();
+            while (sent.TryPeek(out var oldest) && oldest.At <= now.AddHours(-1)) sent.Dequeue();
+            var last = sent.LastOrDefault();
+            var cooldown = last.Initial ? InitialCooldownSeconds : CooldownSeconds;
+            if (sent.Count >= MailsPerAccountPerHour ||
+                (sent.Count > 0 && !(correctingAddress && last.Initial) &&
+                 now - last.At < TimeSpan.FromSeconds(cooldown)))
+                return false;
+            sent.Enqueue((now, initialConfirmation));
+            cache.Set(key, sent, TimeSpan.FromHours(1));
+            return true;
+        }
     }
-
-    public void Dispose() => _limiter.Dispose();
 }

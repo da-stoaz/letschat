@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { preventRepeatedSubmit } from '@/lib/preventRepeatedSubmit'
 import { changePassword } from '../../lib/spacetimedb/auth'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordLengthError } from '../../lib/authService'
 import { toast } from 'sonner'
@@ -39,6 +40,7 @@ function ChangePasswordForm({ onDone }: { onDone: () => void }) {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const busy = useRef(false)
   const [error, setError] = useState<string | null>(null)
 
   // Only complain once the user has actually typed something in the field.
@@ -49,6 +51,8 @@ function ChangePasswordForm({ onDone }: { onDone: () => void }) {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (busy.current || !canSubmit) return
+    busy.current = true
     setError(null)
     setIsSaving(true)
     try {
@@ -59,11 +63,13 @@ function ChangePasswordForm({ onDone }: { onDone: () => void }) {
       const message = caught instanceof Error ? caught.message : 'Could not change your password.'
       setError(message)
       setIsSaving(false)
+    } finally {
+      busy.current = false
     }
   }
 
   return (
-    <form className="space-y-3" onSubmit={handleSubmit}>
+    <form className="space-y-3" onSubmit={handleSubmit} onKeyDownCapture={preventRepeatedSubmit}>
       <div className="space-y-1.5">
         <Label htmlFor="current-password">Current password</Label>
         <Input

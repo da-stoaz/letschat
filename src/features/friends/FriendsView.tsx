@@ -239,7 +239,7 @@ export function FriendsView() {
                 {acceptedFriends.length} total · {onlineFriends.length} online
               </p>
             </div>
-            <TabsList className="max-w-full overflow-x-auto">
+            <TabsList className="max-w-full flex-wrap">
               <TabsTrigger value="online">Online</TabsTrigger>
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="pending" className="gap-1.5">

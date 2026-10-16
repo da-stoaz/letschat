@@ -22,6 +22,23 @@ Argon2id PHC strings. Application sessions use signed one-hour access and
 seven-day refresh tokens; the separate asymmetric OIDC token is what
 SpacetimeDB validates.
 
+Unconfirmed registrations can correct a mistyped email through
+`POST /auth/correct-registration-email` with `username`, `password`, and `email`.
+The endpoint verifies the password with lockout, accepts only unconfirmed
+`Registered` accounts, and shares the per-account confirmation-mail budget.
+It preserves the account and chat identity. Both confirmation screens expose
+this correction, including after restarting the client.
+The initial confirmation email starts a 30-second resend cooldown, while the
+first address correction is available immediately. After a resend or correction,
+both actions share a 60-second cooldown. The three-email hourly cap still applies.
+
+Administrators can change an address and resend confirmation from the user
+detail page. Address changes clear email confirmation, invalidate prior
+confirmation/reset links and session tokens, and are audited for admin actions.
+Accounts awaiting approval return to email confirmation; active, disabled and
+rejected accounts retain their status. If delivery fails after saving, the UI
+reports that the address changed and offers another send attempt.
+
 The service also synchronizes account access state and selected instance
 settings into the SpacetimeDB module. Chat messages, memberships, and reducer
 authorization remain owned by `server/`, not this service.

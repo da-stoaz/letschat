@@ -35,6 +35,8 @@ public static class AuthEndpoints
         routes.MapPost("/auth/login", Login).RequireRateLimiting(LoginRateLimitPolicy);
         routes.MapPost("/auth/resend-confirmation", ResendConfirmation)
             .RequireRateLimiting(EmailRateLimitPolicy);
+        routes.MapPost("/auth/correct-registration-email", CorrectRegistrationEmail)
+            .RequireRateLimiting(PasswordRateLimitPolicy);
 
         // Password reset. forgot-password mails the link; reset-password is the
         // browser-facing GET form + POST submit the email link opens.
@@ -126,6 +128,7 @@ public static class AuthEndpoints
 
         if (requiresConfirmation)
         {
+            mailLimit.TryAcquire(user.Id, initialConfirmation: true);
             try
             {
                 await accountEmail.SendConfirmationEmailAsync(user);
@@ -282,6 +285,7 @@ public static class AuthEndpoints
 
         if (requiresConfirmation)
         {
+            mailLimit.TryAcquire(user.Id, initialConfirmation: true);
             try
             {
                 await accountEmail.SendConfirmationEmailAsync(user);
@@ -577,6 +581,31 @@ public static class AuthEndpoints
         return new RegistrationStatusResponse(StatusToString(user.Status));
     }
 
+    private static async Task<CorrectRegistrationEmailResponse> CorrectRegistrationEmail(
+        CorrectRegistrationEmailRequest request,
+        UserManager<ApplicationUser> users,
+        SignInManager<ApplicationUser> signIn,
+        AccountEmailService accountEmail,
+        MailSendLimiter mailLimit)
+    {
+        var username = Validation.NormalizeUsername(request.Username);
+        Validation.ValidateUsername(username);
+        Validation.ValidatePassword(request.Password);
+        var user = await users.FindByNameAsync(username)
+            ?? throw ApiException.Unauthorized("Invalid username or password.");
+        var check = await signIn.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
+        if (check.IsLockedOut) throw ApiException.Unauthorized(LockedOutMessage);
+        if (!check.Succeeded) throw ApiException.Unauthorized("Invalid username or password.");
+        if (user.Status != AccountStatus.Registered || user.EmailConfirmed)
+            throw ApiException.Forbidden("Only an unconfirmed registration can be corrected here.");
+        if (!mailLimit.TryAcquire(user.Id, correctingAddress: true))
+            throw new ApiException(System.Net.HttpStatusCode.TooManyRequests,
+                "Please wait at least 60 seconds between emails. At most three emails can be requested per hour.");
+
+        var sent = await accountEmail.ChangeAddressAsync(user, request.Email);
+        return new CorrectRegistrationEmailResponse(user.Email!, sent);
+    }
+
     /// <summary>Re-sends the confirmation email. Always responds generically.</summary>
     private static async Task<IResult> ResendConfirmation(
         ResendConfirmationRequest request,
@@ -597,7 +626,7 @@ public static class AuthEndpoints
             user = await users.FindByNameAsync(Validation.NormalizeUsername(request.Username));
         }
 
-        if (user is { Status: AccountStatus.Registered, EmailConfirmed: false } && mailLimit.TryAcquire(user.Id))
+        if (user is { EmailConfirmed: false } && mailLimit.TryAcquire(user.Id))
         {
             // A 503 here, where a missing account answers 200, told a stranger
             // the account exists and is unconfirmed (BUG_ANALYSIS A9).
@@ -616,6 +645,7 @@ public static class AuthEndpoints
         {
             status = "ok",
             message = "If that account exists and is unconfirmed, a new confirmation email has been sent.",
+            retryAfterSeconds = MailSendLimiter.CooldownSeconds,
         });
     }
 

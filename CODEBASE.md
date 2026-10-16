@@ -98,6 +98,11 @@ through explicit pagination reducers.
 
 ### Account settings
 
+Pending registrations can correct their email after password verification,
+including from the blocked-login screen. Admin user details also support email
+changes. Both paths preserve account identity, require confirmation of the new
+address, and revoke old confirmation links and tokens; see `core-api/README.md`.
+
 The client separates account identity, credential security, connection details,
 and notification preferences into Account, Security, Connection, and
 Notifications tabs. Private account metadata such as email comes from the

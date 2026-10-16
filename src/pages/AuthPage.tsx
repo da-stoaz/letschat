@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { preventRepeatedSubmit } from '@/lib/preventRepeatedSubmit'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { authReturnPath } from '../features/auth/returnPath'
 import { CheckCircle2Icon, PlugZapIcon } from 'lucide-react'
@@ -118,7 +119,7 @@ export function AuthPage() {
           <CardTitle className="text-2xl">LetsChat</CardTitle>
           <CardDescription>{headerDescription}</CardDescription>
         </CardHeader>
-        <CardContent>{renderView()}</CardContent>
+        <CardContent onKeyDownCapture={preventRepeatedSubmit}>{renderView()}</CardContent>
       </Card>
     </section>
   )
@@ -140,7 +141,11 @@ export function AuthPage() {
     }
 
     if (pendingRegistration) {
-      return <ConfirmEmailScreen pending={pendingRegistration} onBack={backToSignIn} />
+      return <ConfirmEmailScreen pending={pendingRegistration} onBack={backToSignIn} onEmailChanged={email => {
+        const updated = { ...pendingRegistration, email }
+        persistPendingRegistration(updated)
+        setPendingRegistration(updated)
+      }} />
     }
 
     if (loginNotice) {

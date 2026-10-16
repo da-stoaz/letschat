@@ -1,7 +1,10 @@
 import type { Identity } from '../types/domain'
 import { AUTH_SESSION_KEY, useServerConfigStore } from '../stores/serverConfigStore'
+import { startConfirmationCooldown } from '../features/auth/confirmationCooldown'
 
 const AUTH_REQUEST_TIMEOUT_MS = 12000
+const authRequestsInFlight = new Set<string>()
+const authRetryAt = new Map<string, number>()
 
 
 function getNetworkErrorDetails(error: unknown): string {
@@ -182,6 +185,26 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
   path: string,
   payload: TPayload,
 ): Promise<TResponse> {
+  const key = `${useServerConfigStore.getState().config?.authServiceUrl}${path}`
+  const guarded = /^\/auth\/(login|register|link|change-password|correct-registration-email|forgot-password|resend-confirmation)$/.test(path)
+  if (guarded) {
+    const wait = Math.ceil(((authRetryAt.get(key) ?? 0) - Date.now()) / 1000)
+    if (wait > 0) throw new Error(`Too many requests. Please wait ${wait} seconds.`)
+    if (authRequestsInFlight.has(key)) throw new Error('A request is already in progress. Please wait.')
+    authRequestsInFlight.add(key)
+  }
+  try {
+    return await sendJson<TResponse, TPayload>(path, payload, guarded ? key : undefined)
+  } finally {
+    if (guarded) authRequestsInFlight.delete(key)
+  }
+}
+
+async function sendJson<TResponse, TPayload extends Record<string, unknown>>(
+  path: string,
+  payload: TPayload,
+  rateLimitKey?: string,
+): Promise<TResponse> {
   const AUTH_SERVICE_URL = useServerConfigStore.getState().config?.authServiceUrl
   if (!AUTH_SERVICE_URL) {
     throw new Error('Server not configured. Please complete setup first.')
@@ -216,6 +239,12 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
   }
 
   if (!response.ok) {
+    if (response.status === 429 && rateLimitKey) {
+      const header = response.headers.get('Retry-After')
+      const seconds = header && /^\d+$/.test(header) ? Number(header)
+        : header ? (Date.parse(header) - Date.now()) / 1000 : 60
+      authRetryAt.set(rateLimitKey, Date.now() + Math.max(1, Number.isFinite(seconds) ? seconds : 60) * 1000)
+    }
     const fallback = `Request failed (${response.status})`
     const errorBody = (await response.json().catch(() => null)) as { error?: string } | null
     throw new Error(errorBody?.error ?? fallback)
@@ -229,6 +258,7 @@ async function postJson<TResponse, TPayload extends Record<string, unknown>>(
 
 export async function authServiceRegister(payload: RegisterPayload): Promise<RegisterResult> {
   const result = await postJson<RegisterResult, RegisterPayload>('/auth/register', payload)
+  if (result.status === 'pending_email_verification') startConfirmationCooldown(payload.username, true)
   // Only an `active` registration yields a usable session to persist.
   if (result.status === 'active' && result.auth) {
     setStoredAuthSessionToken(result.auth.sessionToken)
@@ -247,6 +277,12 @@ export async function authServiceResendConfirmation(
   await postJson<{ status: string; message: string }, Record<string, string>>(
     '/auth/resend-confirmation',
     payload,
+  )
+}
+
+export function authServiceCorrectRegistrationEmail(payload: { username: string; password: string; email: string }) {
+  return postJson<{ email: string; confirmationSent: boolean }, typeof payload>(
+    '/auth/correct-registration-email', payload,
   )
 }
 

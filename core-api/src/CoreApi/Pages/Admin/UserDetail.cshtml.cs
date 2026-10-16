@@ -19,6 +19,7 @@ public sealed class UserDetailModel(
     public ApplicationUser Target { get; private set; } = null!;
     public bool TargetIsAdmin { get; private set; }
     public bool IsSelf { get; private set; }
+    [BindProperty] public string Email { get; set; } = string.Empty;
 
     [TempData] public string? Message { get; set; }
     [TempData] public string? Error { get; set; }
@@ -32,9 +33,46 @@ public sealed class UserDetailModel(
         }
 
         Target = user;
+        Email = user.Email ?? string.Empty;
         TargetIsAdmin = await users.IsInRoleAsync(user, DbInitializer.AdminRole);
         IsSelf = id == CurrentUserId();
         return Page();
+    }
+
+    public async Task<IActionResult> OnPostChangeEmailAsync(string id)
+    {
+        var user = await users.FindByIdAsync(id);
+        if (user is null) return NotFound();
+        try
+        {
+            var oldEmail = user.Email;
+            var sent = await accountEmail.ChangeAddressAsync(user, Email);
+            await AuditAsync("user.change-email", user, $"Changed email from {oldEmail} to {user.Email}");
+            if (sent) Message = "Email updated. A confirmation link was sent to the new address.";
+            else Error = "Email updated, but the confirmation email could not be sent. Retry sending it below.";
+        }
+        catch (ApiException ex)
+        {
+            Error = ex.Message;
+        }
+        return Back(id);
+    }
+
+    public async Task<IActionResult> OnPostSendConfirmationAsync(string id)
+    {
+        var user = await users.FindByIdAsync(id);
+        if (user is null) return NotFound();
+        if (user.EmailConfirmed) return Back(id);
+        try
+        {
+            await accountEmail.SendConfirmationEmailAsync(user);
+            Message = "Confirmation email sent.";
+        }
+        catch (EmailDeliveryException ex)
+        {
+            Error = $"Could not send the confirmation email: {ex.Message}";
+        }
+        return Back(id);
     }
 
     public async Task<IActionResult> OnPostApproveAsync(string id)
