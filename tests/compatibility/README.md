@@ -65,3 +65,12 @@ UI verification: use `tests/ui/compatibility.html` on the local Vite server. Che
 legacy acknowledgment/cancel, incompatible download messaging, retry, hosted-web
 recovery, narrow screens and keyboard focus. The fixture isolates storage and
 never contacts a backend.
+
+Fixture parameters: `state=compatible|incompatible|legacy|legacy-metadata|unreachable`
+(`legacy` returns 404; `legacy-metadata` models the v1.5.0 discovery response without
+`clientProtocol`). Add `hosted` to exercise hosted-web startup. Use `entry=saved`,
+`entry=startup`, or `entry=setup` for saved selection, restored connection startup,
+or manual discovery. For browser join links, use `entry=join` and the normal
+`s`, `a`, `l`, `d` query parameters pointing to the fixture endpoints.
+
+See [verification.md](verification.md) for the executed checks and remaining gaps.
