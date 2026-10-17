@@ -1,3 +1,4 @@
+import { CompatibilityError } from '../compatibility'
 import { connect, disconnect, setStoredToken, clearStoredToken, spacetimedbClient } from './connection'
 import { reducers } from './reducers'
 import { syncUsers } from './sync'
@@ -118,7 +119,7 @@ export async function loginWithPassword(username: string, password: string): Pro
   try {
     await connect()
   } catch (error) {
-    clearStoredToken()
+    if (!(error instanceof CompatibilityError)) clearStoredToken()
     throw error
   }
 

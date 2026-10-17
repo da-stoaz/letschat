@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useServerConfigStore, parseJoinLink } from '../stores/serverConfigStore'
-import { initializeSpacetime } from '../lib/spacetimedb'
+import { parseJoinLink } from '../stores/serverConfigStore'
+import { selectServer } from '../lib/selectServer'
 import { SplashScreen } from '../components/SplashScreen'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button'
  */
 export function WebJoinPage() {
   const navigate = useNavigate()
-  const setConfig = useServerConfigStore((s) => s.setConfig)
   const [error, setError] = useState<string | null>(null)
   const started = useRef(false)
 
@@ -29,17 +28,13 @@ export function WebJoinPage() {
         return
       }
       try {
-        // Same reasoning as the desktop deep link: this config arrived in a
-        // link, not from the user. The dialog completes the connect on accept.
-        if (!useServerConfigStore.getState().requestConnect(cfg, { confirmUnknown: true })) return
-        setConfig(cfg)
-        await initializeSpacetime()
+        await selectServer(cfg, { confirmUnknown: true })
         navigate('/', { replace: true })
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to connect to the server.')
       }
     })()
-  }, [navigate, setConfig])
+  }, [navigate])
 
   if (error) {
     return (

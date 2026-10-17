@@ -2,6 +2,10 @@ import type { ServerConfig } from '../stores/serverConfigStore'
 
 /** Shape of the `/.well-known/letschat.json` document served by core-api. */
 export interface WellKnown {
+  clientProtocol?: unknown
+  serverVersion?: unknown
+  recommendedClient?: unknown
+  minClient?: unknown
   spacetimedb?: string
   auth?: string
   livekit?: string
@@ -13,6 +17,22 @@ export interface WellKnown {
   instanceStorageLimitBytes?: number
   /** The instance's hosted web client, or null when it has none. */
   web?: string | null
+}
+
+export class DiscoveryHttpError extends Error {
+  readonly status: number
+  constructor(status: number, base: string) {
+    super(`Discovery failed (${status}). Is /.well-known/letschat.json hosted at ${base}?`)
+    this.status = status
+  }
+}
+
+export function safeWebUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  try {
+    const url = new URL(value)
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : null
+  } catch { return null }
 }
 
 /** Loopback, `.local` and private-network hosts — where plain http is normal. */
@@ -69,11 +89,14 @@ function assertSecureEndpoints(base: string, json: WellKnown): void {
 /** Fetches a server's raw `/.well-known/letschat.json` document. */
 export async function fetchWellKnown(serverUrl: string): Promise<WellKnown> {
   const base = normalizeServerUrl(serverUrl)
-  const res = await fetch(`${base}/.well-known/letschat.json`, { signal: AbortSignal.timeout(8000) })
+  if (!safeWebUrl(base)) throw new Error('Discovery requires an HTTP(S) server URL.')
+  const res = await fetch(`${base}/.well-known/letschat.json`, { signal: AbortSignal.timeout(8000), cache: 'no-store', credentials: 'omit' })
   if (!res.ok) {
-    throw new Error(`Discovery failed (${res.status}). Is /.well-known/letschat.json hosted at ${base}?`)
+    throw new DiscoveryHttpError(res.status, base)
   }
-  return (await res.json()) as WellKnown
+  const json: unknown = await res.json()
+  if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error('Invalid discovery document.')
+  return json as WellKnown
 }
 
 /**
@@ -85,13 +108,23 @@ export async function fetchWellKnown(serverUrl: string): Promise<WellKnown> {
 export async function discoverConfig(serverUrl: string): Promise<ServerConfig> {
   const base = normalizeServerUrl(serverUrl)
   const json = await fetchWellKnown(base)
+  return configFromDiscovery(base, json)
+}
+
+export function configFromDiscovery(base: string, json: WellKnown): ServerConfig {
   const missing: string[] = []
   if (!json.spacetimedb) missing.push('spacetimedb')
   if (!json.auth) missing.push('auth')
   if (!json.livekit) missing.push('livekit')
   if (missing.length) throw new Error(`letschat.json is missing fields: ${missing.join(', ')}`)
   assertSecureEndpoints(base, json)
+  if (!safeWebUrl(json.auth) || !safeWebUrl(json.spacetimedb?.replace(/^ws(s?):/, 'http$1:'))
+    || !safeWebUrl(json.livekit?.replace(/^ws(s?):/, 'http$1:'))
+    || (json.database !== undefined && (typeof json.database !== 'string' || !json.database.trim()))) {
+    throw new Error('Discovery contains invalid connection details.')
+  }
   return {
+    discoveryUrl: base,
     spacetimedbUri: toSocketUrl(json.spacetimedb!),
     authServiceUrl: json.auth!,
     livekitUrl: toSocketUrl(json.livekit!),

@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 export interface ServerConfig {
+  /** Original discovery root; older saved hosts fall back to authServiceUrl. */
+  discoveryUrl?: string
   spacetimedbUri: string
   spacetimedbDatabase: string
   authServiceUrl: string
@@ -23,9 +25,8 @@ export const AUTH_SESSION_KEY = 'letschat.auth_session_token'
 
 /**
  * A host's stable identity for the known-hosts list. `authServiceUrl` is the
- * discovery root, so it identifies the instance; `spacetimedbUri` deliberately
- * does not, because the connection layer rewrites it in place when it falls
- * back to an alternate candidate URI for the *same* host.
+ * discovery root, so it identifies the instance; transport URLs may move without changing
+ * the authority that owns the account.
  */
 function hostKey(config: ServerConfig): string {
   return config.authServiceUrl
@@ -38,13 +39,13 @@ function rememberHost(hosts: ServerConfig[], config: ServerConfig): ServerConfig
 
 /** A service URL that a known host is now advertising differently than before. */
 export interface HostChange {
-  field: 'spacetimedbUri' | 'livekitUrl' | 'spacetimedbDatabase'
+  field: 'spacetimedbUri' | 'livekitUrl' | 'spacetimedbDatabase' | 'authServiceUrl'
   stored: string
   incoming: string
 }
 
-/** The fields pinned per host. `authServiceUrl` is excluded — it is the key. */
-const PINNED_FIELDS: HostChange['field'][] = ['spacetimedbUri', 'livekitUrl', 'spacetimedbDatabase']
+/** Pin auth too when the original discovery root identifies a moved host. */
+const PINNED_FIELDS: HostChange['field'][] = ['spacetimedbUri', 'livekitUrl', 'spacetimedbDatabase', 'authServiceUrl']
 
 /**
  * Compares what a host is advertising now against what it served last time.
@@ -57,7 +58,8 @@ const PINNED_FIELDS: HostChange['field'][] = ['spacetimedbUri', 'livekitUrl', 's
  * without question.</p>
  */
 export function diffKnownHost(hosts: ServerConfig[], incoming: ServerConfig): HostChange[] | null {
-  const stored = hosts.find((host) => hostKey(host) === hostKey(incoming))
+  const stored = hosts.find((host) => hostKey(host) === hostKey(incoming)
+    || (host.discoveryUrl ?? host.authServiceUrl) === (incoming.discoveryUrl ?? incoming.authServiceUrl))
   if (!stored) return null
 
   return PINNED_FIELDS.flatMap((field) =>
@@ -88,6 +90,7 @@ export function mergePersisted(persisted: unknown, current: ServerConfigState): 
   const knownHosts = merged.knownHosts ?? []
   return {
     ...merged,
+    sessionHost: merged.sessionHost ?? merged.config?.authServiceUrl ?? knownHosts[0]?.authServiceUrl ?? null,
     knownHosts: knownHosts.length === 0 && merged.config ? [merged.config] : knownHosts,
   }
 }
@@ -102,6 +105,8 @@ export interface PendingHost {
 
 interface ServerConfigState {
   config: ServerConfig | null
+  /** Token owner survives the server picker; selecting another host clears both tokens. */
+  sessionHost: string | null
   /** Every host successfully configured before, most recent first. */
   knownHosts: ServerConfig[]
   hasHydrated: boolean
@@ -117,6 +122,7 @@ interface ServerConfigState {
    * and web join links — where an unfamiliar host is worth naming out loud.
    */
   requestConnect: (config: ServerConfig, options?: { confirmUnknown?: boolean }) => boolean
+  /** Returns the trusted proposal; compatibility must pass before setConfig. */
   resolvePendingHost: (accept: boolean) => ServerConfig | null
   forgetHost: (authServiceUrl: string) => void
   clearConfig: () => void
@@ -127,6 +133,7 @@ export const useServerConfigStore = create<ServerConfigState>()(
   persist(
     (set, get) => ({
       config: null,
+      sessionHost: null,
       knownHosts: [],
       hasHydrated: false,
       pendingHost: null,
@@ -135,13 +142,13 @@ export const useServerConfigStore = create<ServerConfigState>()(
           // A session token is only meaningful to the host that issued it.
           // Carrying one across a host switch would hand instance A's bearer
           // token to instance B, so drop it whenever the host actually changes.
-          // Re-setting the same host (hosted-web bootstrap on every load, or
-          // the SpacetimeDB URI-candidate rewrite) must NOT sign the user out.
-          if (state.config && hostKey(state.config) !== hostKey(config)) {
+          // Re-discovery of the same authority must not sign the user out.
+          if (state.sessionHost && state.sessionHost !== hostKey(config)) {
             localStorage.removeItem(AUTH_SESSION_KEY)
+            localStorage.removeItem('spacetimedb.auth_token')
           }
 
-          return { config, knownHosts: rememberHost(state.knownHosts, config) }
+          return { config, sessionHost: hostKey(config), knownHosts: rememberHost(state.knownHosts, config) }
         }),
       requestConnect: (config, options) => {
         const state = get()
@@ -163,7 +170,6 @@ export const useServerConfigStore = create<ServerConfigState>()(
         set({ pendingHost: null })
         if (!pending || !accept) return null
 
-        get().setConfig(pending.config)
         return pending.config
       },
       forgetHost: (authServiceUrl) =>
@@ -185,7 +191,7 @@ export const useServerConfigStore = create<ServerConfigState>()(
       // Only the durable facts. A pending confirmation is a live UI decision —
       // persisting it would resurrect a security prompt on the next launch with
       // no context for why it is there.
-      partialize: (state) => ({ config: state.config, knownHosts: state.knownHosts }),
+      partialize: (state) => ({ config: state.config, sessionHost: state.sessionHost, knownHosts: state.knownHosts }),
       merge: (persisted, current) => mergePersisted(persisted, current),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true)

@@ -17,6 +17,11 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
+vi.mock('../compatibility', () => ({
+  ensureServerCompatibility: vi.fn(async (config) => config),
+  CompatibilityError: class extends Error { retryable = false },
+}))
+
 vi.mock('../../generated', () => ({
   tables: new Proxy({}, { get: (_target, property) => String(property) }),
   DbConnection: {
@@ -179,10 +184,47 @@ describe('signing out while connecting', () => {
 
   it('abandons the attempt instead of opening another socket', async () => {
     const pending = connect()
+    await Promise.resolve() // compatibility preflight completes before constructing the socket
     disconnect()
 
     await expect(pending).resolves.toBeUndefined()
     expect(mocks.build).toHaveBeenCalledOnce()
     expect(mocks.connectionState.status).toBe('disconnected')
   })
+})
+
+
+describe('compatibility admission before realtime', () => {
+  it.each(['incompatible', 'unknown'])('opens no socket when preflight is %s', async (status) => {
+    disconnect()
+    vi.clearAllMocks()
+    const { ensureServerCompatibility, CompatibilityError } = await import('../compatibility')
+    vi.mocked(ensureServerCompatibility).mockRejectedValueOnce(new CompatibilityError(status))
+    await expect(connect()).rejects.toThrow(status)
+    expect(mocks.build).not.toHaveBeenCalled()
+  })
+})
+
+it('does not let an abandoned preflight clear the newer connection attempt', async () => {
+  disconnect()
+  vi.clearAllMocks()
+  const { ensureServerCompatibility, CompatibilityError } = await import('../compatibility')
+  let rejectOld!: (error: Error) => void
+  let rejectNew!: (error: Error) => void
+  vi.mocked(ensureServerCompatibility)
+    .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOld = reject }))
+    .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectNew = reject }))
+  const old = connect()
+  disconnect()
+  const current = connect()
+  const currentRejected = expect(current).rejects.toThrow('blocked')
+  rejectOld(new CompatibilityError('cancelled'))
+  await old
+  const concurrent = connect()
+  const concurrentRejected = expect(concurrent).rejects.toThrow('blocked')
+  expect(ensureServerCompatibility).toHaveBeenCalledTimes(2)
+  rejectNew(new CompatibilityError('blocked'))
+  await currentRejected
+  await concurrentRejected
+  expect(mocks.build).not.toHaveBeenCalled()
 })

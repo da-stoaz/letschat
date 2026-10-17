@@ -11,12 +11,15 @@ namespace CoreApi.Services;
 /// </summary>
 public sealed class VersionInfo
 {
+    // Protocol families describe the required HTTP + SpacetimeDB contract, not releases.
+    public const int ClientProtocol = 1;
+    public const string FirstCompatibleClient = "1.6.1";
     public string ServerVersion { get; }
 
     /// <summary>The app version the landing page will offer for download.</summary>
     public string RecommendedClientVersion { get; }
 
-    /// <summary>Oldest desktop app this backend still accepts at connect time.</summary>
+    /// <summary>Advertised minimum client for admission UX; not an authorization boundary.</summary>
     public string MinClientVersion { get; }
 
     public bool IsDevBuild => ServerVersion.StartsWith("0.0.0", StringComparison.Ordinal);
@@ -38,6 +41,6 @@ public sealed class VersionInfo
                 ? rec : ServerVersion;
         MinClientVersion =
             (config["MIN_CLIENT_VERSION"]?.Trim() is { Length: > 0 } min)
-                ? min : ServerVersion;
+                ? min : FirstCompatibleClient;
     }
 }

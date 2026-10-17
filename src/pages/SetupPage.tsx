@@ -1,5 +1,5 @@
 import { hostLabel, useServerConfigStore, type ServerConfig } from '../stores/serverConfigStore'
-import { initializeSpacetime } from '../lib/spacetimedb'
+import { selectServer } from '../lib/selectServer'
 import { DiscoverTab } from './setup/DiscoverTab'
 import { JoinLinkTab } from './setup/JoinLinkTab'
 import { Button } from '@/components/ui/button'
@@ -8,18 +8,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { GlobeIcon, QrCodeIcon, ServerIcon, XIcon } from 'lucide-react'
 
 export function SetupPage() {
-  const setConfig = useServerConfigStore((s) => s.setConfig)
-  const requestConnect = useServerConfigStore((s) => s.requestConnect)
   const knownHosts = useServerConfigStore((s) => s.knownHosts)
   const forgetHost = useServerConfigStore((s) => s.forgetHost)
 
-  const handleConnect = async (cfg: ServerConfig) => {
-    // A host the user typed here is deliberate, so an unknown one needs no
-    // prompt — but one that has moved since last time still does.
-    if (!requestConnect(cfg)) return
-    setConfig(cfg)
-    await initializeSpacetime()
-  }
+  const handleConnect = (cfg: ServerConfig) => selectServer(cfg)
 
   return (
     <main className="grid min-h-full place-items-center bg-[radial-gradient(1200px_800px_at_10%_-20%,theme(colors.blue.500/20),transparent),radial-gradient(900px_700px_at_100%_0%,theme(colors.cyan.500/15),transparent)] p-4">
@@ -42,7 +34,7 @@ export function SetupPage() {
                     type="button"
                     variant="outline"
                     className="min-w-0 flex-1 justify-start"
-                    onClick={() => void handleConnect(host)}
+                    onClick={() => void handleConnect(host).catch(() => {})}
                   >
                     <ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="truncate">{hostLabel(host)}</span>

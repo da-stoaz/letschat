@@ -31,7 +31,7 @@ const hostB = { ...hostA, authServiceUrl: 'https://auth.b.example', spacetimedbU
 describe('serverConfigStore known hosts', () => {
   beforeEach(() => {
     store.clear()
-    useServerConfigStore.setState({ config: null, knownHosts: [], pendingHost: null })
+    useServerConfigStore.setState({ config: null, sessionHost: null, knownHosts: [], pendingHost: null })
   })
 
   it('records every configured host, most recent first, without duplicates', () => {
@@ -201,19 +201,19 @@ describe('serverConfigStore known hosts', () => {
     expect(useServerConfigStore.getState().pendingHost).toBeNull()
   })
 
-  it('applies the moved host only once accepted', () => {
+  it('returns the accepted host without committing before compatibility passes', () => {
     useServerConfigStore.getState().setConfig(hostA)
     const moved = { ...hostA, spacetimedbUri: 'wss://moved.example' }
     useServerConfigStore.getState().requestConnect(moved)
 
     expect(useServerConfigStore.getState().resolvePendingHost(true)).toEqual(moved)
-    expect(useServerConfigStore.getState().config?.spacetimedbUri).toBe('wss://moved.example')
+    expect(useServerConfigStore.getState().config?.spacetimedbUri).toBe(hostA.spacetimedbUri)
   })
 
   it('waves through an unknown host the user typed, but stops one that arrived in a link', () => {
     expect(useServerConfigStore.getState().requestConnect(hostA)).toBe(true)
 
-    useServerConfigStore.setState({ config: null, knownHosts: [], pendingHost: null })
+    useServerConfigStore.setState({ config: null, sessionHost: null, knownHosts: [], pendingHost: null })
     expect(useServerConfigStore.getState().requestConnect(hostA, { confirmUnknown: true })).toBe(false)
     expect(useServerConfigStore.getState().pendingHost?.reason).toBe('unknown')
   })

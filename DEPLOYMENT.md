@@ -519,7 +519,7 @@ the owner credential.
 | Registration policy | `REQUIRE_EMAIL_CONFIRMATION`, `REQUIRE_ADMIN_APPROVAL` | Booleans (`true`/`false`) — also runtime-editable via the admin panel |
 | Email | `EMAIL_SENDER`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_STARTTLS`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME` | `EMAIL_SENDER=smtp` for real delivery; `log` only in dev |
 | Rate limiting | `RATE_LIMIT_PERMIT`, `RATE_LIMIT_WINDOW_SECONDS` | Per-IP fixed window, separate budgets for registration, email, and password actions; sign-in allows 10× |
-| Client versions | `RECOMMENDED_CLIENT_VERSION`, `MIN_CLIENT_VERSION` | Optional; default to backend's compiled version |
+| Client versions | `RECOMMENDED_CLIENT_VERSION`, `MIN_CLIENT_VERSION` | Optional; recommended defaults to the backend version, minimum to the protocol family's first client (1.6.1 for protocol 1) |
 | LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Compose passes the pair to LiveKit as `LIVEKIT_KEYS` and to core-api, so they cannot disagree. `LIVEKIT_KEYS` replaces any `keys:` block still in `livekit/config.prod.yaml` |
 | MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `FILES_DOMAIN` | Served by the pinned MinIO-compatible Silo image. Compose derives `MINIO_PUBLIC_ENDPOINT` from `FILES_DOMAIN` and `PUBLIC_SCHEME`; presigned URLs use this public address. Existing `minio_data` volumes are reused |
 | MinIO CORS | `MINIO_CORS_ALLOW_ORIGIN` | Keep `*`. Gates the presigned **upload** PUT as well as downloads, and the desktop app's origin is `tauri://localhost` / `http://tauri.localhost` — pinning to `https://app.<domain>` alone silently blocks every desktop upload at the CORS preflight |
@@ -674,16 +674,18 @@ LetsChat setup auto-discovery expects this shape:
   "livekit": "wss://lk.example.com",
   "database": "letschat",
   "web": "https://app.example.com",
-  "serverVersion": "0.3.1",
-  "recommendedClient": "0.3.1",
-  "minClient": "0.3.1"
+  "serverVersion": "1.6.1",
+  "recommendedClient": "1.6.1",
+  "minClient": "1.6.1",
+  "clientProtocol": 1
 }
 ```
 
-`serverVersion` is the running core-api version. `recommendedClient` and
-`minClient` default to the same value; operators can pin different desktop-app
-versions via env (used by `/downloads/{os}` and future client-side update
-gating).
+`serverVersion` is the running core-api version. `recommendedClient` defaults
+to that release; `minClient` defaults to the first client in the protocol family
+(1.6.1 for protocol 1). Operators can override both version settings via env.
+The client checks `clientProtocol` and `minClient` before connecting; the
+recommendation only selects the instance’s manual downloads.
 
 LiveKit scheme by track:
 
@@ -798,3 +800,17 @@ Postgres backup example:
 ```bash
 docker exec letschat-postgres pg_dump -U letschat auth | gzip > auth-$(date +%F).sql.gz
 ```
+
+## Desktop and web client compatibility
+
+Discovery now declares a compiled-in `clientProtocol` independently of the app
+version. Protocol 1 starts with client 1.6.1; its default `minClient` remains
+1.6.1 across compatible backend releases. `MIN_CLIENT_VERSION` overrides that
+floor; `RECOMMENDED_CLIENT_VERSION` selects the version offered by the instance's
+download page and does not by itself reject other compatible clients. Keep the
+web image, Core API, and SpacetimeDB module on a tested deployment combination.
+
+Clients check discovery before authentication and realtime connections. Older
+backends without protocol metadata require an explicit compatibility warning
+acknowledgment; network failures offer retry. No client update is installed
+automatically. See [compatibility tests and release policy](tests/compatibility/README.md).

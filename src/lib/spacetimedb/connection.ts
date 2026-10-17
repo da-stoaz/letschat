@@ -1,3 +1,4 @@
+import { CompatibilityError, ensureServerCompatibility } from '../compatibility'
 import { DbConnection, tables } from '../../generated'
 import { cancelPendingRefreshes, watchLiveTables } from './events'
 import { syncAll, resetClientState } from './sync'
@@ -374,7 +375,8 @@ function scheduleReconnect(): void {
   reconnectAttempts += 1
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
-    void connect().catch(() => {
+    void connect().catch((error: unknown) => {
+      if (error instanceof CompatibilityError && !error.retryable) return
       scheduleReconnect()
     })
   }, delay)
@@ -393,8 +395,10 @@ export async function connect(): Promise<void> {
   }
   const { spacetimedbUri: SPACETIMEDB_URI, spacetimedbDatabase: SPACETIMEDB_DATABASE } = serverConfig
 
-  connectPromise = (async () => {
+  const attemptPromise = (async () => {
     setStatus('connecting')
+    await ensureServerCompatibility(serverConfig, true)
+    if (abandoned()) return
 
     // `reportErrors` controls whether a final-candidate failure surfaces a
     // user-facing "Connection Error" notification. We suppress it on the first
@@ -411,15 +415,7 @@ export async function connect(): Promise<void> {
         try {
           await connectWithUri(candidate, SPACETIMEDB_DATABASE, isLastCandidate && reportErrors)
 
-          if (candidate !== SPACETIMEDB_URI) {
-            const currentConfig = useServerConfigStore.getState().config
-            if (currentConfig && currentConfig.spacetimedbUri === SPACETIMEDB_URI) {
-              useServerConfigStore.getState().setConfig({
-                ...currentConfig,
-                spacetimedbUri: candidate,
-              })
-            }
-          }
+          // Keep discovered/pinned endpoints stable; loopback fallback is transport-local.
           return
         } catch (error) {
           errors.push(`${candidate} -> ${getConnectionErrorDetails(error)}`)
@@ -467,8 +463,9 @@ export async function connect(): Promise<void> {
     }
   })()
 
+  connectPromise = attemptPromise
   try {
-    await connectPromise
+    await attemptPromise
     if (abandoned()) return
     reconnectAttempts = 0
     startHeartbeat()
@@ -484,7 +481,7 @@ export async function connect(): Promise<void> {
     setStatus('error', getConnectionErrorDetails(error))
     throw error
   } finally {
-    connectPromise = null
+    if (connectPromise === attemptPromise) connectPromise = null
   }
 }
 

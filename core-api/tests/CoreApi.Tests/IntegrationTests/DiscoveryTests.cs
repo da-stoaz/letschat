@@ -1,3 +1,4 @@
+using CoreApi.Services;
 using System.Net;
 using System.Text.Json;
 
@@ -52,7 +53,28 @@ public sealed class DiscoveryTests : IClassFixture<LetsChatWebApplicationFactory
         Assert.False(string.IsNullOrWhiteSpace(serverVersion));
         // RecommendedClient defaults to serverVersion when no env override is set.
         Assert.Equal(serverVersion, root.GetProperty("recommendedClient").GetString());
-        Assert.Equal(serverVersion, root.GetProperty("minClient").GetString());
+        Assert.Equal(VersionInfo.FirstCompatibleClient, root.GetProperty("minClient").GetString());
+        Assert.Equal(1, root.GetProperty("clientProtocol").GetInt32());
+    }
+
+    [Fact]
+    public async Task ClientPolicyOverrides_DoNotRelabelTheProtocol()
+    {
+        await using var factory = new LetsChatWebApplicationFactory
+        {
+            ExtraConfig = new()
+            {
+                ["MIN_CLIENT_VERSION"] = "1.8.0",
+                ["RECOMMENDED_CLIENT_VERSION"] = "1.9.0",
+                ["CLIENT_PROTOCOL"] = "99",
+            },
+        };
+        using var response = await factory.CreateClient().GetAsync("/.well-known/letschat.json");
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("1.8.0", document.RootElement.GetProperty("minClient").GetString());
+        Assert.Equal("1.9.0", document.RootElement.GetProperty("recommendedClient").GetString());
+        Assert.Equal(1, document.RootElement.GetProperty("clientProtocol").GetInt32());
     }
 
     [Fact]

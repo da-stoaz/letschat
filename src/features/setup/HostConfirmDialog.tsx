@@ -1,7 +1,9 @@
+import { isServerAdmitted, useCompatibilityStore } from '../../lib/compatibility'
+import { isHostedWebBuild } from '../../lib/tauri'
 import { useNavigate } from 'react-router-dom'
 import { ShieldAlertIcon } from 'lucide-react'
 import { hostLabel, useServerConfigStore } from '../../stores/serverConfigStore'
-import { initializeSpacetime } from '../../lib/spacetimedb'
+import { selectServer, cancelServerSelection } from '../../lib/selectServer'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -13,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 
 const FIELD_LABELS: Record<string, string> = {
+  authServiceUrl: 'Auth',
   spacetimedbUri: 'SpacetimeDB',
   livekitUrl: 'LiveKit',
   spacetimedbDatabase: 'Database',
@@ -33,11 +36,24 @@ export function HostConfirmDialog() {
 
   if (!pendingHost) return null
 
+  const cancel = () => {
+    cancelServerSelection()
+    const state = useServerConfigStore.getState()
+    if (!isServerAdmitted(state.config)) {
+      if (isHostedWebBuild() && state.config) {
+        useCompatibilityStore.setState({ notice: { config: state.config, status: 'unreachable', message: 'Connection cancelled. Retry when you are ready to confirm the server details.', document: {}, fingerprint: '' } })
+      } else {
+        state.clearConfig()
+        navigate('/setup')
+      }
+    }
+  }
+
   const host = hostLabel(pendingHost.config)
   const isChanged = pendingHost.reason === 'changed'
 
   return (
-    <Dialog open onOpenChange={(open) => !open && resolvePendingHost(false)}>
+    <Dialog open onOpenChange={(open) => !open && cancel()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -73,16 +89,16 @@ export function HostConfirmDialog() {
         ) : null}
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => resolvePendingHost(false)}>
+          <Button type="button" variant="outline" onClick={cancel}>
             Cancel
           </Button>
           <Button
             type="button"
             variant={isChanged ? 'destructive' : 'default'}
             onClick={() => {
-              if (!resolvePendingHost(true)) return
-              void initializeSpacetime()
-              navigate('/')
+              const config = resolvePendingHost(true)
+              if (!config) return
+              void selectServer(config, { trusted: true }).then(() => navigate('/')).catch(() => {})
             }}
           >
             {isChanged ? 'Connect anyway' : 'Connect'}
