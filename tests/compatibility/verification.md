@@ -1,4 +1,4 @@
-# Compatibility verification — 2026-10-17
+# Compatibility verification — 2026-10-17–18
 
 Candidate: 1.6.1, protocol 1, branch `feat/backend-compatibility`.
 
@@ -65,14 +65,34 @@ Editing the fixture while open exposed a fixture-only React hot-reload issue
 (multiple roots). Making the entry module reload fully fixed it; the hosted
 acknowledgment flow then passed on a fresh load.
 
+## Real browser session follow-up — 2026-10-18
+
+Ran the unmodified app UI on a fresh loopback frontend origin against a disposable
+backend, with real HTTP authentication and SpacetimeDB transport (no fixture mocks).
+
+- Discovered the backend through Setup and signed in with its generated admin account.
+- Sent and read a channel message through the UI.
+- Reloaded and restored the selected host, signed-in account, and message history.
+- Raised the disposable backend's minimum to 99.0.0 and restarted its realtime
+  service. The reconnect preflight blocked the client and displayed the minimum.
+- Restored the minimum to 1.6.1 and clicked Retry. The same account reconnected
+  without another login and successfully sent a new channel message.
+
+The first recovery attempt exposed a test-runner issue: Docker reassigned random
+published ports on container recreation/restart. The interactive runner now pins
+both service ports once allocated. The full block/retry/send sequence then passed
+with unchanged endpoints. A temporary sign-in screen during the initial network
+failure did not erase credentials; reload restored the account without a login.
+The disposable stack and private session file were removed after verification.
+
 ## Remaining coverage limits
 
 - Protocol 1 has no published baseline yet. The oldest/latest released-client/backend
   matrix is implemented but cannot run until those releases exist.
 - OS-delivered desktop cold/warm deep links and the real OS external-link opener
   were not exercised; browser join routing and the shared admission were tested.
-- Real authentication/messaging ran through the disposable integration harness;
-  the interactive UI fixture intentionally disables transport. This does not replace
-  an installed-release end-to-end UI session or media-transport testing.
+- Real authentication/messaging ran through both the disposable integration harness
+  and the real browser app. Native Tauri recovery used the transport-disabled fixture;
+  an installed-release end-to-end session and media-transport testing remain separate.
 - The checks establish observed regression coverage, not a guarantee that every
   deployment or connection succeeds.

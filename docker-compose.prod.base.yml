@@ -199,8 +199,8 @@ services:
 
       DISCOVERY_DATABASE: "letschat"
 
-      # Optional version overrides — by default both fall back to the
-      # backend's compiled version (see /.well-known/letschat.json).
+      # Optional version overrides: recommended defaults to the backend release;
+      # minimum stays at the first compatible client (see /.well-known/letschat.json).
       RECOMMENDED_CLIENT_VERSION: "${RECOMMENDED_CLIENT_VERSION:-}"
       MIN_CLIENT_VERSION: "${MIN_CLIENT_VERSION:-}"
 

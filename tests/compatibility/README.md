@@ -32,6 +32,22 @@ subscription list, channel messages, DMs, and voice-token issuance are real.
 No production or existing development database is used. It does not test actual
 media transport; the existing RTC suite covers that separately.
 
+## Real app UI testing
+
+To keep the disposable stack alive after its smoke test:
+
+```sh
+python3 tests/compatibility/run.py --session-file /tmp/letschat-compat-ui-session.json
+```
+
+The private session file contains the local discovery URL and generated test-account
+credentials. Use a fresh local frontend origin or isolated desktop QA application;
+connect to that URL through normal setup. The runner pins both published ports so
+container restarts preserve the selected endpoints. Removing the session file ends
+the runner and removes its containers and volumes. Never commit the session file.
+This mode supports authentication and messaging UI checks; it does not start a
+media server for voice calls.
+
 ## Release gate
 
 The reusable Backend compatibility workflow runs on PRs and before **both** backend

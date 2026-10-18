@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import time
 from urllib.request import urlopen
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
@@ -19,7 +20,10 @@ parser.add_argument('--backend-source', type=Path, default=ROOT)
 parser.add_argument('--client-source', type=Path, default=ROOT)
 parser.add_argument('--core-image', default='letschat-compat-core:candidate')
 parser.add_argument('--module-image', default='letschat-compat-module:candidate')
+parser.add_argument('--session-file', type=Path, help='Keep the disposable stack alive for UI tests until this private file is removed')
 args = parser.parse_args()
+if args.session_file and args.session_file.exists():
+    raise RuntimeError('Refusing to overwrite an existing session file')
 project = 'letschat-compat-' + secrets.token_hex(5)
 
 
@@ -73,10 +77,20 @@ with tempfile.TemporaryDirectory(prefix=project) as temporary:
     def compose(*command):
         return run('docker', 'compose', '-p', project, '-f', str(config_file), *command, env=env)
 
+    session_created = False
     try:
         compose('up', '-d', 'core-api', 'module-init', 'minio-init')
         auth = 'http://' + compose('port', 'core-api', '8787')
         database = 'http://' + compose('port', 'spacetimedb', '3000')
+        if args.session_file:
+            # Real app discovery needs the published loopback ports, not Docker DNS.
+            config['services']['core-api']['ports'][0]['published'] = str(urlsplit(auth).port)
+            config['services']['spacetimedb']['ports'][0]['published'] = str(urlsplit(database).port)
+            config['services']['core-api']['environment'].update(
+                DISCOVERY_AUTH_URL=auth, DISCOVERY_SPACETIMEDB_URI=database,
+                DISCOVERY_LIVEKIT_URL='http://127.0.0.1:7880')
+            config_file.write_text(json.dumps(config))
+            compose('up', '-d', '--no-deps', 'spacetimedb', 'core-api')
         deadline = time.monotonic() + 120
         while True:
             try:
@@ -96,5 +110,16 @@ with tempfile.TemporaryDirectory(prefix=project) as temporary:
         # Visible output contains assertions and PASS only, never authentication responses.
         subprocess.run(['bun', '--no-env-file', str(ROOT / 'tests/compatibility/smoke.ts')],
                        cwd=folder, env=client_env, check=True, timeout=120)
+        if args.session_file:
+            with args.session_file.open('x') as session:
+                session_created = True
+                os.chmod(args.session_file, 0o600)
+                json.dump({'auth': auth, 'database': database, 'username': 'admin',
+                           'password': password, 'project': project, 'compose': str(config_file)}, session)
+            print('Disposable UI backend ready; remove the private session file to stop and clean up.', flush=True)
+            while args.session_file.exists():
+                time.sleep(1)
     finally:
+        if session_created:
+            args.session_file.unlink(missing_ok=True)
         compose('down', '-v', '--remove-orphans')
