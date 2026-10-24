@@ -176,8 +176,13 @@ pub fn admin_set_account_access(
     let Some(mut user) = ctx.db.user().identity().find(target) else {
         return Ok(());
     };
+    // Credential and status changes advance the same generation. A delayed
+    // reconciliation snapshot must not undo a newer suspension or re-enable.
+    if min_token_generation < user.min_token_generation {
+        return Ok(());
+    }
     user.suspended = suspended;
-    user.min_token_generation = user.min_token_generation.max(min_token_generation);
+    user.min_token_generation = min_token_generation;
     ctx.db.user().identity().update(user);
     Ok(())
 }

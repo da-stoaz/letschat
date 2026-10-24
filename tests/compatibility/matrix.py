@@ -19,14 +19,16 @@ first = re.search(r'FirstCompatibleClient = "([^"]+)"', policy)[1]
 current = json.loads((ROOT / 'package.json').read_text())['version']
 
 
-def smoke(**options):
+def smoke(check_revocation=False, **options):
     command = ['python3', str(ROOT / 'tests/compatibility/run.py')]
+    if check_revocation:
+        command.append('--check-revocation')
     for key, value in options.items():
         command.extend(['--' + key.replace('_', '-'), str(value)])
     subprocess.run(command, check=True, cwd=ROOT)
 
 
-smoke()
+smoke(check_revocation=True)
 if current == first:
     print(f'Protocol {protocol} begins with {first}; candidate/candidate establishes the baseline.', flush=True)
     raise SystemExit(0)

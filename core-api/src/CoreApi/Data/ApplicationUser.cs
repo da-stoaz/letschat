@@ -33,13 +33,10 @@ public sealed class ApplicationUser : IdentityUser
     /// after it — which is the whole mechanism behind revoking a stolen session.
     ///
     /// <para>
-    /// Identity's own <c>SecurityStamp</c> already changes on a credential
-    /// change, but it is an opaque random value: comparing it can only ever be
-    /// an equality test. The SpacetimeDB module has to hold a copy of whatever
-    /// it compares against, and that copy is pushed best-effort — so an equality
-    /// test would lock the legitimate user out whenever the push failed. A
-    /// counter compares with <c>&gt;=</c> and degrades to "not yet revoked"
-    /// instead.
+    /// Account-status changes advance this counter too, so delayed module
+    /// synchronization cannot undo newer access state. HTTP and public chat
+    /// admission compare against PostgreSQL; the module's replicated floor is
+    /// replayed after outages and accepts only monotonic updates.
     /// </para>
     /// </summary>
     public long TokenGeneration { get; set; }

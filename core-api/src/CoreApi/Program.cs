@@ -117,9 +117,10 @@ else
 builder.Services.AddScoped<AccountEmailService>();
 
 // Keeps the SpacetimeDB module's copy of an account's access state (suspended,
-// token generation) in step with core-api's — the chat client never asks
-// core-api, so nothing else revokes a session there.
+// token generation) in step with core-api's, and close revoked public sockets.
 builder.Services.AddScoped<AccountAccessService>();
+builder.Services.AddSingleton<ChatSessions>();
+builder.Services.AddHostedService<AccountAccessReconciler>();
 builder.Services.AddScoped<AdminRoleService>();
 
 // Runtime-editable config + audit log (admin control panel).
@@ -354,11 +355,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseStaticFiles();
 app.UseCors();
+app.UseWebSockets();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapAuthEndpoints();
+app.MapChatEndpoints();
 app.MapLiveKitEndpoints();
 app.MapUploadEndpoints();
 app.MapVideoPlaybackEndpoints();

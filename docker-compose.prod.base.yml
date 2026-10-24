@@ -39,7 +39,7 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # Only client traffic reaches SpacetimeDB through this allowlist. The chat
+  # Client traffic passes this allowlist and core-api's revocable gateway. The chat
   # network preserves existing tunnel routes to spacetimedb:3000; neither
   # public proxy joins the default network containing the administrative API.
   chat-edge:
@@ -56,6 +56,8 @@ services:
         target: /etc/caddy/Caddyfile
     depends_on:
       spacetimedb:
+        condition: service_healthy
+      core-api:
         condition: service_healthy
     restart: unless-stopped
 
@@ -445,14 +447,14 @@ configs:
           path /v1/identity/websocket-token
         }
         handle @token {
-          reverse_proxy spacetimedb-internal:3000
+          reverse_proxy core-api:8787
         }
         @subscribe {
           method GET
           path /v1/database/letschat/subscribe
         }
         handle @subscribe {
-          reverse_proxy spacetimedb-internal:3000
+          reverse_proxy core-api:8787
         }
         handle {
           respond "" 404

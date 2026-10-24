@@ -24,7 +24,7 @@ React/Tauri client
   ├─ HTTPS ───────────────> core-api ─────> PostgreSQL
   │                           ├───────────> MinIO
   │                           └─ token ───> LiveKit
-  └─ WebSocket + OIDC JWT ─> SpacetimeDB
+  └─ WebSocket + OIDC JWT ─> core-api gateway ─> SpacetimeDB
                                 └─ subscription updates ─> client stores
 
 archive-worker ────────────> SpacetimeDB
@@ -80,10 +80,15 @@ docker-compose.prod.caddy.yml
 1. The client discovers the deployment through
    `/.well-known/letschat.json`.
 2. `core-api` authenticates the account and returns a revocable application
-   session plus a short-lived OIDC access token.
-3. SpacetimeDB validates that token against the configured issuer and JWKS.
+   session plus an OIDC access token.
+3. The SDK exchanges the OIDC token for a single-use gateway ticket. The gateway
+   checks current PostgreSQL account access before proxying the socket to
+   SpacetimeDB, which validates the original token against the issuer and JWKS.
 4. The module maps the trusted token subject to its `User` row. Reducers reject
    callers without the required membership, role, friendship, or ownership.
+5. Credential/status changes close revoked public sockets, including their
+   subscriptions and procedures. Periodic checks catch external changes and
+   expiry. Module access state is replayed from PostgreSQL after outages.
 
 ### Chat mutation and synchronization
 

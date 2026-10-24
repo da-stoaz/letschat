@@ -73,9 +73,9 @@ fn page_size(limit: u32) -> usize {
 ///
 /// The token-generation floor that `require_account` also enforces cannot be
 /// checked here: inside `with_tx` the sender is `Identity::ZERO` and no JWT is
-/// in scope, so there are no claims to read. That leaves a revoked token able to
-/// page history it could already read through the views — the same read-side gap
-/// BUG_ANALYSIS A4 documents, not a new one. Writes stay fully gated.
+/// in scope, so there are no claims to read. Public reads must pass through the
+/// core-api chat gateway, which checks the generation and closes revoked
+/// sockets. The raw SpacetimeDB API is a private operator/service boundary.
 fn require_readable_account(tx: &TxContext, caller: Identity) -> Result<(), String> {
     let user = tx
         .db

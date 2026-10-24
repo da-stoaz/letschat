@@ -30,7 +30,7 @@ jobs:
       - run: bun run build
       - run: bun run lint
       - run: bun run test:unit
-      - run: dotnet test core-api/CoreApi.slnx --filter FullyQualifiedName~DiscoveryTests
+      - run: dotnet test core-api/CoreApi.slnx --filter 'FullyQualifiedName~DiscoveryTests|FullyQualifiedName~ChatRevocationTests'
       - name: Build disposable candidate backend
         run: |
           cargo build --manifest-path server/Cargo.toml --target wasm32-unknown-unknown --release --locked

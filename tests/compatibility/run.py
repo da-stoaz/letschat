@@ -20,6 +20,7 @@ parser.add_argument('--backend-source', type=Path, default=ROOT)
 parser.add_argument('--client-source', type=Path, default=ROOT)
 parser.add_argument('--core-image', default='letschat-compat-core:candidate')
 parser.add_argument('--module-image', default='letschat-compat-module:candidate')
+parser.add_argument('--check-revocation', action='store_true', help='Test public chat revocation on the candidate backend')
 parser.add_argument('--session-file', type=Path, help='Keep the disposable stack alive for UI tests until this private file is removed')
 args = parser.parse_args()
 if args.session_file and args.session_file.exists():
@@ -69,7 +70,8 @@ with tempfile.TemporaryDirectory(prefix=project) as temporary:
         network['name'] = project + '-' + name
     config['services']['core-api']['image'] = args.core_image
     config['services']['module-init']['image'] = args.module_image
-    for name, port in (('core-api', 8787), ('spacetimedb', 3000)):
+    chat_service = 'chat-edge' if 'chat-edge' in config['services'] else 'spacetimedb'
+    for name, port in (('core-api', 8787), (chat_service, 3000)):
         config['services'][name]['ports'] = [{'target': port, 'published': '0', 'host_ip': '127.0.0.1'}]
     config_file = folder / 'compose.json'
     config_file.write_text(json.dumps(config))
@@ -79,18 +81,18 @@ with tempfile.TemporaryDirectory(prefix=project) as temporary:
 
     session_created = False
     try:
-        compose('up', '-d', 'core-api', 'module-init', 'minio-init')
+        compose('up', '-d', 'core-api', 'module-init', 'minio-init', chat_service)
         auth = 'http://' + compose('port', 'core-api', '8787')
-        database = 'http://' + compose('port', 'spacetimedb', '3000')
+        database = 'http://' + compose('port', chat_service, '3000')
         if args.session_file:
             # Real app discovery needs the published loopback ports, not Docker DNS.
             config['services']['core-api']['ports'][0]['published'] = str(urlsplit(auth).port)
-            config['services']['spacetimedb']['ports'][0]['published'] = str(urlsplit(database).port)
+            config['services'][chat_service]['ports'][0]['published'] = str(urlsplit(database).port)
             config['services']['core-api']['environment'].update(
                 DISCOVERY_AUTH_URL=auth, DISCOVERY_SPACETIMEDB_URI=database,
                 DISCOVERY_LIVEKIT_URL='http://127.0.0.1:7880')
             config_file.write_text(json.dumps(config))
-            compose('up', '-d', '--no-deps', 'spacetimedb', 'core-api')
+            compose('up', '-d', '--no-deps', chat_service, 'core-api')
         deadline = time.monotonic() + 120
         while True:
             try:
@@ -110,6 +112,9 @@ with tempfile.TemporaryDirectory(prefix=project) as temporary:
         # Visible output contains assertions and PASS only, never authentication responses.
         subprocess.run(['bun', '--no-env-file', str(ROOT / 'tests/compatibility/smoke.ts')],
                        cwd=folder, env=client_env, check=True, timeout=120)
+        if args.check_revocation:
+            subprocess.run(['bun', '--no-env-file', str(ROOT / 'tests/security/chat-revocation.ts')],
+                           cwd=ROOT, env=client_env, check=True, timeout=120)
         if args.session_file:
             with args.session_file.open('x') as session:
                 session_created = True

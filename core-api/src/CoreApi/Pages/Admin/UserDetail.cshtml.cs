@@ -227,14 +227,13 @@ public sealed class UserDetailModel(
 
     private async Task SetStatusAsync(ApplicationUser user, AccountStatus status)
     {
+        if (user.Status != status) user.TokenGeneration++;
         user.Status = status;
         user.UpdatedAtUtc = DateTime.UtcNow;
-        await users.UpdateAsync(user);
+        var result = await users.UpdateAsync(user);
+        if (!result.Succeeded)
+            throw ApiException.Conflict("Could not update account access. Reload and try again.");
 
-        // Disabling an account here only stops it signing in again; the chat
-        // client talks to SpacetimeDB directly and never asks core-api, so
-        // without this the account keeps reading and posting until its token
-        // expires. Best-effort: the status change itself has already been saved.
         await access.SyncAsync(user);
     }
 

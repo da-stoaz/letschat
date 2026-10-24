@@ -10,6 +10,7 @@ on .NET 10 with ASP.NET Core Identity and PostgreSQL; the former Rust
 |---|---|
 | Accounts | register, link, login, verify, account, password change/reset, email confirmation, session renewal |
 | OIDC | discovery metadata and JWKS used by SpacetimeDB |
+| Chat transport | single-use ticket exchange and revocable WebSocket proxy to private SpacetimeDB |
 | Voice | `POST /livekit/token` |
 | Attachments | `POST /uploads/request`, `/confirm`, `/download-url`, `/download-urls` |
 | Administration | Razor UI under `/admin` on a separate listener |
@@ -21,6 +22,13 @@ SpacetimeDB identity, account status, and a token generation. Passwords use
 Argon2id PHC strings. Application sessions use signed one-hour access and
 seven-day refresh tokens; the separate asymmetric OIDC token is what
 SpacetimeDB validates.
+
+Public chat connections pass through this service. Admission and periodic checks
+use PostgreSQL account status, token generation and expiry; local revocation
+closes sockets immediately. Account access is replayed to the module in bounded
+batches after outages/restarts. Raw SpacetimeDB ports must stay private. See
+[`tests/compatibility/README.md`](../tests/compatibility/README.md) for the disposable
+real-backend revocation test.
 
 Unconfirmed registrations can correct a mistyped email through
 `POST /auth/correct-registration-email` with `username`, `password`, and `email`.
@@ -75,6 +83,10 @@ Development configuration comes from
 admin UI on `127.0.0.1:8788`. Root `.env` files are not read: that file holds
 production-stack settings for `docker compose`. EF Core migrations for
 the configured databases run on startup.
+
+Discovery advertises the chat gateway on `ws://localhost:8787`; raw SpacetimeDB
+on loopback `4300` is for module publishing and backend access only. Rediscover
+the local instance if a saved client still points directly at port 4300.
 
 Run checks with:
 

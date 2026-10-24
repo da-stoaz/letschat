@@ -231,17 +231,17 @@ public static class AuthEndpoints
                 throw ApiException.Unauthorized("Your current password is required to change it.");
             }
 
+            // Persist the credential and its revocation generation together.
+            existing.TokenGeneration++;
+            existing.DisplayName = displayName;
+            existing.UpdatedAtUtc = DateTime.UtcNow;
             var changed = await users.ChangePasswordAsync(existing, request.CurrentPassword, request.Password);
             if (!changed.Succeeded)
             {
                 throw TranslateIdentityFailure(changed);
             }
 
-            existing.DisplayName = displayName;
-            existing.UpdatedAtUtc = DateTime.UtcNow;
-            // Persists the display name with the generation bump; every older
-            // session dies, and the response below carries the new generation.
-            await access.RevokeTokensAsync(existing);
+            await access.SyncAsync(existing);
             return BuildAuthResponse(existing, await users.GetRolesAsync(existing), tokens, spacetime);
         }
 
@@ -441,6 +441,8 @@ public static class AuthEndpoints
 
         Validation.ValidatePassword(request.NewPassword ?? string.Empty);
 
+        user.TokenGeneration++;
+        user.UpdatedAtUtc = DateTime.UtcNow;
         var result = await users.ChangePasswordAsync(
             user, request.CurrentPassword ?? string.Empty, request.NewPassword!);
         if (!result.Succeeded)
@@ -454,7 +456,7 @@ public static class AuthEndpoints
         // credential-change endpoint that also hands out credentials is a wider
         // surface than it needs to be. The client signs in again with the
         // password it just set, which is one well-tested path instead of two.
-        await access.RevokeTokensAsync(user);
+        await access.SyncAsync(user);
         return Results.NoContent();
     }
 
@@ -504,7 +506,8 @@ public static class AuthEndpoints
     private static async Task<IResult> ConfirmEmail(
         string? userId, string? token,
         UserManager<ApplicationUser> users,
-        SystemConfigService config)
+        SystemConfigService config,
+        AccountAccessService access)
     {
         if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(token))
         {
@@ -537,8 +540,12 @@ public static class AuthEndpoints
             user.Status = config.Current.RequireAdminApproval
                 ? AccountStatus.EmailVerified
                 : AccountStatus.Active;
+            user.TokenGeneration++;
             user.UpdatedAtUtc = DateTime.UtcNow;
-            await users.UpdateAsync(user);
+            var updated = await users.UpdateAsync(user);
+            if (!updated.Succeeded)
+                throw ApiException.Conflict("Could not update account access. Reload and try again.");
+            await access.SyncAsync(user);
         }
 
         return ConfirmedStatePage(user.Status);
@@ -740,6 +747,8 @@ public static class AuthEndpoints
             return HtmlPage("Invalid link", "This password-reset link is no longer valid.", ok: false);
         }
 
+        user.TokenGeneration++;
+        user.UpdatedAtUtc = DateTime.UtcNow;
         var result = await users.ResetPasswordAsync(user, token, password);
         if (!result.Succeeded)
         {
@@ -753,7 +762,7 @@ public static class AuthEndpoints
         // The reason people reset a password is that someone else may have it.
         // Without this the reset changes nothing for the attacker, whose chat
         // token stays valid for its full 30 days.
-        await access.RevokeTokensAsync(user);
+        await access.SyncAsync(user);
 
         return HtmlPage(
             "Password updated",

@@ -32,6 +32,12 @@ subscription list, channel messages, DMs, and voice-token issuance are real.
 No production or existing development database is used. It does not test actual
 media transport; the existing RTC suite covers that separately.
 
+Candidate backends with `chat-edge` exercise the public gateway. Add
+`--check-revocation` to verify compressed subscriptions, password-change socket
+closure, stale credential/ticket rejection and fresh-login recovery against the
+real stack. Older backend source trees without `chat-edge` retain direct access
+for the historical compatibility matrix.
+
 ## Real app UI testing
 
 To keep the disposable stack alive after its smoke test:
