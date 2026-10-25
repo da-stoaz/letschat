@@ -3,7 +3,7 @@
 > Architecture baseline reviewed 2026-09-15 at version 1.0.14.
 >
 > This document describes the current system. Security findings and feature
-> gaps belong in `BUG_ANALYSIS.md`, so they cannot silently turn this map into
+> gaps belong in `Findings/BUG_ANALYSIS.md`, so they cannot silently turn this map into
 > another stale backlog.
 
 ## System at a glance
@@ -66,6 +66,8 @@ src/
 src-tauri/                 native commands, capabilities, and packaging
 archive-worker/            archive process
 site/                      static Astro site
+docs/                      architecture, security, deployment, and feature backlog
+Findings/                  detailed audits and remediation register
 scripts/                   publishing, deployment, and security helpers
 docker-compose.dev.yml     local dependencies
 docker-compose.prod.base.yml
@@ -276,7 +278,7 @@ configuration. See `DEPLOYMENT.md` for the exact ports and bootstrap procedure.
 - Treat generated bindings as build output; change the Rust module first.
 - Keep `README.md`, this file, `SECURITY.md`, and `DEPLOYMENT.md` synchronized
   whenever a service boundary or production component changes.
-- Record actionable defects and their status in `BUG_ANALYSIS.md`; link to code
+- Record actionable defects and their status in `Findings/BUG_ANALYSIS.md`; link to code
   and tests instead of duplicating architectural descriptions there.
 - Date scanner snapshots. Live dependency status belongs in GitHub's
   Dependabot/Security views rather than an undated count in architecture docs.

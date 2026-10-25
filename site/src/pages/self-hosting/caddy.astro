@@ -188,7 +188,7 @@ VITE_WEB_WS_COMPRESSION=gzip`} />
           (e.g. <code>LETSCHAT_VERSION=1.2.4</code>) to make upgrades explicit. Before an upgrade, save
           the current deployment files and keep the deployed images. To roll back, restore those files
           together with <code>.env</code>, then run <code>docker compose … up -d --pull never</code>.
-          See <a href={`https://github.com/${GITHUB_REPO}/blob/main/DEPLOYMENT.md#upgrading-a-running-deployment`}>the upgrade and rollback guide</a>.
+          See <a href={`https://github.com/${GITHUB_REPO}/blob/main/docs/DEPLOYMENT.md#upgrading-a-running-deployment`}>the upgrade and rollback guide</a>.
         </p>
         <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d

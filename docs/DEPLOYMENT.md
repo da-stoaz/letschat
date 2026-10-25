@@ -9,7 +9,7 @@ Use this file as a compact operator reference.
 
 The deployment invariants and known residual risks are summarized in
 [`SECURITY.md`](SECURITY.md). The tracked code findings live in
-[`BUG_ANALYSIS.md`](BUG_ANALYSIS.md).
+[`Findings/BUG_ANALYSIS.md`](../Findings/BUG_ANALYSIS.md).
 
 > **Backend service:** production runs **`core-api`** (.NET / ASP.NET Core
 > Identity + PostgreSQL). The legacy Rust `auth-service` has been **removed**
@@ -805,4 +805,4 @@ web image, Core API, and SpacetimeDB module on a tested deployment combination.
 Clients check discovery before authentication and realtime connections. Older
 backends without protocol metadata require an explicit compatibility warning
 acknowledgment; network failures offer retry. No client update is installed
-automatically. See [compatibility tests and release policy](tests/compatibility/README.md).
+automatically. See [compatibility tests and release policy](../tests/compatibility/README.md).

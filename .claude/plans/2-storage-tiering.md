@@ -3,7 +3,7 @@
 > **Status (reviewed 2026-09-19): durability is implemented; eviction is
 > deferred until measurements justify it.** This document describes only the
 > remaining hot/cold split. The production archive and rebuild procedure are
-> documented in [`DEPLOYMENT.md`](../../DEPLOYMENT.md).
+> documented in [`DEPLOYMENT.md`](../../docs/DEPLOYMENT.md).
 
 ## Implemented baseline
 

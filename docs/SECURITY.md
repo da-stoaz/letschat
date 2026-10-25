@@ -3,7 +3,7 @@
 > Security baseline reviewed 2026-09-18 at version 1.0.18.
 
 This document defines the trust boundaries and invariants that security fixes
-must preserve. [`BUG_ANALYSIS.md`](BUG_ANALYSIS.md) is the actionable finding
+must preserve. [`Findings/BUG_ANALYSIS.md`](../Findings/BUG_ANALYSIS.md) is the actionable finding
 register; GitHub's security views are the live source for dependency alerts.
 
 ## Trust boundaries
@@ -162,7 +162,7 @@ for package versions and remediation status; do not copy that changing list into
 the architecture document.
 
 The remaining code findings are prioritized in
-[`BUG_ANALYSIS.md`](BUG_ANALYSIS.md). As of 2026-09-24 there is no open S1 or S2
+[`Findings/BUG_ANALYSIS.md`](../Findings/BUG_ANALYSIS.md). As of 2026-09-24 there is no open S1 or S2
 finding.
 
 ## Security review workflow
@@ -175,7 +175,7 @@ For a boundary-changing pull request:
    concurrent or stale-session case when relevant.
 3. Run the component tests and formatting checks from `CODEBASE.md`.
 4. Run `bun run test:security` when the required integration stack is available.
-5. Update `BUG_ANALYSIS.md` only after the fix and regression test are merged.
+5. Update `Findings/BUG_ANALYSIS.md` only after the fix and regression test are merged.
 
 Report suspected vulnerabilities privately through the repository owner's
 preferred private channel; do not publish exploit details in a public issue

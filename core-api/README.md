@@ -51,8 +51,8 @@ The service also synchronizes account access state and selected instance
 settings into the SpacetimeDB module. Chat messages, memberships, and reducer
 authorization remain owned by `server/`, not this service.
 
-See the repository [`SECURITY.md`](../SECURITY.md) for the required trust
-boundaries and [`CODEBASE.md`](../CODEBASE.md) for end-to-end flows.
+See the repository [`SECURITY.md`](../docs/SECURITY.md) for the required trust
+boundaries and [`CODEBASE.md`](../docs/CODEBASE.md) for end-to-end flows.
 
 ## Project layout
 
@@ -129,7 +129,7 @@ important groups are:
 | `EMAIL_SENDER`, `SMTP_*` | verification and password-reset delivery |
 
 The canonical production list and generated-secret procedure are in
-[`DEPLOYMENT.md`](../DEPLOYMENT.md). Outside Development, the process refuses to
+[`DEPLOYMENT.md`](../docs/DEPLOYMENT.md). Outside Development, the process refuses to
 start with known public development secrets or endpoints.
 
 ## Attachment guarantees
@@ -215,7 +215,7 @@ instance limit is unlimited. Authenticated clients can read personal usage via
 confirmation window; multipart sessions last two hours and part URLs at most
 10 minutes. Download URLs last one hour, with at most 128 keys per download
 batch. Behind a Cloudflare Tunnel, multipart parts
-remain below the 100 MB Free/Pro request-body cap; see `DEPLOYMENT.md`.
+remain below the 100 MB Free/Pro request-body cap; see `docs/DEPLOYMENT.md`.
 
 ## Legacy account import
 

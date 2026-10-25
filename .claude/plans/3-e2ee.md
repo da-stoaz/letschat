@@ -3,7 +3,7 @@
 > **Status (reviewed 2026-09-16): proposed, not implemented.** LetsChat does not
 > currently provide end-to-end encryption; operators must not infer E2EE
 > guarantees from this design document. The implemented security model is
-> documented in [`SECURITY.md`](../../SECURITY.md).
+> documented in [`SECURITY.md`](../../docs/SECURITY.md).
 
 ## Context
 Messages and files are currently stored as plaintext; the server can read everything. This plan introduces end-to-end encryption for text messages (DMs + server channels) and file attachments. The server stores only ciphertext it can never read, plus wrapped key blobs it cannot open. All decryption happens on-device.
