@@ -295,7 +295,6 @@ export function syncMessages(conn: DbConnection): void {
     if (!grouped.has(channelId)) store.setChannelMessages(channelId, [])
   }
   for (const [channelId, rows] of grouped.entries()) {
-    rows.sort((a, b) => a.sentAt.localeCompare(b.sentAt))
     store.setChannelMessages(channelId, rows)
   }
 }
@@ -381,7 +380,6 @@ export function syncDirectMessages(conn: DbConnection): void {
     if (!grouped.has(partner)) store.setConversation(partner, [])
   }
   for (const [partner, rows] of grouped.entries()) {
-    rows.sort((a, b) => a.sentAt.localeCompare(b.sentAt))
     store.setConversation(partner, rows)
   }
 }

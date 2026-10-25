@@ -1,3 +1,4 @@
+import { compareMessages } from '../lib/messageOrder'
 import { create } from 'zustand'
 import type { DirectMessage, Identity } from '../types/domain'
 
@@ -14,11 +15,11 @@ interface DmState {
 
 /** Union of a backfilled page and the live window, oldest first; live wins ties. */
 function mergeHistory(older: DirectMessage[] | undefined, live: DirectMessage[]): DirectMessage[] {
-  if (!older || older.length === 0) return live
+  if (!older || older.length === 0) return [...live].sort(compareMessages)
   const byId = new Map<number, DirectMessage>()
   for (const message of older) byId.set(message.id, message)
   for (const message of live) byId.set(message.id, message)
-  return [...byId.values()].sort((a, b) => a.sentAt.localeCompare(b.sentAt))
+  return [...byId.values()].sort(compareMessages)
 }
 
 function areDirectMessagesEqual(a: DirectMessage[], b: DirectMessage[]): boolean {

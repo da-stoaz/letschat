@@ -95,9 +95,9 @@ fn require_readable_account(tx: &TxContext, caller: Identity) -> Result<(), Stri
 /// `by_channel_and_sent_at` / `by_sender_recipient_sent_at` index ranges. Same
 /// scan the view does; swap in the index range scan if paging a very long
 /// history ever shows up in a profile.
-fn older_than<T>(mut rows: Vec<T>, before: Timestamp, sent_at: impl Fn(&T) -> Timestamp, take: usize) -> Vec<T> {
-    rows.retain(|row| sent_at(row) < before);
-    rows.sort_by_key(|row| sent_at(row));
+fn older_than<T>(mut rows: Vec<T>, before: (Timestamp, u64), key: impl Fn(&T) -> (Timestamp, u64), take: usize) -> Vec<T> {
+    rows.retain(|row| key(row) < before);
+    rows.sort_by_key(key);
     let start = rows.len().saturating_sub(take);
     rows.split_off(start)
 }
@@ -116,6 +116,19 @@ pub fn load_older_channel_messages(
     before: Timestamp,
     limit: u32,
 ) -> Vec<Message> {
+    // Keep the original timestamp-only wire contract for released clients.
+    load_older_channel_messages_page(ctx, channel_id, before, 0, limit)
+}
+
+/// Page by the exclusive (timestamp, id) cursor, including timestamp ties.
+#[spacetimedb::procedure]
+pub fn load_older_channel_messages_page(
+    ctx: &mut ProcedureContext,
+    channel_id: u64,
+    before: Timestamp,
+    before_id: u64,
+    limit: u32,
+) -> Vec<Message> {
     let caller = ctx.sender();
     let take = page_size(limit);
 
@@ -131,7 +144,7 @@ pub fn load_older_channel_messages(
             require_channel_access(tx, &channel, caller)?;
 
             let history: Vec<Message> = tx.db.message().channel_id().filter(channel_id).collect();
-            Ok(older_than(history, before, |message| message.sent_at, take))
+            Ok(older_than(history, (before, before_id), |message| (message.sent_at, message.id), take))
         })();
 
         match page {
@@ -153,6 +166,19 @@ pub fn load_older_direct_messages(
     ctx: &mut ProcedureContext,
     partner: Identity,
     before: Timestamp,
+    limit: u32,
+) -> Vec<DirectMessage> {
+    // Keep the original timestamp-only wire contract for released clients.
+    load_older_direct_messages_page(ctx, partner, before, 0, limit)
+}
+
+/// Page by the exclusive (timestamp, id) cursor, including timestamp ties.
+#[spacetimedb::procedure]
+pub fn load_older_direct_messages_page(
+    ctx: &mut ProcedureContext,
+    partner: Identity,
+    before: Timestamp,
+    before_id: u64,
     limit: u32,
 ) -> Vec<DirectMessage> {
     let caller = ctx.sender();
@@ -182,6 +208,6 @@ pub fn load_older_direct_messages(
             .filter(|row| seen.insert(row.id))
             .collect();
 
-        older_than(thread, before, |message| message.sent_at, take)
+        older_than(thread, (before, before_id), |message| (message.sent_at, message.id), take)
     })
 }

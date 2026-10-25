@@ -5,7 +5,12 @@ views/reducers and generated bindings, plus connection behavior. It is independe
 of release numbers. UI-only changes do not change the protocol. Additive changes
 must work in both directions before retaining the same family; requiring a new
 field/reducer/transport without a fallback requires a new family. This phase
-supports protocol 1 only, with no adapters or feature negotiation.
+supports protocol 1 only.
+
+History pagination adds `load_older_*_messages_page` alongside the original
+timestamp-only procedures. New clients fall back to the original calls only on
+`No such procedure`; network and authorization errors remain retryable failures.
+Older modules retain their equal-timestamp paging limitation until upgraded.
 
 `VersionInfo.ClientProtocol` declares the server contract;
 `SUPPORTED_CLIENT_PROTOCOLS` declares client support. The protocol is compiled in,

@@ -99,7 +99,14 @@ docker-compose.prod.caddy.yml
    source of truth.
 
 Messages initially synchronize in bounded windows and older history is loaded
-through explicit pagination reducers.
+through explicit pagination procedures.
+
+History pages use an exclusive `(sent_at, id)` cursor. The client preserves the
+server's microseconds in ISO strings, and views, pages and stores share that
+ordering. The additive `load_older_*_messages_page` procedures handle timestamp
+ties; original timestamp-only procedures remain for released clients. New clients
+fall back only on the older module's `No such procedure` response. Complete paging
+across equal timestamps requires both the updated client and module.
 
 ### Account settings
 

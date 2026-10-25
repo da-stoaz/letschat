@@ -7,14 +7,20 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
 import * as LoadOlderChannelMessagesProcedure from "../load_older_channel_messages_procedure";
+import * as LoadOlderChannelMessagesPageProcedure from "../load_older_channel_messages_page_procedure";
 import * as LoadOlderDirectMessagesProcedure from "../load_older_direct_messages_procedure";
+import * as LoadOlderDirectMessagesPageProcedure from "../load_older_direct_messages_page_procedure";
 import * as LoadPinnedChannelMessagesProcedure from "../load_pinned_channel_messages_procedure";
 import * as ResolveInviteServerProcedure from "../resolve_invite_server_procedure";
 
 export type LoadOlderChannelMessagesArgs = __Infer<typeof LoadOlderChannelMessagesProcedure.params>;
 export type LoadOlderChannelMessagesResult = __Infer<typeof LoadOlderChannelMessagesProcedure.returnType>;
+export type LoadOlderChannelMessagesPageArgs = __Infer<typeof LoadOlderChannelMessagesPageProcedure.params>;
+export type LoadOlderChannelMessagesPageResult = __Infer<typeof LoadOlderChannelMessagesPageProcedure.returnType>;
 export type LoadOlderDirectMessagesArgs = __Infer<typeof LoadOlderDirectMessagesProcedure.params>;
 export type LoadOlderDirectMessagesResult = __Infer<typeof LoadOlderDirectMessagesProcedure.returnType>;
+export type LoadOlderDirectMessagesPageArgs = __Infer<typeof LoadOlderDirectMessagesPageProcedure.params>;
+export type LoadOlderDirectMessagesPageResult = __Infer<typeof LoadOlderDirectMessagesPageProcedure.returnType>;
 export type LoadPinnedChannelMessagesArgs = __Infer<typeof LoadPinnedChannelMessagesProcedure.params>;
 export type LoadPinnedChannelMessagesResult = __Infer<typeof LoadPinnedChannelMessagesProcedure.returnType>;
 export type ResolveInviteServerArgs = __Infer<typeof ResolveInviteServerProcedure.params>;

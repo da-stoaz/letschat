@@ -37,8 +37,8 @@ pub struct DiscoverServerMemberCount {
 /// did, it just no longer ships the result. The index accessors iterate
 /// ascending only, so "newest N" needs the full range either way; worth
 /// revisiting if view evaluation itself ever shows up in a server profile.
-fn newest<T>(mut rows: Vec<T>, sent_at: impl Fn(&T) -> Timestamp) -> Vec<T> {
-    rows.sort_by_key(|row| sent_at(row));
+fn newest<T>(mut rows: Vec<T>, key: impl Fn(&T) -> (Timestamp, u64)) -> Vec<T> {
+    rows.sort_by_key(key);
     let start = rows.len().saturating_sub(RECENT_MESSAGE_WINDOW);
     rows.split_off(start)
 }
@@ -293,7 +293,7 @@ pub fn my_channel_messages(ctx: &ViewContext) -> Vec<Message> {
     let mut rows = Vec::<Message>::new();
     for channel in my_channels(ctx) {
         let history: Vec<Message> = ctx.db.message().channel_id().filter(channel.id).collect();
-        rows.extend(newest(history, |message| message.sent_at));
+        rows.extend(newest(history, |message| (message.sent_at, message.id)));
     }
     rows
 }
@@ -334,7 +334,7 @@ pub fn my_direct_messages(ctx: &ViewContext) -> Vec<DirectMessage> {
 
     by_partner
         .into_values()
-        .flat_map(|thread| newest(thread, |message| message.sent_at))
+        .flat_map(|thread| newest(thread, |message| (message.sent_at, message.id)))
         .collect()
 }
 

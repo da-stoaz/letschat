@@ -48,7 +48,7 @@ export function toU64Number(value: unknown): number {
 export function toIsoString(value: unknown): string {
   if (typeof value === 'string') return value
   if (value && typeof value === 'object' && 'toDate' in value) {
-    return (value as SpacetimeTimestamp).toDate().toISOString()
+    return (value as SpacetimeTimestamp).toISOString()
   }
   if (value instanceof Date) return value.toISOString()
   return new Date().toISOString()

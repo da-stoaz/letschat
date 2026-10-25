@@ -49,4 +49,15 @@ describe('messagesStore history backfill', () => {
 
     expect(useMessagesStore.getState().historyExhausted[1]).toBe(true)
   })
+
+  it('orders by microseconds before IDs, including mixed millisecond and microsecond ISO strings', () => {
+    const store = useMessagesStore.getState()
+    store.setChannelMessages(1, [
+      message(1, '2026-09-01T10:00:00.123456Z'),
+      message(9, '2026-09-01T10:00:00.123455Z'),
+      message(5, '2026-09-01T10:00:00.123Z'),
+      message(2, '2026-09-01T10:00:00.123456Z'),
+    ])
+    expect(useMessagesStore.getState().messagesByChannel[1].map(row => row.id)).toEqual([5, 9, 1, 2])
+  })
 })
