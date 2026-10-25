@@ -9,13 +9,14 @@ permissions:
   contents: read
 
 jobs:
-  protocol:
+  backend-security:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      COMPOSE_FILE: .github/compose.backend-tests.yml
+      COMPOSE_PROJECT_NAME: backend-tests-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-dotnet@v5
         with:
@@ -27,10 +28,60 @@ jobs:
         with:
           workspaces: ./server -> target
       - run: bun install --frozen-lockfile
+      - name: Install media test dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version
+      - name: Start disposable test services
+        run: |
+          docker compose --env-file /dev/null up -d --wait --wait-timeout 120
+          {
+            echo "LETSCHAT_TEST_POSTGRES_URL=Host=127.0.0.1;Port=$(docker compose port postgres 5432 | cut -d: -f2);Database=postgres;Username=postgres;Password=backend-tests"
+            echo "LETSCHAT_TEST_MINIO_ENDPOINT=http://$(docker compose port minio 9000)"
+            echo "STDB_URL=http://$(docker compose port spacetimedb 3000)"
+          } >> "$GITHUB_ENV"
+          # Use the exact CLI shipped with the tested server, with a fresh identity.
+          mkdir -p "$RUNNER_TEMP/backend-test-bin" "$RUNNER_TEMP/backend-test-cli"
+          docker compose cp spacetimedb:/opt/spacetime/spacetimedb-cli "$RUNNER_TEMP/backend-test-bin/spacetime"
+          echo "$RUNNER_TEMP/backend-test-bin" >> "$GITHUB_PATH"
+      - name: Full API suite (including PostgreSQL, MinIO and media smoke tests)
+        run: dotnet test core-api/CoreApi.slnx
+      - name: Module unit tests and security test binary
+        run: |
+          cargo test --manifest-path server/Cargo.toml --locked
+          cargo build --manifest-path server/Cargo.toml --target wasm32-unknown-unknown --release --locked
+      - name: SpacetimeDB authorization regressions
+        env:
+          STDB_TEST_DB: letschat-security-tests
+          STDB_MODULE_BIN: server/target/wasm32-unknown-unknown/release/letschat_server.wasm
+          XDG_CONFIG_HOME: ${{ runner.temp }}/backend-test-cli
+        run: bun --no-env-file run test:security
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose --env-file /dev/null logs --no-color
+      - name: Remove disposable services and volumes
+        if: always()
+        run: docker compose --env-file /dev/null down -v --remove-orphans
+
+  protocol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./server -> target
+      - run: bun install --frozen-lockfile
       - run: bun run build
       - run: bun run lint
       - run: bun run test:unit
-      - run: dotnet test core-api/CoreApi.slnx --filter 'FullyQualifiedName~DiscoveryTests|FullyQualifiedName~ChatRevocationTests'
       - name: Build disposable candidate backend
         run: |
           cargo build --manifest-path server/Cargo.toml --target wasm32-unknown-unknown --release --locked

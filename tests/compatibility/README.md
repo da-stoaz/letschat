@@ -69,8 +69,15 @@ media server for voice calls.
 ## Release gate
 
 The reusable Backend compatibility workflow runs on PRs and before **both** backend
-image publication and desktop release creation. It runs unit/discovery checks and
-`matrix.py`: candidate/candidate first, then candidate client against the oldest
+image publication and desktop release creation. Every job must succeed: the full
+API suite (including PostgreSQL, MinIO and FFmpeg smoke tests), Rust module unit
+tests, the complete SpacetimeDB authorization suite, frontend checks, and
+`matrix.py`. Backend/security tests use `.github/compose.backend-tests.yml` with
+fresh services, random loopback ports and no existing data mounts. The CLI comes
+from the pinned server image; the suite publishes the candidate WASM into a
+throwaway database. Services and volumes are removed even after a test failure.
+
+The compatibility matrix runs candidate/candidate first, then candidate client against the oldest
 and latest published backend in the declared family, and those released clients
 against the candidate backend. Each released client uses its own SDK and generated
 bindings. Missing baselines or unavailable GitHub metadata fail the gate rather
