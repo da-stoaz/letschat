@@ -68,6 +68,52 @@ fn page_size(limit: u32) -> usize {
     (limit as usize).clamp(1, MAX_PAGE)
 }
 
+/// Revalidate only history already cached by the caller. Missing or inaccessible
+/// IDs are omitted so clients can remove hard-deleted and no-longer-readable rows.
+#[spacetimedb::procedure]
+pub fn refresh_channel_messages(
+    ctx: &mut ProcedureContext,
+    channel_id: u64,
+    message_ids: Vec<u64>,
+) -> Vec<Message> {
+    let caller = ctx.sender();
+    ctx.with_tx(|tx| {
+        if require_readable_account(tx, caller).is_err() {
+            return Vec::new();
+        }
+        let Some(channel) = tx.db.channel().id().find(channel_id) else {
+            return Vec::new();
+        };
+        if require_channel_access(tx, &channel, caller).is_err() {
+            return Vec::new();
+        }
+        message_ids.iter().copied().take(MAX_PAGE)
+            .filter_map(|id| tx.db.message().id().find(id))
+            .filter(|message| message.channel_id == channel_id)
+            .collect()
+    })
+}
+
+/// DM history uses the same per-conversation authorization as paging and views.
+#[spacetimedb::procedure]
+pub fn refresh_direct_messages(
+    ctx: &mut ProcedureContext,
+    partner: Identity,
+    message_ids: Vec<u64>,
+) -> Vec<DirectMessage> {
+    let caller = ctx.sender();
+    ctx.with_tx(|tx| {
+        if require_readable_account(tx, caller).is_err() {
+            return Vec::new();
+        }
+        message_ids.iter().copied().take(MAX_PAGE)
+            .filter_map(|id| tx.db.direct_message().id().find(id))
+            .filter(|message| (message.sender_identity == caller && message.recipient_identity == partner)
+                || (message.recipient_identity == caller && message.sender_identity == partner))
+            .collect()
+    })
+}
+
 /// The caller must have an account, and it must not be disabled — the read-side
 /// half of `require_account`.
 ///

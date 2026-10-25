@@ -11,6 +11,8 @@ import * as LoadOlderChannelMessagesPageProcedure from "../load_older_channel_me
 import * as LoadOlderDirectMessagesProcedure from "../load_older_direct_messages_procedure";
 import * as LoadOlderDirectMessagesPageProcedure from "../load_older_direct_messages_page_procedure";
 import * as LoadPinnedChannelMessagesProcedure from "../load_pinned_channel_messages_procedure";
+import * as RefreshChannelMessagesProcedure from "../refresh_channel_messages_procedure";
+import * as RefreshDirectMessagesProcedure from "../refresh_direct_messages_procedure";
 import * as ResolveInviteServerProcedure from "../resolve_invite_server_procedure";
 
 export type LoadOlderChannelMessagesArgs = __Infer<typeof LoadOlderChannelMessagesProcedure.params>;
@@ -23,6 +25,10 @@ export type LoadOlderDirectMessagesPageArgs = __Infer<typeof LoadOlderDirectMess
 export type LoadOlderDirectMessagesPageResult = __Infer<typeof LoadOlderDirectMessagesPageProcedure.returnType>;
 export type LoadPinnedChannelMessagesArgs = __Infer<typeof LoadPinnedChannelMessagesProcedure.params>;
 export type LoadPinnedChannelMessagesResult = __Infer<typeof LoadPinnedChannelMessagesProcedure.returnType>;
+export type RefreshChannelMessagesArgs = __Infer<typeof RefreshChannelMessagesProcedure.params>;
+export type RefreshChannelMessagesResult = __Infer<typeof RefreshChannelMessagesProcedure.returnType>;
+export type RefreshDirectMessagesArgs = __Infer<typeof RefreshDirectMessagesProcedure.params>;
+export type RefreshDirectMessagesResult = __Infer<typeof RefreshDirectMessagesProcedure.returnType>;
 export type ResolveInviteServerArgs = __Infer<typeof ResolveInviteServerProcedure.params>;
 export type ResolveInviteServerResult = __Infer<typeof ResolveInviteServerProcedure.returnType>;
 

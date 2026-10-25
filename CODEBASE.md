@@ -108,6 +108,18 @@ ties; original timestamp-only procedures remain for released clients. New client
 fall back only on the older module's `No such procedure` response. Complete paging
 across equal timestamps requires both the updated client and module.
 
+Backfilled channel/DM rows are revalidated by ID in batches of at most 200.
+Each connection starts a refresh after its initial subscription applies, then
+five seconds after each completed cycle; returning to a visible tab also
+refreshes. The `refresh_channel_messages` / `refresh_direct_messages` procedures
+recheck read access and use primary-key lookups. Edits and deletion flags replace
+cached values; absent or inaccessible IDs remove them. Live rows win overlapping
+updates, and stopped connections cannot apply late refresh or paging replies.
+No requests are sent without backfill. Failed requests retain the cache for retry.
+Older modules without these additive procedures keep their previous behavior
+until upgraded and reconnected. Cost scales with loaded history; scope revisions
+are the next step if periodic reads become expensive.
+
 ### Account settings
 
 Pending registrations can correct their email after password verification,

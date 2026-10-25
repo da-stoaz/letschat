@@ -1,3 +1,4 @@
+import { refreshCachedRows, updateCachedRows } from './historyCache'
 import { compareMessages } from '../lib/messageOrder'
 import { create } from 'zustand'
 import type { DirectMessage, Identity } from '../types/domain'
@@ -10,6 +11,7 @@ interface DmState {
   historyExhausted: Record<Identity, boolean>
   setConversation: (identity: Identity, messages: DirectMessage[]) => void
   prependOlderMessages: (identity: Identity, older: DirectMessage[], exhausted: boolean) => void
+  refreshOlderMessages: (identity: Identity, requested: DirectMessage[], refreshed: DirectMessage[], live: DirectMessage[]) => void
   appendMessage: (identity: Identity, message: DirectMessage) => void
 }
 
@@ -34,6 +36,7 @@ function areDirectMessagesEqual(a: DirectMessage[], b: DirectMessage[]): boolean
       left.recipientIdentity !== right.recipientIdentity ||
       left.content !== right.content ||
       left.sentAt !== right.sentAt ||
+      left.editedAt !== right.editedAt ||
       left.deletedBySender !== right.deletedBySender ||
       left.deletedByRecipient !== right.deletedByRecipient
     ) {
@@ -49,10 +52,12 @@ export const useDmStore = create<DmState>((set, get) => ({
   historyExhausted: {},
   setConversation: (identity, messages) =>
     set((state) => {
-      const merged = mergeHistory(state.olderByConversation[identity], messages)
+      const older = updateCachedRows(state.olderByConversation[identity] ?? [], messages)
+      const merged = mergeHistory(older, messages)
       const current = state.conversations[identity] ?? []
-      if (areDirectMessagesEqual(current, merged)) return state
+      if (areDirectMessagesEqual(current, merged) && areDirectMessagesEqual(state.olderByConversation[identity] ?? [], older)) return state
       return {
+        olderByConversation: { ...state.olderByConversation, [identity]: older },
         conversations: { ...state.conversations, [identity]: merged },
       }
     }),
@@ -68,6 +73,20 @@ export const useDmStore = create<DmState>((set, get) => ({
         historyExhausted: { ...state.historyExhausted, [identity]: exhausted },
       }
     }),
+  refreshOlderMessages: (identity, requested, refreshed, live) =>
+    set((state) => {
+      const older = updateCachedRows(refreshCachedRows(state.olderByConversation[identity] ?? [], requested, refreshed), live)
+      const merged = mergeHistory(older, live)
+      const exhausted = refreshed.length < requested.length ? false : state.historyExhausted[identity]
+      if (areDirectMessagesEqual(state.olderByConversation[identity] ?? [], older)
+        && areDirectMessagesEqual(state.conversations[identity] ?? [], merged)
+        && state.historyExhausted[identity] === exhausted) return state
+      return {
+        olderByConversation: { ...state.olderByConversation, [identity]: older },
+        historyExhausted: { ...state.historyExhausted, [identity]: exhausted },
+        conversations: { ...state.conversations, [identity]: merged },
+      }
+    }),
   appendMessage: (identity, message) => {
     const prev = get().conversations[identity] ?? []
     const idx = prev.findIndex((row) => row.id === message.id)
@@ -78,6 +97,7 @@ export const useDmStore = create<DmState>((set, get) => ({
         current.recipientIdentity === message.recipientIdentity &&
         current.content === message.content &&
         current.sentAt === message.sentAt &&
+        current.editedAt === message.editedAt &&
         current.deletedBySender === message.deletedBySender &&
         current.deletedByRecipient === message.deletedByRecipient
       ) {

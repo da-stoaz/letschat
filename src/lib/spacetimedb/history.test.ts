@@ -4,15 +4,35 @@ import { useDmStore } from '../../stores/dmStore'
 import { mapDirectMessage, mapMessage, type DbRow } from './mappers'
 import { useMessagesStore } from '../../stores/messagesStore'
 import { callProcedure } from './connection'
-import { loadChannelMessage, loadOlderChannelMessages, loadOlderDirectMessages, loadPinnedChannelMessages } from './history'
+import { cancelHistoryRequests, loadChannelMessage, loadOlderChannelMessages, loadOlderDirectMessages, loadPinnedChannelMessages } from './history'
 import type { Message } from '../../types/domain'
 
 vi.mock('./connection', () => ({ callProcedure: vi.fn() }))
 const message = (id: number): Message => ({ id, channelId: 1, senderIdentity: 'me', content: String(id), sentAt: new Date(id * 1000).toISOString(), editedAt: null, deleted: false })
 beforeEach(() => {
+  cancelHistoryRequests()
   vi.resetAllMocks()
   useDmStore.setState({ conversations: {}, olderByConversation: {}, historyExhausted: {} })
   useMessagesStore.setState({ messagesByChannel: { 1: [message(201)] }, olderByChannel: {}, historyExhausted: {} })
+})
+
+it('discards a page from a disconnected session without cancelling a newer request', async () => {
+  let finishOld!: (rows: Message[]) => void
+  let finishNew!: (rows: Message[]) => void
+  vi.mocked(callProcedure)
+    .mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    .mockImplementationOnce(() => new Promise(resolve => { finishNew = resolve }))
+  const old = loadOlderChannelMessages(1)
+  cancelHistoryRequests()
+  const current = loadOlderChannelMessages(1)
+  finishOld([message(1)])
+  await old
+  expect(useMessagesStore.getState().olderByChannel).toEqual({})
+  const concurrent = loadOlderChannelMessages(1)
+  expect(callProcedure).toHaveBeenCalledTimes(2)
+  finishNew([message(200)])
+  await Promise.all([current, concurrent])
+  expect(useMessagesStore.getState().olderByChannel[1].map(row => row.id)).toEqual([200])
 })
 
 it('shares in-flight history, allows retry after failure, and keeps pin previews out of the paging cursor', async () => {

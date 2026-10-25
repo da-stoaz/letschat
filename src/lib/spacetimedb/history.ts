@@ -22,6 +22,14 @@ const PAGE_SIZE = 100
 // design: a rejected call clears its key, so the next scroll retries.
 const channelRequests = new Map<u64, Promise<void>>()
 const dmRequests = new Map<Identity, Promise<void>>()
+let requestGeneration = 0
+
+/** A response from a previous connection must not restore cleared history. */
+export function cancelHistoryRequests(): void {
+  requestGeneration++
+  channelRequests.clear()
+  dmRequests.clear()
+}
 
 async function historyPage(procedure: string, scope: Record<string, unknown>, oldest: { id: number; sentAt: string }): Promise<DbRow[]> {
   const args = { ...scope, before: new Timestamp(messageTimestampMicros(oldest.sentAt)), limit: PAGE_SIZE }
@@ -44,6 +52,7 @@ async function historyPage(procedure: string, scope: Record<string, unknown>, ol
  * anything to page back from.
  */
 export async function loadOlderChannelMessages(channelId: u64): Promise<void> {
+  const generation = requestGeneration
   const existing = channelRequests.get(channelId)
   if (existing) return existing
 
@@ -57,10 +66,11 @@ export async function loadOlderChannelMessages(channelId: u64): Promise<void> {
       const rows = await historyPage('loadOlderChannelMessages', {
         channelId: BigInt(channelId),
       }, oldest)
+      if (generation !== requestGeneration) return
       // A short page means the module had nothing more to give.
       useMessagesStore.getState().prependOlderMessages(channelId, rows.map(mapMessage), rows.length < PAGE_SIZE)
     } finally {
-      channelRequests.delete(channelId)
+      if (generation === requestGeneration) channelRequests.delete(channelId)
     }
   })()
   channelRequests.set(channelId, pending)
@@ -69,6 +79,7 @@ export async function loadOlderChannelMessages(channelId: u64): Promise<void> {
 
 /** The DM equivalent of {@link loadOlderChannelMessages}, per conversation. */
 export async function loadOlderDirectMessages(partner: Identity): Promise<void> {
+  const generation = requestGeneration
   const existing = dmRequests.get(partner)
   if (existing) return existing
 
@@ -82,11 +93,12 @@ export async function loadOlderDirectMessages(partner: Identity): Promise<void> 
       const rows = await historyPage('loadOlderDirectMessages', {
         partner: toReducerIdentity(partner),
       }, oldest)
+      if (generation !== requestGeneration) return
       useDmStore
         .getState()
         .prependOlderMessages(partner, rows.map(mapDirectMessage), rows.length < PAGE_SIZE)
     } finally {
-      dmRequests.delete(partner)
+      if (generation === requestGeneration) dmRequests.delete(partner)
     }
   })()
   dmRequests.set(partner, pending)

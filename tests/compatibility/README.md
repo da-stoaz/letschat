@@ -12,6 +12,13 @@ timestamp-only procedures. New clients fall back to the original calls only on
 `No such procedure`; network and authorization errors remain retryable failures.
 Older modules retain their equal-timestamp paging limitation until upgraded.
 
+Backfilled edit/deletion synchronization adds `refresh_channel_messages` and
+`refresh_direct_messages`. A client probes only after history has been loaded;
+`No such procedure` stops refresh attempts for that connection while preserving
+existing paging. Updated modules support bounded refresh without changing the
+original procedures or required subscription list. Both client and module must
+be updated for synchronization outside the recent-message window.
+
 `VersionInfo.ClientProtocol` declares the server contract;
 `SUPPORTED_CLIENT_PROTOCOLS` declares client support. The protocol is compiled in,
 not an operator override. `FirstCompatibleClient` stays 1.6.1 for protocol 1.

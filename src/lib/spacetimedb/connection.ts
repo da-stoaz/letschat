@@ -8,6 +8,8 @@ import { useConnectionStore, type ConnectionStatus } from '../../stores/connecti
 import { useServerConfigStore } from '../../stores/serverConfigStore'
 import { isDesktopTauriRuntime } from '../tauri'
 import { WEB_WS_COMPRESSION } from '../runtimeConfig'
+import { startHistoryRefresh } from './historyRefresh'
+import { cancelHistoryRequests } from './history'
 
 export type SpacetimeDBClient = {
   connection: DbConnection | null
@@ -22,6 +24,7 @@ let connection: DbConnection | null = null
 let subscriptionHandle: { unsubscribe: () => void } | null = null
 let connectPromise: Promise<void> | null = null
 let liveEventsEnabled = false
+let stopHistoryRefresh: (() => void) | null = null
 
 // ─── Keepalive + reconnect ─────────────────────────────────────────────────
 // The SpacetimeDB SDK has no built-in heartbeat or auto-reconnect (it only
@@ -80,6 +83,9 @@ function setStatus(status: ConnectionStatus, errorMessage?: string | null): void
 // already inside the SDK's onDisconnect, where the socket is closed and
 // re-closing it could re-enter the callback.
 function teardownConnection(closeSocket = false): void {
+  stopHistoryRefresh?.()
+  stopHistoryRefresh = null
+  cancelHistoryRequests()
   subscriptionHandle?.unsubscribe()
   subscriptionHandle = null
   liveEventsEnabled = false
@@ -289,6 +295,7 @@ async function connectWithUri(uri: string, database: string, reportErrors: boole
         liveEventsEnabled = true
         establishedThisConnection = true
         if (appliedOnce) return
+        stopHistoryRefresh = startHistoryRefresh(nextConnection)
         appliedOnce = true
         clearTimeout(connectTimeout)
         resolveApplied?.()
