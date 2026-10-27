@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
-import type { RemoteAudioTrack, Room } from 'livekit-client'
+import { Track, type RemoteAudioTrack, type Room } from 'livekit-client'
 import { useLiveKitRoom } from '../../../lib/livekit'
 import { dmVoiceRoomKey } from '../../../lib/livekit'
 import { normalizeIdentity } from '../../../layouts/app-layout/helpers'
@@ -9,6 +9,7 @@ import { useConnectionStore } from '../../../stores/connectionStore'
 import { useDmVoiceSessionStore } from '../../../stores/dmVoiceSessionStore'
 import { useDmVoiceStore } from '../../../stores/dmVoiceStore'
 import { useMediaDeviceStore } from '../../../stores/mediaDeviceStore'
+import { callTrackVolume, useCallAudioStore } from '../../../stores/callAudioStore'
 import { useVoiceSessionStore } from '../../../stores/voiceSessionStore'
 import { useVoiceStore } from '../../../stores/voiceStore'
 import { useNoiseFilter } from '../hooks/useNoiseFilter'
@@ -47,7 +48,6 @@ function RemoteTrackAudioSink({
     if (!element) return
 
     track.attach(element)
-    element.muted = false
     const playback = watchAudioPlayback(element, blocked => {
       onPlaybackBlocked(playbackKey, blocked ? playback.retry : null)
     })
@@ -63,19 +63,18 @@ function RemoteTrackAudioSink({
 
   useEffect(() => {
     const element = audioRef.current
-    if (element) {
-      element.volume = volume
-    }
-  }, [volume])
+    track.setVolume(volume)
+    if (element) element.muted = volume === 0
+  }, [track, volume])
 
   useEffect(() => {
     const element = audioRef.current as SinkCapableElement | null
     if (!element || !sinkId || typeof element.setSinkId !== 'function') return
     void element.setSinkId(sinkId).catch(() => undefined)
-  }, [sinkId])
+  }, [track, sinkId])
 
   return (
-    <audio ref={audioRef} autoPlay data-letschat-audio="remote" aria-label="Call participant audio">
+    <audio ref={audioRef} autoPlay muted={volume === 0} data-letschat-audio="remote" data-playback-key={playbackKey} aria-label="Call participant audio">
       {/* Live WebRTC audio has no caption source; satisfies media-caption a11y rules. */}
       <track kind="captions" />
     </audio>
@@ -84,7 +83,7 @@ function RemoteTrackAudioSink({
 
 /**
  * Attaches every remote audio track in a room to a persistent hidden sink.
- * Applies the local deafen state (volume) and selected output device (sinkId).
+ * Applies listener volume levels, deafen, and the selected output device.
  */
 function RoomAudioSinks({
   room,
@@ -100,18 +99,18 @@ function RoomAudioSinks({
   onPlaybackBlocked: PlaybackReporter
 }) {
   const { remoteParticipants } = useLiveKitRoom(room)
+  const preferences = useCallAudioStore()
 
   const sinks = useMemo(
     () => remoteAudioTracks(remoteParticipants, room?.localParticipant.identity),
     [remoteParticipants, room],
   )
 
-  const volume = deafened ? 0 : 1
-
   return (
     <>
-      {sinks.map(({ key, track }) => (
-        <RemoteTrackAudioSink key={key} track={track} volume={volume} sinkId={sinkId}
+      {sinks.map(({ key, identity, track }) => (
+        <RemoteTrackAudioSink key={key} track={track}
+          volume={callTrackVolume(preferences, identity, track.source === Track.Source.ScreenShareAudio ? 'screen' : 'voice', deafened)} sinkId={sinkId}
           playbackKey={`${scope}:${key}`} onPlaybackBlocked={onPlaybackBlocked} />
       ))}
     </>

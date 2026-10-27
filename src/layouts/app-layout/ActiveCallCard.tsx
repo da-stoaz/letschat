@@ -39,6 +39,7 @@ import { callConnection } from '../../features/voice/callConnection'
 import { CallLatencyBadge } from '../../features/voice/components/CallLatencyBadge'
 import { NoiseFilterToggle } from '../../features/voice/components/NoiseFilterToggle'
 import { ScreenShareMenu } from '../../features/voice/components/ScreenShareMenu'
+import { CallVolumeMixer } from '../../features/voice/components/CallVolumeMixer'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -521,7 +522,6 @@ export function ActiveCallCard({
 
   const { onToggleMute, onToggleDeafen, onToggleCamera, onToggleScreenShare, onLeave } = useVoiceControlActions({
     room: activeRoom,
-    remoteParticipants,
     selfState: selfParticipant
       ? {
           muted: selfParticipant.muted,
@@ -595,6 +595,7 @@ export function ActiveCallCard({
                 </Badge>
               )}
               <NoiseFilterToggle compact />
+              <CallVolumeMixer room={activeRoom} deafened={deafened} compact />
             </div>
           </div>
 
@@ -712,6 +713,7 @@ export function ActiveCallCard({
               <Badge variant={connecting ? 'outline' : 'secondary'}>{statusLabel}</Badge>
             )}
             <NoiseFilterToggle />
+            <CallVolumeMixer room={activeRoom} deafened={deafened} compact />
           </div>
         </div>
 

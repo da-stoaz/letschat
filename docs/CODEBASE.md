@@ -203,6 +203,13 @@ user switches filters, restores raw audio on failure, and reports runtime status
 separately from the persisted preference. Each processor owns and closes its
 AudioContext so its WASM memory can be released after switching or hanging up.
 
+Call playback has device-local, persisted master volume and separate voice/stream
+levels per participant (0–100%). The app-shell audio renderer applies their product
+to each remote track in channels and DMs; deafen temporarily silences both sources
+without changing the saved levels. Call docks and call options share the Volume
+mixer, while Audio settings also exposes master volume. Reconnected tracks reuse
+the same participant preferences.
+
 ### Instance administration and space discovery
 
 ASP.NET Core Identity's `Admin` role is authoritative for human instance

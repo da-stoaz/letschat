@@ -18,6 +18,10 @@ The check covers:
 - A second browser peer receiving real audio packets over UDP, then TCP.
 - Both peers withholding LAN candidates, so success cannot depend on LiveKit
   initiating a connection directly to a client's LAN address.
+- The real call audio renderer and volume slider: independent voice/stream
+  levels, master mute, deafen/undeafen, fresh tracks after reconnect, and the DM
+  playback path. Screen audio uses a second synthetic microphone track;
+  this does not test the operating system's screen-audio capture support.
 
 Only application authentication and SpacetimeDB presence calls are stubbed.
 `tests/security/voice-lifecycle.test.ts` independently covers presence ownership

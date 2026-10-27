@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'src/lib/livekit*'
+      - 'src/features/voice/**'
+      - 'src/stores/callAudioStore*'
       - 'tests/rtc/**'
       - 'docker-compose.prod.*.yml'
       - 'livekit/**'

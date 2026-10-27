@@ -53,8 +53,16 @@ await writeFile(join(directory, 'compose.json'), JSON.stringify({ services: { li
   volumes: [`${directory}/livekit.yaml:/etc/livekit.yaml:ro`],
 } }, networks: Object.fromEntries(networks.map(name => [name, {}])) }))
 
+const assets = new Map<string, string>()
 const build = await Bun.build({ entrypoints: [join(import.meta.dir, 'browser.ts')], target: 'browser', plugins: [{
   name: 'test-auth-and-presence', setup(builder) {
+    // Match Vite's asset URL imports used by the real audio renderer.
+    builder.onResolve({ filter: /\?url$/ }, args => ({ path: Bun.resolveSync(args.path.slice(0, -4), args.resolveDir), namespace: 'asset-url' }))
+    builder.onLoad({ filter: /.*/, namespace: 'asset-url' }, args => {
+      const url = `/fixture-assets/${assets.size}`
+      assets.set(url, args.path)
+      return { loader: 'js', contents: `export default ${JSON.stringify(url)}` }
+    })
     // Only replace app authentication/presence. The call manager, SDK and
     // browser WebRTC implementation are real; presence has separate DB tests.
     builder.onResolve({ filter: /^\.\/(tauri|spacetimedb)$/ }, args => {
@@ -69,9 +77,10 @@ assert(build.success, build.logs.join('\n'))
 const bundle = await build.outputs[0].text()
 const web = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
   const path = new URL(request.url).pathname
+  if (assets.has(path)) return new Response(Bun.file(assets.get(path)!))
   if (path === '/token') { const { room, identity } = await request.json(); return Response.json({ token: token(room, identity) }) }
   if (path === '/bundle.js') return new Response(bundle, { headers: { 'Content-Type': 'text/javascript' } })
-  return new Response(`<script>window.rtcSignalUrl="ws://127.0.0.1:${port}"</script><script src="/bundle.js"></script>`, { headers: { 'Content-Type': 'text/html' } })
+  return new Response(`<script>window.rtcSignalUrl="ws://127.0.0.1:${port}"</script><script type="module" src="/bundle.js"></script>`, { headers: { 'Content-Type': 'text/html' } })
 } })
 async function waitFor<T>(read: () => Promise<T>, timeout = 15000): Promise<T> {
   const deadline = Date.now() + timeout
@@ -83,7 +92,7 @@ let socket: WebSocket | undefined
 try {
   await command([...compose, 'up', '-d'])
   browser = Bun.spawn([chrome, '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${directory}/chrome`,
-    '--no-first-run', '--no-default-browser-check', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', 'about:blank'],
+    '--no-first-run', '--no-default-browser-check', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required', 'about:blank'],
   { stdout: 'ignore', stderr: Bun.file(join(directory, 'chrome.log')) })
   const debugPort = await waitFor(async () => (await readFile(join(directory, 'chrome/DevToolsActivePort'), 'utf8')).split('\n')[0])
   const targets: { type: string; webSocketDebuggerUrl: string }[] = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()
@@ -94,6 +103,7 @@ try {
   const pending = new Map<number, { resolve: (value: CdpResult) => void; reject: (error: unknown) => void }>()
   socket.onmessage = event => {
     const message = JSON.parse(String(event.data))
+    if (message.method === 'Runtime.exceptionThrown') console.error(message.params.exceptionDetails.exception?.description ?? message.params.exceptionDetails.text)
     const request = pending.get(message.id)
     if (!request) return
     pending.delete(message.id)
@@ -105,6 +115,7 @@ try {
     pending.set(id, { resolve: value => { clearTimeout(timeout); resolve(value) }, reject: error => { clearTimeout(timeout); reject(error) } })
     socket!.send(JSON.stringify({ id, method, params }))
   })
+  await cdp('Runtime.enable')
   for (const forceTCP of [false, true]) {
     config.rtc.force_tcp = forceTCP
     await writeConfig()
@@ -123,7 +134,7 @@ try {
     const probe = result.result.value as { audioBytes: number; protocol: string }
     assert(probe.audioBytes > 0)
     assert.equal(probe.protocol, forceTCP ? 'tcp' : 'udp')
-    console.log(`${probe.protocol.toUpperCase()}: hidden LAN candidates, authenticated internal API, join and received audio OK (${probe.audioBytes} bytes)`)
+    console.log(`${probe.protocol.toUpperCase()}: received audio, master/voice/stream controls, deafen, reconnect and DM playback OK (${probe.audioBytes} bytes)`)
   }
 } finally {
   socket?.close()

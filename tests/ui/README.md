@@ -1,5 +1,12 @@
 # Responsive UI verification
 
+Open `/tests/ui/call-volume.html` on the local Vite server to check the real
+volume mixer at desktop and phone widths. Both buttons share the same saved
+levels with Audio settings. Check separate voice/stream sliders, keyboard
+arrows, Escape/focus return, long participant names, and the muted-call notice.
+This fixture uses simulated participants and isolated in-memory preferences;
+`tests/rtc/run.ts` verifies the actual audio sinks against disposable LiveKit.
+
 Run `bun run dev`, then open `/tests/ui/responsive.html` on the local Vite server.
 The fixture uses the actual layout and messaging components with in-memory storage
 and seeded data. It never initializes a backend connection. The width matrix checks

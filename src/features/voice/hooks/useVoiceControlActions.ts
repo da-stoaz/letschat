@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import type { RemoteParticipant, Room } from 'livekit-client'
+import type { Room } from 'livekit-client'
 import { screenShareOptions } from '../../../lib/screenShare'
 import { useMediaDeviceStore } from '../../../stores/mediaDeviceStore'
 import {
@@ -24,7 +24,6 @@ type VoicePatch = Partial<VoiceStateSnapshot>
 
 type UseVoiceControlActionsArgs = {
   room: Room | null
-  remoteParticipants?: RemoteParticipant[]
   selfState: VoiceStateSnapshot | null
   audioInputId: string | null
   videoInputId: string | null
@@ -37,7 +36,6 @@ type UseVoiceControlActionsArgs = {
 
 export function useVoiceControlActions({
   room,
-  remoteParticipants = [],
   selfState,
   audioInputId,
   videoInputId,
@@ -85,9 +83,6 @@ export function useVoiceControlActions({
       assertActiveCallRoom(room)
       setError(null)
       const nextDeafened = !selfState.deafened
-      for (const participant of remoteParticipants) {
-        participant.setVolume(nextDeafened ? 0 : 1)
-      }
       await patchVoiceState({ deafened: nextDeafened })
     } catch (error) {
       if (isCallCancelled(error)) return
@@ -95,7 +90,7 @@ export function useVoiceControlActions({
       const message = error instanceof Error ? error.message : 'Could not toggle deafen.'
       setError(message)
     }
-  }, [patchVoiceState, remoteParticipants, room, selfState, setError])
+  }, [patchVoiceState, room, selfState, setError])
 
   const onToggleCamera = useCallback(async () => {
     if (!room || !selfState) return
