@@ -19,8 +19,10 @@ The check covers:
 - Both peers withholding LAN candidates, so success cannot depend on LiveKit
   initiating a connection directly to a client's LAN address.
 - The real call audio renderer and volume slider: independent voice/stream
-  levels, master mute, deafen/undeafen, fresh tracks after reconnect, and the DM
-  playback path. Screen audio uses a second synthetic microphone track;
+  levels up to 200%, master mute, deafen/undeafen, output-device routing,
+  suspended-context recovery, cleanup, fresh tracks after reconnect, and the DM
+  playback path. Sample measurements compare a quiet continuous tone before and
+  after amplification. Screen audio uses a second synthetic tone track;
   this does not test the operating system's screen-audio capture support.
 
 Only application authentication and SpacetimeDB presence calls are stubbed.

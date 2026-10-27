@@ -58,7 +58,7 @@ export function CallLatencyBadge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background/40 font-medium tabular-nums',
+        'inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background/40 font-medium tabular-nums pointer-coarse:min-h-11',
         compact ? 'h-8 px-2 text-xs' : 'h-9 px-2.5 text-xs',
         className,
       )}

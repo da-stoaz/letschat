@@ -19,7 +19,7 @@ export function NoiseFilterToggle({ compact = false, className }: { compact?: bo
           aria-label={`Noise suppression settings${active ? ', active' : ''}`}
           className={cn(
             'relative transition-[color,background-color,border-color] duration-150',
-            compact ? 'h-8 w-8' : 'h-9 w-9',
+            compact ? 'size-8 rounded-md' : 'size-9 rounded-md',
             active
               ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground aria-expanded:bg-primary/90 aria-expanded:text-primary-foreground dark:border-primary dark:bg-primary dark:hover:bg-primary/90'
               : 'border-border/70 bg-background/35 text-muted-foreground hover:bg-muted/70 hover:text-foreground',

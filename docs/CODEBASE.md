@@ -204,8 +204,11 @@ separately from the persisted preference. Each processor owns and closes its
 AudioContext so its WASM memory can be released after switching or hanging up.
 
 Call playback has device-local, persisted master volume and separate voice/stream
-levels per participant (0–100%). The app-shell audio renderer applies their product
-to each remote track in channels and DMs; deafen temporarily silences both sources
+levels per participant (0–200%, with 100% unchanged). The app-shell audio renderer
+applies their product through Web Audio gain to each remote track in channels and
+DMs, then plays the processed stream through the selected HTML audio output sink.
+The tracks share one playback context, closed when the last track leaves.
+Deafen temporarily silences both sources
 without changing the saved levels. Call docks and call options share the Volume
 mixer, while Audio settings also exposes master volume. Reconnected tracks reuse
 the same participant preferences.

@@ -7,7 +7,7 @@ export function AudioTab() {
     <Card className="border-border/70 bg-muted/20">
       <CardHeader>
         <CardTitle className="text-base">Call playback</CardTitle>
-        <CardDescription>Adjust voice and stream audio together. Use Volume in a call to adjust individual people.</CardDescription>
+        <CardDescription>Adjust voice and stream audio together. Above 100% boosts quiet audio. Use Volume in a call to adjust individual people.</CardDescription>
       </CardHeader>
       <CardContent className="max-w-lg"><MasterVolumeControl /></CardContent>
     </Card>

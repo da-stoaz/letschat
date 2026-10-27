@@ -100,10 +100,8 @@ function shortLabel(label: string, max = 12): string {
  * Whether this runtime can route call audio to a chosen output device.
  *
  * Only `HTMLMediaElement.prototype.setSinkId` counts, because that is the one
- * API the switch actually goes through: `switchRoomDevice` moves the sink via
- * `room.switchActiveDevice('audiooutput')`, `participant.setAudioOutput`, and
- * `setSinkId` on the attached `<audio>` elements — every one of them an
- * HTMLMediaElement call.
+ * API used by the audio renderer's processed playback sinks. The selected
+ * device is also passed to `room.switchActiveDevice('audiooutput')`.
  *
  * This used to also accept `AudioContext.prototype.setSinkId` as evidence,
  * which is a different API that nothing here touches. WebKit ships that one but
@@ -595,7 +593,7 @@ export function ActiveCallCard({
                 </Badge>
               )}
               <NoiseFilterToggle compact />
-              <CallVolumeMixer room={activeRoom} deafened={deafened} compact />
+              <CallVolumeMixer room={activeRoom} deafened={deafened} compact className="size-8 rounded-md" />
             </div>
           </div>
 
@@ -713,7 +711,7 @@ export function ActiveCallCard({
               <Badge variant={connecting ? 'outline' : 'secondary'}>{statusLabel}</Badge>
             )}
             <NoiseFilterToggle />
-            <CallVolumeMixer room={activeRoom} deafened={deafened} compact />
+            <CallVolumeMixer room={activeRoom} deafened={deafened} compact className="size-9 rounded-md" />
           </div>
         </div>
 

@@ -15,7 +15,7 @@ function VolumeSlider({ label, value, onChange }: { label: string; value: number
       <label htmlFor={id} className="min-w-0 break-words">{label}</label>
       <output htmlFor={id} className="shrink-0 tabular-nums text-muted-foreground">{Math.round(value)}%</output>
     </div>
-    <input id={id} type="range" min={0} max={100} step={1} value={value}
+    <input id={id} type="range" min={0} max={200} step={1} value={value}
       aria-valuetext={`${Math.round(value)} percent`}
       onChange={event => onChange(Number(event.target.value))}
       className="h-6 w-full cursor-pointer accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" />
@@ -28,7 +28,7 @@ export function MasterVolumeControl() {
   return <VolumeSlider label="Call volume" value={volumePercent(volume)} onChange={setVolume} />
 }
 
-export function CallVolumeMixer({ room, deafened, compact = false }: { room: Room | null; deafened: boolean; compact?: boolean }) {
+export function CallVolumeMixer({ room, deafened, compact = false, className }: { room: Room | null; deafened: boolean; compact?: boolean; className?: string }) {
   const { remoteParticipants } = useLiveKitRoom(room)
   const preferences = useCallAudioStore()
   const users = useUsersStore(s => s.byIdentity)
@@ -37,12 +37,13 @@ export function CallVolumeMixer({ room, deafened, compact = false }: { room: Roo
     .map(user => [user.identity.trim().toLowerCase(), user.displayName || user.username]))
 
   return <Popover>
-    <PopoverTrigger render={<Button variant="outline" size={compact ? 'icon-xs' : 'default'} aria-label="Call volume controls" />}>
+    <PopoverTrigger render={<Button variant="outline" size={compact ? 'icon' : 'default'} className={className} aria-label="Call volume controls" />}>
       <SlidersHorizontalIcon className="size-4" />{compact ? null : 'Volume'}
     </PopoverTrigger>
     <PopoverContent side="top" align="end" className="max-h-[min(70dvh,32rem)] w-80 max-w-[calc(100vw-1.5rem)] gap-4 overflow-y-auto p-4">
       <PopoverTitle>Call volume</PopoverTitle>
       <p className="text-xs text-muted-foreground">Changes affect only what you hear and are saved on this device.</p>
+      <p className="text-xs text-muted-foreground">100% is original volume. Higher levels boost quiet audio.</p>
       <MasterVolumeControl />
       {deafened ? <p role="status" className="text-xs text-muted-foreground">Call audio is muted. Your volume levels will apply when you unmute.</p> : null}
       {remoteParticipants.filter(participant => !participant.isLocal && participant.identity !== room?.localParticipant.identity).map(participant => {

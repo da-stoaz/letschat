@@ -7,7 +7,7 @@ type AudioPreferences = { masterVolume: number; participantVolumes: ParticipantV
 
 const identityKey = (identity: string) => identity.trim().toLowerCase()
 export const volumePercent = (value: number | undefined) =>
-  typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 100
+  typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(200, value)) : 100
 
 export function participantVolume(preferences: AudioPreferences, identity: string, source: CallAudioSource) {
   return volumePercent(preferences.participantVolumes[identityKey(identity)]?.[source])

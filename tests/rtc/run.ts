@@ -134,7 +134,7 @@ try {
     const probe = result.result.value as { audioBytes: number; protocol: string }
     assert(probe.audioBytes > 0)
     assert.equal(probe.protocol, forceTCP ? 'tcp' : 'udp')
-    console.log(`${probe.protocol.toUpperCase()}: received audio, master/voice/stream controls, deafen, reconnect and DM playback OK (${probe.audioBytes} bytes)`)
+    console.log(`${probe.protocol.toUpperCase()}: received audio, measured boost, device routing, playback recovery, deafen, cleanup, reconnect and DM playback OK (${probe.audioBytes} bytes)`)
   }
 } finally {
   socket?.close()

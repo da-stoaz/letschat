@@ -13,7 +13,7 @@ import { callTrackVolume, useCallAudioStore } from '../../../stores/callAudioSto
 import { useVoiceSessionStore } from '../../../stores/voiceSessionStore'
 import { useVoiceStore } from '../../../stores/voiceStore'
 import { useNoiseFilter } from '../hooks/useNoiseFilter'
-import { watchAudioPlayback } from '../audioPlayback'
+import { createCallAudioPlayback } from '../callAudioPlayback'
 import { remoteAudioTracks } from '../remoteAudioTracks'
 
 type PlaybackReporter = (key: string, retry: (() => void) | null) => void
@@ -42,30 +42,29 @@ function RemoteTrackAudioSink({
   onPlaybackBlocked: PlaybackReporter
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const playbackRef = useRef<ReturnType<typeof createCallAudioPlayback> | null>(null)
+  const mediaStreamTrack = track.mediaStreamTrack
 
   useEffect(() => {
     const element = audioRef.current
     if (!element) return
 
-    track.attach(element)
-    const playback = watchAudioPlayback(element, blocked => {
+    const playback = createCallAudioPlayback(mediaStreamTrack, element, 0, blocked => {
       onPlaybackBlocked(playbackKey, blocked ? playback.retry : null)
     })
+    playbackRef.current = playback
     playback.retry()
 
     return () => {
       playback.dispose()
+      playbackRef.current = null
       onPlaybackBlocked(playbackKey, null)
-      track.detach(element)
-      element.srcObject = null
     }
-  }, [track, playbackKey, onPlaybackBlocked])
+  }, [track, mediaStreamTrack, playbackKey, onPlaybackBlocked])
 
   useEffect(() => {
-    const element = audioRef.current
-    track.setVolume(volume)
-    if (element) element.muted = volume === 0
-  }, [track, volume])
+    playbackRef.current?.setVolume(volume)
+  }, [track, mediaStreamTrack, volume])
 
   useEffect(() => {
     const element = audioRef.current as SinkCapableElement | null

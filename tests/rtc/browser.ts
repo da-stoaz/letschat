@@ -25,6 +25,21 @@ async function verifyCallVolume(receiver: Room, publisher: Room, token: string) 
   const container = document.createElement('div')
   document.body.append(container)
   const root = createRoot(container)
+  const meterContext = new AudioContext()
+  await meterContext.resume()
+  const meters = new Map<MediaStream, AnalyserNode>()
+  const energy = (stream: MediaStream) => {
+    let meter = meters.get(stream)
+    if (!meter) {
+      meter = meterContext.createAnalyser()
+      meter.fftSize = 2048
+      meterContext.createMediaStreamSource(stream).connect(meter)
+      meters.set(stream, meter)
+    }
+    const samples = new Float32Array(meter.fftSize)
+    meter.getFloatTimeDomainData(samples)
+    return Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length)
+  }
   const preferences = useCallAudioStore.getState()
   useMediaDeviceStore.getState().setNoiseFilterEnabled(false)
   useCallAudioStore.setState({ masterVolume: 50, participantVolumes: { publisher: { voice: 40, screen: 20 } } })
@@ -32,19 +47,47 @@ async function verifyCallVolume(receiver: Room, publisher: Room, token: string) 
   useVoiceSessionStore.setState({ room: receiver, joinedChannelId: 42 })
   const self = { channelId: 42, userIdentity: 'receiver', joinedAt: new Date().toISOString(), muted: true, deafened: false, sharingScreen: false, sharingCamera: false }
   useVoiceStore.getState().setParticipants(42, [self])
-  const screenAudio = publisher.localParticipant.getTrackPublication(Track.Source.Microphone)!.audioTrack!.mediaStreamTrack.clone()
+  // Use a quiet continuous tone for sample ratios; Chrome's fake microphone
+  // has silent gaps and can clip when boosted. Call-manager capture is checked above.
+  const oscillator = meterContext.createOscillator()
+  const quiet = meterContext.createGain()
+  quiet.gain.value = 0.05
+  const tone = meterContext.createMediaStreamDestination()
+  oscillator.connect(quiet).connect(tone)
+  oscillator.start()
+  const microphone = publisher.localParticipant.getTrackPublication(Track.Source.Microphone)!.audioTrack!
+  await publisher.localParticipant.unpublishTrack(microphone)
+  const micAudio = tone.stream.getAudioTracks()[0]
+  const screenAudio = micAudio.clone()
+  const NativeAudioContext = window.AudioContext
+  const playbackContexts: AudioContext[] = []
   try {
+    await publisher.localParticipant.publishTrack(micAudio, { source: Track.Source.Microphone })
     await publisher.localParticipant.publishTrack(screenAudio, { source: Track.Source.ScreenShareAudio })
+    window.AudioContext = class extends NativeAudioContext {
+      constructor(options?: AudioContextOptions) { super(options); playbackContexts.push(this) }
+    }
     root.render(createElement('div', null, createElement(CallAudioRenderer), createElement(CallVolumeMixer, { room: receiver, deafened: false })))
     const volumes = (voice: number, screen: number) => {
       const remote = receiver.remoteParticipants.get('publisher')
-      const mic = remote?.getTrackPublication(Track.Source.Microphone)?.audioTrack?.attachedElements[0]
-      const stream = remote?.getTrackPublication(Track.Source.ScreenShareAudio)?.audioTrack?.attachedElements[0]
       return document.querySelectorAll('[data-letschat-audio="remote"]').length === 2
-        && mic?.volume === voice && stream?.volume === screen
-        && mic.muted === (voice === 0) && stream.muted === (screen === 0)
+        && [[Track.Source.Microphone, voice], [Track.Source.ScreenShareAudio, screen]].every(([source, level]) => {
+          const publication = remote?.getTrackPublication(source as Track.Source)
+          const track = publication?.audioTrack
+          const sink = [...document.querySelectorAll<HTMLAudioElement>('[data-letschat-audio="remote"]')]
+            .find(element => element.dataset.playbackKey?.endsWith(`:${publication?.trackSid}`))
+          if (!track?.mediaStream || !(sink?.srcObject instanceof MediaStream)) return false
+          const input = energy(track.mediaStream)
+          const output = energy(sink.srcObject)
+          // Measure the samples delivered to the chosen output sink, not a stored gain value.
+          return (level === 0 ? output < 0.00001 : input > 0.001 && Math.abs(output / input - Number(level)) < 0.08)
+            && sink.muted === (level === 0)
+            && track.attachedElements.every(element => element.volume === 0)
+        })
     }
     await waitForPlayback(() => volumes(0.2, 0.1), 'Channel voice/stream volume did not reach the audio sinks')
+    window.AudioContext = NativeAudioContext
+    if (playbackContexts.length !== 1) throw new Error('Remote tracks should share one playback context')
     // Exercise the actual accessible slider, not just the store setter.
     container.querySelector<HTMLButtonElement>('[aria-label="Call volume controls"]')!.click()
     await waitForPlayback(() => !!document.querySelector('input[type="range"]'), 'Volume mixer did not open')
@@ -54,6 +97,21 @@ async function verifyCallVolume(receiver: Room, publisher: Room, token: string) 
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, '25')
     slider.dispatchEvent(new Event('input', { bubbles: true }))
     await waitForPlayback(() => volumes(0.1, 0.05), 'Master slider did not update playback')
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, '200')
+    slider.dispatchEvent(new Event('input', { bubbles: true }))
+    preferences.setParticipantVolume('publisher', 'voice', 100)
+    preferences.setParticipantVolume('publisher', 'screen', 75)
+    await waitForPlayback(() => volumes(2, 1.5), 'Boost did not amplify the samples reaching the output sinks')
+    await playbackContexts[0].suspend()
+    const enableAudio = () => [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Enable audio')
+    await waitForPlayback(() => !!enableAudio(), 'Suspended playback context did not offer audio recovery')
+    enableAudio()!.click()
+    await waitForPlayback(() => playbackContexts[0].state === 'running' && !enableAudio() && volumes(2, 1.5), 'Audio recovery did not restore boosted playback')
+    useMediaDeviceStore.getState().setAudioOutputId('default')
+    await waitForPlayback(() => [...document.querySelectorAll<HTMLAudioElement>('[data-letschat-audio="remote"]')]
+      .every(element => (element as HTMLAudioElement & { sinkId: string }).sinkId === 'default'), 'Boosted playback lost output device routing')
+    preferences.setParticipantVolume('publisher', 'voice', 40)
+    preferences.setParticipantVolume('publisher', 'screen', 20)
     preferences.setMasterVolume(0)
     await waitForPlayback(() => volumes(0, 0), 'Master zero did not mute both sources')
     preferences.setMasterVolume(50)
@@ -66,6 +124,7 @@ async function verifyCallVolume(receiver: Room, publisher: Room, token: string) 
     await waitForPlayback(() => volumes(0.3, 0.1), 'Undeafen lost the saved mix')
 
     await receiver.disconnect()
+    await waitForPlayback(() => playbackContexts[0].state === 'closed', 'Leaving the room leaked its playback context')
     await receiver.connect(window.rtcSignalUrl, token, { rtcConfig: { iceServers: [] }, peerConnectionTimeout: 5000 })
     await waitForPlayback(() => volumes(0.3, 0.1), 'New tracks after reconnect lost the saved mix')
 
@@ -77,9 +136,14 @@ async function verifyCallVolume(receiver: Room, publisher: Room, token: string) 
     useDmVoiceStore.getState().setRoomParticipants('publisher:receiver', [{ ...dmSelf, deafened: true }])
     await waitForPlayback(() => volumes(0, 0), 'DM deafen did not mute both sources')
   } finally {
+    window.AudioContext = NativeAudioContext
     root.unmount()
+    oscillator.stop()
+    await meterContext.close()
     container.remove()
     await publisher.localParticipant.unpublishTrack(screenAudio)
+    await publisher.localParticipant.unpublishTrack(micAudio)
+    micAudio.stop()
     screenAudio.stop()
     useDmVoiceSessionStore.getState().reset()
     useVoiceSessionStore.setState({ room: publisher, joinedChannelId: 42 })
