@@ -37,7 +37,7 @@ public sealed class SmtpEmailSender(SystemConfigService config, ILogger<SmtpEmai
                 await client.AuthenticateAsync(settings.SmtpUser, settings.SmtpPassword ?? string.Empty, ct);
             }
 
-            await client.SendAsync(message, ct);
+            await client.SendAsync(new MailKit.SendRequest(message), ct);
             await client.DisconnectAsync(quit: true, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not EmailDeliveryException)

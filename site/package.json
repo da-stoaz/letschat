@@ -11,16 +11,18 @@
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
-    "astro": "^7.3.2",
+    "astro": "^7.4.8",
     "http-cache-semantics": "file:./vendor/http-cache-semantics"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
-    "tailwindcss": "^4.3.3"
+    "@tailwindcss/vite": "^4.3.5",
+    "tailwindcss": "^4.3.5"
   },
   "overrides": {
     "devalue": "5.9.4",
+    "glob": "14.0.4",
     "http-cache-semantics": "$http-cache-semantics",
+    "minimatch": "11.0.5",
     "svgo": "4.1.0"
   }
 }
