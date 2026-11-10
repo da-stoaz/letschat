@@ -14,7 +14,7 @@
     <InternalsVisibleTo Include="CoreApi.Tests" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.15" />
     <PackageReference Include="Npgsql" Version="10.0.3" />
-    <PackageReference Include="SpacetimeDB.ClientSDK" Version="2.10.2" />
+    <PackageReference Include="SpacetimeDB.ClientSDK" Version="2.10.1" />
   </ItemGroup>
 
 </Project>

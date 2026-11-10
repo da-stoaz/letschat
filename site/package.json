@@ -20,7 +20,9 @@
   },
   "overrides": {
     "devalue": "5.9.4",
+    "glob": "14.0.4",
     "http-cache-semantics": "$http-cache-semantics",
+    "minimatch": "11.0.5",
     "svgo": "4.1.0"
   }
 }
