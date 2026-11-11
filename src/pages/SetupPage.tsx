@@ -25,7 +25,6 @@ export function SetupPage() {
           <Card className="border-border/70 bg-card/90 backdrop-blur">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Recent servers</CardTitle>
-              <CardDescription className="text-xs">Servers you have connected to before.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-1.5">
               {knownHosts.map((host) => (

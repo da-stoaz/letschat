@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { reducers } from '../lib/spacetimedb'
 import { uploadSingleFile } from '../lib/uploads'
-import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -112,7 +112,6 @@ export function EditServerModal({
     >
       <DialogHeader>
         <DialogTitle>Edit Space</DialogTitle>
-        <DialogDescription>Update space name and icon.</DialogDescription>
       </DialogHeader>
 
       <input
@@ -131,7 +130,6 @@ export function EditServerModal({
         <div className="flex items-center justify-between gap-3">
           <div>
             <Label className="text-sm">Space icon</Label>
-            <p className="text-xs text-muted-foreground">Shown in sidebars and space headers.</p>
           </div>
           <Avatar className="size-14 rounded-xl">
             {effectiveIconUrl ? <AvatarImage src={effectiveIconUrl} alt={name || currentName} /> : null}

@@ -48,7 +48,6 @@ export function ServerTab({
                 <ServerIcon className="size-4 text-muted-foreground" />
                 Identity
               </CardTitle>
-              <CardDescription>Branding shown to members and on Discover.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap items-start justify-between gap-3 py-1">
@@ -89,7 +88,6 @@ export function ServerTab({
                 <UserPlusIcon className="size-4 text-muted-foreground" />
                 Your membership
               </CardTitle>
-              <CardDescription>Leave this space if you no longer want access.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               <Button

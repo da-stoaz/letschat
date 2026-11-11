@@ -135,7 +135,6 @@ export function AccountTab() {
       <Card className="border-border/70 bg-muted/20">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Profile</CardTitle>
-          <CardDescription>What other members see in chat, member lists and calls.</CardDescription>
         </CardHeader>
         <CardContent>
           <form
@@ -254,7 +253,7 @@ export function AccountTab() {
       <Card className="border-border/70 bg-muted/20">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Account</CardTitle>
-          <CardDescription>Your sign-in identity on this server. Contact its admin to change your username or email.</CardDescription>
+          <CardDescription>Contact your server admin to change your username or email.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="divide-y divide-border/60 rounded-lg border border-border/70 bg-card/70 px-3">
@@ -310,7 +309,6 @@ export function AccountTab() {
       <Card className="border-border/70 bg-muted/20">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Sign out</CardTitle>
-          <CardDescription>Disconnects this client and clears its saved session.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button

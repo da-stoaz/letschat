@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { reducers } from '../lib/spacetimedb'
 import type { ChannelKind } from '../types/domain'
 import { useChannelsStore } from '../stores/channelsStore'
-import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -89,7 +89,6 @@ export function CreateChannelModal({
     >
       <DialogHeader>
         <DialogTitle>Create Channel</DialogTitle>
-        <DialogDescription>Choose a channel type and permissions.</DialogDescription>
       </DialogHeader>
 
       <div className="space-y-2">

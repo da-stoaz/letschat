@@ -6,7 +6,7 @@ import { userInitials } from '../../layouts/app-layout/helpers'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
@@ -54,7 +54,6 @@ export function RequestsTab({ serverId, joinRequests }: RequestsTabProps) {
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
         <div>
           <CardTitle className="text-base">Requests</CardTitle>
-          <CardDescription>People asking to join this space.</CardDescription>
         </div>
         <Badge variant="secondary">{joinRequests.length}</Badge>
       </CardHeader>

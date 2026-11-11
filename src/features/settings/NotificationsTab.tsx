@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 
 type NotificationToggleRow = {
@@ -25,7 +25,6 @@ type NotificationToggleRow = {
     | 'missedCalls'
     | 'mentions'
   label: string
-  description: string
 }
 
 const NOTIFICATION_TOGGLE_ROWS: NotificationToggleRow[] = [
@@ -33,43 +32,36 @@ const NOTIFICATION_TOGGLE_ROWS: NotificationToggleRow[] = [
     event: 'channel_message',
     key: 'channelMessages',
     label: 'Space messages',
-    description: 'New text messages from space channels.',
   },
   {
     event: 'mention',
     key: 'mentions',
     label: 'Mentions',
-    description: 'Messages that include your @username or @display name.',
   },
   {
     event: 'direct_message',
     key: 'directMessages',
     label: 'Direct messages',
-    description: 'New direct messages from friends.',
   },
   {
     event: 'friend_request',
     key: 'friendRequests',
     label: 'Friend requests',
-    description: 'Incoming friend requests.',
   },
   {
     event: 'friend_accepted',
     key: 'friendAccepted',
     label: 'Friend accepted',
-    description: 'When someone accepts your friend request.',
   },
   {
     event: 'incoming_call',
     key: 'incomingCalls',
     label: 'Incoming calls',
-    description: 'Ring notifications for incoming DM calls.',
   },
   {
     event: 'missed_call',
     key: 'missedCalls',
     label: 'Missed/call ended',
-    description: 'Missed call and call-ended summaries.',
   },
 ]
 
@@ -110,19 +102,14 @@ export function NotificationsTab() {
 
   const priorityNotificationRows = NOTIFICATION_TOGGLE_ROWS.filter((row) => PRIORITY_NOTIFICATION_KEYS.includes(row.key))
   const secondaryNotificationRows = NOTIFICATION_TOGGLE_ROWS.filter((row) => !PRIORITY_NOTIFICATION_KEYS.includes(row.key))
-  const enabledNotificationCount = NOTIFICATION_TOGGLE_ROWS.reduce((total, row) => {
-    return total + (notificationSettings.eventToggles[row.key] ? 1 : 0)
-  }, 0)
 
   const renderNotificationToggleRow = (row: NotificationToggleRow) => (
     <div key={row.event} className="flex items-center justify-between gap-3 py-2 min-h-11">
       <div className="space-y-0.5">
         <Label htmlFor={`notification-${row.key}`} className="text-sm font-medium">{row.label}</Label>
-        <p id={`notification-${row.key}-hint`} className="text-xs text-muted-foreground">{row.description}</p>
       </div>
       <Switch
         id={`notification-${row.key}`}
-        aria-describedby={`notification-${row.key}-hint`}
         checked={notificationSettings.eventToggles[row.key]}
         onCheckedChange={(checked) => setNotificationEventEnabled(row.key, Boolean(checked))}
       />
@@ -134,26 +121,18 @@ export function NotificationsTab() {
       <Card className="border-border/70 bg-muted/20">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Notification Master Control</CardTitle>
-          <CardDescription>Choose between quiet mode and full awareness in one place.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex min-h-11 items-center justify-between gap-3 py-2">
             <div className="space-y-1">
               <Label htmlFor="notifications-enabled" className="text-sm font-medium">Enable notifications</Label>
-              <p id="notifications-enabled-hint" className="text-xs text-muted-foreground">Master switch for all desktop/browser notifications.</p>
             </div>
             <Switch
               id="notifications-enabled"
-                aria-describedby="notifications-enabled-hint"
                 checked={notificationSettings.enabled}
               onCheckedChange={(checked) => setNotificationsEnabled(Boolean(checked))}
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            {notificationSettings.enabled
-              ? `Enabled for ${enabledNotificationCount} of ${NOTIFICATION_TOGGLE_ROWS.length} event types.`
-              : 'Notifications are currently disabled globally.'}
-          </p>
         </CardContent>
       </Card>
 
@@ -164,7 +143,6 @@ export function NotificationsTab() {
         <Card className="border-border/70 bg-muted/20">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Priority Alerts</CardTitle>
-            <CardDescription>Keep these on if you never want to miss direct attention.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {priorityNotificationRows.map((row) => renderNotificationToggleRow(row))}
@@ -174,7 +152,6 @@ export function NotificationsTab() {
         <Card className="border-border/70 bg-muted/20">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Everything Else</CardTitle>
-            <CardDescription>Lower-priority updates you can tune based on preference.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {secondaryNotificationRows.map((row) => renderNotificationToggleRow(row))}
@@ -184,17 +161,14 @@ export function NotificationsTab() {
         <Card className="border-border/70 bg-muted/20">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Privacy & Schedule</CardTitle>
-            <CardDescription>Control what is shown and when alerts are suppressed.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex min-h-11 items-center justify-between gap-3 py-2">
               <div className="space-y-1">
                 <Label htmlFor="notification-previews" className="text-sm font-medium">Show message previews</Label>
-                <p id="notification-previews-hint" className="text-xs text-muted-foreground">Hide content in notification bodies when disabled.</p>
               </div>
               <Switch
                 id="notification-previews"
-                aria-describedby="notification-previews-hint"
                 checked={notificationSettings.showPreviews}
                 onCheckedChange={(checked) => setNotificationPreviewsEnabled(Boolean(checked))}
               />
@@ -204,11 +178,9 @@ export function NotificationsTab() {
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <Label htmlFor="notification-quiet-hours" className="text-sm font-medium">Quiet hours</Label>
-                  <p id="notification-quiet-hours-hint" className="text-xs text-muted-foreground">Suppress all notifications during this time range.</p>
                 </div>
                 <Switch
                   id="notification-quiet-hours"
-                aria-describedby="notification-quiet-hours-hint"
                 checked={notificationSettings.quietHoursEnabled}
                   onCheckedChange={(checked) => setNotificationQuietHoursEnabled(Boolean(checked))}
                 />
@@ -252,7 +224,6 @@ export function NotificationsTab() {
       <Card className="border-border/70 bg-muted/20">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Permission & Test</CardTitle>
-          <CardDescription>Verify runtime permission and test delivery quickly.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-card/70 p-3">

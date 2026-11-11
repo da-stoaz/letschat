@@ -55,7 +55,6 @@ export function ConnectionTab() {
             {STATUS_LABELS[status]}
           </Badge>
         </div>
-        <p className="text-xs text-muted-foreground">The LetsChat server domain this app is signed in to.</p>
 
         {/* Native disclosure — nobody needs these until something is broken, and
           then they are the first thing an operator asks for. */}
