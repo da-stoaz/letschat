@@ -4,7 +4,7 @@ import type { Server, ServerInvitePolicy } from '../../types/domain'
 import { invitePolicyLabel } from './helpers'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -142,7 +142,6 @@ export function ServerAccessSettings({ server, isOwner, invitePolicySaving, disc
           <ShieldCheckIcon className="size-4 text-muted-foreground" />
           Access &amp; Discovery
         </CardTitle>
-        <CardDescription>Who can find this space and how new members get in.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <section className="space-y-2">

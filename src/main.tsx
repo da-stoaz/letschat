@@ -1,3 +1,6 @@
+import { CompatibilityNotice } from './features/setup/CompatibilityNotice'
+import { HostConfirmDialog } from './features/setup/HostConfirmDialog'
+import { isHostedWebBuild } from './lib/tauri'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
@@ -14,7 +17,7 @@ import { useServerConfigStore } from './stores/serverConfigStore'
 const queryClient = new QueryClient()
 
 function initializePersistedSpacetime(): void {
-  if (useServerConfigStore.getState().config !== null) {
+  if (!isHostedWebBuild() && useServerConfigStore.getState().config !== null) {
     // Failure is surfaced via the connection store's 'error' status (App shows a
     // retry screen); swallow the rejection here so it isn't an unhandled reject.
     void initializeSpacetime().catch(() => {})
@@ -35,6 +38,8 @@ createRoot(document.getElementById('root')!).render(
         <TooltipProvider>
           <BrowserRouter>
             <App />
+            <CompatibilityNotice />
+            <HostConfirmDialog />
             <VideoPlayerHost />
           </BrowserRouter>
           <Toaster richColors closeButton position="top-right" />

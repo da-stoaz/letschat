@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { reducers } from '../lib/spacetimedb'
 import { useChannelsStore } from '../stores/channelsStore'
-import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -127,7 +127,6 @@ export function EditChannelModal({
     >
       <DialogHeader>
         <DialogTitle>Edit Channel</DialogTitle>
-        <DialogDescription>Update channel details.</DialogDescription>
       </DialogHeader>
       <div className="space-y-2">
         <Label htmlFor="edit-channel-name">Channel name</Label>

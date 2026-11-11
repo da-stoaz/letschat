@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useServerConfigStore, parseJoinLink, type ServerConfig } from '../stores/serverConfigStore'
-import { initializeSpacetime } from '../lib/spacetimedb'
+import { selectServer } from '../lib/selectServer'
 
 /**
  * Catches <c>letschat://join?…</c> deep links — cold-start (the OS launched
@@ -40,7 +40,6 @@ function sameConfig(a: ServerConfig | null, b: ServerConfig): boolean {
 
 export function useDeepLink(): void {
   const navigate = useNavigate()
-  const setConfig = useServerConfigStore((s) => s.setConfig)
 
   useEffect(() => {
     let cancelled = false
@@ -69,23 +68,9 @@ export function useDeepLink(): void {
       const previous = useServerConfigStore.getState().config
       if (sameConfig(previous, cfg)) return
 
-      // A deep link is a config handed over by someone else, so both an
-      // unfamiliar host and a moved one stop for confirmation. The dialog
-      // finishes the connect when the user accepts.
-      if (!useServerConfigStore.getState().requestConnect(cfg, { confirmUnknown: true })) return
-
-      const switching = previous !== null
-      setConfig(cfg)
-      void initializeSpacetime()
-
-      const toastId = `deeplink:${cfg.authServiceUrl}`
-      try {
-        const host = new URL(cfg.authServiceUrl).host
-        toast.success(switching ? `Switched to ${host}` : `Connected to ${host}`, { id: toastId })
-      } catch {
-        toast.success(switching ? 'Switched instance.' : 'Connection configured.', { id: toastId })
-      }
-      navigate('/')
+      void selectServer(cfg, { confirmUnknown: true }).then(() => navigate('/')).catch(() => {
+        // The shared compatibility notice owns retry and recovery.
+      })
     }
 
     async function init() {
@@ -142,5 +127,5 @@ export function useDeepLink(): void {
     return () => {
       cancelled = true
     }
-  }, [navigate, setConfig])
+  }, [navigate])
 }

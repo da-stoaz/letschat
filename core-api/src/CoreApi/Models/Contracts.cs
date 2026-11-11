@@ -187,7 +187,7 @@ public sealed record DownloadUrlsResponse(List<DownloadUrlItem> Items);
 // lowercase keys the client's discovery parser requires
 // (spacetimedb / auth / livekit / database). The version triple uses
 // camelCase keys (serverVersion / recommendedClient / minClient) so the
-// landing page and future client-side update gating can read them.
+// landing page and client compatibility preflight can read them.
 public sealed record WellKnownResponse(
     string Spacetimedb,
     string Auth,
@@ -196,6 +196,7 @@ public sealed record WellKnownResponse(
     string ServerVersion,
     string RecommendedClient,
     string MinClient,
+    int ClientProtocol,
     long UploadPartSizeBytes,
     long UploadMaxFileSizeBytes,
     long DailyUploadQuotaBytes,

@@ -19,7 +19,6 @@ if (!lanIp) {
 
 const authPort = Number(process.env.AUTH_PORT ?? 8787)
 const adminPort = Number(process.env.ADMIN_PORT ?? 8788)
-const spacetimePort = Number(process.env.SPACETIMEDB_PORT ?? 4300)
 const livekitPort = Number(process.env.LIVEKIT_PORT ?? 7880)
 const minioPort = Number(process.env.MINIO_PORT ?? 4390)
 
@@ -34,7 +33,7 @@ const env: NodeJS.ProcessEnv = {
   // URLs that the client receives and dials directly. All must point at the
   // LAN IP so a remote client doesn't try to hit its own loopback.
   DISCOVERY_AUTH_URL: `http://${lanIp}:${authPort}`,
-  DISCOVERY_SPACETIMEDB_URI: `ws://${lanIp}:${spacetimePort}`,
+  DISCOVERY_SPACETIMEDB_URI: `ws://${lanIp}:${authPort}`,
   DISCOVERY_LIVEKIT_URL: `ws://${lanIp}:${livekitPort}`,
   DISCOVERY_WEB_URL: process.env.DISCOVERY_WEB_URL ?? `http://${lanIp}:5173`,
   // Baked into MinIO presigned upload/download URLs. core-api still talks

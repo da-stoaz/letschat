@@ -1,3 +1,4 @@
+import { compareMessages } from '../../lib/messageOrder'
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDownIcon } from 'lucide-react'
 import { MessageBubble, type MessageGroup, type RenderableMessage } from '../channels/MessageBubble'
@@ -116,7 +117,7 @@ export const ChatMessageFeed = forwardRef<ChatMessageFeedHandle, {
   const touchStartY = useRef<number | null>(null)
 
   const sortedMessages = useMemo(
-    () => [...messages].sort((a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt)),
+    () => [...messages].sort(compareMessages),
     [messages],
   )
 

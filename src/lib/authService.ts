@@ -1,3 +1,4 @@
+import { requireCurrentCompatibility, connectionKey, CompatibilityError } from './compatibility'
 import type { Identity } from '../types/domain'
 import { AUTH_SESSION_KEY, useServerConfigStore } from '../stores/serverConfigStore'
 import { startConfirmationCooldown } from '../features/auth/confirmationCooldown'
@@ -205,7 +206,11 @@ async function sendJson<TResponse, TPayload extends Record<string, unknown>>(
   payload: TPayload,
   rateLimitKey?: string,
 ): Promise<TResponse> {
-  const AUTH_SERVICE_URL = useServerConfigStore.getState().config?.authServiceUrl
+  const startsSession = /^\/auth\/(login|register|link|verify|renew-session)$/.test(path)
+  const admitted = await requireCurrentCompatibility(startsSession)
+  const selected = useServerConfigStore.getState().config
+  if (!selected || connectionKey(selected) !== admitted) throw new CompatibilityError('The selected server changed.')
+  const AUTH_SERVICE_URL = selected.authServiceUrl
   if (!AUTH_SERVICE_URL) {
     throw new Error('Server not configured. Please complete setup first.')
   }
@@ -238,6 +243,9 @@ async function sendJson<TResponse, TPayload extends Record<string, unknown>>(
     clearTimeout(timeout)
   }
 
+  const current = useServerConfigStore.getState().config
+  if (!current || connectionKey(current) !== admitted) throw new CompatibilityError('The selected server changed.')
+
   if (!response.ok) {
     if (response.status === 429 && rateLimitKey) {
       const header = response.headers.get('Retry-After')
@@ -253,7 +261,10 @@ async function sendJson<TResponse, TPayload extends Record<string, unknown>>(
   // 204 has no body — parsing it as JSON would turn a success into an error.
   if (response.status === 204) return undefined as TResponse
 
-  return (await response.json()) as TResponse
+  const result = (await response.json()) as TResponse
+  const active = useServerConfigStore.getState().config
+  if (!active || connectionKey(active) !== admitted) throw new CompatibilityError('The selected server changed.')
+  return result
 }
 
 export async function authServiceRegister(payload: RegisterPayload): Promise<RegisterResult> {

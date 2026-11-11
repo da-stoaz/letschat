@@ -14,7 +14,7 @@ import { canInviteUsers } from '../lib/permissions'
 import { isHostedWebBuild } from '../lib/tauri'
 import { fetchWellKnown } from '../lib/discovery'
 import { useServerConfigStore } from '../stores/serverConfigStore'
-import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -355,7 +355,6 @@ export function InviteModal({ serverId, onClose }: { serverId: number; onClose: 
           <LinkIcon className="size-4 text-primary" />
           Invite to {server?.name ?? 'Space'}
         </DialogTitle>
-        <DialogDescription>Invite people directly or create shareable space links.</DialogDescription>
       </DialogHeader>
 
       <Tabs

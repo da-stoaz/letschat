@@ -1,3 +1,4 @@
+import { CompatibilityError, ensureServerCompatibility } from '../compatibility'
 import { DbConnection, tables } from '../../generated'
 import { cancelPendingRefreshes, watchLiveTables } from './events'
 import { syncAll, resetClientState } from './sync'
@@ -7,6 +8,8 @@ import { useConnectionStore, type ConnectionStatus } from '../../stores/connecti
 import { useServerConfigStore } from '../../stores/serverConfigStore'
 import { isDesktopTauriRuntime } from '../tauri'
 import { WEB_WS_COMPRESSION } from '../runtimeConfig'
+import { startHistoryRefresh } from './historyRefresh'
+import { cancelHistoryRequests } from './history'
 
 export type SpacetimeDBClient = {
   connection: DbConnection | null
@@ -21,6 +24,7 @@ let connection: DbConnection | null = null
 let subscriptionHandle: { unsubscribe: () => void } | null = null
 let connectPromise: Promise<void> | null = null
 let liveEventsEnabled = false
+let stopHistoryRefresh: (() => void) | null = null
 
 // ─── Keepalive + reconnect ─────────────────────────────────────────────────
 // The SpacetimeDB SDK has no built-in heartbeat or auto-reconnect (it only
@@ -79,6 +83,9 @@ function setStatus(status: ConnectionStatus, errorMessage?: string | null): void
 // already inside the SDK's onDisconnect, where the socket is closed and
 // re-closing it could re-enter the callback.
 function teardownConnection(closeSocket = false): void {
+  stopHistoryRefresh?.()
+  stopHistoryRefresh = null
+  cancelHistoryRequests()
   subscriptionHandle?.unsubscribe()
   subscriptionHandle = null
   liveEventsEnabled = false
@@ -288,6 +295,7 @@ async function connectWithUri(uri: string, database: string, reportErrors: boole
         liveEventsEnabled = true
         establishedThisConnection = true
         if (appliedOnce) return
+        stopHistoryRefresh = startHistoryRefresh(nextConnection)
         appliedOnce = true
         clearTimeout(connectTimeout)
         resolveApplied?.()
@@ -374,7 +382,8 @@ function scheduleReconnect(): void {
   reconnectAttempts += 1
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
-    void connect().catch(() => {
+    void connect().catch((error: unknown) => {
+      if (error instanceof CompatibilityError && !error.retryable) return
       scheduleReconnect()
     })
   }, delay)
@@ -393,8 +402,10 @@ export async function connect(): Promise<void> {
   }
   const { spacetimedbUri: SPACETIMEDB_URI, spacetimedbDatabase: SPACETIMEDB_DATABASE } = serverConfig
 
-  connectPromise = (async () => {
+  const attemptPromise = (async () => {
     setStatus('connecting')
+    await ensureServerCompatibility(serverConfig, true)
+    if (abandoned()) return
 
     // `reportErrors` controls whether a final-candidate failure surfaces a
     // user-facing "Connection Error" notification. We suppress it on the first
@@ -411,15 +422,7 @@ export async function connect(): Promise<void> {
         try {
           await connectWithUri(candidate, SPACETIMEDB_DATABASE, isLastCandidate && reportErrors)
 
-          if (candidate !== SPACETIMEDB_URI) {
-            const currentConfig = useServerConfigStore.getState().config
-            if (currentConfig && currentConfig.spacetimedbUri === SPACETIMEDB_URI) {
-              useServerConfigStore.getState().setConfig({
-                ...currentConfig,
-                spacetimedbUri: candidate,
-              })
-            }
-          }
+          // Keep discovered/pinned endpoints stable; loopback fallback is transport-local.
           return
         } catch (error) {
           errors.push(`${candidate} -> ${getConnectionErrorDetails(error)}`)
@@ -467,8 +470,9 @@ export async function connect(): Promise<void> {
     }
   })()
 
+  connectPromise = attemptPromise
   try {
-    await connectPromise
+    await attemptPromise
     if (abandoned()) return
     reconnectAttempts = 0
     startHeartbeat()
@@ -484,7 +488,7 @@ export async function connect(): Promise<void> {
     setStatus('error', getConnectionErrorDetails(error))
     throw error
   } finally {
-    connectPromise = null
+    if (connectPromise === attemptPromise) connectPromise = null
   }
 }
 

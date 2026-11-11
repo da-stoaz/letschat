@@ -20,7 +20,7 @@ production backend is `core-api`. The removed Rust `auth-service` is only
 relevant to historical migrations.
 
 For data ownership, request flows, and trust boundaries, see
-[`CODEBASE.md`](CODEBASE.md) and [`SECURITY.md`](SECURITY.md).
+[`CODEBASE.md`](docs/CODEBASE.md) and [`SECURITY.md`](docs/SECURITY.md).
 
 ## Local development
 
@@ -75,14 +75,16 @@ documented local stack.
 ## Production and documentation
 
 Production uses `docker-compose.prod.base.yml` with either the tunnel or Caddy
-overlay. Follow [`DEPLOYMENT.md`](DEPLOYMENT.md); do not expose internal service
+overlay. Follow [`DEPLOYMENT.md`](docs/DEPLOYMENT.md); do not expose internal service
 ports directly.
 
 | Document | Purpose |
 |---|---|
-| [`CODEBASE.md`](CODEBASE.md) | Current architecture and repository map |
-| [`SECURITY.md`](SECURITY.md) | Security model, invariants, and review workflow |
-| [`BUG_ANALYSIS.md`](BUG_ANALYSIS.md) | Finding register and remediation status |
-| [`DEPLOYMENT.md`](DEPLOYMENT.md) | Production deployment and operations |
+| [`CODEBASE.md`](docs/CODEBASE.md) | Current architecture and repository map |
+| [`SECURITY.md`](docs/SECURITY.md) | Security model, invariants, and review workflow |
+| [`BUG_ANALYSIS.md`](Findings/BUG_ANALYSIS.md) | Finding register and remediation status |
+| [`DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Production deployment and operations |
 | [`core-api/README.md`](core-api/README.md) | Control-plane API development and configuration |
-| [`CLAUDE.md`](CLAUDE.md) | Repository-specific implementation guidance |
+| [`TODO.md`](docs/TODO.md) | Remaining feature work |
+| [`CODING_RULES.md`](docs/CODING_RULES.md) | Implementation and UI rules |
+| [`CLAUDE.md`](docs/CLAUDE.md) | Repository-specific implementation guidance |

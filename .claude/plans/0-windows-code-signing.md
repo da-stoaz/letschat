@@ -4,7 +4,7 @@
 > SignPath application, CI integration, and signed Windows validation remain
 > unchecked. This is a proposal, not a description of the current release
 > pipeline. Current operational documentation lives in
-> [`DEPLOYMENT.md`](../../DEPLOYMENT.md).
+> [`DEPLOYMENT.md`](../../docs/DEPLOYMENT.md).
 
 ## Context
 

@@ -1,3 +1,5 @@
+import { selectServer, cancelServerSelection } from '../../lib/selectServer'
+import { CLIENT_VERSION } from '../../lib/clientCompatibility'
 import { CopyButton } from '@/components/CopyButton'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -30,7 +32,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 export function ConnectionTab() {
   const config = useServerConfigStore((s) => s.config)
   const knownHosts = useServerConfigStore((s) => s.knownHosts)
-  const setConfig = useServerConfigStore((s) => s.setConfig)
   const clearConfig = useServerConfigStore((s) => s.clearConfig)
   const status = useConnectionStore((s) => s.status)
   const identity = useConnectionStore((s) => s.identity)
@@ -54,7 +55,6 @@ export function ConnectionTab() {
             {STATUS_LABELS[status]}
           </Badge>
         </div>
-        <p className="text-xs text-muted-foreground">The LetsChat server domain this app is signed in to.</p>
 
         {/* Native disclosure — nobody needs these until something is broken, and
           then they are the first thing an operator asks for. */}
@@ -64,6 +64,7 @@ export function ConnectionTab() {
             Technical details
           </summary>
           <div className="space-y-1.5 px-3 pb-3 font-mono text-xs text-muted-foreground">
+            <DetailRow label="App version" value={CLIENT_VERSION} />
             <DetailRow label="SpacetimeDB" value={config.spacetimedbUri} />
             <DetailRow label="Auth" value={config.authServiceUrl} />
             <DetailRow label="LiveKit" value={config.livekitUrl} />
@@ -96,11 +97,7 @@ export function ConnectionTab() {
                     size="sm"
                     className="w-full justify-start"
                     onClick={() => {
-                      setConfig(host)
-                      // Full reload so bootstrap re-runs against the new host —
-                      // simpler and more reliable than tearing the live
-                      // connection down and rebuilding it in place.
-                      window.location.assign('/auth')
+                      void selectServer(host).then(() => navigate('/auth')).catch(() => {})
                     }}
                   >
                     <ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -115,6 +112,7 @@ export function ConnectionTab() {
               variant="ghost"
               size="sm"
               onClick={() => {
+                cancelServerSelection()
                 clearConfig()
                 navigate('/setup')
               }}

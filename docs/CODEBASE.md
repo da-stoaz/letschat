@@ -3,7 +3,7 @@
 > Architecture baseline reviewed 2026-09-15 at version 1.0.14.
 >
 > This document describes the current system. Security findings and feature
-> gaps belong in `BUG_ANALYSIS.md`, so they cannot silently turn this map into
+> gaps belong in `Findings/BUG_ANALYSIS.md`, so they cannot silently turn this map into
 > another stale backlog.
 
 ## System at a glance
@@ -24,7 +24,7 @@ React/Tauri client
   ├─ HTTPS ───────────────> core-api ─────> PostgreSQL
   │                           ├───────────> MinIO
   │                           └─ token ───> LiveKit
-  └─ WebSocket + OIDC JWT ─> SpacetimeDB
+  └─ WebSocket + OIDC JWT ─> core-api gateway ─> SpacetimeDB
                                 └─ subscription updates ─> client stores
 
 archive-worker ────────────> SpacetimeDB
@@ -66,6 +66,8 @@ src/
 src-tauri/                 native commands, capabilities, and packaging
 archive-worker/            archive process
 site/                      static Astro site
+docs/                      architecture, security, deployment, and feature backlog
+Findings/                  detailed audits and remediation register
 scripts/                   publishing, deployment, and security helpers
 docker-compose.dev.yml     local dependencies
 docker-compose.prod.base.yml
@@ -80,10 +82,15 @@ docker-compose.prod.caddy.yml
 1. The client discovers the deployment through
    `/.well-known/letschat.json`.
 2. `core-api` authenticates the account and returns a revocable application
-   session plus a short-lived OIDC access token.
-3. SpacetimeDB validates that token against the configured issuer and JWKS.
+   session plus an OIDC access token.
+3. The SDK exchanges the OIDC token for a single-use gateway ticket. The gateway
+   checks current PostgreSQL account access before proxying the socket to
+   SpacetimeDB, which validates the original token against the issuer and JWKS.
 4. The module maps the trusted token subject to its `User` row. Reducers reject
    callers without the required membership, role, friendship, or ownership.
+5. Credential/status changes close revoked public sockets, including their
+   subscriptions and procedures. Periodic checks catch external changes and
+   expiry. Module access state is replayed from PostgreSQL after outages.
 
 ### Chat mutation and synchronization
 
@@ -94,7 +101,26 @@ docker-compose.prod.caddy.yml
    source of truth.
 
 Messages initially synchronize in bounded windows and older history is loaded
-through explicit pagination reducers.
+through explicit pagination procedures.
+
+History pages use an exclusive `(sent_at, id)` cursor. The client preserves the
+server's microseconds in ISO strings, and views, pages and stores share that
+ordering. The additive `load_older_*_messages_page` procedures handle timestamp
+ties; original timestamp-only procedures remain for released clients. New clients
+fall back only on the older module's `No such procedure` response. Complete paging
+across equal timestamps requires both the updated client and module.
+
+Backfilled channel/DM rows are revalidated by ID in batches of at most 200.
+Each connection starts a refresh after its initial subscription applies, then
+five seconds after each completed cycle; returning to a visible tab also
+refreshes. The `refresh_channel_messages` / `refresh_direct_messages` procedures
+recheck read access and use primary-key lookups. Edits and deletion flags replace
+cached values; absent or inaccessible IDs remove them. Live rows win overlapping
+updates, and stopped connections cannot apply late refresh or paging replies.
+No requests are sent without backfill. Failed requests retain the cache for retry.
+Older modules without these additive procedures keep their previous behavior
+until upgraded and reconnected. Cost scales with loaded history; scope revisions
+are the next step if periodic reads become expensive.
 
 ### Account settings
 
@@ -177,6 +203,18 @@ user switches filters, restores raw audio on failure, and reports runtime status
 separately from the persisted preference. Each processor owns and closes its
 AudioContext so its WASM memory can be released after switching or hanging up.
 
+Call playback has device-local, persisted master volume and separate voice/stream
+levels per participant (0–200%, with 100% unchanged). The app-shell audio renderer
+applies their product through Web Audio gain to each remote track in channels and
+DMs, then plays the processed stream through the selected HTML audio output sink.
+The tracks share one playback context, closed when the last track leaves.
+Deafen temporarily silences both sources
+without changing the saved levels. Call docks, call options and Audio settings
+expose master volume. Per-person levels live on the person: right-clicking (or
+long-pressing) someone in your current call, on a call tile, sidebar avatar or member
+list row, opens a context menu with their voice and, while they share audio, stream
+volume. Reconnected tracks reuse the same participant preferences.
+
 ### Instance administration and space discovery
 
 ASP.NET Core Identity's `Admin` role is authoritative for human instance
@@ -252,7 +290,7 @@ configuration. See `DEPLOYMENT.md` for the exact ports and bootstrap procedure.
 - Treat generated bindings as build output; change the Rust module first.
 - Keep `README.md`, this file, `SECURITY.md`, and `DEPLOYMENT.md` synchronized
   whenever a service boundary or production component changes.
-- Record actionable defects and their status in `BUG_ANALYSIS.md`; link to code
+- Record actionable defects and their status in `Findings/BUG_ANALYSIS.md`; link to code
   and tests instead of duplicating architectural descriptions there.
 - Date scanner snapshots. Live dependency status belongs in GitHub's
   Dependabot/Security views rather than an undated count in architecture docs.

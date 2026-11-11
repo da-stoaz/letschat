@@ -1,3 +1,4 @@
+import { connectionKey, useCompatibilityStore } from './lib/compatibility'
 import { useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
@@ -28,7 +29,6 @@ import { ensureNotificationPermission } from './lib/notifications'
 import { useVoiceLifecycle } from './hooks/useVoiceLifecycle'
 import { initializeSpacetime, REAUTHENTICATION_REQUIRED_MESSAGE } from './lib/spacetimedb'
 import { SplashScreen } from './components/SplashScreen'
-import { HostConfirmDialog } from './features/setup/HostConfirmDialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { LoaderCircleIcon, TriangleAlertIcon } from 'lucide-react'
@@ -44,7 +44,9 @@ function App() {
   const connectionError = useConnectionStore((s) => s.errorMessage)
   const clearServerConfig = useServerConfigStore((s) => s.clearConfig)
   const notificationsEnabled = useUiStore((s) => s.notificationSettings.enabled)
-  const isConfigured = useServerConfigStore((s) => s.config !== null)
+  const config = useServerConfigStore((s) => s.config)
+  const isConfigured = config !== null
+  const admittedKey = useCompatibilityStore((s) => s.admittedKey)
   const hasHydrated = useServerConfigStore((s) => s.hasHydrated)
   const location = useLocation()
   const navigate = useNavigate()
@@ -70,6 +72,9 @@ function App() {
     return webAutoConfig === 'failed' ? <WebConnectErrorPage /> : <SplashScreen />
   }
 
+  // Do not mount auth forms or their background polls before admission.
+  if (config && admittedKey !== connectionKey(config)) return <SplashScreen />
+
   // Desktop / local dev only: unconfigured clients pick a server via Setup.
   if (!isHostedWeb && !isConfigured && !onSetupRoute && !onJoinRoute) {
     return <Navigate to="/setup" replace />
@@ -87,7 +92,6 @@ function App() {
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">Establishing realtime connection...</CardContent>
         </Card>
-        <HostConfirmDialog />
       </main>
     )
   }
@@ -116,13 +120,12 @@ function App() {
               {authenticationRequired ?
                 <Button onClick={() => navigate('/auth')}>Sign in again</Button>
               : <Button onClick={() => void initializeSpacetime().catch(() => {})}>Try again</Button>}
-              <Button variant="outline" onClick={() => clearServerConfig()}>
-                Change server
+              <Button variant="outline" onClick={() => isHostedWeb ? window.location.reload() : clearServerConfig()}>
+                {isHostedWeb ? 'Reload' : 'Change server'}
               </Button>
             </div>
           </CardContent>
         </Card>
-        <HostConfirmDialog />
       </main>
     )
   }
@@ -153,7 +156,6 @@ function App() {
       </Route>
         </Routes>
       </div>
-      <HostConfirmDialog />
     </div>
   )
 }

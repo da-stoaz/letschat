@@ -68,14 +68,60 @@ fn page_size(limit: u32) -> usize {
     (limit as usize).clamp(1, MAX_PAGE)
 }
 
+/// Revalidate only history already cached by the caller. Missing or inaccessible
+/// IDs are omitted so clients can remove hard-deleted and no-longer-readable rows.
+#[spacetimedb::procedure]
+pub fn refresh_channel_messages(
+    ctx: &mut ProcedureContext,
+    channel_id: u64,
+    message_ids: Vec<u64>,
+) -> Vec<Message> {
+    let caller = ctx.sender();
+    ctx.with_tx(|tx| {
+        if require_readable_account(tx, caller).is_err() {
+            return Vec::new();
+        }
+        let Some(channel) = tx.db.channel().id().find(channel_id) else {
+            return Vec::new();
+        };
+        if require_channel_access(tx, &channel, caller).is_err() {
+            return Vec::new();
+        }
+        message_ids.iter().copied().take(MAX_PAGE)
+            .filter_map(|id| tx.db.message().id().find(id))
+            .filter(|message| message.channel_id == channel_id)
+            .collect()
+    })
+}
+
+/// DM history uses the same per-conversation authorization as paging and views.
+#[spacetimedb::procedure]
+pub fn refresh_direct_messages(
+    ctx: &mut ProcedureContext,
+    partner: Identity,
+    message_ids: Vec<u64>,
+) -> Vec<DirectMessage> {
+    let caller = ctx.sender();
+    ctx.with_tx(|tx| {
+        if require_readable_account(tx, caller).is_err() {
+            return Vec::new();
+        }
+        message_ids.iter().copied().take(MAX_PAGE)
+            .filter_map(|id| tx.db.direct_message().id().find(id))
+            .filter(|message| (message.sender_identity == caller && message.recipient_identity == partner)
+                || (message.recipient_identity == caller && message.sender_identity == partner))
+            .collect()
+    })
+}
+
 /// The caller must have an account, and it must not be disabled — the read-side
 /// half of `require_account`.
 ///
 /// The token-generation floor that `require_account` also enforces cannot be
 /// checked here: inside `with_tx` the sender is `Identity::ZERO` and no JWT is
-/// in scope, so there are no claims to read. That leaves a revoked token able to
-/// page history it could already read through the views — the same read-side gap
-/// BUG_ANALYSIS A4 documents, not a new one. Writes stay fully gated.
+/// in scope, so there are no claims to read. Public reads must pass through the
+/// core-api chat gateway, which checks the generation and closes revoked
+/// sockets. The raw SpacetimeDB API is a private operator/service boundary.
 fn require_readable_account(tx: &TxContext, caller: Identity) -> Result<(), String> {
     let user = tx
         .db
@@ -95,9 +141,9 @@ fn require_readable_account(tx: &TxContext, caller: Identity) -> Result<(), Stri
 /// `by_channel_and_sent_at` / `by_sender_recipient_sent_at` index ranges. Same
 /// scan the view does; swap in the index range scan if paging a very long
 /// history ever shows up in a profile.
-fn older_than<T>(mut rows: Vec<T>, before: Timestamp, sent_at: impl Fn(&T) -> Timestamp, take: usize) -> Vec<T> {
-    rows.retain(|row| sent_at(row) < before);
-    rows.sort_by_key(|row| sent_at(row));
+fn older_than<T>(mut rows: Vec<T>, before: (Timestamp, u64), key: impl Fn(&T) -> (Timestamp, u64), take: usize) -> Vec<T> {
+    rows.retain(|row| key(row) < before);
+    rows.sort_by_key(key);
     let start = rows.len().saturating_sub(take);
     rows.split_off(start)
 }
@@ -116,6 +162,19 @@ pub fn load_older_channel_messages(
     before: Timestamp,
     limit: u32,
 ) -> Vec<Message> {
+    // Keep the original timestamp-only wire contract for released clients.
+    load_older_channel_messages_page(ctx, channel_id, before, 0, limit)
+}
+
+/// Page by the exclusive (timestamp, id) cursor, including timestamp ties.
+#[spacetimedb::procedure]
+pub fn load_older_channel_messages_page(
+    ctx: &mut ProcedureContext,
+    channel_id: u64,
+    before: Timestamp,
+    before_id: u64,
+    limit: u32,
+) -> Vec<Message> {
     let caller = ctx.sender();
     let take = page_size(limit);
 
@@ -131,7 +190,7 @@ pub fn load_older_channel_messages(
             require_channel_access(tx, &channel, caller)?;
 
             let history: Vec<Message> = tx.db.message().channel_id().filter(channel_id).collect();
-            Ok(older_than(history, before, |message| message.sent_at, take))
+            Ok(older_than(history, (before, before_id), |message| (message.sent_at, message.id), take))
         })();
 
         match page {
@@ -153,6 +212,19 @@ pub fn load_older_direct_messages(
     ctx: &mut ProcedureContext,
     partner: Identity,
     before: Timestamp,
+    limit: u32,
+) -> Vec<DirectMessage> {
+    // Keep the original timestamp-only wire contract for released clients.
+    load_older_direct_messages_page(ctx, partner, before, 0, limit)
+}
+
+/// Page by the exclusive (timestamp, id) cursor, including timestamp ties.
+#[spacetimedb::procedure]
+pub fn load_older_direct_messages_page(
+    ctx: &mut ProcedureContext,
+    partner: Identity,
+    before: Timestamp,
+    before_id: u64,
     limit: u32,
 ) -> Vec<DirectMessage> {
     let caller = ctx.sender();
@@ -182,6 +254,6 @@ pub fn load_older_direct_messages(
             .filter(|row| seen.insert(row.id))
             .collect();
 
-        older_than(thread, before, |message| message.sent_at, take)
+        older_than(thread, (before, before_id), |message| (message.sent_at, message.id), take)
     })
 }

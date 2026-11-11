@@ -15,12 +15,12 @@ const models = [
 function NoiseFilterStatus({ enabled, supported }: { enabled: boolean; supported: boolean }) {
   const status = useNoiseFilterStore(s => s.status)
   const error = useNoiseFilterStore(s => s.error)
-  let message = 'Starts when your microphone is on.'
+  // Only say something the switch doesn't already show.
+  let message: string | null = null
   if (!supported) message = 'Not available on this device.'
-  else if (!enabled) message = 'Noise suppression is off.'
-  else if (status === 'error') message = error ?? 'Could not start noise suppression. Turn it off and on to retry.'
-  else if (status === 'loading') message = 'Starting noise suppression…'
-  else if (status === 'active') message = 'Filtering your microphone.'
+  else if (enabled && status === 'error') message = error ?? 'Could not start noise suppression. Turn it off and on to retry.'
+  else if (enabled && status === 'loading') message = 'Starting noise suppression…'
+  if (!message) return null
 
   return <p role="status" className={cn('border-t pt-3 text-xs leading-relaxed', enabled && status === 'error' ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
 }
@@ -36,11 +36,8 @@ export function NoiseFilterSettings() {
   return <div className="space-y-3">
     <div className="flex items-center justify-between gap-4">
       <Label htmlFor={`${id}-enabled`}>Noise suppression</Label>
-      <Switch id={`${id}-enabled`} aria-describedby={`${id}-description`} checked={enabled} disabled={!supported} onCheckedChange={setEnabled} />
+      <Switch id={`${id}-enabled`} checked={enabled} disabled={!supported} onCheckedChange={setEnabled} />
     </div>
-    <p id={`${id}-description`} className="text-xs leading-relaxed text-muted-foreground">
-      Reduces microphone background noise so your voice stays clear.
-    </p>
     {enabled && supported ? <div className="space-y-2">
       <Label htmlFor={`${id}-model`} className="text-xs">Filter</Label>
       <Select items={models} value={model} onValueChange={value => { if (value) setModel(value) }}>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { reducers } from '../lib/spacetimedb'
-import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -31,7 +31,6 @@ export function CreateServerModal({ onClose }: { onClose: () => void }) {
     >
       <DialogHeader>
         <DialogTitle>Create Space</DialogTitle>
-        <DialogDescription>Set a name for your new space.</DialogDescription>
       </DialogHeader>
 
       <div className="space-y-2">

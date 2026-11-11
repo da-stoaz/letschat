@@ -12,6 +12,7 @@ namespace CoreApi.Pages.Admin;
 public sealed class PendingModel(
     UserManager<ApplicationUser> users,
     AccountEmailService accountEmail,
+    AccountAccessService access,
     AuditService audit) : PageModel
 {
     public List<ApplicationUser> Pending { get; private set; } = [];
@@ -33,8 +34,12 @@ public sealed class PendingModel(
         if (user is { Status: AccountStatus.EmailVerified })
         {
             user.Status = AccountStatus.Active;
+            user.TokenGeneration++;
             user.UpdatedAtUtc = DateTime.UtcNow;
-            await users.UpdateAsync(user);
+            var result = await users.UpdateAsync(user);
+            if (!result.Succeeded)
+                throw ApiException.Conflict("Could not update account access. Reload and try again.");
+            await access.SyncAsync(user);
             await audit.RecordAsync(
                 User.Identity?.Name ?? "admin", "user.approve", "user", user.Id,
                 $"Approved {user.UserName}");
@@ -59,8 +64,12 @@ public sealed class PendingModel(
         if (user is { Status: AccountStatus.EmailVerified })
         {
             user.Status = AccountStatus.Rejected;
+            user.TokenGeneration++;
             user.UpdatedAtUtc = DateTime.UtcNow;
-            await users.UpdateAsync(user);
+            var result = await users.UpdateAsync(user);
+            if (!result.Succeeded)
+                throw ApiException.Conflict("Could not update account access. Reload and try again.");
+            await access.SyncAsync(user);
             await audit.RecordAsync(
                 User.Identity?.Name ?? "admin", "user.reject", "user", user.Id,
                 $"Rejected {user.UserName}");

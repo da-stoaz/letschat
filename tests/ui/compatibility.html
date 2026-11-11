@@ -1,0 +1,5 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Compatibility regression</title></head><body><div id="root"></div><script>
+const memory = new Map();
+Object.defineProperty(window, 'localStorage', { value: { getItem: key => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, String(value)), removeItem: key => memory.delete(key) } });
+if (new URLSearchParams(location.search).has('hosted')) window.__LETSCHAT_CONFIG__ = { webConnectUrl: 'https://fixture.test' };
+</script><script type="module" src="./compatibility.tsx"></script></body></html>

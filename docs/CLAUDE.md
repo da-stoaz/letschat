@@ -3,14 +3,14 @@
 Use the repository's canonical documents instead of copying their content into
 this file:
 
-- [`README.md`](README.md) — local setup and common commands
+- [`README.md`](../README.md) — local setup and common commands
 - [`CODEBASE.md`](CODEBASE.md) — current architecture, request flows, repository
   map, and verification matrix
 - [`SECURITY.md`](SECURITY.md) — trust boundaries and security invariants
 - [`DEPLOYMENT.md`](DEPLOYMENT.md) — production configuration and operations
 - [`CODING_RULES.md`](CODING_RULES.md) — implementation and UI rules
-- [`BUG_ANALYSIS.md`](BUG_ANALYSIS.md) — open findings and remediation status
-- [`core-api/README.md`](core-api/README.md) — control-plane development
+- [`Findings/BUG_ANALYSIS.md`](../Findings/BUG_ANALYSIS.md) — open findings and remediation status
+- [`core-api/README.md`](../core-api/README.md) — control-plane development
 
 Apply the document relevant to the code being changed. In particular:
 

@@ -1,3 +1,4 @@
+import { CLIENT_VERSION } from './clientCompatibility'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { authServiceGenerateLivekitToken, clearStoredAuthSessionToken, getStoredAuthSessionToken } from './authService'
@@ -122,7 +123,7 @@ export const tauriCommands = {
     if (isTauriRuntime()) return invoke<void>('minimize_to_tray')
   },
   getAppVersion: async () =>
-    isTauriRuntime() ? invoke<string>('get_app_version') : 'web',
+    isTauriRuntime() ? invoke<string>('get_app_version') : CLIENT_VERSION,
   saveAttachmentFile: async (url: string, fileName: string, operationId: string): Promise<boolean> => {
     if (!isTauriRuntime()) return false
     return invoke<boolean>('save_attachment_file', { url, fileName, operationId })

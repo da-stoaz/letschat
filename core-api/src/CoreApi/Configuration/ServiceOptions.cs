@@ -262,7 +262,7 @@ public sealed class ServiceOptions
             LiveKitApiKey = Get("LIVEKIT_API_KEY", "devkey"),
             LiveKitApiSecret = Get("LIVEKIT_API_SECRET", DevLiveKitApiSecret),
 
-            DiscoverySpacetimeDbUri = Get("DISCOVERY_SPACETIMEDB_URI", "ws://localhost:4300"),
+            DiscoverySpacetimeDbUri = Get("DISCOVERY_SPACETIMEDB_URI", "ws://localhost:8787"),
             DiscoveryAuthUrl = Get("DISCOVERY_AUTH_URL", "http://localhost:8787"),
             DiscoveryLiveKitUrl = Get("DISCOVERY_LIVEKIT_URL", "ws://localhost:7880"),
             DiscoveryWebUrl = GetOptional("DISCOVERY_WEB_URL")?.TrimEnd('/'),

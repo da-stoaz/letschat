@@ -1,10 +1,7 @@
 // Token revocation inside the chat module (BUG_ANALYSIS A4).
 //
-// The client talks to SpacetimeDB directly, so core-api's account checks are
-// simply not on that path. Disabling an account only stopped it signing in
-// again, and resetting a password revoked nothing at all — the stolen token
-// kept full chat access for its entire 30-day life. The module therefore holds
-// two facts per account, pushed by core-api:
+// Defense in depth behind the public gateway. These tests use the private
+// module API to verify two facts per account, replayed by core-api:
 //
 //   • `suspended`             — refuses every client-callable reducer outright.
 //   • `min_token_generation`  — refuses tokens minted before the last
@@ -131,6 +128,16 @@ describe('min_token_generation — a credential change ends existing sessions', 
     await setAccess(user, false, 2)
     expect(storedFloor(user)).toBe(5)
 
+    await expect(user.call('touch_presence', [])).rejects.toThrow(/session is no longer valid/)
+  })
+
+  it('does not let a delayed access snapshot undo a newer status change', async () => {
+    const user = await makeUser('status_order')
+    await setAccess(user, true, 2)
+    await setAccess(user, false, 1)
+    await expect(user.call('touch_presence', [])).rejects.toThrow(/account has been disabled/)
+    await setAccess(user, false, 3)
+    await setAccess(user, true, 2)
     await expect(user.call('touch_presence', [])).rejects.toThrow(/session is no longer valid/)
   })
 })

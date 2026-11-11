@@ -27,6 +27,7 @@ export function JoinLinkTab({ onConnect }: Props) {
       await onConnect(parsed)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Connection failed.')
+    } finally {
       setConnecting(false)
     }
   }

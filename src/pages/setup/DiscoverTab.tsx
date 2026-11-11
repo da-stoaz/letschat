@@ -40,6 +40,7 @@ export function DiscoverTab({ onConnect }: Props) {
       await onConnect(discovered)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Connection failed.')
+    } finally {
       setConnecting(false)
     }
   }

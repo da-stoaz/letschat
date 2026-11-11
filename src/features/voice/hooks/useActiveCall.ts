@@ -67,12 +67,11 @@ export function useActiveCall() {
 
   useEffect(() => {
     if (!joined) return
-    for (const participant of remoteParticipants) participant.setVolume(deafened ? 0 : 1)
     if (isDm && remoteParticipants.length > 0) setAnswered(true)
-  }, [joined, deafened, remoteParticipants, isDm, setAnswered])
+  }, [joined, remoteParticipants, isDm, setAnswered])
 
   const actions = useVoiceControlActions({
-    room, remoteParticipants, selfState: self,
+    room, selfState: self,
     audioInputId, videoInputId, hasScreenCapture, setError,
     patchVoiceState: async (patch) => {
       if (!self) return

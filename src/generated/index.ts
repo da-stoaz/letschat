@@ -124,8 +124,12 @@ import UseInviteReducer from "./use_invite_reducer";
 
 // Import all procedure arg schemas
 import * as LoadOlderChannelMessagesProcedure from "./load_older_channel_messages_procedure";
+import * as LoadOlderChannelMessagesPageProcedure from "./load_older_channel_messages_page_procedure";
 import * as LoadOlderDirectMessagesProcedure from "./load_older_direct_messages_procedure";
+import * as LoadOlderDirectMessagesPageProcedure from "./load_older_direct_messages_page_procedure";
 import * as LoadPinnedChannelMessagesProcedure from "./load_pinned_channel_messages_procedure";
+import * as RefreshChannelMessagesProcedure from "./refresh_channel_messages_procedure";
+import * as RefreshDirectMessagesProcedure from "./refresh_direct_messages_procedure";
 import * as ResolveInviteServerProcedure from "./resolve_invite_server_procedure";
 
 // Import all table schema definitions
@@ -534,8 +538,12 @@ const reducersSchema = __reducers(
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
   __procedureSchema("load_older_channel_messages", LoadOlderChannelMessagesProcedure.params, LoadOlderChannelMessagesProcedure.returnType),
+  __procedureSchema("load_older_channel_messages_page", LoadOlderChannelMessagesPageProcedure.params, LoadOlderChannelMessagesPageProcedure.returnType),
   __procedureSchema("load_older_direct_messages", LoadOlderDirectMessagesProcedure.params, LoadOlderDirectMessagesProcedure.returnType),
+  __procedureSchema("load_older_direct_messages_page", LoadOlderDirectMessagesPageProcedure.params, LoadOlderDirectMessagesPageProcedure.returnType),
   __procedureSchema("load_pinned_channel_messages", LoadPinnedChannelMessagesProcedure.params, LoadPinnedChannelMessagesProcedure.returnType),
+  __procedureSchema("refresh_channel_messages", RefreshChannelMessagesProcedure.params, RefreshChannelMessagesProcedure.returnType),
+  __procedureSchema("refresh_direct_messages", RefreshDirectMessagesProcedure.params, RefreshDirectMessagesProcedure.returnType),
   __procedureSchema("resolve_invite_server", ResolveInviteServerProcedure.params, ResolveInviteServerProcedure.returnType),
 );
 

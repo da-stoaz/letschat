@@ -34,7 +34,11 @@ permissions:
   packages: write
 
 jobs:
+  compatibility:
+    uses: ./.github/workflows/compatibility.yml
+
   build-backend:
+    needs: compatibility
     runs-on: ubuntu-latest
     environment: production
 
@@ -136,6 +140,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-tauri:
+    needs: compatibility
     environment: production
     strategy:
       fail-fast: false

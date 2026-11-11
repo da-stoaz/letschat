@@ -1,64 +1,30 @@
 import { useEffect, useState } from 'react'
 import { useServerConfigStore } from '../stores/serverConfigStore'
-import { discoverConfig } from '../lib/discovery'
-import { initializeSpacetime } from '../lib/spacetimedb'
+import { discoverConfig, normalizeServerUrl } from '../lib/discovery'
+import { selectServer } from '../lib/selectServer'
 import { isHostedWebBuild } from '../lib/tauri'
 import { WEB_CONNECT_URL } from '../lib/runtimeConfig'
 
 export type WebAutoConfigStatus = 'inactive' | 'discovering' | 'done' | 'failed'
+// Share work across StrictMode remounts, but let every mounted subscriber finish.
+let bootstrap: Promise<void> | null = null
 
-// Module-level guard: run the one-shot discovery at most once per page load,
-// surviving React StrictMode's mount/unmount/remount.
-let bootstrapStarted = false
-
-/**
- * Hosted-web bootstrap. A web build is single-tenant — locked to its own
- * deployment — so when a connect URL is configured and we're running in a
- * browser (not the Tauri desktop shell), auto-discover the instance config from
- * its connect URL and connect, skipping the desktop "pick a server" Setup
- * screen. Falls back to Setup (status `failed`) if discovery fails, so the user
- * is never stranded.
- *
- * Returns the bootstrap status so the app shell can show a splash while
- * discovering instead of flashing the Setup page.
- */
 export function useWebAutoConfig(): WebAutoConfigStatus {
   const hasHydrated = useServerConfigStore((s) => s.hasHydrated)
-  const setConfig = useServerConfigStore((s) => s.setConfig)
-
-  const isHostedWeb = isHostedWebBuild() && WEB_CONNECT_URL !== undefined
-
-  const [status, setStatus] = useState<WebAutoConfigStatus>(isHostedWeb ? 'discovering' : 'inactive')
-
+  const hosted = isHostedWebBuild()
+  const [status, setStatus] = useState<WebAutoConfigStatus>(hosted ? 'discovering' : 'inactive')
   useEffect(() => {
-    if (!isHostedWeb || !hasHydrated || bootstrapStarted) return
-    bootstrapStarted = true
-
+    if (!hosted || !hasHydrated) return
     let cancelled = false
-    void (async () => {
-      try {
-        // A persisted config (returning user) is honored as-is — no re-discovery.
-        if (useServerConfigStore.getState().config) {
-          if (!cancelled) setStatus('done')
-          return
-        }
-        const cfg = await discoverConfig(WEB_CONNECT_URL!)
-        if (cancelled) return
-        setConfig(cfg)
-        await initializeSpacetime()
-        if (!cancelled) setStatus('done')
-      } catch (error) {
-        console.error('[web] auto-config discovery failed:', error)
-        // Allow the Setup fallback (and a later manual retry) to proceed.
-        bootstrapStarted = false
-        if (!cancelled) setStatus('failed')
-      }
+    bootstrap ??= (async () => {
+      const root = normalizeServerUrl(WEB_CONNECT_URL!)
+      const saved = useServerConfigStore.getState().config
+      const config = saved && (saved.discoveryUrl ?? saved.authServiceUrl) === root
+        ? saved : await discoverConfig(root)
+      await selectServer(config)
     })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [isHostedWeb, hasHydrated, setConfig])
-
+    void bootstrap.then(() => { if (!cancelled) setStatus('done') }, () => { if (!cancelled) setStatus('failed') })
+    return () => { cancelled = true }
+  }, [hosted, hasHydrated])
   return status
 }

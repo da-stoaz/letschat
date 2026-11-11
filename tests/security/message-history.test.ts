@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { Identity, Timestamp } from 'spacetimedb'
 import { DbConnection } from '../../src/generated'
-import { BASE, DB, createChannel, createServer, makeFriends, makeUser, none, some, type TestUser } from './harness'
+import { BASE, DB, createChannel, createServer, makeAdmin, makeFriends, makeUser, none, ownerSql, some, timestamp, type TestUser } from './harness'
 
 // `my_channel_messages` / `my_direct_messages` used to return every message of
 // every channel of every space the caller belonged to, with no bound at all
@@ -140,6 +140,9 @@ describe('bounded message history', () => {
       limit: PAGE,
     })
     expect(page).toEqual([])
+    expect(await outsiderConn.procedures.loadOlderChannelMessagesPage({
+      channelId: BigInt(channelId), before: newestPageCursor(), beforeId: 0n, limit: PAGE,
+    })).toEqual([])
   })
 
   it('loads an older pin outside the subscription window only for a channel member', async () => {
@@ -176,5 +179,70 @@ describe('bounded message history', () => {
       limit: PAGE,
     })
     expect(theirs).toEqual([])
+    expect(await outsiderConn.procedures.loadOlderDirectMessagesPage({
+      partner: new Identity(`0x${partner.identity}`), before: newestPageCursor(), beforeId: 0n, limit: PAGE,
+    })).toEqual([])
+  })
+
+  it.each(['channel', 'dm', 'self-dm'])('pages all %s rows across a tied subscription boundary and multiple tied pages', async kind => {
+    // Archive restore gives deterministic microseconds and insertion order;
+    // sending messages against a real clock cannot reliably create ties.
+    const worker = await makeAdmin('cursor_fixture')
+    await worker.call('set_archive_service_identity', [worker.idArg])
+    const room = await createChannel(owner, await createServer(owner))
+    const partner = kind === 'self-dm' ? owner : await makeUser('cursor_partner')
+    const total = WINDOW + PAGE * 2 + 5
+    const micros = 1_790_000_000_123_456
+    let subscription: { unsubscribe(): void } | undefined
+    try {
+      // Allocate the first ID normally; restore advances the counter for the rest.
+      if (kind === 'channel') await owner.call('send_message', [room, 'cursor seed'])
+      else {
+        const seedPartner = kind === 'self-dm' ? await makeUser('cursor_seed') : partner
+        await makeFriends(owner, seedPartner)
+        await owner.call('send_direct_message', [seedPartner.idArg, 'cursor seed'])
+      }
+      const view = kind === 'channel' ? 'my_channel_messages' : 'my_direct_messages'
+      const seed = (await owner.sql(`SELECT id, content FROM ${view}`)).rows.find(row => row.content === 'cursor seed')!
+      const firstId = Number(seed.id)
+      const ids = Array.from({ length: total }, (_, index) => firstId + index)
+      const rows = ids.map((id, index) => kind === 'channel'
+        ? [id, room, owner.idArg, `cursor-${index}`, timestamp(micros - (index === 0 ? 1 : 0)), none, false]
+        : [id, index % 2 ? partner.idArg : owner.idArg, index % 2 ? owner.idArg : partner.idArg,
+          `cursor-${index}`, timestamp(micros - (index === 0 ? 1 : 0)), none, false, false])
+      await worker.call(kind === 'channel' ? 'archive_restore_message' : 'archive_restore_direct_message', [rows.reverse()])
+      subscription = await new Promise((resolve, reject) => {
+        const handle = ownerConn.subscriptionBuilder().onApplied(() => resolve(handle))
+          .onError((_ctx, error) => reject(error)).subscribe([`SELECT * FROM ${view}`])
+      })
+      const live = (kind === 'channel'
+        ? [...ownerConn.db.my_channel_messages.iter()].filter(row => row.channelId === BigInt(room))
+        : [...ownerConn.db.my_direct_messages.iter()].filter(row =>
+          (row.senderIdentity.toHexString() === owner.identity && row.recipientIdentity.toHexString() === partner.identity)
+          || (row.senderIdentity.toHexString() === partner.identity && row.recipientIdentity.toHexString() === owner.identity)))
+        .sort((a, b) => Number(a.id - b.id))
+      expect(live.map(row => Number(row.id))).toEqual(ids.slice(-WINDOW))
+      let cursor = live[0]
+      let loaded = live.map(row => Number(row.id))
+      const sizes: number[] = []
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const args = { before: cursor.sentAt, beforeId: cursor.id, limit: PAGE }
+        const page = kind === 'channel'
+          ? await ownerConn.procedures.loadOlderChannelMessagesPage({ channelId: BigInt(room), ...args })
+          : await ownerConn.procedures.loadOlderDirectMessagesPage({ partner: new Identity(partner.identity), ...args })
+        sizes.push(page.length)
+        loaded = [...page.map(row => Number(row.id)), ...loaded]
+        if (page.length < PAGE) break
+        cursor = page[0]
+      }
+      expect(sizes).toEqual([PAGE, PAGE, 5])
+      expect(loaded).toEqual(ids)
+      expect(new Set(loaded).size).toBe(total)
+    } finally {
+      subscription?.unsubscribe()
+      // These fixture restores must not leave the shared suite in restore mode.
+      ownerSql('DELETE FROM storage_restore_fence')
+      ownerSql(`UPDATE user SET is_admin = false WHERE identity = 0x${worker.identity}`)
+    }
   })
 })

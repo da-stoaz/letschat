@@ -9,7 +9,7 @@ Use this file as a compact operator reference.
 
 The deployment invariants and known residual risks are summarized in
 [`SECURITY.md`](SECURITY.md). The tracked code findings live in
-[`BUG_ANALYSIS.md`](BUG_ANALYSIS.md).
+[`Findings/BUG_ANALYSIS.md`](../Findings/BUG_ANALYSIS.md).
 
 > **Backend service:** production runs **`core-api`** (.NET / ASP.NET Core
 > Identity + PostgreSQL). The legacy Rust `auth-service` has been **removed**
@@ -64,7 +64,8 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml
 
 Both overlays route `spacetimedb:3000` through `chat-edge`. It allows only
 `POST /v1/identity/websocket-token` and `GET /v1/database/letschat/subscribe`;
-CORS preflights for the token exchange are answered locally. Every other path
+CORS preflights for the token exchange are answered locally. Allowed requests
+go through core-api's authenticated WebSocket gateway before SpacetimeDB. Every other path
 or method returns 404, including publish, SQL, identity creation and other
 databases. No tunnel-route changes or additional WAF rules are needed.
 Host proxies keep using `127.0.0.1:44300`; the administrative API is available
@@ -421,8 +422,8 @@ moment the migration is deferred and retried on the next start.
 
 ## Who may create a chat account
 
-A public WebSocket can issue an anonymous identity, so the module cannot
-assume the caller came through core-api. Two checks in the module close that door:
+The public gateway admits only active core-api accounts. The module also
+protects registration independently with two checks:
 
 - Every client-callable reducer requires the caller to have a `User` row, i.e. a
   registered account on this instance.
@@ -443,36 +444,27 @@ warnings indicate a missing owner credential or an unreachable module.
 
 ## Ending a session: disables and password resets
 
-The chat client talks to SpacetimeDB directly, so core-api's account checks are
-not on that path. Two things follow, and both are now enforced in the module
-rather than left to token expiry:
+The public chat path is `chat-edge → core-api → SpacetimeDB`. The gateway checks
+PostgreSQL account status, token generation and expiry before admitting a socket,
+including when a ticket was exchanged before a password or status change.
 
-- **Disabling an account in the control panel takes effect immediately.** It
-  used to only block the next sign-in; the account kept reading and posting
-  until its SpacetimeDB token expired, which could be up to 30 days.
-- **A password reset or change ends every other session.** Each account carries
-  a token generation that increments on any credential change; core-api stamps
-  it into every token it mints and pushes the new floor to the module, which
-  refuses anything older on its next reducer call. The device that performed the
-  change is handed a replacement, so it stays signed in.
+- Credential and account-status changes close revoked sockets on that core-api
+  process immediately. This stops subscriptions, procedures and reducers together.
+- Each socket also rechecks PostgreSQL every five seconds, with a three-second
+  query timeout. External changes, expired tokens and unavailable account
+  validation close the connection. Changing a password requires signing in
+  again; the client does this with the new password.
+- Password and generation changes are saved together. Module access-state pushes
+  are retried automatically from PostgreSQL in batches of up to 100 accounts
+  every ten seconds (plus batch duration), including after restarts. Revocation
+  at the public gateway remains effective during module outages.
 
-**You do not configure this.** The push happens automatically and needs an
-instance admin to exist (the same credential the admin panel already uses).
-
-**It fails open, deliberately.** If SpacetimeDB is unreachable when an account is
-disabled or a password reset, the change is still saved in core-api — only the
-push is lost, and the module keeps admitting the old tokens until the next push
-succeeds. The alternative would be locking legitimate users out of chat because
-the database blinked. core-api logs the failure:
-
-```
-Could not push access state for <user> to SpacetimeDB.
-```
-
-If you see it, the account's core-api side is correct but its chat sessions are
-not yet revoked. Any later status change or credential change re-pushes; to
-force it, toggle the account's status in the control panel once SpacetimeDB is
-back.
+**Upgrade core-api, the module and the base Compose configuration together.**
+Recreate `chat-edge` so existing sockets on the old direct route are closed.
+Keep the raw API on `127.0.0.1:44302` private; exposing it bypasses the gateway.
+No public hostname or client protocol change is needed. Tickets are held in
+memory: the supported single-core-api deployment needs no shared session store;
+multiple replicas would require sticky routing for ticket exchange and upgrade.
 
 To confirm the module's view of an account:
 
@@ -519,7 +511,7 @@ the owner credential.
 | Registration policy | `REQUIRE_EMAIL_CONFIRMATION`, `REQUIRE_ADMIN_APPROVAL` | Booleans (`true`/`false`) — also runtime-editable via the admin panel |
 | Email | `EMAIL_SENDER`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_STARTTLS`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME` | `EMAIL_SENDER=smtp` for real delivery; `log` only in dev |
 | Rate limiting | `RATE_LIMIT_PERMIT`, `RATE_LIMIT_WINDOW_SECONDS` | Per-IP fixed window, separate budgets for registration, email, and password actions; sign-in allows 10× |
-| Client versions | `RECOMMENDED_CLIENT_VERSION`, `MIN_CLIENT_VERSION` | Optional; default to backend's compiled version |
+| Client versions | `RECOMMENDED_CLIENT_VERSION`, `MIN_CLIENT_VERSION` | Optional; recommended defaults to the backend version, minimum to the protocol family's first client (1.6.2 for protocol 1) |
 | LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Compose passes the pair to LiveKit as `LIVEKIT_KEYS` and to core-api, so they cannot disagree. `LIVEKIT_KEYS` replaces any `keys:` block still in `livekit/config.prod.yaml` |
 | MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `FILES_DOMAIN` | Served by the pinned MinIO-compatible Silo image. Compose derives `MINIO_PUBLIC_ENDPOINT` from `FILES_DOMAIN` and `PUBLIC_SCHEME`; presigned URLs use this public address. Existing `minio_data` volumes are reused |
 | MinIO CORS | `MINIO_CORS_ALLOW_ORIGIN` | Keep `*`. Gates the presigned **upload** PUT as well as downloads, and the desktop app's origin is `tauri://localhost` / `http://tauri.localhost` — pinning to `https://app.<domain>` alone silently blocks every desktop upload at the CORS preflight |
@@ -674,16 +666,18 @@ LetsChat setup auto-discovery expects this shape:
   "livekit": "wss://lk.example.com",
   "database": "letschat",
   "web": "https://app.example.com",
-  "serverVersion": "0.3.1",
-  "recommendedClient": "0.3.1",
-  "minClient": "0.3.1"
+  "serverVersion": "1.6.2",
+  "recommendedClient": "1.6.2",
+  "minClient": "1.6.2",
+  "clientProtocol": 1
 }
 ```
 
-`serverVersion` is the running core-api version. `recommendedClient` and
-`minClient` default to the same value; operators can pin different desktop-app
-versions via env (used by `/downloads/{os}` and future client-side update
-gating).
+`serverVersion` is the running core-api version. `recommendedClient` defaults
+to that release; `minClient` defaults to the first client in the protocol family
+(1.6.2 for protocol 1). Operators can override both version settings via env.
+The client checks `clientProtocol` and `minClient` before connecting; the
+recommendation only selects the instance’s manual downloads.
 
 LiveKit scheme by track:
 
@@ -798,3 +792,17 @@ Postgres backup example:
 ```bash
 docker exec letschat-postgres pg_dump -U letschat auth | gzip > auth-$(date +%F).sql.gz
 ```
+
+## Desktop and web client compatibility
+
+Discovery now declares a compiled-in `clientProtocol` independently of the app
+version. Protocol 1 starts with client 1.6.2; its default `minClient` remains
+1.6.2 across compatible backend releases. `MIN_CLIENT_VERSION` overrides that
+floor; `RECOMMENDED_CLIENT_VERSION` selects the version offered by the instance's
+download page and does not by itself reject other compatible clients. Keep the
+web image, Core API, and SpacetimeDB module on a tested deployment combination.
+
+Clients check discovery before authentication and realtime connections. Older
+backends without protocol metadata require an explicit compatibility warning
+acknowledgment; network failures offer retry. No client update is installed
+automatically. See [compatibility tests and release policy](../tests/compatibility/README.md).

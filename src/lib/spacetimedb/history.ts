@@ -4,6 +4,7 @@ import { mapDirectMessage, mapMessage, toReducerIdentity, type DbRow } from './m
 import { useMessagesStore } from '../../stores/messagesStore'
 import { useDmStore } from '../../stores/dmStore'
 import type { Identity, u64 } from '../../types/domain'
+import { messageTimestampMicros } from '../messageOrder'
 
 /**
  * Paging over the history the subscription views do not carry.
@@ -21,9 +22,26 @@ const PAGE_SIZE = 100
 // design: a rejected call clears its key, so the next scroll retries.
 const channelRequests = new Map<u64, Promise<void>>()
 const dmRequests = new Map<Identity, Promise<void>>()
+let requestGeneration = 0
 
-function beforeTimestamp(sentAt: string): Timestamp {
-  return Timestamp.fromDate(new Date(sentAt))
+/** A response from a previous connection must not restore cleared history. */
+export function cancelHistoryRequests(): void {
+  requestGeneration++
+  channelRequests.clear()
+  dmRequests.clear()
+}
+
+async function historyPage(procedure: string, scope: Record<string, unknown>, oldest: { id: number; sentAt: string }): Promise<DbRow[]> {
+  const args = { ...scope, before: new Timestamp(messageTimestampMicros(oldest.sentAt)), limit: PAGE_SIZE }
+  try {
+    return await callProcedure<DbRow[]>(`${procedure}Page`, { ...args, beforeId: BigInt(oldest.id) })
+  } catch (error) {
+    // Protocol-1 backends predating the additive cursor procedures still accept
+    // the timestamp API. Never turn a timeout or an authorization failure into
+    // a successful empty page. Equal-timestamp paging needs an upgraded module.
+    if (String(error) !== 'No such procedure') throw error
+    return callProcedure<DbRow[]>(procedure, args)
+  }
 }
 
 /**
@@ -34,6 +52,7 @@ function beforeTimestamp(sentAt: string): Timestamp {
  * anything to page back from.
  */
 export async function loadOlderChannelMessages(channelId: u64): Promise<void> {
+  const generation = requestGeneration
   const existing = channelRequests.get(channelId)
   if (existing) return existing
 
@@ -44,15 +63,14 @@ export async function loadOlderChannelMessages(channelId: u64): Promise<void> {
 
   const pending = (async () => {
     try {
-      const rows = await callProcedure<DbRow[]>('loadOlderChannelMessages', {
+      const rows = await historyPage('loadOlderChannelMessages', {
         channelId: BigInt(channelId),
-        before: beforeTimestamp(oldest.sentAt),
-        limit: PAGE_SIZE,
-      })
+      }, oldest)
+      if (generation !== requestGeneration) return
       // A short page means the module had nothing more to give.
       useMessagesStore.getState().prependOlderMessages(channelId, rows.map(mapMessage), rows.length < PAGE_SIZE)
     } finally {
-      channelRequests.delete(channelId)
+      if (generation === requestGeneration) channelRequests.delete(channelId)
     }
   })()
   channelRequests.set(channelId, pending)
@@ -61,6 +79,7 @@ export async function loadOlderChannelMessages(channelId: u64): Promise<void> {
 
 /** The DM equivalent of {@link loadOlderChannelMessages}, per conversation. */
 export async function loadOlderDirectMessages(partner: Identity): Promise<void> {
+  const generation = requestGeneration
   const existing = dmRequests.get(partner)
   if (existing) return existing
 
@@ -71,16 +90,15 @@ export async function loadOlderDirectMessages(partner: Identity): Promise<void> 
 
   const pending = (async () => {
     try {
-      const rows = await callProcedure<DbRow[]>('loadOlderDirectMessages', {
+      const rows = await historyPage('loadOlderDirectMessages', {
         partner: toReducerIdentity(partner),
-        before: beforeTimestamp(oldest.sentAt),
-        limit: PAGE_SIZE,
-      })
+      }, oldest)
+      if (generation !== requestGeneration) return
       useDmStore
         .getState()
         .prependOlderMessages(partner, rows.map(mapDirectMessage), rows.length < PAGE_SIZE)
     } finally {
-      dmRequests.delete(partner)
+      if (generation === requestGeneration) dmRequests.delete(partner)
     }
   })()
   dmRequests.set(partner, pending)

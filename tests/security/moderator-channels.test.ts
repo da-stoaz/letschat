@@ -84,6 +84,7 @@ describe('moderator-only channel confidentiality', () => {
     }
     const page = { channelId: BigInt(textId), before: Timestamp.fromDate(new Date(Date.now() + 60_000)), limit: 10 }
     expect(await memberConn.procedures.loadOlderChannelMessages(page)).toEqual([])
+    expect(await memberConn.procedures.loadOlderChannelMessagesPage({ ...page, beforeId: 0n })).toEqual([])
     expect(await memberConn.procedures.loadPinnedChannelMessages({ channelId: BigInt(textId) })).toEqual([])
     expect((await ownerConn.procedures.loadOlderChannelMessages(page)).map(row => row.content)).toEqual(['private discussion'])
     await expect(member.call('set_typing_state', [`channel:${textId}`, true])).rejects.toThrow(/moderator-only/)

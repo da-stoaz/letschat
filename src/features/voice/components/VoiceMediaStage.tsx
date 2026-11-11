@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { useIsMobile } from '../../../hooks/use-mobile'
 import { selectCallTiles } from '../mediaLayout'
 import { ParticipantMediaTile } from './ParticipantMediaTile'
+import { ParticipantVolumeMenu } from './ParticipantVolumeMenu'
 
 export type VoiceMediaTile = {
   key: string
@@ -43,18 +44,18 @@ export function VoiceMediaStage({ tiles, className, emptyStateText = 'No partici
       {spotlight.length === 0 ? <div className="grid min-h-0 flex-1 place-items-center rounded-xl border border-dashed text-sm text-muted-foreground">{emptyStateText}</div> : (
         <div className={cn('call-spotlight grid min-h-0 flex-1 gap-2', spotlight.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
           {spotlight.map((tile, index) => (
-            <div key={tile.key} className="relative min-h-0 min-w-0">
+            <ParticipantVolumeMenu key={tile.key} identity={tile.participant?.identity} name={tile.displayName}><div className="relative min-h-0 min-w-0">
               <ParticipantMediaTile {...tile} className="h-full" stageClassName="aspect-auto min-h-0 flex-1" avatarClassName="size-24 max-h-[70%] max-w-[70%] sm:size-36" />
               {tiles.length > 1 ? <Button ref={index === 0 ? primaryButton : undefined} size="icon" variant="secondary" className="absolute right-2 top-2" aria-label={focused ? 'Show all participants' : `Focus ${tile.displayName}${tile.tileType === 'screen' ? ' screen' : ''}`} aria-pressed={focused} onClick={() => focusTile(focused ? null : tile.key)}>{focused ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}</Button> : null}
-            </div>
+            </div></ParticipantVolumeMenu>
           ))}
         </div>
       )}
       {secondary.length > 0 && !focused ? <div className="min-h-0 shrink-0 overflow-x-auto overscroll-x-contain p-0.5">
         <div className="flex w-max gap-2">
-          {secondary.map((tile) => <button key={tile.key} type="button" className="w-28 rounded-xl text-left focus-visible:outline-2 focus-visible:outline-ring md:w-40" aria-label={`Focus ${tile.displayName}${tile.tileType === 'screen' ? ' screen' : ''}`} onClick={() => focusTile(tile.key)}>
+          {secondary.map((tile) => <ParticipantVolumeMenu key={tile.key} identity={tile.participant?.identity} name={tile.displayName}><button type="button" className="w-28 rounded-xl text-left focus-visible:outline-2 focus-visible:outline-ring md:w-40" aria-label={`Focus ${tile.displayName}${tile.tileType === 'screen' ? ' screen' : ''}`} onClick={() => focusTile(tile.key)}>
             <ParticipantMediaTile {...tile} stageClassName="h-[min(14dvh,5rem)] md:h-20 aspect-auto" avatarClassName="size-10 max-h-[80%]" />
-          </button>)}
+          </button></ParticipantVolumeMenu>)}
         </div>
       </div> : null}
     </div>

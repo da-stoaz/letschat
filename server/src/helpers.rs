@@ -172,10 +172,7 @@ pub(crate) fn require_account(ctx: &ReducerContext) -> Result<(), String> {
         .find(ctx.sender())
         .ok_or_else(|| "no account for this identity".to_string())?;
 
-    // An admin disabled the account. Refusing here rather than at token expiry
-    // is the whole point: the SpacetimeDB token is long-lived and the client
-    // talks to this module directly, so core-api's sign-in check never sees
-    // these calls.
+    // Defense in depth behind the public gateway's PostgreSQL access check.
     assert_or_err(!user.suspended, "this account has been disabled")?;
 
     require_current_token(ctx, &user)
@@ -184,19 +181,13 @@ pub(crate) fn require_account(ctx: &ReducerContext) -> Result<(), String> {
 /// Rejects a token minted before the account's last credential change.
 ///
 /// core-api increments the account's token generation on every password reset
-/// or change and pushes the new floor onto the `User` row, so a token stolen
-/// beforehand — minted at a lower generation — stops working on the very next
-/// reducer call. Without this, "I was compromised, so I reset my password" does
-/// nothing: the client talks to this module directly, so nothing in the chat
-/// path ever consults core-api again and the stolen token keeps full access for
-/// its entire lifetime.
-///
-/// Fails **open** by construction, in two ways that both matter:
+/// or change and replays the new floor onto the `User` row. This replicated
+/// check supplements the public gateway's authoritative account check:
 ///
 /// - A floor of `0` (never revoked — every account's starting state, and what
 ///   an upgraded instance arrives with) skips the check for one integer
 ///   compare.
-/// - `>=`, not `==`. The push from core-api is best-effort, so the floor can
+/// - `>=`, not `==`. Reconciliation is asynchronous, so the floor can
 ///   lag behind the generation the user's fresh token already carries. `>=`
 ///   still admits them; an equality test would lock the legitimate user out of
 ///   chat because SpacetimeDB happened to be unreachable during their reset.

@@ -128,7 +128,7 @@ def check_edge(config):
     image = config["services"]["chat-edge"]["image"]
     with tempfile.TemporaryDirectory(prefix="letschat-edge-test-") as td:
         Path(td, "edge").write_text(config["configs"]["chat-edge"]["content"])
-        Path(td, "upstream").write_text(":3000 {\n respond upstream 200\n}\n")
+        Path(td, "upstream").write_text(":8787 {\n respond upstream 200\n}\n")
         try:
             created = run(["docker", "network", "create", name])
             assert created.returncode == 0, created.stderr
@@ -137,7 +137,7 @@ def check_edge(config):
             if pulled.returncode:
                 pulled = run(["docker", "pull", image])
                 assert pulled.returncode == 0, pulled.stderr
-            for suffix, extra in [("upstream", ["--network-alias", "spacetimedb-internal"]),
+            for suffix, extra in [("upstream", ["--network-alias", "core-api"]),
                                   ("edge", ["-p", "127.0.0.1::3000"])]:
                 started = run(["docker", "run", "-d", "--name", f"{name}-{suffix}",
                                "--network", name, "-v", f"{td}/{suffix}:/etc/caddy/Caddyfile:ro",

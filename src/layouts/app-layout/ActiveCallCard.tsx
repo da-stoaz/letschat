@@ -39,6 +39,7 @@ import { callConnection } from '../../features/voice/callConnection'
 import { CallLatencyBadge } from '../../features/voice/components/CallLatencyBadge'
 import { NoiseFilterToggle } from '../../features/voice/components/NoiseFilterToggle'
 import { ScreenShareMenu } from '../../features/voice/components/ScreenShareMenu'
+import { CallVolumeMixer } from '../../features/voice/components/CallVolumeMixer'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -99,10 +100,8 @@ function shortLabel(label: string, max = 12): string {
  * Whether this runtime can route call audio to a chosen output device.
  *
  * Only `HTMLMediaElement.prototype.setSinkId` counts, because that is the one
- * API the switch actually goes through: `switchRoomDevice` moves the sink via
- * `room.switchActiveDevice('audiooutput')`, `participant.setAudioOutput`, and
- * `setSinkId` on the attached `<audio>` elements — every one of them an
- * HTMLMediaElement call.
+ * API used by the audio renderer's processed playback sinks. The selected
+ * device is also passed to `room.switchActiveDevice('audiooutput')`.
  *
  * This used to also accept `AudioContext.prototype.setSinkId` as evidence,
  * which is a different API that nothing here touches. WebKit ships that one but
@@ -521,7 +520,6 @@ export function ActiveCallCard({
 
   const { onToggleMute, onToggleDeafen, onToggleCamera, onToggleScreenShare, onLeave } = useVoiceControlActions({
     room: activeRoom,
-    remoteParticipants,
     selfState: selfParticipant
       ? {
           muted: selfParticipant.muted,
@@ -595,6 +593,7 @@ export function ActiveCallCard({
                 </Badge>
               )}
               <NoiseFilterToggle compact />
+              <CallVolumeMixer compact className="size-8 rounded-md" />
             </div>
           </div>
 
@@ -712,6 +711,7 @@ export function ActiveCallCard({
               <Badge variant={connecting ? 'outline' : 'secondary'}>{statusLabel}</Badge>
             )}
             <NoiseFilterToggle />
+            <CallVolumeMixer compact className="size-9 rounded-md" />
           </div>
         </div>
 

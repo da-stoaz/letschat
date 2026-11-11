@@ -12,7 +12,7 @@ services:
     container_name: letschat-dev-spacetimedb
     command: start
     ports:
-      - "4300:3000"
+      - "127.0.0.1:4300:3000"
     volumes:
       - spacetimedb_dev_home:/home/spacetime
     # core-api is the OIDC issuer; SpacetimeDB fetches its discovery + JWKS at

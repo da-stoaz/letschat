@@ -30,6 +30,7 @@ public static class MiscEndpoints
                 version.ServerVersion,
                 version.RecommendedClientVersion,
                 version.MinClientVersion,
+                VersionInfo.ClientProtocol,
                 config.Current.UploadPartSizeMiB * UploadLimits.MiB,
                 config.Current.UploadMaxFileSizeMiB * UploadLimits.MiB,
                 config.Current.DailyUploadQuotaMiB * UploadLimits.MiB,
