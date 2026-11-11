@@ -13,6 +13,7 @@ import {
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu'
 import { PresenceDot } from '@/components/user/PresenceDot'
+import { ParticipantVolumeMenu } from '../../features/voice/components/ParticipantVolumeMenu'
 import { useUserPresentation } from '../../hooks/useUserPresentation'
 import { userInitials } from './helpers'
 import {
@@ -85,6 +86,7 @@ function MemberRow({
   const showMenu = canActOnTarget
 
   return (
+    <ParticipantVolumeMenu identity={member.userIdentity} name={displayName}>
     <div
       className={`flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/40 group ${timedOut ? 'opacity-60' : ''}`}
     >
@@ -188,6 +190,7 @@ function MemberRow({
         </DropdownMenu>
       ) : null}
     </div>
+    </ParticipantVolumeMenu>
   )
 }
 

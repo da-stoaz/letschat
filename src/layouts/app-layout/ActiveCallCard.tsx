@@ -593,7 +593,7 @@ export function ActiveCallCard({
                 </Badge>
               )}
               <NoiseFilterToggle compact />
-              <CallVolumeMixer room={activeRoom} deafened={deafened} compact className="size-8 rounded-md" />
+              <CallVolumeMixer compact className="size-8 rounded-md" />
             </div>
           </div>
 
@@ -711,7 +711,7 @@ export function ActiveCallCard({
               <Badge variant={connecting ? 'outline' : 'secondary'}>{statusLabel}</Badge>
             )}
             <NoiseFilterToggle />
-            <CallVolumeMixer room={activeRoom} deafened={deafened} compact className="size-9 rounded-md" />
+            <CallVolumeMixer compact className="size-9 rounded-md" />
           </div>
         </div>
 

@@ -66,7 +66,7 @@ export function CallOptions({ call, open, onOpenChange, inline = false, collapse
             <Button variant="outline" disabled={!call.joined} aria-pressed={call.deafened} onClick={() => void call.onToggleDeafen()}>{call.deafened ? <VolumeXIcon /> : <Volume2Icon />}{call.deafened ? 'Unmute call audio' : 'Mute call audio'}</Button>
             {call.hasScreenCapture ? <ScreenShareMenu size="default" showLabel disabled={!call.joined} sharing={call.sharingScreen} onToggle={call.onToggleScreenShare} /> : null}
             <NoiseFilterToggle compact />
-            <CallVolumeMixer room={call.room} deafened={call.deafened} />
+            <CallVolumeMixer />
           </div>
           {collapseDevices ? <Popover>
             <PopoverTrigger render={<Button variant="outline" />}><Settings2Icon />Devices</PopoverTrigger>

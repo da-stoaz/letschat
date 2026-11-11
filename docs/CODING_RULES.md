@@ -19,3 +19,11 @@
   says “Joining…”, a nearby “Joining…” badge is noise; reserve badges for state
   the control cannot express, such as “In call” for a call the viewer has not
   joined.
+- Put actions about one person on that person: right-click (long-press on
+  touch) them wherever they appear. Don't make users hunt for them in a list of
+  everyone, e.g. per-person call volume lives in their context menu, not in a
+  mixer listing every participant.
+- No filler descriptions. Only add helper text when it tells the user something
+  the title, label or control doesn't: a consequence ("Your other devices will
+  be signed out"), why something is disabled, or an error/loading state. Text
+  that restates the heading or what a switch obviously does gets cut.

@@ -209,9 +209,11 @@ applies their product through Web Audio gain to each remote track in channels an
 DMs, then plays the processed stream through the selected HTML audio output sink.
 The tracks share one playback context, closed when the last track leaves.
 Deafen temporarily silences both sources
-without changing the saved levels. Call docks and call options share the Volume
-mixer, while Audio settings also exposes master volume. Reconnected tracks reuse
-the same participant preferences.
+without changing the saved levels. Call docks, call options and Audio settings
+expose master volume. Per-person levels live on the person: right-clicking (or
+long-pressing) someone in your current call, on a call tile, sidebar avatar or member
+list row, opens a context menu with their voice and, while they share audio, stream
+volume. Reconnected tracks reuse the same participant preferences.
 
 ### Instance administration and space discovery
 

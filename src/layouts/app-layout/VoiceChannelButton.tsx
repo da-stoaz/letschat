@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from '@/components/ui/avatar'
 import { normalizeIdentity, userInitials } from './helpers'
+import { ParticipantVolumeMenu } from '../../features/voice/components/ParticipantVolumeMenu'
 import { cn } from '../../lib/utils'
 import type { Channel, VoiceParticipant } from '../../types/domain'
 
@@ -59,8 +60,8 @@ export function VoiceChannelButton({
                     const normalizedParticipantIdentity = normalizeIdentity(participant.userIdentity)
                     const isSpeaking = activeSpeakerIdentityKeys.has(normalizedParticipantIdentity)
                     return (
+                      <ParticipantVolumeMenu key={`${channel.id}-${participant.userIdentity}`} identity={participant.userIdentity} name={fallbackLabel}>
                       <Avatar
-                        key={`${channel.id}-${participant.userIdentity}`}
                         size="sm"
                         className={cn(
                           isSpeaking
@@ -71,6 +72,7 @@ export function VoiceChannelButton({
                         {profile?.avatarUrl ? <AvatarImage src={profile.avatarUrl} alt={fallbackLabel} /> : null}
                         <AvatarFallback>{userInitials(fallbackLabel)}</AvatarFallback>
                       </Avatar>
+                      </ParticipantVolumeMenu>
                     )
                   })}
                   {overflow > 0 ? <AvatarGroupCount className="size-6 text-[10px]">+{overflow}</AvatarGroupCount> : null}

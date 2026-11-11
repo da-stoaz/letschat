@@ -67,7 +67,7 @@ async function verifyCallVolume(receiver: Room, publisher: Room, token: string) 
     window.AudioContext = class extends NativeAudioContext {
       constructor(options?: AudioContextOptions) { super(options); playbackContexts.push(this) }
     }
-    root.render(createElement('div', null, createElement(CallAudioRenderer), createElement(CallVolumeMixer, { room: receiver, deafened: false })))
+    root.render(createElement('div', null, createElement(CallAudioRenderer), createElement(CallVolumeMixer)))
     const volumes = (voice: number, screen: number) => {
       const remote = receiver.remoteParticipants.get('publisher')
       return document.querySelectorAll('[data-letschat-audio="remote"]').length === 2

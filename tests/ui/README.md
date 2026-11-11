@@ -1,10 +1,12 @@
 # Responsive UI verification
 
 Open `/tests/ui/call-volume.html` on the local Vite server to check the real
-volume mixer at desktop and phone widths. The dock and sidebar rows should each
-have matching control heights and corner radii. Both mixers share saved
-levels with Audio settings. Check separate voice/stream sliders up to 200%, keyboard
-arrows, Escape/focus return, long participant names, and the muted-call notice.
+master volume at desktop and phone widths. The dock and sidebar rows should each
+have matching control heights and corner radii, and share the saved level with
+Audio settings. Right-click (or long-press) Alice or Bob on a tile, a sidebar avatar or in the
+member list: the menu opens at the pointer with the voice slider focused, Alice
+also gets a stream slider, all arrow keys and Home/End adjust it, Escape returns
+focus. Carol is not in the call and must get no menu.
 This fixture uses simulated participants and isolated in-memory preferences;
 `tests/rtc/run.ts` verifies the actual audio sinks against disposable LiveKit.
 
