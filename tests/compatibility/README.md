@@ -41,7 +41,10 @@ The runner renders production Compose without loading `.env`, assigns a random
 project name, fresh volumes/networks, and random loopback ports. It removes only
 that project on exit. Authentication, generated bindings, the client's complete
 subscription list, channel messages, DMs, and voice-token issuance are real.
-No production or existing development database is used. It does not test actual
+No production or existing development database is used. `--schema-out FILE` saves the
+published module definition for `contract.py`; `--upgrade` (with `--backend-source`,
+`--core-image`, `--module-image` of a release) upgrades that release's data in place
+to the candidate and repeats the smoke. It does not test actual
 media transport; the existing RTC suite covers that separately.
 
 Candidate backends with `chat-edge` exercise the public gateway. Add
@@ -77,12 +80,26 @@ fresh services, random loopback ports and no existing data mounts. The CLI comes
 from the pinned server image; the suite publishes the candidate WASM into a
 throwaway database. Services and volumes are removed even after a test failure.
 
-The compatibility matrix runs candidate/candidate first, then candidate client against the oldest
-and latest published backend in the declared family, and those released clients
-against the candidate backend. Each released client uses its own SDK and generated
-bindings. Missing baselines or unavailable GitHub metadata fail the gate rather
-than silently reducing coverage. The first family release runs candidate/candidate
-only because no released family baseline exists yet.
+The compatibility matrix runs candidate/candidate first, then, for the oldest and
+latest published backend in the declared family:
+
+1. **Candidate client → released backend**, using the release's own Compose file and images.
+2. **Client contract** (`contract.py`): every reducer, procedure, public view and public
+   table of the released module must still exist in the candidate with an identical
+   signature. Additions are fine; removing or changing one fails unless the candidate
+   starts a new protocol family. This is exhaustive, unlike the smoke flow, and
+   SpacetimeDB's own publish check does not cover it: it flags column changes but not
+   reducer arguments, and production publishes with `--yes`.
+3. **In-place upgrade** (`run.py --upgrade`): the released backend's data, written by
+   the smoke, is upgraded to the candidate on the same volumes the way production does
+   it (new images, `module-init` republishes, EF migrations run). Both the released
+   client and the candidate client must then read the pre-upgrade messages and DMs
+   and complete the smoke.
+
+Each released client uses its own SDK and generated bindings. Missing baselines or
+unavailable GitHub metadata fail the gate rather than silently reducing coverage. The
+first family release runs candidate/candidate only because no released family baseline
+exists yet. A baseline counts only once its GitHub release is published (not a draft).
 
 For the matrix, fetch all git tags and provide `GITHUB_TOKEN` if needed for the
 read-only Releases API. These release queries exist only in test tooling. The app
