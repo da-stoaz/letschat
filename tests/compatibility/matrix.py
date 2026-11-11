@@ -54,10 +54,12 @@ for release in releases:
         continue
     if tuple(map(int, tag[1:].split('.'))) >= tuple(map(int, current.split('.'))):
         continue
+    if subprocess.run(['git', 'rev-parse', '--verify', '--quiet', f'{tag}^{{commit}}'], cwd=ROOT, capture_output=True).returncode:
+        raise RuntimeError(f'Missing source for published {tag}; fetch tags before running the matrix')
     source = subprocess.run(['git', 'show', f'{tag}:core-api/src/CoreApi/Services/VersionInfo.cs'],
                             cwd=ROOT, text=True, capture_output=True)
     if source.returncode:
-        raise RuntimeError(f'Missing source for published {tag}; fetch tags before running the matrix')
+        continue  # Released before VersionInfo.cs existed, so it predates every protocol.
     declared = re.search(r'ClientProtocol = (\d+)', source.stdout)
     if declared and int(declared[1]) == protocol:
         matching.append(tag)

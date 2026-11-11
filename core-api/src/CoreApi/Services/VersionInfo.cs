@@ -13,7 +13,7 @@ public sealed class VersionInfo
 {
     // Protocol families describe the required HTTP + SpacetimeDB contract, not releases.
     public const int ClientProtocol = 1;
-    public const string FirstCompatibleClient = "1.6.1";
+    public const string FirstCompatibleClient = "1.6.2";
     public string ServerVersion { get; }
 
     /// <summary>The app version the landing page will offer for download.</summary>

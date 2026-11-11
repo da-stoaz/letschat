@@ -1,6 +1,6 @@
 # Client/backend compatibility
 
-Protocol 1 begins at **1.6.1**. The protocol covers required HTTP APIs, SpacetimeDB
+Protocol 1 begins at **1.6.2**. The protocol covers required HTTP APIs, SpacetimeDB
 views/reducers and generated bindings, plus connection behavior. It is independent
 of release numbers. UI-only changes do not change the protocol. Additive changes
 must work in both directions before retaining the same family; requiring a new
@@ -21,7 +21,7 @@ be updated for synchronization outside the recent-message window.
 
 `VersionInfo.ClientProtocol` declares the server contract;
 `SUPPORTED_CLIENT_PROTOCOLS` declares client support. The protocol is compiled in,
-not an operator override. `FirstCompatibleClient` stays 1.6.1 for protocol 1.
+not an operator override. `FirstCompatibleClient` stays 1.6.2 for protocol 1.
 `MIN_CLIENT_VERSION` can raise the operator's minimum (for example, to require a
 security fix); `RECOMMENDED_CLIENT_VERSION` only recommends a manual download.
 Neither a newer server release nor a different recommendation alone blocks access.
