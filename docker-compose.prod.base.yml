@@ -249,7 +249,13 @@ services:
   module-init:
     image: ghcr.io/da-stoaz/letschat-module:${LETSCHAT_VERSION:-latest}
     container_name: letschat-module-init
-    command: "publish --server http://spacetimedb:3000 letschat --bin-path /module/letschat_server.wasm --yes"
+    # Deliberately NOT a bare --yes (= all): that also skipped the "this will BREAK
+    # existing clients" confirmation, so an upgrade that changes rows older apps
+    # decode was published silently and those apps failed to read data. Such an
+    # upgrade now stops here (the old module keeps serving); see DEPLOYMENT.md
+    # "Upgrades that break existing clients" for the one-time accept command.
+    # Never add delete-data or --delete-data.
+    command: "publish --server http://spacetimedb:3000 letschat --bin-path /module/letschat_server.wasm --yes=remote,skip-login,migrate"
     # PERSISTS THE PUBLISHER IDENTITY. `spacetime login` mints a NEW identity
     # every time it runs, and only the identity that first created the database
     # may update it. Without this volume the very next publish — i.e. every

@@ -101,6 +101,8 @@ with tempfile.TemporaryDirectory(prefix=project) as temporary:
             except (OSError, RuntimeError):
                 pass
             if time.monotonic() >= deadline:
+                # Publish output only (no secrets); names e.g. a refused client-breaking schema change.
+                print(compose('logs', '--no-color', '--tail', '15', 'module-init'), flush=True)
                 raise RuntimeError('Disposable backend did not become ready')
             time.sleep(1)
 
