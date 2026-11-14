@@ -56,10 +56,14 @@ export function createCallAudioPlayback(track: MediaStreamTrack, element: HTMLAu
       source.disconnect()
       gain.disconnect()
       output.stream.getTracks().forEach(track => track.stop())
-      if (--users === 0) {
+      // React disposes and recreates a sink in one commit when its track is swapped
+      // (and StrictMode remounts). Close only if no sink took over by then: a fresh
+      // context started outside a user gesture may be suspended (WebKit), stopping audio.
+      if (--users === 0) queueMicrotask(() => {
+        if (users > 0 || sharedContext !== context) return
         sharedContext = undefined
         void context.close().catch(() => undefined)
-      }
+      })
     },
   }
 }
