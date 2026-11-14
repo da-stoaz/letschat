@@ -21,20 +21,7 @@
             <a id="open-app" class="btn btn-primary" href="@Model.DeepLink">
                 Open in LetsChat
             </a>
-            @if (Model.HasAnyInstaller)
-            {
-                <div id="desktop-downloads" class="cta" aria-label="Desktop downloads">
-                    <a class="btn btn-secondary" data-download="macos" href="/downloads/macos">Get the app for macOS</a>
-                    <a class="btn btn-secondary" data-download="windows" href="/downloads/windows">Get the app for Windows</a>
-                    <a class="btn btn-secondary" data-download="linux" href="/downloads/linux">Get the app for Linux</a>
-                </div>
-            }
-            else
-            {
-                <span class="btn btn-secondary" aria-disabled="true" title="No installer hosted on this instance.">
-                    Download coming soon
-                </span>
-            }
+            <partial name="_Downloads" model="Model.HasAnyInstaller" />
         </div>
 
         <p class="trust">
@@ -47,18 +34,3 @@
         <a href="https://github.com/da-stoaz/letschat" target="_blank" rel="noopener">View source</a>
     </footer>
 </main>
-
-<script>
-    (function () {
-        var ua = (navigator.userAgent || '').toLowerCase();
-        // Mobile and unknown platforms keep all desktop choices visible.
-        var mobile = /android|iphone|ipad|ipod|mobile/.test(ua) ||
-            (/mac/.test(ua) && navigator.maxTouchPoints > 1);
-        var os = mobile ? null : /mac/.test(ua) ? 'macos' :
-            /win/.test(ua) ? 'windows' : /linux/.test(ua) ? 'linux' : null;
-        if (os) {
-            var match = document.querySelector('[data-download="' + os + '"]');
-            if (match) match.classList.add('btn-primary');
-        }
-    })();
-</script>

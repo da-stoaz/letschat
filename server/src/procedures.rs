@@ -42,6 +42,22 @@ pub fn resolve_invite_server(ctx: &mut ProcedureContext, token: String) -> Optio
     })
 }
 
+/// The space name for a shared invite link's preview card (core-api renders it
+/// for link unfurlers, which have no account). The name only, and only for a
+/// live invite open to anyone: whoever holds such a token could join and read
+/// it anyway. Username-restricted invites stay anonymous.
+#[spacetimedb::procedure]
+pub fn invite_preview(ctx: &mut ProcedureContext, token: String) -> Option<String> {
+    ctx.with_tx(|tx| {
+        let invite = tx.db.invite().token().find(&token)?;
+        let exhausted = invite.max_uses.is_some_and(|max| invite.use_count >= max);
+        if tx.timestamp > invite.expires_at || exhausted || !invite.allowed_usernames.is_empty() {
+            return None;
+        }
+        tx.db.server().id().find(invite.server_id).map(|server| server.name)
+    })
+}
+
 /// Pinned content is independent of the caller's recent history window.
 /// Match history authorization and never expose another channel's messages.
 #[spacetimedb::procedure]

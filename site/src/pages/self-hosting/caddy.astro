@@ -159,10 +159,10 @@ EMAIL_FROM_ADDRESS=no-reply@example.com`} />
         <h3 class="text-lg font-medium pt-1">Hosting the browser client (optional)</h3>
         <p class="guide-prose">
           For the browser client at <code>app.example.com</code>, set its hostname below. It supplies
-          both Caddy routing and desktop invite links. Leave <code>APP_DOMAIN</code> empty to omit
+          Caddy routing and the "Continue in browser" option on invite links. Leave <code>APP_DOMAIN</code> empty to omit
           the browser site.
         </p>
-        <CodeBlock label=".env" code={`# Browser site and desktop invite links; no separate URL setting.
+        <CodeBlock label=".env" code={`# Browser site; invite links then also offer "Continue in browser".
 APP_DOMAIN=app.example.com
 
 # DB WebSocket compression in the browser: "gzip" (default) or "none".

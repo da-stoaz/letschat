@@ -6,6 +6,7 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
+import * as InvitePreviewProcedure from "../invite_preview_procedure";
 import * as LoadOlderChannelMessagesProcedure from "../load_older_channel_messages_procedure";
 import * as LoadOlderChannelMessagesPageProcedure from "../load_older_channel_messages_page_procedure";
 import * as LoadOlderDirectMessagesProcedure from "../load_older_direct_messages_procedure";
@@ -15,6 +16,8 @@ import * as RefreshChannelMessagesProcedure from "../refresh_channel_messages_pr
 import * as RefreshDirectMessagesProcedure from "../refresh_direct_messages_procedure";
 import * as ResolveInviteServerProcedure from "../resolve_invite_server_procedure";
 
+export type InvitePreviewArgs = __Infer<typeof InvitePreviewProcedure.params>;
+export type InvitePreviewResult = __Infer<typeof InvitePreviewProcedure.returnType>;
 export type LoadOlderChannelMessagesArgs = __Infer<typeof LoadOlderChannelMessagesProcedure.params>;
 export type LoadOlderChannelMessagesResult = __Infer<typeof LoadOlderChannelMessagesProcedure.returnType>;
 export type LoadOlderChannelMessagesPageArgs = __Infer<typeof LoadOlderChannelMessagesPageProcedure.params>;

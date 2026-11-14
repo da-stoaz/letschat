@@ -26,33 +26,33 @@ public sealed class IndexModel(
     /// fall back on. False only on a dev build with no local installers, where
     /// the download CTA would just lead to an error page.
     /// </summary>
-    public bool HasAnyInstaller
+    public bool HasAnyInstaller => AnyInstaller(version, env);
+
+    /// <summary>Shared with the invite page, which offers the same downloads.</summary>
+    internal static bool AnyInstaller(VersionInfo version, IWebHostEnvironment env)
     {
-        get
-        {
-            if (!version.IsDevBuild) return true;
-            var dir = Path.Combine(env.WebRootPath, "downloads");
-            if (!Directory.Exists(dir)) return false;
-            return Directory.EnumerateFiles(dir, "*.*")
-                .Any(f =>
-                {
-                    var ext = Path.GetExtension(f).ToLowerInvariant();
-                    return ext is ".dmg" or ".msi" or ".exe" or ".appimage" or ".deb";
-                });
-        }
+        if (!version.IsDevBuild) return true;
+        var dir = Path.Combine(env.WebRootPath, "downloads");
+        if (!Directory.Exists(dir)) return false;
+        return Directory.EnumerateFiles(dir, "*.*")
+            .Any(f =>
+            {
+                var ext = Path.GetExtension(f).ToLowerInvariant();
+                return ext is ".dmg" or ".msi" or ".exe" or ".appimage" or ".deb";
+            });
     }
 
-    public void OnGet()
-    {
-        // Mirrors `buildJoinLink` in src/stores/serverConfigStore.ts — short
-        // param keys (s/a/l/d) so the resulting URL stays compact.
-        var query = string.Join('&',
-        [
-            "s=" + Uri.EscapeDataString(options.DiscoverySpacetimeDbUri),
-            "a=" + Uri.EscapeDataString(options.DiscoveryAuthUrl),
-            "l=" + Uri.EscapeDataString(options.DiscoveryLiveKitUrl),
-            "d=" + Uri.EscapeDataString(options.DiscoveryDatabase),
-        ]);
-        DeepLink = $"letschat://join?{query}";
-    }
+    public void OnGet() => DeepLink = JoinLink(options);
+
+    /// <summary>
+    /// Mirrors `buildJoinLink` in src/stores/serverConfigStore.ts — short
+    /// param keys (s/a/l/d) so the resulting URL stays compact.
+    /// </summary>
+    internal static string JoinLink(ServiceOptions options) => "letschat://join?" + string.Join('&',
+    [
+        "s=" + Uri.EscapeDataString(options.DiscoverySpacetimeDbUri),
+        "a=" + Uri.EscapeDataString(options.DiscoveryAuthUrl),
+        "l=" + Uri.EscapeDataString(options.DiscoveryLiveKitUrl),
+        "d=" + Uri.EscapeDataString(options.DiscoveryDatabase),
+    ]);
 }

@@ -1,0 +1,46 @@
+@page "/invite/{token}"
+@model InviteModel
+@{
+    var title = Model.SpaceName is { } name ? $"Join {name} on LetsChat" : "You're invited to a LetsChat space";
+    const string description = "LetsChat is a self-hosted chat app for voice, video, text and files.";
+    ViewData["Title"] = title;
+}
+@section Head {
+    <meta name="robots" content="noindex">
+    <meta name="description" content="@description">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LetsChat">
+    <meta property="og:title" content="@title">
+    <meta property="og:description" content="@description">
+    <meta property="og:image" content="@Model.ImageUrl">
+    <meta name="twitter:card" content="summary">
+    <meta name="theme-color" content="#6aa7ff">
+}
+
+<main class="landing">
+    <section class="hero">
+        <div class="brand">
+            <img src="/img/letschat-logo.png" alt="" width="36" height="36" class="brand-mark">
+            <span>Lets<span class="accent">Chat</span></span>
+        </div>
+
+        <h1>@title</h1>
+        <p class="lede">@description</p>
+
+        <div class="cta">
+            <a class="btn btn-primary" href="@Model.DeepLink">Open in LetsChat</a>
+            @if (Model.WebLink is { } web)
+            {
+                <a class="btn btn-secondary" href="@web">Continue in browser</a>
+            }
+        </div>
+        <div class="cta">
+            <partial name="_Downloads" model="Model.HasAnyInstaller" />
+        </div>
+    </section>
+
+    <footer class="foot">
+        <span>LetsChat · self-hosted</span>
+        <a href="https://github.com/da-stoaz/letschat" target="_blank" rel="noopener">View source</a>
+    </footer>
+</main>

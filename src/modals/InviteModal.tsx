@@ -35,10 +35,10 @@ import type { Invite } from '../types/domain'
 const EMPTY: never[] = []
 
 /**
- * Where invite links point. The hosted web client serves /invite/:token itself,
- * so its own origin is right. Anywhere else (desktop) the link must open this
- * instance's web client, which core-api advertises in discovery. Null when the
- * instance hosts none: no URL would work, so no link is offered.
+ * Base for invite links (`<base>/<token>`). Instances that advertise `invite` in
+ * discovery serve the link from core-api, which renders the link-preview card
+ * and hands off to the app or browser. Older instances fall back to the hosted
+ * web client's own /invite route. Null when neither exists: no URL would work.
  */
 function useInviteBaseUrl(): string | null {
   const hosted = isHostedWebBuild()
@@ -46,12 +46,15 @@ function useInviteBaseUrl(): string | null {
   const { data } = useQuery({
     queryKey: ['well-known', authUrl],
     queryFn: () => fetchWellKnown(authUrl!),
-    enabled: !hosted && !!authUrl,
+    enabled: !!authUrl,
     staleTime: Infinity,
   })
-  if (hosted) return window.location.origin
-  const web = data?.web?.replace(/\/+$/, '')
-  return web && /^https?:\/\//.test(web) ? web : null
+  const http = (url: unknown) => typeof url === 'string' && /^https?:\/\//.test(url) ? url.replace(/\/+$/, '') : null
+  const invite = http(data?.invite)
+  if (invite) return invite
+  if (hosted) return `${window.location.origin}/invite`
+  const web = http(data?.web)
+  return web ? `${web}/invite` : null
 }
 
 const EXPIRY_OPTIONS = [
@@ -90,7 +93,7 @@ function formatExpiry(expiresAt: string, now: number): string {
 
 interface InviteCardProps {
   invite: Invite
-  /** Null when the instance has no web client to open the link in. */
+  /** Null when the instance has no page to open the link on. */
   baseUrl: string | null
   now: number
   onDelete: (token: string) => void
@@ -98,7 +101,7 @@ interface InviteCardProps {
 
 function InviteCard({ invite, baseUrl, now, onDelete }: InviteCardProps) {
   const [showQr, setShowQr] = useState(false)
-  const url = baseUrl ? `${baseUrl}/invite/${invite.token}` : null
+  const url = baseUrl ? `${baseUrl}/${invite.token}` : null
   const expired = new Date(invite.expiresAt).getTime() <= now
 
   return (

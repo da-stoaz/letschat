@@ -17,6 +17,8 @@ export interface WellKnown {
   instanceStorageLimitBytes?: number
   /** The instance's hosted web client, or null when it has none. */
   web?: string | null
+  /** Base URL of the instance's shareable invite page (core-api `/invite`). */
+  invite?: string
 }
 
 export class DiscoveryHttpError extends Error {

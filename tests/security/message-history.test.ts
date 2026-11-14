@@ -93,6 +93,21 @@ describe('bounded message history', () => {
     const restrictedToken = String(restricted.rows.find(row => Number(row.server_id) === target)!.token)
     expect(await outsiderConn.procedures.resolveInviteServer({ token: restrictedToken })).toBeUndefined()
   })
+  it('previews only the name of a live invite open to anyone', async () => {
+    const name = `preview-${Date.now()}`
+    const target = await createServer(owner, name)
+    await owner.call('create_invite', [target, none, some(1), []])
+    const { rows } = await owner.sql(`SELECT token FROM my_invites WHERE server_id = ${target}`)
+    const token = String(rows[0].token)
+    expect(await outsiderConn.procedures.invitePreview({ token })).toBe(name)
+    expect(await outsiderConn.procedures.invitePreview({ token: 'unknown' })).toBeUndefined()
+    await outsider.call('use_invite', [token])
+    expect(await outsiderConn.procedures.invitePreview({ token })).toBeUndefined()
+
+    await owner.call('create_invite', [target, none, none, [outsider.username]])
+    const restricted = await owner.sql(`SELECT token FROM my_invites WHERE server_id = ${target}`)
+    expect(await outsiderConn.procedures.invitePreview({ token: String(restricted.rows[0].token) })).toBeUndefined()
+  })
   it('caps the subscription view at the recent window', async () => {
     const { rows, error } = await owner.sql('SELECT id FROM my_channel_messages')
     expect(error).toBeNull()

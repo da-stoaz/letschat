@@ -9,7 +9,8 @@ import { selectServer } from '../lib/selectServer'
  * the app with the URL) and warm-start (a click while the app is already
  * running). Parses the embedded config, persists it via the server-config
  * store, kicks off the SpacetimeDB connection, and routes to <c>/</c> so the
- * App's normal redirect chain takes over.
+ * App's normal redirect chain takes over. An <c>i=</c> invite token (from
+ * core-api's invite page) routes to that invite instead.
  *
  * Module-level state (not React state) handles two real-world pitfalls:
  *
@@ -36,6 +37,16 @@ function sameConfig(a: ServerConfig | null, b: ServerConfig): boolean {
     && a.livekitUrl === b.livekitUrl
     && a.spacetimedbDatabase === b.spacetimedbDatabase
   )
+}
+
+/** The optional invite token; only the module's alphanumeric form is accepted. */
+export function inviteToken(raw: string): string | null {
+  try {
+    const token = new URL(raw.replace('letschat://', 'http://letschat/')).searchParams.get('i')
+    return token && /^[A-Za-z0-9]{1,64}$/.test(token) ? token : null
+  } catch {
+    return null
+  }
 }
 
 export function useDeepLink(): void {
@@ -65,10 +76,15 @@ export function useDeepLink(): void {
       // this guard (because the new config differs from the cached URL) only
       // if the cold-start guard somehow missed; if they happen to re-pick the
       // same instance, the no-op suppresses an unwanted toast either way.
+      const invite = inviteToken(raw)
+      const target = invite ? `/invite/${invite}` : '/'
       const previous = useServerConfigStore.getState().config
-      if (sameConfig(previous, cfg)) return
+      if (sameConfig(previous, cfg)) {
+        if (invite) navigate(target)
+        return
+      }
 
-      void selectServer(cfg, { confirmUnknown: true }).then(() => navigate('/')).catch(() => {
+      void selectServer(cfg, { confirmUnknown: true }).then(() => navigate(target)).catch(() => {
         // The shared compatibility notice owns retry and recovery.
       })
     }

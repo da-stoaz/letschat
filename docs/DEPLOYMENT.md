@@ -142,9 +142,10 @@ SPA files and user content are never evaluated as templates.
 Other env (see the `.env.production.*.example` files):
 
 - `APP_DOMAIN=app.example.com` — Compose builds the URL advertised as `web` in
-  `/.well-known/letschat.json`. The desktop app builds shareable invite links on
-  it; without it the desktop app offers no invite links (direct invites still
-  work).
+  `/.well-known/letschat.json`. Shareable invite links point at core-api's
+  `https://<AUTH_DOMAIN>/invite/<token>` page either way: it renders the
+  link-preview card (space name only, and only for invites open to anyone) and
+  offers the desktop app, plus "Continue in browser" when `APP_DOMAIN` is set.
 - `VITE_WEB_WS_COMPRESSION=gzip` — DB WebSocket compression in browsers
   (`gzip` default, or `none`). The client auto-downgrades to `none` if a gzip
   socket fails to establish, so this never strands a user.
