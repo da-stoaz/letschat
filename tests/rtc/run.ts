@@ -95,6 +95,11 @@ try {
     '--no-first-run', '--no-default-browser-check', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required', 'about:blank'],
   { stdout: 'ignore', stderr: Bun.file(join(directory, 'chrome.log')) })
   const debugPort = await waitFor(async () => (await readFile(join(directory, 'chrome/DevToolsActivePort'), 'utf8')).split('\n')[0])
+    .catch(async (error: unknown) => {
+      // The log is removed with the temp directory; surface why Chrome never started.
+      console.error(await readFile(join(directory, 'chrome.log'), 'utf8').catch(() => 'no chrome.log'))
+      throw error
+    })
   const targets: { type: string; webSocketDebuggerUrl: string }[] = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()
   socket = new WebSocket(targets.find(target => target.type === 'page')!.webSocketDebuggerUrl)
   await new Promise<void>((resolve, reject) => { socket!.onopen = () => resolve(); socket!.onerror = () => reject(new Error('Chrome debugger connection failed')) })
