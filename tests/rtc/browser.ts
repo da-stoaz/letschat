@@ -87,7 +87,7 @@ async function verifyCallVolume(receiver: Room, publisher: Room, token: string) 
     }
     await waitForPlayback(() => volumes(0.2, 0.1), 'Channel voice/stream volume did not reach the audio sinks')
     window.AudioContext = NativeAudioContext
-    if (playbackContexts.length !== 1) throw new Error('Remote tracks should share one playback context')
+    if (playbackContexts.length !== 1) throw new Error(`Remote tracks should share one playback context (got ${playbackContexts.length})`)
     // Exercise the actual accessible slider, not just the store setter.
     container.querySelector<HTMLButtonElement>('[aria-label="Call volume controls"]')!.click()
     await waitForPlayback(() => !!document.querySelector('input[type="range"]'), 'Volume mixer did not open')
