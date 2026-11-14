@@ -10,3 +10,13 @@ rtc:
 keys:
   devkey: devsecret0123456789devsecret0123456789
 log_level: info
+# Speaking indicator. The SFU decides who is speaking (even for your own mic)
+# per update_interval-ms window: a window counts if >= min_percentile% of it is
+# louder than -active_level dBov, then the level is EMA-smoothed over
+# smooth_intervals windows. Defaults (400 ms, 35, 40%, 2) lagged ~0.5 s and
+# dropped quiet speech between syllables.
+audio:
+  update_interval: 100
+  active_level: 45      # -45 dBov; was -35, quiet speech fell below it
+  min_percentile: 20    # syllable gaps no longer zero a whole window
+  smooth_intervals: 3   # longer release so the ring holds across pauses
