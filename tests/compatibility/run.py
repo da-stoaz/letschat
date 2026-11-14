@@ -22,9 +22,14 @@ parser.add_argument('--core-image', default='letschat-compat-core:candidate')
 parser.add_argument('--module-image', default='letschat-compat-module:candidate')
 parser.add_argument('--check-revocation', action='store_true', help='Test public chat revocation on the candidate backend')
 parser.add_argument('--session-file', type=Path, help='Keep the disposable stack alive for UI tests until this private file is removed')
+parser.add_argument('--schema-out', type=Path, help='Save the published module definition (first deployment) for contract.py')
+parser.add_argument('--upgrade', action='store_true',
+                    help='After the first smoke, upgrade the same volumes in place to the candidate backend and '
+                         'repeat the smoke with the given client and the candidate client')
 args = parser.parse_args()
 if args.session_file and args.session_file.exists():
     raise RuntimeError('Refusing to overwrite an existing session file')
+assert not (args.upgrade and args.session_file), '--upgrade and --session-file are separate modes'
 project = 'letschat-compat-' + secrets.token_hex(5)
 
 
@@ -38,10 +43,6 @@ def run(*command, **kwargs):
 
 with tempfile.TemporaryDirectory(prefix=project) as temporary:
     folder = Path(temporary)
-    for name in ('docker-compose.prod.base.yml', 'spacetimedb/config.prod.toml', 'livekit/config.prod.yaml'):
-        target = folder / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(args.backend_source / name, target)
     password = secrets.token_hex(32)
     # Explicitly neutralise deployment variables; never load the repository .env.
     env = {key: value for key, value in os.environ.items() if key in ('PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'TMPDIR')}
@@ -53,34 +54,71 @@ with tempfile.TemporaryDirectory(prefix=project) as temporary:
                REQUIRE_EMAIL_CONFIRMATION='false', REQUIRE_ADMIN_APPROVAL='false', LIVEKIT_API_KEY='compat-key')
     for key in ('AUTH_JWT_SECRET', 'POSTGRES_PASSWORD', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY', 'LIVEKIT_API_SECRET'):
         env[key] = secrets.token_hex(32)
-    config = json.loads(run('docker', 'compose', '--env-file', '/dev/null', '-p', project,
-                            '-f', str(folder / 'docker-compose.prod.base.yml'), 'config', '--format', 'json', env=env))
-    for name, service in config['services'].items():
-        service['container_name'] = project + '-' + name
-        service.pop('ports', None)
-        # All mounts must be new project volumes or copied fixture config files.
-        for volume in service.get('volumes', []):
-            if volume['type'] == 'bind':
-                assert Path(volume['source']).is_relative_to(folder)
-    for name, volume in config.get('volumes', {}).items():
-        assert not volume.get('external')
-        volume['name'] = project + '-' + name
-    for name, network in config.get('networks', {}).items():
-        assert not network.get('external')
-        network['name'] = project + '-' + name
-    config['services']['core-api']['image'] = args.core_image
-    config['services']['module-init']['image'] = args.module_image
-    chat_service = 'chat-edge' if 'chat-edge' in config['services'] else 'spacetimedb'
-    for name, port in (('core-api', 8787), (chat_service, 3000)):
-        config['services'][name]['ports'] = [{'target': port, 'published': '0', 'host_ip': '127.0.0.1'}]
     config_file = folder / 'compose.json'
-    config_file.write_text(json.dumps(config))
+
+    def render(source, core_image, module_image):
+        """Write the disposable Compose project for one backend; volumes keep their project names."""
+        for name in ('docker-compose.prod.base.yml', 'spacetimedb/config.prod.toml', 'livekit/config.prod.yaml'):
+            target = folder / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source / name, target)
+        config = json.loads(run('docker', 'compose', '--env-file', '/dev/null', '-p', project,
+                                '-f', str(folder / 'docker-compose.prod.base.yml'), 'config', '--format', 'json', env=env))
+        for name, service in config['services'].items():
+            service['container_name'] = project + '-' + name
+            service.pop('ports', None)
+            # All mounts must be new project volumes or copied fixture config files.
+            for volume in service.get('volumes', []):
+                if volume['type'] == 'bind':
+                    assert Path(volume['source']).is_relative_to(folder)
+        for name, volume in config.get('volumes', {}).items():
+            assert not volume.get('external')
+            volume['name'] = project + '-' + name
+        for name, network in config.get('networks', {}).items():
+            assert not network.get('external')
+            network['name'] = project + '-' + name
+        config['services']['core-api']['image'] = core_image
+        config['services']['module-init']['image'] = module_image
+        chat_service = 'chat-edge' if 'chat-edge' in config['services'] else 'spacetimedb'
+        for name, port in (('core-api', 8787), (chat_service, 3000)):
+            config['services'][name]['ports'] = [{'target': port, 'published': '0', 'host_ip': '127.0.0.1'}]
+        config_file.write_text(json.dumps(config))
+        return config, chat_service
 
     def compose(*command):
         return run('docker', 'compose', '-p', project, '-f', str(config_file), *command, env=env)
 
+    def wait_until_ready(auth):
+        deadline = time.monotonic() + 120
+        while True:
+            try:
+                with urlopen(auth + '/health', timeout=2) as response:
+                    if response.status == 200:
+                        # core-api pins the module issuer during first login; module publish must finish.
+                        state = json.loads(run('docker', 'inspect', project + '-module-init'))[0]['State']
+                        if state['Status'] == 'exited' and state['ExitCode'] == 0:
+                            return
+            except (OSError, RuntimeError):
+                pass
+            if time.monotonic() >= deadline:
+                # Publish output only (no secrets); names e.g. a refused client-breaking schema change.
+                print(compose('logs', '--no-color', '--tail', '15', 'module-init'), flush=True)
+                raise RuntimeError('Disposable backend did not become ready')
+            time.sleep(1)
+
+    def smoke(client_source, upgraded=False):
+        client_env = dict(env, COMPAT_AUTH_URL=auth, COMPAT_DATABASE_URL=database, COMPAT_PASSWORD=password,
+                          COMPAT_CLIENT_SOURCE=str(client_source.resolve()), COMPAT_UPGRADED='1' if upgraded else '',
+                          # An in-place upgrade repeats the smoke on the same data: one second account per run.
+                          COMPAT_BOB='compatbob_' + secrets.token_hex(4))
+        # Visible output contains assertions and PASS only, never authentication responses.
+        subprocess.run(['bun', '--no-env-file', str(ROOT / 'tests/compatibility/smoke.ts')],
+                       cwd=folder, env=client_env, check=True, timeout=120)
+        return client_env
+
     session_created = False
     try:
+        config, chat_service = render(args.backend_source, args.core_image, args.module_image)
         compose('up', '-d', 'core-api', 'module-init', 'minio-init', chat_service)
         auth = 'http://' + compose('port', 'core-api', '8787')
         database = 'http://' + compose('port', chat_service, '3000')
@@ -93,28 +131,24 @@ with tempfile.TemporaryDirectory(prefix=project) as temporary:
                 DISCOVERY_LIVEKIT_URL='http://127.0.0.1:7880')
             config_file.write_text(json.dumps(config))
             compose('up', '-d', '--no-deps', chat_service, 'core-api')
-        deadline = time.monotonic() + 120
-        while True:
-            try:
-                with urlopen(auth + '/health', timeout=2) as response:
-                    if response.status == 200:
-                        # core-api pins the module issuer during first login; module publish must finish.
-                        state = json.loads(run('docker', 'inspect', project + '-module-init'))[0]['State']
-                        if state['Status'] == 'exited' and state['ExitCode'] == 0:
-                            break
-            except (OSError, RuntimeError):
-                pass
-            if time.monotonic() >= deadline:
-                raise RuntimeError('Disposable backend did not become ready')
-            time.sleep(1)
-        client_env = dict(env, COMPAT_AUTH_URL=auth, COMPAT_DATABASE_URL=database,
-                          COMPAT_PASSWORD=password, COMPAT_CLIENT_SOURCE=str(args.client_source.resolve()))
-        # Visible output contains assertions and PASS only, never authentication responses.
-        subprocess.run(['bun', '--no-env-file', str(ROOT / 'tests/compatibility/smoke.ts')],
-                       cwd=folder, env=client_env, check=True, timeout=120)
+        wait_until_ready(auth)
+        if args.schema_out:
+            args.schema_out.write_text(compose('exec', '-T', 'spacetimedb', 'curl', '-sf',
+                                               'http://localhost:3000/v1/database/letschat/schema?version=9'))
+        client_env = smoke(args.client_source)
         if args.check_revocation:
             subprocess.run(['bun', '--no-env-file', str(ROOT / 'tests/security/chat-revocation.ts')],
                            cwd=ROOT, env=client_env, check=True, timeout=120)
+        if args.upgrade:
+            # The production upgrade path: same volumes and secrets, new images, module-init republishes.
+            print('Upgrading the disposable backend in place to the candidate', flush=True)
+            _, chat_service = render(ROOT, 'letschat-compat-core:candidate', 'letschat-compat-module:candidate')
+            compose('up', '-d', '--remove-orphans', 'core-api', 'module-init', 'minio-init', chat_service)
+            auth = 'http://' + compose('port', 'core-api', '8787')
+            database = 'http://' + compose('port', chat_service, '3000')
+            wait_until_ready(auth)
+            for client_source in dict.fromkeys([args.client_source.resolve(), ROOT]):
+                smoke(client_source, upgraded=True)
         if args.session_file:
             with args.session_file.open('x') as session:
                 session_created = True
@@ -127,4 +161,5 @@ with tempfile.TemporaryDirectory(prefix=project) as temporary:
     finally:
         if session_created:
             args.session_file.unlink(missing_ok=True)
-        compose('down', '-v', '--remove-orphans')
+        if config_file.exists():
+            compose('down', '-v', '--remove-orphans')

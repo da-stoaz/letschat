@@ -5,6 +5,15 @@ import SiteFooter from "@/components/SiteFooter.astro";
 
 const changes = [
   {
+    version: "v1.6.3",
+    date: "November 2026",
+    items: [
+      "module-init no longer publishes a schema change that SpacetimeDB reports as breaking existing clients. It used to accept that confirmation silently, and older desktop apps then failed to read the changed data. Such an upgrade now stops at module-init while the previous module keeps serving.",
+      "Release checks now compare the whole client contract (every reducer, procedure, view and public table) with the previous release of the same protocol and upgrade that release's data in place, so a release that breaks it has to start a new client protocol.",
+    ],
+    migration: "Download the new docker-compose.prod.base.yml with the 1.6.3 images. Nothing else changes for a routine upgrade. If a later upgrade leaves module-init restarting with \"will BREAK existing clients\" in its log, read that release's notes here, then accept once with the command in docs/DEPLOYMENT.md under \"Upgrades that break existing clients\".",
+  },
+  {
     version: "v1.2.4",
     date: "September 2026",
     items: [

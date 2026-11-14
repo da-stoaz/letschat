@@ -4,7 +4,7 @@ import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
 import { GITHUB_DISCUSSIONS, GITHUB_ISSUE_NEW } from "@/lib/site";
 
-const updatedAt = "September 23, 2026";
+const updatedAt = "November 14, 2026";
 
 // Delivered and merged to main.
 const shipped = [
@@ -74,6 +74,17 @@ const shipped = [
       "Production images pinned by LETSCHAT_VERSION with immutable version and commit tags, published for amd64 and arm64, plus a documented upgrade/rollback runbook.",
     ],
   },
+  {
+    id: "v1.1 – v1.6",
+    focus: "Attachments, Calls & Compatibility",
+    blurb: "Files and calls grew up, two security reviews closed, and old and new versions now fail clearly instead of silently.",
+    items: [
+      "Object-storage attachments with multipart uploads, upload quotas, video posters and HLS playback.",
+      "Call quality: local RNNoise or DeepFilterNet noise suppression on desktop and web, screen sharing up to 1080p/60 with simulcast, and master and per-person call volume.",
+      "Every open security review finding closed; the public database API is restricted to the chat socket and token exchange.",
+      "Client/backend compatibility: apps check the server's protocol before connecting, and releases are gated on the full client contract and an in-place upgrade of the previous release.",
+    ],
+  },
 ];
 
 // Sequenced ahead — roughly in priority order. Direction: Spaces with
@@ -123,9 +134,9 @@ const upcoming = [
     status: "Planned",
     effort: "~2 weeks",
     goals: [
-      "Adaptive/simulcast video resolution that auto-downscales for weak connections.",
-      "Per-user and master audio volume controls.",
-      "Extend noise suppression to the web client (Krisp already ships on desktop).",
+      "Volume controls, local noise suppression on web and desktop, and adaptive screen sharing have shipped (see v1.1 – v1.6).",
+      "Tune camera video to downscale automatically on weak connections.",
+      "Verify adaptive layer switching between real clients and call quality on headsets and installed desktop builds.",
     ],
   },
   {
@@ -208,7 +219,7 @@ const upcoming = [
 
       <div class="roadmap-kpis">
         <article>
-          <p class="kpi-value">6</p>
+          <p class="kpi-value">7</p>
           <p class="kpi-label">Plans shipped</p>
         </article>
         <article>

@@ -13,6 +13,7 @@ const database = process.env.COMPAT_DATABASE_URL!
 assert(new URL(auth).hostname === '127.0.0.1', 'Only disposable loopback services are allowed')
 assert(new URL(database).hostname === '127.0.0.1')
 const password = process.env.COMPAT_PASSWORD!
+const bob = process.env.COMPAT_BOB!
 const sockets: Connection[] = []
 const deadline = setTimeout(() => { console.error('Compatibility smoke timed out'); process.exit(1) }, 90_000)
 
@@ -51,8 +52,8 @@ try {
   const discovery = await (await fetch(`${auth}/.well-known/letschat.json`)).json()
   assert.equal(evaluateCompatibility(discovery).status, 'compatible', 'Release declares incompatible client/backend')
   const accountA = await post('/auth/login', { username: 'admin', password })
-  await post('/auth/register', { username: 'compatbob', displayName: 'Bob', email: 'bob@test.local', password })
-  const accountB = await post('/auth/login', { username: 'compatbob', password })
+  await post('/auth/register', { username: bob, displayName: 'Bob', email: `${bob}@test.local`, password })
+  const accountB = await post('/auth/login', { username: bob, password })
   const a = await connect(accountA.spacetimeToken)
   const b = await connect(accountB.spacetimeToken)
   await subscribe(a.conn)
@@ -61,7 +62,12 @@ try {
     await a.conn.reducers.registerUser({ username: 'admin', displayName: 'Admin' })
   }
   if (![...b.conn.db.my_visible_users.iter()].some(row => row.identity.isEqual(b.identity))) {
-    await b.conn.reducers.registerUser({ username: 'compatbob', displayName: 'Bob' })
+    await b.conn.reducers.registerUser({ username: bob, displayName: 'Bob' })
+  }
+  if (process.env.COMPAT_UPGRADED) {
+    // Rows written before the upgrade must survive it and still decode with this client.
+    await until(() => [...a.conn.db.my_channel_messages.iter()].some(row => row.content === 'compatibility channel message'))
+    await until(() => [...a.conn.db.my_direct_messages.iter()].some(row => row.content === 'compatibility DM'))
   }
   await a.conn.reducers.createServer({ name: 'Compatibility smoke' })
   await until(() => [...a.conn.db.my_channels.iter()].some(row => row.kind.tag === 'Text'))
@@ -79,7 +85,7 @@ try {
   await until(() => [...a.conn.db.my_voice_participants.iter()].some(row => row.channelId === voice.id))
   const voiceToken = await post('/livekit/token', { room: String(voice.id), identity: accountA.spacetimeIdentity, sessionToken: accountA.sessionToken })
   assert.equal(voiceToken.token.split('.').length, 3)
-  console.log('PASS discovery, real sign-in, generated subscriptions, channel message, DM, voice token')
+  console.log(`PASS discovery, real sign-in, generated subscriptions, channel message, DM, voice token${process.env.COMPAT_UPGRADED ? ', data preserved across upgrade' : ''}`)
 } finally {
   for (const socket of sockets) socket.disconnect()
   clearTimeout(deadline)

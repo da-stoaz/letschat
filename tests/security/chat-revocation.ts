@@ -13,7 +13,7 @@ async function post(path: string, body: object) {
   return fetch(`${auth}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 }
 async function login(password: string) {
-  const response = await post('/auth/login', { username: 'compatbob', password })
+  const response = await post('/auth/login', { username: process.env.COMPAT_BOB!, password })
   assert.equal(response.status, 200)
   return response.json()
 }

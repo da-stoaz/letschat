@@ -210,6 +210,32 @@ docker compose -f docker-compose.prod.base.yml run --rm module-init \
 A separately installed CLI reaches the raw API at `http://127.0.0.1:44302`
 and must authenticate as the module owner. Port :44300 is the client filter.
 
+### Upgrades that break existing clients
+
+`module-init` confirms routine migrations itself but **refuses** a schema change
+that SpacetimeDB reports as breaking existing clients (for example a new column
+in a table or view that apps decode). Older desktop apps would otherwise fail to
+read data. The publish stops, `module-init` keeps retrying, and the previously
+published module keeps serving, so chat stays up on the old schema:
+
+```bash
+docker logs letschat-module-init
+# The above changes will BREAK existing clients. Do you want to proceed? [y/N]Aborting
+```
+
+Releases that ship such a change say so on the Breaking Changes page and start a
+new client protocol, so older apps are told to update instead of failing. After
+reading those notes, accept the change once for this upgrade:
+
+```bash
+docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml \
+  run --rm module-init publish --server http://spacetimedb:3000 letschat \
+  --bin-path /module/letschat_server.wasm --yes=remote,skip-login,migrate,break-clients
+```
+
+The next `module-init` retry then finds nothing left to publish and exits. Never
+add `--delete-data`; data-deleting migrations go through the cold-archive rebuild.
+
 ## Upgrading a running deployment
 
 Before upgrading, save a private copy of `.env`, both Compose files and the
@@ -749,10 +775,10 @@ the same end state as `vA → vB → vC`.
 
 Two exceptions where the order DOES matter:
 
-1. **Destructive SpacetimeDB schema changes.** `spacetime publish` prompts
-   before deleting data; the prompt is the safety net. Always run publishes
-   without `--yes` for upgrades (see "SpacetimeDB Publish" above) so you
-   don't silently drop tables.
+1. **SpacetimeDB schema changes that break clients or delete data.**
+   `module-init` never deletes data and refuses changes that break existing
+   clients; see "Upgrades that break existing clients" above. Skipping
+   versions can combine several releases' changes into one such publish.
 2. **Env var renames.** Always read the release notes for new/renamed
    variables before pulling. core-api fails fast on missing required values,
    but a renamed-but-still-set old name silently falls back to defaults.

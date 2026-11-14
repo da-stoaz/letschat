@@ -170,6 +170,11 @@ import SiteFooter from "@/components/SiteFooter.astro";
               <td class="p-3"><code class="text-xs">module-init</code> failed or SpacetimeDB not yet healthy</td>
               <td class="p-3">Check <code class="text-xs">docker logs letschat-module-init</code>; it retries on failure automatically</td>
             </tr>
+            <tr>
+              <td class="p-3"><code class="text-xs">module-init</code> keeps restarting after an upgrade</td>
+              <td class="p-3">Its log says the changes <em>will BREAK existing clients</em>; the old module keeps serving</td>
+              <td class="p-3">Read the release's Breaking Changes notes, then accept once with the <code class="text-xs">run --rm module-init publish … break-clients</code> command from <code class="text-xs">docs/DEPLOYMENT.md</code> ("Upgrades that break existing clients")</td>
+            </tr>
           </tbody>
         </table>
       </div>

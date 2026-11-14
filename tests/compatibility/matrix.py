@@ -1,4 +1,6 @@
-"""Gate releases against the candidate and the oldest/latest published protocol family.
+"""Gate releases against the candidate and the oldest/latest published protocol family:
+full client contract (contract.py), both client/backend directions, and an in-place
+upgrade of the released backend's data to the candidate.
 Uses GitHub Releases only to select TEST baselines, never as a client update feed.
 Requires a full git checkout including tags and locally built candidate images.
 """
@@ -19,16 +21,15 @@ first = re.search(r'FirstCompatibleClient = "([^"]+)"', policy)[1]
 current = json.loads((ROOT / 'package.json').read_text())['version']
 
 
-def smoke(check_revocation=False, **options):
-    command = ['python3', str(ROOT / 'tests/compatibility/run.py')]
-    if check_revocation:
-        command.append('--check-revocation')
+def smoke(*flags, **options):
+    command = ['python3', str(ROOT / 'tests/compatibility/run.py'), *flags]
     for key, value in options.items():
         command.extend(['--' + key.replace('_', '-'), str(value)])
     subprocess.run(command, check=True, cwd=ROOT)
 
 
-smoke(check_revocation=True)
+schemas = Path(tempfile.mkdtemp(prefix='letschat-compat-schemas-'))
+smoke('--check-revocation', schema_out=schemas / 'candidate.json')
 if current == first:
     print(f'Protocol {protocol} begins with {first}; candidate/candidate establishes the baseline.', flush=True)
     raise SystemExit(0)
@@ -75,8 +76,13 @@ with tempfile.TemporaryDirectory(prefix='letschat-compat-sources-') as temporary
             files.extractall(source, filter='data')
         subprocess.run(['bun', 'install', '--frozen-lockfile'], cwd=source, check=True)
         version = tag[1:]
+        images = dict(core_image=f'ghcr.io/da-stoaz/letschat-core-api:{version}',
+                      module_image=f'ghcr.io/da-stoaz/letschat-module:{version}')
         print(f'Candidate client → backend {version}', flush=True)
-        smoke(backend_source=source, core_image=f'ghcr.io/da-stoaz/letschat-core-api:{version}',
-              module_image=f'ghcr.io/da-stoaz/letschat-module:{version}')
-        print(f'Client {version} → candidate backend', flush=True)
-        smoke(client_source=source)
+        smoke(backend_source=source, schema_out=schemas / f'{version}.json', **images)
+        print(f'Client contract {version} → candidate', flush=True)
+        subprocess.run(['python3', str(ROOT / 'tests/compatibility/contract.py'),
+                        str(schemas / f'{version}.json'), str(schemas / 'candidate.json')], check=True)
+        # Covers client {version} → candidate backend, on upgraded rather than fresh data.
+        print(f'Backend {version} upgraded in place → candidate, clients {version} and candidate', flush=True)
+        smoke('--upgrade', backend_source=source, client_source=source, **images)
