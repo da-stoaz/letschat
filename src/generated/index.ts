@@ -123,6 +123,7 @@ import UpdateVoiceStateReducer from "./update_voice_state_reducer";
 import UseInviteReducer from "./use_invite_reducer";
 
 // Import all procedure arg schemas
+import * as InvitePreviewProcedure from "./invite_preview_procedure";
 import * as LoadOlderChannelMessagesProcedure from "./load_older_channel_messages_procedure";
 import * as LoadOlderChannelMessagesPageProcedure from "./load_older_channel_messages_page_procedure";
 import * as LoadOlderDirectMessagesProcedure from "./load_older_direct_messages_procedure";
@@ -537,6 +538,7 @@ const reducersSchema = __reducers(
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
+  __procedureSchema("invite_preview", InvitePreviewProcedure.params, InvitePreviewProcedure.returnType),
   __procedureSchema("load_older_channel_messages", LoadOlderChannelMessagesProcedure.params, LoadOlderChannelMessagesProcedure.returnType),
   __procedureSchema("load_older_channel_messages_page", LoadOlderChannelMessagesPageProcedure.params, LoadOlderChannelMessagesPageProcedure.returnType),
   __procedureSchema("load_older_direct_messages", LoadOlderDirectMessagesProcedure.params, LoadOlderDirectMessagesProcedure.returnType),

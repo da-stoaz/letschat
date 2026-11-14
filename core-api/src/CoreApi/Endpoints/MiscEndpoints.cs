@@ -36,6 +36,7 @@ public static class MiscEndpoints
                 config.Current.DailyUploadQuotaMiB * UploadLimits.MiB,
                 config.Current.UserStorageLimitMiB * UploadLimits.MiB,
                 config.Current.InstanceStorageLimitMiB * UploadLimits.MiB,
-                options.DiscoveryWebUrl));
+                options.DiscoveryWebUrl,
+                $"{options.DiscoveryAuthUrl.TrimEnd('/')}/invite"));
     }
 }

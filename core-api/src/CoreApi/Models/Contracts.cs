@@ -203,4 +203,7 @@ public sealed record WellKnownResponse(
     long UserStorageLimitBytes,
     long InstanceStorageLimitBytes,
     // Hosted web client (DISCOVERY_WEB_URL), or null when the instance has none.
-    string? Web);
+    string? Web,
+    // Base for shareable space invite links: core-api's own /invite page, which
+    // renders the link-preview card. Absent on older instances.
+    string Invite);

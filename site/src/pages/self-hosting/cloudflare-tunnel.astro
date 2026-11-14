@@ -222,7 +222,7 @@ LIVEKIT_DOMAIN=lk.example.com`} />
           Want people to use LetsChat from a browser at <code>app.example.com</code>? It connects to
           the auth hostname on its own; add the <code>app</code> route in Step 4, and set:
         </p>
-        <CodeBlock label=".env" code={`# Browser site and desktop invite links; no separate URL setting.
+        <CodeBlock label=".env" code={`# Browser site; invite links then also offer "Continue in browser".
 APP_DOMAIN=app.example.com
 
 # DB WebSocket compression in the browser: "gzip" (default) or "none".

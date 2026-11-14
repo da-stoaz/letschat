@@ -688,6 +688,39 @@ public sealed class SpacetimeClient(
         return value.StartsWith("0x", StringComparison.Ordinal) ? value[2..] : value;
     }
 
+    /// <summary>
+    /// The space name a shared invite link may show (module procedure
+    /// <c>invite_preview</c>), or <c>null</c> for an unknown, used-up,
+    /// username-restricted or expired invite, an older module without the
+    /// procedure, or SpacetimeDB not answering. Callers render a generic card.
+    /// </summary>
+    public async Task<string?> GetInvitePreviewAsync(string token, CancellationToken ct = default)
+    {
+        var http = httpFactory.CreateClient(ClientName);
+        var url = $"{options.SpacetimeHttpUrl.TrimEnd('/')}/v1/database/{options.SpacetimeModuleName}/call/invite_preview";
+        using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = ReducerArgs(new[] { token }) };
+        // A fixed subject that no account id (a GUID) can collide with; the
+        // procedure needs no account, this only avoids an anonymous identity per call.
+        request.Headers.Authorization = new("Bearer", tokens.Mint("invite-preview"));
+        try
+        {
+            using var response = await http.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            // Option<String> is the SATS sum [0, "name"] (some) or [1, []] (none).
+            var value = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOpts, ct);
+            return value.ValueKind == JsonValueKind.Array && value.GetArrayLength() == 2
+                && value[0].ValueKind == JsonValueKind.Number && value[0].GetInt32() == 0
+                && value[1].ValueKind == JsonValueKind.String
+                ? value[1].GetString()
+                : null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException)
+        {
+            logger.LogWarning(ex, "Invite preview lookup failed");
+            return null;
+        }
+    }
+
     /// <summary>Reads the current <c>space_create_policy</c> from the module's settings row.</summary>
     public async Task<SpaceCreatePolicy> GetSpaceCreatePolicyAsync(CancellationToken ct = default)
     {
