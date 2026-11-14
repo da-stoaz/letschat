@@ -94,7 +94,8 @@ try {
   browser = Bun.spawn([chrome, '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${directory}/chrome`,
     '--no-first-run', '--no-default-browser-check', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required', 'about:blank'],
   { stdout: 'ignore', stderr: Bun.file(join(directory, 'chrome.log')) })
-  const debugPort = await waitFor(async () => (await readFile(join(directory, 'chrome/DevToolsActivePort'), 'utf8')).split('\n')[0])
+  // A cold first Chrome launch on a CI runner has taken longer than the 15 s fixture default.
+  const debugPort = await waitFor(async () => (await readFile(join(directory, 'chrome/DevToolsActivePort'), 'utf8')).split('\n')[0], 60_000)
     .catch(async (error: unknown) => {
       // The log is removed with the temp directory; surface why Chrome never started.
       console.error(await readFile(join(directory, 'chrome.log'), 'utf8').catch(() => 'no chrome.log'))
