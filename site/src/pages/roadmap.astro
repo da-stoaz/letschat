@@ -4,7 +4,7 @@ import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
 import { GITHUB_DISCUSSIONS, GITHUB_ISSUE_NEW } from "@/lib/site";
 
-const updatedAt = "November 14, 2026";
+const updatedAt = "November 17, 2026";
 
 // Delivered and merged to main.
 const shipped = [
@@ -99,7 +99,19 @@ const upcoming = [
     goals: [
       "Sign the Windows build so SmartScreen/AV stop flagging LetsChat as malware.",
       "Wire signing into the release CI; verify macOS notarization parity.",
-      "Highest-leverage adoption fix — done before storage tiering starts.",
+      "Free for open source via the SignPath Foundation, applying now; desktop auto-update does not wait on it.",
+    ],
+  },
+  {
+    id: "OTA Updates",
+    focus: "Client & server auto-update",
+    priority: "P1",
+    status: "Now",
+    effort: "~1–2 weeks",
+    goals: [
+      "Tauri auto-updater for the desktop client over a signed update feed (its own Ed25519 signature; does not need Windows code signing).",
+      "Automate the self-hosted server upgrade — today it's 100% manual (docker compose pull + spacetime publish); make it a one-command, safe update.",
+      "Desktop first: the app offers the release its servers recommend and installs it on restart, so it never runs ahead of a backend that stays on an older version.",
     ],
   },
   {
@@ -113,18 +125,6 @@ const upcoming = [
       "Serve older history from the cold archive on demand, transparently to the client.",
       "Part A (durability: the archive mirror, safe rebuilds, scheduled backups) has shipped.",
       "The client half already landed: clients sync a recent window and page older history back on scroll, so eviction only has to move rows, not change how they are read.",
-    ],
-  },
-  {
-    id: "OTA Updates",
-    focus: "Client & server auto-update",
-    priority: "P1",
-    status: "Planned",
-    effort: "~1–2 weeks",
-    goals: [
-      "Tauri auto-updater for the desktop client over a signed update feed (builds on Windows code signing).",
-      "Automate the self-hosted server upgrade — today it's 100% manual (docker compose pull + spacetime publish); make it a one-command, safe update.",
-      "Staged rollout with version gating (already exposed in /.well-known); scheduled right after Plan 2.",
     ],
   },
   {

@@ -1,10 +1,10 @@
 # P0 Plan: Windows Code Signing (via SignPath Foundation)
 
-> **Status (reviewed 2026-09-16): not started; externally blocked.** The
-> SignPath application, CI integration, and signed Windows validation remain
-> unchecked. This is a proposal, not a description of the current release
-> pipeline. Current operational documentation lives in
-> [`DEPLOYMENT.md`](../../docs/DEPLOYMENT.md).
+> **Status (reviewed 2026-11-14): not started; application material prepared
+> below.** The owner cannot pay for a certificate (Azure ~$10/mo, Certum ~€25/yr),
+> so SignPath Foundation is the only route. Desktop auto-update (branch
+> `feat/desktop-auto-update`) does **not** depend on this. Current operational
+> documentation lives in [`DEPLOYMENT.md`](../../docs/DEPLOYMENT.md).
 
 ## Context
 
@@ -110,11 +110,48 @@ signing policy until the org exists.
 
 ---
 
+## Application prep (checked against https://signpath.org/terms, 2026-11-14)
+
+| Requirement | State |
+|---|---|
+| OSI license, no commercial dual-licensing | ✓ GPL-3.0 |
+| Actively maintained, already released in the signed form | ✓ GitHub releases since v0.1.0 |
+| Functionality documented on a download page | ✓ site `/download` |
+| No malware/PUP, no proprietary code | ✓ (vendored glib is LGPL) |
+| Verifiable automated build from the repo | ✓ `release.yml` on GitHub-hosted runners |
+| Every release manually approved before signing | ✓ releases are drafts; owner publishes |
+| Team roles: Authors, Reviewers, Approvers | Owner holds all three (single maintainer) |
+| MFA on GitHub and SignPath for every member | Confirm GitHub MFA is on before applying |
+| Product name + version metadata on binaries | ✓ Tauri sets `ProductName`/`FileVersion` from `tauri.conf.json` (LetsChat, package version); verify on the signed `.exe` |
+| "Code signing policy" section on the project home page | **To publish when applying** — draft below |
+
+### Draft: code signing policy section (site, e.g. `/download` or a `/code-signing` page)
+
+> **Code signing policy.** Free code signing for Windows provided by
+> [SignPath.io](https://about.signpath.io), certificate by
+> [SignPath Foundation](https://signpath.org).
+> Committers and reviewers: [da-stoaz](https://github.com/da-stoaz).
+> Approvers: [da-stoaz](https://github.com/da-stoaz).
+> Every signed release is built by GitHub Actions from this repository and approved
+> manually before signing.
+> **Privacy.** LetsChat transfers no data to any system unless a user connects it
+> to a server they choose. The desktop app checks GitHub releases for updates.
+
+Publish it only once the application is submitted: it states that SignPath signs
+the builds.
+
+### Interaction with the desktop updater
+
+The updater's `.sig` (Tauri Ed25519) covers the exact installer bytes. Authenticode
+signing changes the file, so once SignPath signs `.msi`/`.exe`, **re-run
+`tauri signer sign` on the signed files and rewrite their entries in `latest.json`**
+before attaching them, or every Windows update fails verification.
+
 ## Implementation surface
 
 | Path | Change |
 |---|---|
-| `.github/workflows/release.yml` (two `windows-latest` legs) | Build Windows artifacts **without publishing** them; add a SignPath signing-request step (official action / API) that uploads each `.msi`/`.exe`, polls, and downloads the signed result; add a `signtool verify /pa /v` gate; upload the **signed** artifacts to the existing draft release. |
+| `.github/workflows/release.yml` (two `windows-latest` legs) | Build Windows artifacts **without publishing** them; add a SignPath signing-request step (official action / API) that uploads each `.msi`/`.exe`, polls, and downloads the signed result; add a `signtool verify /pa /v` gate; re-sign them for the updater (see above); upload the **signed** artifacts to the existing draft release. |
 | `src-tauri/tauri.conf.json` | **No change** — signing is external, not Tauri-inline; no `bundle.windows` block needed. |
 | `production` GitHub environment secrets | Add `SIGNPATH_API_TOKEN` (+ org/project/signing-policy slugs, which can be plain workflow env, not secret). |
 | App / frontend code | **No change.** |
@@ -144,6 +181,7 @@ approval is implementable here.
 
 ## Status
 
+- [x] Application material prepared (2026-11-14, above)
 - [ ] SignPath Foundation application submitted
 - [ ] Approved + org/policy/cert provisioned
 - [ ] GitHub App installed, secrets added to `production` environment
