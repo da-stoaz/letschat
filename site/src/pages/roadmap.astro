@@ -79,108 +79,118 @@ const shipped = [
     focus: "Attachments, Calls & Compatibility",
     blurb: "Files and calls grew up, two security reviews closed, and old and new versions now fail clearly instead of silently.",
     items: [
-      "Object-storage attachments with multipart uploads, upload quotas, video posters and HLS playback.",
+      "Object-storage attachments with multipart uploads, daily and stored-byte upload limits, video posters and HLS playback.",
       "Call quality: local RNNoise or DeepFilterNet noise suppression on desktop and web, screen sharing up to 1080p/60 with simulcast, and master and per-person call volume.",
       "Every open security review finding closed; the public database API is restricted to the chat socket and token exchange.",
       "Client/backend compatibility: apps check the server's protocol before connecting, and releases are gated on the full client contract and an in-place upgrade of the previous release.",
+      "Invite links unfurl as a preview card in other messengers and open the desktop app straight at the invite.",
+    ],
+  },
+  {
+    id: "v1.7",
+    focus: "Desktop auto-update",
+    blurb: "The desktop app updates itself, but never ahead of the servers it connects to.",
+    items: [
+      "Each saved server recommends a client version; the app offers the highest one and installs it when you restart, so a call is never cut off.",
+      "Updates come from a signed feed checked against a key built into the app. Downgrades and unpublished releases are never offered.",
+      "Operators can hand out a client fix early with RECOMMENDED_CLIENT_VERSION.",
+      "Apps older than 1.6.5 have no updater and need one manual update.",
     ],
   },
 ];
 
-// Sequenced ahead — roughly in priority order. Direction: Spaces with
-// Discord-like behaviour (community servers, not team workspaces).
+// Ahead, roughly in priority order. `status` picks the group on the page:
+// Now = in progress, Next = up next, Planned, Deferred = later.
 const upcoming = [
   {
-    id: "Windows Code Signing",
+    id: "Release",
     focus: "Signed Windows installers",
-    priority: "P0",
-    status: "Now",
-    effort: "~days",
-    goals: [
-      "Sign the Windows build so SmartScreen/AV stop flagging LetsChat as malware.",
-      "Wire signing into the release CI; verify macOS notarization parity.",
-      "Free for open source via the SignPath Foundation, applying now; desktop auto-update does not wait on it.",
-    ],
-  },
-  {
-    id: "OTA Updates",
-    focus: "Client & server auto-update",
     priority: "P1",
     status: "Now",
-    effort: "~1–2 weeks",
+    effort: "~1 week after approval",
     goals: [
-      "Tauri auto-updater for the desktop client over a signed update feed (its own Ed25519 signature; does not need Windows code signing).",
-      "Automate the self-hosted server upgrade — today it's 100% manual (docker compose pull + spacetime publish); make it a one-command, safe update.",
-      "Desktop shipped in 1.7.0: the app offers the release its servers recommend and installs it on restart, so it never runs ahead of a backend that stays on an older version.",
+      "Sign every Windows installer so SmartScreen and antivirus show a verified publisher instead of \"unknown publisher\".",
+      "Free for open source through the SignPath Foundation. The application is prepared; release CI is wired up once it is approved.",
+      "Re-sign the updater files after Authenticode signing, so Windows auto-updates keep verifying.",
+      "SmartScreen warnings fade gradually: the free certificate builds reputation over time.",
     ],
   },
   {
-    id: "Plan 2, Part B",
-    focus: "Storage Tiering — Eviction",
+    id: "Operations",
+    focus: "One-command server upgrades",
     priority: "P0",
     status: "Next",
-    effort: "~2 weeks",
+    effort: "~2–4 weeks",
     goals: [
-      "Keep only a bounded hot working set in SpacetimeDB to cap server RAM.",
-      "Serve older history from the cold archive on demand, transparently to the client.",
-      "Part A (durability: the archive mirror, safe rebuilds, scheduled backups) has shipped.",
-      "The client half already landed: clients sync a recent window and page older history back on scroll, so eviction only has to move rows, not change how they are read.",
+      "Upgrading a self-hosted server is still manual: download the new compose files, pull the images and restart.",
+      "Turn that into one safe command. (The desktop half of over-the-air updates shipped in 1.7.)",
     ],
   },
   {
-    id: "Plan 3",
-    focus: "Voice & Media Quality",
+    id: "Calls",
+    focus: "Voice & media quality",
     priority: "P1",
     status: "Planned",
-    effort: "~2 weeks",
+    effort: "~4 weeks",
     goals: [
-      "Volume controls, local noise suppression on web and desktop, and adaptive screen sharing have shipped (see v1.1 – v1.6).",
-      "Tune camera video to downscale automatically on weak connections.",
-      "Verify adaptive layer switching between real clients and call quality on headsets and installed desktop builds.",
+      "Tune camera video for weak connections (calls already use adaptive stream and dynacast).",
+      "Verify layer switching between real clients, and call quality on headsets and installed desktop builds.",
     ],
   },
   {
-    id: "Plan 4",
-    focus: "Space Operations & Limits",
+    id: "Spaces",
+    focus: "Space operations & limits",
     priority: "P1",
     status: "Planned",
-    effort: "Multi-week",
+    effort: "~2 months",
     goals: [
-      "Roll out and verify configurable daily, per-user stored, and installation stored limits on the shipped object registry.",
-      "Roll out and verify multipart uploads through Cloudflare Tunnel; add cross-restart upload continuation later.",
-      "Per-space role & access management (Discord-style roles) and space-specific storage quotas.",
+      "Verify the per-user and instance storage limits and >100 MB multipart uploads on a real deployment behind Cloudflare Tunnel; both shipped in v1.1.",
+      "Resumable downloads, and continuing an upload after the app restarts.",
+      "Per-space roles and access management (Discord-style), and per-space storage quotas.",
       "Drop the core-api↔SpacetimeDB admin-identity coupling; add operator-facing server logging.",
     ],
   },
   {
-    id: "Plan 5",
-    focus: "Search & Group DMs",
+    id: "Storage",
+    focus: "Storage tiering, Part B: eviction",
     priority: "P2",
     status: "Planned",
-    effort: "~3 weeks",
+    effort: "~4 weeks",
     goals: [
-      "Full-text search across spaces and DMs — wiring up the currently-stubbed search UI.",
+      "Keep only the newest 200 messages per channel and DM in SpacetimeDB, and serve older history from the PostgreSQL archive.",
+      "Starts when production measurements show SpacetimeDB memory or history paging nearing the host's budget, not before.",
+      "Already in place: the archive mirror, safe rebuilds and backups (Part A), and clients that page older history on scroll.",
+    ],
+  },
+  {
+    id: "Search",
+    focus: "Search & group DMs",
+    priority: "P2",
+    status: "Planned",
+    effort: "~6 weeks",
+    goals: [
+      "Search full history across spaces and DMs. Today search covers only the messages loaded in the open channel.",
       "Group direct messages.",
     ],
   },
   {
-    id: "Plan 6",
-    focus: "Full UI Redesign",
+    id: "Design",
+    focus: "Full UI redesign",
     priority: "P2",
     status: "Planned",
-    effort: "Multi-week",
+    effort: "~2 months",
     goals: [
       "Deliberate ground-up visual redesign rather than incremental patches.",
-      "Profile popup cards, right-click context menus, and a custom window header rail.",
-      "UI and notification sounds.",
+      "Profile cards, and right-click menus everywhere; today only call participants have one, for per-person volume.",
+      "A custom window title bar, and UI and notification sounds.",
     ],
   },
   {
-    id: "Plan 7",
-    focus: "End-to-End Encryption",
+    id: "Security",
+    focus: "End-to-end encryption",
     priority: "P2",
     status: "Planned",
-    effort: "Multi-week",
+    effort: "Multi-month",
     goals: [
       "Encrypt DMs first, then attachments and calls (LiveKit insertable streams), then spaces.",
       "Per-conversation keys wrapped per device; all decryption happens on-device.",
@@ -188,110 +198,84 @@ const upcoming = [
     ],
   },
   {
-    id: "Later / Ideas",
-    focus: "Scheduled later or idea-stage",
+    id: "Ideas",
+    focus: "Later or idea stage",
     priority: "Idea",
     status: "Deferred",
     effort: "Unscheduled",
     goals: [
-      "Localisation (i18n) — agreed, scheduled for a later milestone.",
+      "Localisation (i18n), agreed for a later milestone.",
       "Native mobile app, public integration API, and MCP integration.",
-      "Multi-instance client and an on-device offline cache.",
+      "One app connected to several servers at once, and an on-device message cache for offline reading and faster start.",
     ],
   },
 ];
+
+const groups = [
+  { status: "Now", title: "In progress" },
+  { status: "Next", title: "Up next" },
+  { status: "Planned", title: "Planned" },
+  { status: "Deferred", title: "Later" },
+].map((group) => ({ ...group, items: upcoming.filter((m) => m.status === group.status) }));
 ---
 
-<Layout title="LetsChat Roadmap | Plans and Delivery" description="LetsChat roadmap: shipped milestones and the sequenced plans ahead — Windows code signing, storage tiering, OTA updates, voice quality, a full UI redesign, and end-to-end encryption.">
+<Layout title="LetsChat Roadmap | Plans and Delivery" description="LetsChat roadmap: shipped milestones and the plans ahead — signed Windows installers, one-command server upgrades, storage tiering, call quality, a full UI redesign, and end-to-end encryption.">
   <SiteHeader active="roadmap" />
 
-  <main class="max-w-7xl mx-auto px-5 sm:px-6 py-14 space-y-10">
-    <section class="roadmap-hero">
-      <div>
-        <p class="inline-flex text-xs text-muted-foreground border border-border rounded-full px-3 py-1">Updated: {updatedAt}</p>
-        <h1 class="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight mt-4 mb-3">Roadmap: shipped milestones and the plans ahead</h1>
-        <p class="text-muted-foreground max-w-3xl leading-relaxed">
-          LetsChat is built plan by plan. This roadmap tracks what has shipped and the sequenced
-          work ahead — each plan builds on the one before it. There are no fixed calendar dates;
-          plans land in order as they're completed.
-        </p>
-      </div>
-
-      <div class="roadmap-kpis">
-        <article>
-          <p class="kpi-value">7</p>
-          <p class="kpi-label">Plans shipped</p>
-        </article>
-        <article>
-          <p class="kpi-value">1</p>
-          <p class="kpi-label">Next up</p>
-        </article>
-        <article>
-          <p class="kpi-value">8</p>
-          <p class="kpi-label">Planned &amp; later</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="priority-box">
-      <h2 class="text-xl font-semibold mb-3">How to read this</h2>
-      <div class="grid md:grid-cols-3 gap-3 text-sm">
-        <article>
-          <p class="font-semibold">Shipped</p>
-          <p class="text-muted-foreground">Delivered and merged into <code>main</code>.</p>
-        </article>
-        <article>
-          <p class="font-semibold">Next / Planned</p>
-          <p class="text-muted-foreground">Sequenced and scoped; later plans depend on earlier ones.</p>
-        </article>
-        <article>
-          <p class="font-semibold">Optional / Deferred</p>
-          <p class="text-muted-foreground">Nice-to-have or idea-stage; may be skipped or scheduled later.</p>
-        </article>
-      </div>
-    </section>
-
+  <main class="max-w-7xl mx-auto px-5 sm:px-6 py-14 space-y-14">
     <section>
-      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-5">Shipped</h2>
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight mb-3">Roadmap</h1>
+      <p class="text-lg text-muted-foreground leading-relaxed max-w-2xl">
+        LetsChat is built plan by plan, each one building on the last. There are no calendar dates;
+        plans land in order as they're finished.
+      </p>
+      <p class="text-sm text-muted-foreground mt-3">Last updated {updatedAt}</p>
+    </section>
+
+    <section class="space-y-10">
+      {groups.map((group) => (
+        <div class="space-y-4">
+          <h2 class={`group-title group-${group.status.toLowerCase()}`}>
+            {group.title}
+            <span>{group.items.length}</span>
+          </h2>
+          <div class="timeline-list">
+            {group.items.map((milestone) => (
+              <article class={`timeline-card card-${group.status.toLowerCase()}`}>
+                <div class="timeline-head">
+                  <div>
+                    <p class="timeline-window">{milestone.id}</p>
+                    <h3>{milestone.focus}</h3>
+                  </div>
+                  <div class="timeline-meta">
+                    <span class={`chip priority-${milestone.priority.toLowerCase()}`}>{milestone.priority}</span>
+                    <span class="chip">{milestone.effort}</span>
+                  </div>
+                </div>
+                <ul class="timeline-goals">
+                  {milestone.goals.map((goal) => <li>{goal}</li>)}
+                </ul>
+              </article>
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
+
+    <section class="space-y-4">
+      <h2 class="group-title group-shipped">Shipped <span>{shipped.length}</span></h2>
       <div class="shipped-grid">
-        {shipped.map((milestone) => (
+        {[...shipped].reverse().map((milestone) => (
           <article class="shipped-card">
-            <div class="timeline-head">
-              <div>
-                <p class="timeline-window">{milestone.id}</p>
-                <h3>{milestone.focus}</h3>
-              </div>
-              <span class="status-chip status-shipped">Shipped</span>
-            </div>
+            <p class="timeline-window">{milestone.id}</p>
+            <h3>{milestone.focus}</h3>
             <p class="shipped-blurb">{milestone.blurb}</p>
-            <ul class="timeline-goals">
-              {milestone.items.map((item) => <li>{item}</li>)}
-            </ul>
-          </article>
-        ))}
-      </div>
-    </section>
-
-    <section>
-      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-5">Plans ahead</h2>
-      <div class="timeline-list">
-        {upcoming.map((milestone) => (
-          <article class="timeline-card">
-            <div class="timeline-head">
-              <div>
-                <p class="timeline-window">{milestone.id}</p>
-                <h3>{milestone.focus}</h3>
-              </div>
-              <div class="timeline-meta">
-                <span class={`priority-chip priority-${milestone.priority.toLowerCase()}`}>{milestone.priority}</span>
-                <span class={`status-chip status-${milestone.status.toLowerCase()}`}>{milestone.status}</span>
-                <span class="effort-chip">{milestone.effort}</span>
-              </div>
-            </div>
-
-            <ul class="timeline-goals">
-              {milestone.goals.map((goal) => <li>{goal}</li>)}
-            </ul>
+            <details>
+              <summary>What shipped</summary>
+              <ul class="timeline-goals">
+                {milestone.items.map((item) => <li>{item}</li>)}
+              </ul>
+            </details>
           </article>
         ))}
       </div>
@@ -299,12 +283,12 @@ const upcoming = [
 
     <section class="feedback-strip">
       <div>
-        <h2 class="text-xl font-semibold mb-1">Roadmap input channels</h2>
-        <p class="text-sm text-muted-foreground">Use GitHub discussions for feature direction and issue forms for execution blockers.</p>
+        <h2 class="text-2xl font-semibold tracking-tight mb-1">Shape what comes next</h2>
+        <p class="text-sm text-muted-foreground">Ideas go to GitHub Discussions; bugs that block you go to the issue tracker.</p>
       </div>
       <div class="flex flex-col sm:flex-row gap-3">
         <a href={GITHUB_DISCUSSIONS} target="_blank" rel="noopener" class="feedback-primary">Request a feature</a>
-        <a href={GITHUB_ISSUE_NEW} target="_blank" rel="noopener" class="feedback-secondary">Report Blocking Bug</a>
+        <a href={GITHUB_ISSUE_NEW} target="_blank" rel="noopener" class="feedback-secondary">Report a bug</a>
       </div>
     </section>
   </main>
@@ -313,113 +297,89 @@ const upcoming = [
 </Layout>
 
 <style>
-  .roadmap-hero {
-    border: 1px solid oklch(1 0 0 / 0.12);
-    border-radius: 1.2rem;
-    padding: 1.25rem;
-    background:
-      linear-gradient(170deg, oklch(0.21 0.02 240 / 0.96), oklch(0.16 0.01 245 / 0.93)),
-      radial-gradient(900px 320px at 90% 0%, oklch(0.72 0.1 220 / 0.2), transparent 66%);
-    display: grid;
-    gap: 1.1rem;
-    align-items: end;
-  }
-
-  .roadmap-kpis {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.65rem;
-  }
-
-  .roadmap-kpis article {
-    border-radius: 0.9rem;
-    border: 1px solid oklch(1 0 0 / 0.13);
-    background: oklch(0.17 0.01 245 / 0.9);
-    padding: 0.8rem;
-  }
-
-  .kpi-value {
-    font-size: 1.3rem;
-    font-weight: 650;
-    margin: 0 0 0.2rem;
-  }
-
-  .kpi-label {
+  .group-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
     margin: 0;
-    font-size: 0.72rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .group-title::before {
+    content: "";
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 999px;
+    background: var(--dot, oklch(0.6 0.01 250));
+  }
+
+  .group-title span {
+    font-size: 0.8rem;
+    font-weight: 500;
     color: var(--color-muted-foreground);
+    border: 1px solid oklch(1 0 0 / 0.14);
+    border-radius: 999px;
+    padding: 0.05rem 0.5rem;
   }
 
-  .priority-box {
-    border: 1px solid oklch(1 0 0 / 0.11);
-    border-radius: 1rem;
-    padding: 1rem;
-    background: oklch(0.19 0.01 245 / 0.9);
-  }
+  .group-now { --dot: var(--color-accent-cyan); }
+  .group-next { --dot: var(--color-accent-blue); }
+  .group-shipped { --dot: oklch(0.72 0.14 150); }
 
-  .priority-box code {
-    font-size: 0.85em;
-    padding: 0.05rem 0.3rem;
-    border-radius: 0.3rem;
-    background: oklch(1 0 0 / 0.08);
-  }
-
-  .shipped-grid {
-    display: grid;
-    gap: 0.9rem;
-  }
-
-  .shipped-card {
-    border: 1px solid oklch(0.6 0.13 150 / 0.32);
-    border-left: 3px solid oklch(0.62 0.14 150 / 0.8);
-    border-radius: 1rem;
-    padding: 1rem;
-    background: linear-gradient(175deg, oklch(0.21 0.02 175 / 0.5), oklch(0.18 0.01 245 / 0.92));
-  }
-
-  .shipped-blurb {
-    margin: 0 0 0.6rem;
-    font-size: 0.9rem;
-    color: var(--color-foreground);
+  .group-now::before {
+    box-shadow: 0 0 0 5px oklch(0.79 0.13 210 / 0.18);
   }
 
   .timeline-list {
     position: relative;
     display: grid;
-    gap: 0.9rem;
+    gap: 0.8rem;
   }
 
   .timeline-list::before {
     content: "";
     position: absolute;
-    left: 0.55rem;
+    left: 0.27rem;
     top: 0.65rem;
     bottom: 0.65rem;
     width: 2px;
-    background: linear-gradient(180deg, oklch(0.75 0.1 220 / 0.7), oklch(0.65 0.1 240 / 0.22));
+    background: oklch(1 0 0 / 0.1);
     border-radius: 999px;
   }
 
   .timeline-card {
     position: relative;
-    margin-left: 1.45rem;
+    margin-left: 1.5rem;
     border: 1px solid oklch(1 0 0 / 0.12);
     border-radius: 1rem;
-    padding: 1rem;
+    padding: 1.1rem 1.2rem;
     background: linear-gradient(175deg, oklch(0.21 0.01 245 / 0.95), oklch(0.18 0.01 245 / 0.92));
   }
 
   .timeline-card::before {
     content: "";
     position: absolute;
-    left: -1.03rem;
-    top: 1.22rem;
-    width: 0.65rem;
-    height: 0.65rem;
+    left: calc(-1.5rem + 0.05rem);
+    top: 1.35rem;
+    width: 0.55rem;
+    height: 0.55rem;
     border-radius: 999px;
-    background: oklch(0.76 0.1 220);
-    box-shadow: 0 0 0 5px oklch(0.76 0.1 220 / 0.19);
+    background: oklch(0.45 0.01 250);
   }
+
+  .card-now {
+    border-color: oklch(0.79 0.13 210 / 0.4);
+    background:
+      radial-gradient(600px 200px at 100% 0%, oklch(0.79 0.13 210 / 0.1), transparent 70%),
+      linear-gradient(175deg, oklch(0.21 0.01 245 / 0.95), oklch(0.18 0.01 245 / 0.92));
+  }
+
+  .card-now::before { background: var(--color-accent-cyan); }
+  .card-next { border-color: oklch(0.63 0.18 240 / 0.4); }
+  .card-next::before { background: var(--color-accent-blue); }
+  .card-deferred { opacity: 0.8; }
 
   .timeline-head {
     display: flex;
@@ -431,15 +391,17 @@ const upcoming = [
 
   .timeline-window {
     margin: 0 0 0.2rem;
-    font-size: 0.73rem;
+    font-size: 0.72rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--color-muted-foreground);
   }
 
-  .timeline-head h3 {
+  .timeline-head h3,
+  .shipped-card h3 {
     margin: 0;
-    font-size: 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
     line-height: 1.35;
   }
 
@@ -450,16 +412,14 @@ const upcoming = [
     flex-wrap: wrap;
   }
 
-  .priority-chip,
-  .status-chip,
-  .effort-chip {
+  .chip {
     border-radius: 999px;
     padding: 0.2rem 0.6rem;
-    font-size: 0.7rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-size: 0.72rem;
     border: 1px solid oklch(1 0 0 / 0.15);
     white-space: nowrap;
+    color: var(--color-muted-foreground);
+    background: oklch(0.17 0.01 245 / 0.85);
   }
 
   .priority-p0 {
@@ -477,53 +437,57 @@ const upcoming = [
     color: oklch(0.84 0.06 230);
   }
 
-  .priority-idea {
-    background: oklch(0.5 0.02 245 / 0.25);
-    color: var(--color-muted-foreground);
-  }
-
-  .effort-chip {
-    color: var(--color-muted-foreground);
-    background: oklch(0.17 0.01 245 / 0.85);
-    text-transform: none;
-    letter-spacing: 0;
-  }
-
-  .status-chip {
-    color: var(--color-muted-foreground);
-    background: oklch(0.17 0.01 245 / 0.85);
-  }
-
-  .status-shipped {
-    background: oklch(0.6 0.13 150 / 0.18);
-    color: oklch(0.86 0.12 155);
-    border-color: oklch(0.6 0.13 150 / 0.4);
-  }
-
-  .status-next {
-    background: oklch(0.62 0.1 235 / 0.2);
-    color: oklch(0.87 0.07 230);
-    border-color: oklch(0.62 0.1 235 / 0.42);
-  }
-
   .timeline-goals {
     margin: 0;
     padding-left: 1rem;
     display: grid;
-    gap: 0.35rem;
+    gap: 0.4rem;
     color: var(--color-muted-foreground);
-    font-size: 0.85rem;
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+
+  .shipped-grid {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .shipped-card {
+    border: 1px solid oklch(1 0 0 / 0.12);
+    border-radius: 1rem;
+    padding: 1.1rem 1.2rem;
+    background: oklch(0.19 0.01 245 / 0.9);
+  }
+
+  .shipped-blurb {
+    margin: 0.4rem 0 0.7rem;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--color-muted-foreground);
+  }
+
+  .shipped-card summary {
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-accent-blue);
+  }
+
+  .shipped-card details[open] summary {
+    margin-bottom: 0.6rem;
   }
 
   .feedback-strip {
-    border: 1px solid oklch(1 0 0 / 0.13);
-    border-radius: 1rem;
-    padding: 1rem;
-    background: linear-gradient(165deg, oklch(0.22 0.02 240 / 0.94), oklch(0.17 0.01 245 / 0.92));
+    border: 1px solid oklch(1 0 0 / 0.14);
+    border-radius: 1.25rem;
+    padding: 1.4rem;
+    background:
+      linear-gradient(165deg, oklch(0.21 0.02 240 / 0.96), oklch(0.17 0.01 245 / 0.92)),
+      radial-gradient(700px 280px at 90% 0%, oklch(0.72 0.1 220 / 0.2), transparent 66%);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.8rem;
+    gap: 1rem;
     flex-wrap: wrap;
   }
 
@@ -532,9 +496,9 @@ const upcoming = [
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 0.75rem;
-    padding: 0.62rem 0.9rem;
-    font-size: 0.82rem;
+    border-radius: 0.8rem;
+    padding: 0.7rem 1rem;
+    font-size: 0.84rem;
     font-weight: 600;
   }
 
@@ -559,17 +523,7 @@ const upcoming = [
     }
   }
 
-  @media (min-width: 1100px) {
-    .roadmap-hero {
-      grid-template-columns: 1.4fr 0.6fr;
-    }
-  }
-
   @media (max-width: 720px) {
-    .roadmap-kpis {
-      grid-template-columns: 1fr;
-    }
-
     .timeline-head {
       flex-direction: column;
     }

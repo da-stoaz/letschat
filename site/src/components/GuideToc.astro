@@ -1,0 +1,119 @@
+---
+// "On this page" sidebar for the long self-hosting guides. The list is built
+// in the browser from the guide's own step headings, so it can't drift from
+// them; without JS the guide reads exactly as before, just without the list.
+---
+
+<aside class="hidden lg:block" aria-label="On this page">
+  <nav class="guide-toc">
+    <p>On this page</p>
+    <ol data-guide-toc></ol>
+  </nav>
+</aside>
+
+<script>
+  const list = document.querySelector("[data-guide-toc]");
+  const sections: [HTMLElement, HTMLAnchorElement][] = [];
+  for (const article of document.querySelectorAll<HTMLElement>("article.step-card")) {
+    const heading = article.querySelector("h2");
+    if (!list || !heading) continue;
+    const text = (heading.textContent ?? "").trim();
+    article.id ||= text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const num = article.querySelector(".step-num")?.textContent;
+    const link = document.createElement("a");
+    link.href = `#${article.id}`;
+    link.textContent = num ? `${num}. ${text}` : text;
+    const item = document.createElement("li");
+    item.append(link);
+    list.append(item);
+    sections.push([article, link]);
+  }
+
+  // Highlight the section being read: the last one whose top has passed the
+  // sticky header. At the page bottom the final sections can't reach the top,
+  // so the last one wins there — unless the reader clicked a link, which stays
+  // highlighted until they scroll by hand.
+  const HEADER_OFFSET = 120;
+  let current: HTMLAnchorElement | undefined;
+  let clicked: HTMLAnchorElement | undefined;
+  let queued = false;
+
+  function setCurrent(link: HTMLAnchorElement | undefined) {
+    if (link === current) return;
+    current?.removeAttribute("aria-current");
+    link?.setAttribute("aria-current", "location");
+    current = link;
+  }
+
+  function update() {
+    queued = false;
+    if (clicked) return setCurrent(clicked);
+    let active = sections[0]?.[1];
+    for (const [article, link] of sections) {
+      if (article.getBoundingClientRect().top <= HEADER_OFFSET) active = link;
+    }
+    const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+    setCurrent(atBottom ? sections.at(-1)?.[1] : active);
+  }
+
+  list?.addEventListener("click", (event) => {
+    const link = (event.target as Element).closest("a");
+    if (link) setCurrent((clicked = link));
+  });
+  for (const type of ["wheel", "touchmove", "keydown"]) {
+    addEventListener(type, () => (clicked = undefined), { passive: true });
+  }
+  addEventListener("scroll", () => {
+    if (!queued) queued = !!requestAnimationFrame(update);
+  }, { passive: true });
+  update();
+</script>
+
+<style is:global>
+  /* Global: the links are created by the script above, outside Astro's scoping. */
+  .guide-toc {
+    position: sticky;
+    top: 5.5rem;
+    max-height: calc(100vh - 7rem);
+    overflow-y: auto;
+    font-size: 0.84rem;
+  }
+
+  .guide-toc p {
+    margin: 0 0 0.6rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-muted-foreground);
+  }
+
+  .guide-toc ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-left: 1px solid var(--color-border);
+  }
+
+  .guide-toc a {
+    display: block;
+    margin-left: -1px;
+    padding: 0.32rem 0 0.32rem 0.85rem;
+    border-left: 1px solid transparent;
+    line-height: 1.4;
+    color: var(--color-muted-foreground);
+    text-decoration: none;
+  }
+
+  .guide-toc a:hover {
+    color: var(--color-foreground);
+  }
+
+  .guide-toc a[aria-current] {
+    color: var(--color-foreground);
+    border-left-color: var(--color-accent-blue);
+  }
+
+  article.step-card {
+    scroll-margin-top: 5.5rem;
+  }
+</style>

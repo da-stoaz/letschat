@@ -2,179 +2,123 @@
 import Layout from "@/layouts/Layout.astro";
 import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
+import Callout from "@/components/Callout.astro";
+
+const paths = [
+  {
+    href: "/self-hosting/cloudflare-tunnel",
+    label: "Path A",
+    title: "Cloudflare Tunnel",
+    summary: "Web traffic reaches your server through a Cloudflare Tunnel, so nothing listens on 80/443. Only the two LiveKit media ports are forwarded.",
+    bestFor: "home servers where you'd rather not expose a web server directly.",
+    tags: ["No open 80/443", "Cloudflare ingress"],
+  },
+  {
+    href: "/self-hosting/caddy",
+    label: "Path B",
+    title: "Caddy reverse proxy",
+    summary: "Caddy runs on your host, gets TLS certificates automatically and routes each hostname to its container.",
+    bestFor: "servers with a public IP where opening 80/443 is fine.",
+    tags: ["Direct HTTPS", "Automatic TLS"],
+  },
+];
+
+const services = [
+  { name: "core-api", host: "auth", role: "Accounts, sign-in, the admin panel, and the discovery file apps read on startup (/.well-known/letschat.json)." },
+  { name: "SpacetimeDB", host: "chat", role: "Realtime database for spaces, channels, messages and presence." },
+  { name: "LiveKit", host: "lk", role: "Voice, video and screen sharing." },
+  { name: "MinIO", host: "files", role: "File storage. Defaults: 500 MiB per file and 2 GiB per user per day; change them in the admin panel." },
+  { name: "Web client", host: "app", role: "Optional browser client, so people can join without installing the desktop app." },
+  { name: "PostgreSQL", host: null, role: "Accounts and an archive copy of every message, kept current by the archive worker." },
+];
+
+const mistakes = [
+  ["Voice joins but no audio", "LiveKit media ports not forwarded", "Forward <code>44382/udp</code> (primary) and <code>44381/tcp</code> (fallback) to the host"],
+  ["Setup discovery fails", "<code>auth.&lt;domain&gt;</code> not serving <code>/.well-known/letschat.json</code>", "Tunnel: <code>auth → core-api:8787</code>; Caddy: check <code>AUTH_DOMAIN</code> and DNS"],
+  ["Browser or desktop can't upload or download files", "<code>MINIO_CORS_ALLOW_ORIGIN</code> narrowed to one origin", "Set it back to <code>*</code>. The desktop app's origin is <code>tauri://localhost</code>, not the web one"],
+  ["Upload/download errors", "Wrong <code>MINIO_PUBLIC_ENDPOINT</code>", "Set it to the public <code>https://files…</code> endpoint clients can reach"],
+  ["Upload part fails with <code>413</code> (tunnel)", "Cloudflare caps each proxied request body at 100 MB (Free/Pro)", "Keep the multipart part size at or below 90 MiB in the admin panel. Older clients send one PUT and stay subject to the cap"],
+  ["Caddy certificate issuance fails", "Cloudflare proxy enabled, or 80/443 closed", "Use DNS-only records and open <code>80/tcp</code> and <code>443/tcp</code>"],
+  ["LiveKit setup fails immediately", "Wrong signalling scheme (<code>ws://</code> vs <code>wss://</code>)", "Both paths use <code>wss://lk…</code>; plain <code>ws://</code> is dev-only"],
+  ["SpacetimeDB connect timeout", "<code>module-init</code> failed or SpacetimeDB not yet healthy", "Check <code>docker logs letschat-module-init</code>; it retries automatically"],
+  ["<code>module-init</code> keeps restarting after an upgrade", "Its log says the changes <em>will BREAK existing clients</em>; the old module keeps serving", "Read the release's Breaking Changes notes, then accept once with the <code>break-clients</code> command in <code>docs/DEPLOYMENT.md</code> (\"Upgrades that break existing clients\")"],
+];
 ---
 
 <Layout
   title="LetsChat Self-Hosting Guide"
-  description="Step-by-step production guide for self-hosting LetsChat backend with Cloudflare Tunnel or Caddy reverse proxy."
+  description="Self-host LetsChat with Docker Compose behind Cloudflare Tunnel or a Caddy reverse proxy."
 >
   <SiteHeader active="self-hosting" />
 
-  <main class="relative max-w-6xl mx-auto px-6 py-16 space-y-14 overflow-hidden">
-    <div class="hero-glow hero-glow-a"></div>
-    <div class="hero-glow hero-glow-b"></div>
-
-    <section class="relative z-10 grid lg:grid-cols-[1.1fr_0.9fr] gap-6 items-start">
-      <div class="space-y-4">
-        <p class="inline-flex text-xs px-3 py-1 rounded-full border border-border text-muted-foreground">Beginner-first production tutorial (Ubuntu + Docker Compose)</p>
-        <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Self-host the LetsChat backend</h1>
-        <p class="guide-prose max-w-3xl">
-          LetsChat is not a single server. It is a small backend stack: chat state, auth, voice signaling, file storage,
-          and startup discovery. This guide explains what each part does, why it matters, and then walks you through one
-          of two deployment paths.
-        </p>
-        <p class="guide-prose max-w-3xl">
-          The same stack serves <strong>both ways to connect</strong>: the installable <strong>desktop app</strong> and a
-          hosted <strong>browser client</strong> at <code class="text-xs">app.&lt;domain&gt;</code> — no install required, voice included.
-        </p>
-        <div class="flex flex-wrap gap-2 text-xs">
-          <span class="pill">SpacetimeDB</span>
-          <span class="pill">Auth Service</span>
-          <span class="pill">LiveKit</span>
-          <span class="pill">MinIO</span>
-          <span class="pill">Browser Client</span>
-          <span class="pill">Discovery URL</span>
-        </div>
-      </div>
-      <aside class="frost p-5 rounded-2xl space-y-4">
-        <p class="text-sm font-medium text-foreground">Architecture At A Glance</p>
-        <div class="space-y-2 text-sm">
-          <div class="flow-chip"><span>Desktop or Browser</span><span class="flow-dot"></span><span>auth.example.com</span></div>
-          <div class="flow-chip"><span>Discovery JSON</span><span class="flow-dot"></span><span>auth/chat/lk/files URLs</span></div>
-          <div class="flow-chip"><span>Runtime Services</span><span class="flow-dot"></span><span>Auth + Spacetime + LiveKit + MinIO + Web</span></div>
-        </div>
-        <p class="text-xs text-muted-foreground"><code class="text-xs">auth.&lt;domain&gt;</code> doubles as the discovery entrypoint — startup auto-configures backend endpoints with no manual join links.</p>
-      </aside>
-    </section>
-
-    <section class="frost rounded-2xl p-6 space-y-4">
-      <h2 class="text-2xl font-semibold tracking-tight">What Runs In Production (And Why)</h2>
-      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-        <article class="service-card rounded-xl p-4 space-y-1">
-          <p class="font-medium">SpacetimeDB</p>
-          <p class="text-muted-foreground">Real-time chat/game state backend. Required for channels, messages, membership, and sync.</p>
-        </article>
-        <article class="service-card rounded-xl p-4 space-y-1">
-          <p class="font-medium">Auth Service</p>
-          <p class="text-muted-foreground">Login/session API and token minting. Required for user authentication and LiveKit token creation.</p>
-        </article>
-        <article class="service-card rounded-xl p-4 space-y-1">
-          <p class="font-medium">LiveKit</p>
-          <p class="text-muted-foreground">Voice/media signaling and transport. Required for voice channels and real-time audio.</p>
-        </article>
-        <article class="service-card rounded-xl p-4 space-y-1">
-          <p class="font-medium">MinIO</p>
-          <p class="text-muted-foreground">S3-compatible object storage. Required for uploads, attachments, and download URLs. Large files use multipart PUTs (initially 64 MiB each), staying below Cloudflare's 100 MB per-request cap. The initial per-file limit is 500 MiB and the daily upload allowance is 2 GiB per user. Admins can also set per-user and installation stored-byte limits; both default to unlimited. A full MinIO volume is reported separately.</p>
-        </article>
-        <article class="service-card rounded-xl p-4 space-y-1">
-          <p class="font-medium">Module Init</p>
-          <p class="text-muted-foreground">One-shot container that publishes the SpacetimeDB WASM module on startup. Runs automatically and exits cleanly.</p>
-        </article>
-        <article class="service-card rounded-xl p-4 space-y-1">
-          <p class="font-medium">Web Client (<code class="text-xs">app.&lt;domain&gt;</code>)</p>
-          <p class="text-muted-foreground">Optional hosted browser SPA, pinned to this instance when its container starts, so users can run LetsChat in a browser — voice included — without installing the desktop app.</p>
-        </article>
-        <article class="service-card rounded-xl p-4 space-y-1 md:col-span-2 lg:col-span-1">
-          <p class="font-medium">Discovery Endpoint (<code class="text-xs">/.well-known/letschat.json</code>)</p>
-          <p class="text-muted-foreground">Served by core-api on <code class="text-xs">auth.&lt;domain&gt;</code>, so app startup auto-discovers your backend from one URL (for example <code class="text-xs">https://auth.example.com</code>). No separate <code class="text-xs">connect</code> subdomain. Without this, users must paste a full join link manually.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="rounded-xl border border-border bg-card/80 p-5">
-      <p class="text-sm text-muted-foreground leading-relaxed">
-        Before applying setup or upgrade steps, review 
-        <a href="/breaking-changes" class="mx-1 text-foreground underline underline-offset-4 hover:opacity-80 transition-opacity">Breaking Changes</a>
-        to avoid version mismatch and migration issues.
+  <main class="max-w-7xl mx-auto px-5 sm:px-6 py-14 space-y-14">
+    <section>
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight mb-3">Self-host LetsChat</h1>
+      <p class="text-lg text-muted-foreground leading-relaxed max-w-2xl">
+        One Docker Compose stack runs chat, sign-in, voice and file storage. People connect with the desktop app,
+        or in the browser if you host the web client. Pick how HTTPS reaches your server, then follow that guide.
       </p>
     </section>
 
-    <section class="space-y-4">
-      <h2 class="text-2xl font-semibold tracking-tight">Choose Your Deployment Path</h2>
-      <p class="text-sm text-muted-foreground max-w-2xl">Both paths deploy the same backend stack. The difference is how HTTPS traffic reaches your server.</p>
-      <div class="grid md:grid-cols-2 gap-4">
-        <a href="/self-hosting/cloudflare-tunnel" class="track-card tunnel rounded-xl p-5 space-y-2">
-          <p class="text-lg font-medium">Path A: Cloudflare Tunnel</p>
-          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Routes <code class="text-xs">auth/chat/files/app</code> and LiveKit signalling over Cloudflare Tunnel; only LiveKit media stays direct via forwarded ports.</p>
-          <p class="text-sm text-muted-foreground"><strong class="text-foreground">Why:</strong> Keeps web services off direct public IP while still supporting voice traffic.</p>
-          <p class="text-sm text-muted-foreground"><strong class="text-foreground">Best for:</strong> Home servers where you want Cloudflare ingress control without exposing 80/443 directly.</p>
-          <div class="flex flex-wrap gap-2 pt-1">
-            <span class="mini-pill">Zero Trust Ingress</span>
-            <span class="mini-pill">Lower Host Exposure</span>
-          </div>
-          <p class="text-xs text-accent-blue font-medium pt-1">Read the guide →</p>
-        </a>
-        <a href="/self-hosting/caddy" class="track-card caddy rounded-xl p-5 space-y-2">
-          <p class="text-lg font-medium">Path B: Caddy Reverse Proxy</p>
-          <p class="text-sm text-muted-foreground"><strong class="text-foreground">What:</strong> Caddy terminates TLS on your host and proxies <code class="text-xs">auth/chat/files/lk/app</code> locally.</p>
-          <p class="text-sm text-muted-foreground"><strong class="text-foreground">Why:</strong> Simple standard architecture with fewer external moving parts.</p>
-          <p class="text-sm text-muted-foreground"><strong class="text-foreground">Best for:</strong> Operators comfortable exposing 80/443 and managing direct DNS to host IP.</p>
-          <div class="flex flex-wrap gap-2 pt-1">
-            <span class="mini-pill">Direct HTTPS</span>
-            <span class="mini-pill">Classic Reverse Proxy</span>
-          </div>
-          <p class="text-xs text-accent-blue font-medium pt-1">Read the guide →</p>
-        </a>
+    <section class="space-y-5">
+      <div>
+        <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">Choose a deployment path</h2>
+        <p class="text-muted-foreground">Both paths deploy the same stack. They differ only in how traffic reaches it.</p>
       </div>
+      <div class="grid md:grid-cols-2 gap-4">
+        {paths.map((path) => (
+          <a href={path.href} class="path-card">
+            <p class="path-label">{path.label}</p>
+            <h3>{path.title}</h3>
+            <p>{path.summary}</p>
+            <p><strong>Best for</strong> {path.bestFor}</p>
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+              {path.tags.map((tag) => <span class="tag">{tag}</span>)}
+              <span class="path-cta">Read the guide →</span>
+            </div>
+          </a>
+        ))}
+      </div>
+      <Callout type="note" title="Upgrading an existing server?">
+        Check <a href="/breaking-changes" class="text-foreground underline underline-offset-4">Breaking Changes</a> first
+        for anything you need to migrate.
+      </Callout>
     </section>
 
-    <section class="space-y-4">
-      <h2 class="text-2xl font-semibold tracking-tight">Common Mistakes</h2>
-      <div class="overflow-x-auto rounded-2xl border border-border/70 bg-card/60 backdrop-blur-sm">
-        <table class="w-full text-sm">
-          <thead class="bg-card text-left">
+    <section class="space-y-5">
+      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight">What's in the stack</h2>
+      <dl class="stack-grid">
+        {services.map((service) => (
+          <div>
+            <dt>
+              {service.name}
+              {service.host ? <code>{service.host}.&lt;domain&gt;</code> : <span class="text-xs text-muted-foreground">internal</span>}
+            </dt>
+            <dd>{service.role}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+
+    <section class="space-y-5">
+      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight">Troubleshooting</h2>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
             <tr>
-              <th class="p-3 font-medium">Problem</th>
-              <th class="p-3 font-medium">Likely cause</th>
-              <th class="p-3 font-medium">Fix</th>
+              <th>Problem</th>
+              <th>Likely cause</th>
+              <th>Fix</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-border text-muted-foreground">
-            <tr>
-              <td class="p-3">Voice joins but no audio</td>
-              <td class="p-3">LiveKit media ports not forwarded</td>
-              <td class="p-3">Forward <code class="text-xs">44382/udp</code> (primary) and <code class="text-xs">44381/tcp</code> (fallback) to host</td>
-            </tr>
-            <tr>
-              <td class="p-3">Setup discovery fails</td>
-              <td class="p-3"><code class="text-xs">auth.&lt;domain&gt;</code> not serving <code class="text-xs">/.well-known/letschat.json</code></td>
-              <td class="p-3">Tunnel: <code class="text-xs">auth → core-api:8787</code>; Caddy: check <code class="text-xs">AUTH_DOMAIN</code> + DNS</td>
-            </tr>
-            <tr>
-              <td class="p-3">Browser or desktop can't upload / download files</td>
-              <td class="p-3"><code class="text-xs">MINIO_CORS_ALLOW_ORIGIN</code> narrowed to one origin</td>
-              <td class="p-3">Set it back to <code class="text-xs">*</code> — the desktop app's origin is <code class="text-xs">tauri://localhost</code>, not the web one</td>
-            </tr>
-            <tr>
-              <td class="p-3">Upload/download errors</td>
-              <td class="p-3">Wrong <code class="text-xs">MINIO_PUBLIC_ENDPOINT</code></td>
-              <td class="p-3">Set to public <code class="text-xs">https://files...</code> endpoint clients can reach</td>
-            </tr>
-            <tr>
-              <td class="p-3">Upload part fails with <code class="text-xs">413</code> (tunnel track)</td>
-              <td class="p-3">Cloudflare caps each proxied request body at 100 MB (Free/Pro)</td>
-              <td class="p-3">Keep the multipart part size at or below 90 MiB in the admin panel. Older clients still send one PUT and remain subject to Cloudflare's request cap.</td>
-            </tr>
-            <tr>
-              <td class="p-3">Caddy cert issuance fails</td>
-              <td class="p-3">Cloudflare proxy enabled or closed 80/443</td>
-              <td class="p-3">Use DNS-only records and open <code class="text-xs">80/tcp</code>, <code class="text-xs">443/tcp</code></td>
-            </tr>
-            <tr>
-              <td class="p-3">LiveKit setup fails immediately</td>
-              <td class="p-3">Wrong signalling scheme (<code class="text-xs">ws://</code> vs <code class="text-xs">wss://</code>)</td>
-              <td class="p-3">Both tracks use <code class="text-xs">wss://lk...</code> — signalling is TLS-terminated (Cloudflare tunnel ingress or Caddy). Plain <code class="text-xs">ws://</code> is dev-only</td>
-            </tr>
-            <tr>
-              <td class="p-3">Spacetime connect timeout</td>
-              <td class="p-3"><code class="text-xs">module-init</code> failed or SpacetimeDB not yet healthy</td>
-              <td class="p-3">Check <code class="text-xs">docker logs letschat-module-init</code>; it retries on failure automatically</td>
-            </tr>
-            <tr>
-              <td class="p-3"><code class="text-xs">module-init</code> keeps restarting after an upgrade</td>
-              <td class="p-3">Its log says the changes <em>will BREAK existing clients</em>; the old module keeps serving</td>
-              <td class="p-3">Read the release's Breaking Changes notes, then accept once with the <code class="text-xs">run --rm module-init publish … break-clients</code> command from <code class="text-xs">docs/DEPLOYMENT.md</code> ("Upgrades that break existing clients")</td>
-            </tr>
+          <tbody>
+            {mistakes.map(([problem, cause, fix]) => (
+              <tr>
+                <td set:html={problem} />
+                <td set:html={cause} />
+                <td set:html={fix} />
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -184,130 +128,105 @@ import SiteFooter from "@/components/SiteFooter.astro";
 </Layout>
 
 <style>
-  .hero-glow {
-    position: absolute;
-    pointer-events: none;
-    border-radius: 9999px;
-    filter: blur(56px);
-    opacity: 0.22;
+  .path-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    border: 1px solid oklch(1 0 0 / 0.13);
+    border-radius: 1rem;
+    padding: 1.4rem;
+    background: linear-gradient(175deg, oklch(0.22 0.01 245 / 0.95), oklch(0.19 0.01 245 / 0.92));
+    transition: transform 160ms ease, border-color 160ms ease;
   }
 
-  .hero-glow-a {
-    width: 360px;
-    height: 260px;
-    top: -80px;
-    left: -80px;
-    background: radial-gradient(circle at 40% 40%, color-mix(in oklch, var(--accent-blue) 80%, white 20%), transparent 70%);
-    animation: drift 12s ease-in-out infinite;
-  }
-
-  .hero-glow-b {
-    width: 340px;
-    height: 240px;
-    top: 120px;
-    right: -120px;
-    background: radial-gradient(circle at 60% 50%, color-mix(in oklch, var(--accent-blue) 70%, cyan 30%), transparent 72%);
-    animation: drift 15s ease-in-out infinite reverse;
-  }
-
-  .frost {
-    background:
-      linear-gradient(160deg, oklch(0.24 0 0 / 0.8), oklch(0.20 0 0 / 0.75)),
-      radial-gradient(1200px 380px at -10% -30%, oklch(0.54 0.23 264.3 / 0.16), transparent 60%);
-    border: 1px solid oklch(1 0 0 / 0.11);
-    box-shadow:
-      0 1px 0 oklch(1 0 0 / 0.08) inset,
-      0 20px 50px oklch(0 0 0 / 0.24);
-    backdrop-filter: blur(8px);
-  }
-
-  .pill {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.35rem 0.65rem;
-    border-radius: 9999px;
-    border: 1px solid oklch(1 0 0 / 0.16);
-    background: oklch(0.23 0 0 / 0.72);
-    color: var(--color-muted-foreground);
-  }
-
-  .flow-chip {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    gap: 0.55rem;
-    align-items: center;
-    padding: 0.58rem 0.72rem;
-    border-radius: 0.72rem;
-    border: 1px solid oklch(1 0 0 / 0.1);
-    background: oklch(0.18 0 0 / 0.64);
-    color: var(--color-muted-foreground);
-  }
-
-  .flow-dot {
-    width: 0.42rem;
-    height: 0.42rem;
-    border-radius: 9999px;
-    background: var(--color-accent-blue);
-    box-shadow: 0 0 0 6px oklch(0.49 0.23 264.3 / 0.18);
-  }
-
-  .service-card {
-    border: 1px solid oklch(1 0 0 / 0.12);
-    background: linear-gradient(180deg, oklch(0.21 0 0 / 0.88), oklch(0.19 0 0 / 0.88));
-    box-shadow: 0 12px 28px oklch(0 0 0 / 0.2);
-  }
-
-  .track-card {
-    position: relative;
-    border: 1px solid oklch(1 0 0 / 0.14);
-    background: linear-gradient(180deg, oklch(0.22 0 0 / 0.9), oklch(0.18 0 0 / 0.86));
-    box-shadow: 0 14px 32px oklch(0 0 0 / 0.2);
-    overflow: hidden;
-    transition: transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
-    display: block;
-  }
-
-  .track-card::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 3px;
-    background: linear-gradient(90deg, transparent, var(--color-accent-blue), transparent);
-    opacity: 0.75;
-  }
-
-  .track-card:hover {
+  .path-card:hover {
     transform: translateY(-2px);
-    border-color: oklch(1 0 0 / 0.24);
-    box-shadow: 0 20px 40px oklch(0 0 0 / 0.28);
+    border-color: oklch(0.75 0.1 220 / 0.45);
   }
 
-  .track-card.tunnel {
-    background:
-      linear-gradient(165deg, oklch(0.23 0.02 260 / 0.96), oklch(0.18 0 0 / 0.9)),
-      radial-gradient(420px 180px at 120% -10%, oklch(0.49 0.23 264.3 / 0.25), transparent 65%);
+  .path-card h3 {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 
-  .track-card.caddy {
-    background:
-      linear-gradient(165deg, oklch(0.22 0.01 220 / 0.96), oklch(0.18 0 0 / 0.9)),
-      radial-gradient(420px 180px at 120% -10%, oklch(0.74 0.16 190 / 0.2), transparent 65%);
-  }
-
-  .mini-pill {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 9999px;
-    padding: 0.28rem 0.55rem;
-    border: 1px solid oklch(1 0 0 / 0.16);
-    font-size: 0.68rem;
+  .path-card p {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.6;
     color: var(--color-muted-foreground);
-    background: oklch(0.16 0 0 / 0.6);
   }
 
-  @keyframes drift {
-    0% { transform: translate3d(0, 0, 0) scale(1); }
-    50% { transform: translate3d(8px, -12px, 0) scale(1.04); }
-    100% { transform: translate3d(0, 0, 0) scale(1); }
+  .path-card strong {
+    color: var(--color-foreground);
+    font-weight: 600;
+  }
+
+  .path-card .path-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-accent-cyan);
+  }
+
+  .tag {
+    border: 1px solid oklch(1 0 0 / 0.14);
+    border-radius: 9999px;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.72rem;
+    color: var(--color-muted-foreground);
+  }
+
+  .path-cta {
+    margin-left: auto;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-accent-blue);
+  }
+
+  .stack-grid {
+    display: grid;
+    gap: 1px;
+    margin: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+    overflow: hidden;
+    background: var(--color-border);
+  }
+
+  @media (min-width: 640px) {
+    .stack-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (min-width: 1024px) {
+    .stack-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  .stack-grid > div {
+    padding: 1rem 1.1rem;
+    background: oklch(0.19 0.01 245);
+  }
+
+  .stack-grid dt {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  .stack-grid dt code {
+    font-size: 0.72rem;
+    font-weight: 400;
+  }
+
+  .stack-grid dd {
+    margin: 0;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    color: var(--color-muted-foreground);
   }
 </style>

@@ -2,7 +2,10 @@
 import Layout from "@/layouts/Layout.astro";
 import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
-import { GITHUB_BASE } from "@/lib/site";
+import { GITHUB_BASE, GITHUB_RELEASES, githubApi } from "@/lib/site";
+
+// Last known version, shown until (or if never) the browser fetch below answers.
+const buildVersion: string = (await githubApi("/releases/latest"))?.tag_name?.replace(/^v/, "") ?? "";
 ---
 
 <Layout
@@ -15,11 +18,10 @@ import { GITHUB_BASE } from "@/lib/site";
   <main class="max-w-3xl mx-auto px-6 py-20">
 
     <div class="text-center mb-12">
-      <h1 class="text-4xl font-semibold tracking-tight mb-3">Download LetsChat</h1>
-      <div id="version-badge" class="version-pill is-loading" aria-live="polite">
-        <span class="version-pill-label">Latest Stable</span>
-        <span id="version-value" class="version-pill-value">Loading…</span>
-      </div>
+      <h1 class="text-4xl font-semibold tracking-tight mb-2">Download LetsChat</h1>
+      <p class="text-muted-foreground">
+        <span data-release-label>{buildVersion ? `Version ${buildVersion} · ` : ""}</span><a href={`${GITHUB_RELEASES}/latest`} target="_blank" rel="noopener" class="underline underline-offset-4 decoration-border hover:text-foreground">Release notes</a>
+      </p>
     </div>
 
     <!-- Platform cards -->
@@ -152,14 +154,12 @@ import { GITHUB_BASE } from "@/lib/site";
 
     <!-- Error state -->
     <p id="release-error" class="hidden text-center text-sm text-muted-foreground mt-8">
-      Could not load release data.
-      <a href={`${GITHUB_BASE}/releases`} target="_blank" rel="noopener"
-         class="underline underline-offset-2 hover:text-foreground">Browse releases on GitHub.</a>
+      GitHub didn't answer, so the buttons open the latest release page, where every file is listed.
     </p>
 
     <p class="text-center text-xs text-muted-foreground mt-8">
       macOS builds are signed and notarized. Windows installers are not yet
-      code-signed, so SmartScreen may warn on first run. View all versions on
+      code-signed, so SmartScreen may warn on first run. View all versions on{" "}
       <a href={`${GITHUB_BASE}/releases`} target="_blank" rel="noopener"
          class="underline underline-offset-2 hover:text-foreground">GitHub Releases</a>.
     </p>
@@ -170,6 +170,8 @@ import { GITHUB_BASE } from "@/lib/site";
 </Layout>
 
 <script>
+  import { latestRelease } from "@/lib/latest-release";
+
   const REPO = "da-stoaz/letschat";
 
   const MATCHERS: Record<string, RegExp> = {
@@ -184,18 +186,13 @@ import { GITHUB_BASE } from "@/lib/site";
 
   async function loadRelease() {
     try {
-      const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-        headers: { Accept: "application/vnd.github.v3+json" },
-      });
-      if (!res.ok) throw new Error("no release");
-      const release = await res.json();
+      const release = await latestRelease();
+      if (!release) throw new Error("no release");
 
-      const badge = document.getElementById("version-badge");
-      const badgeValue = document.getElementById("version-value");
-      badge?.classList.remove("is-loading");
-      if (badgeValue) badgeValue.textContent = release.tag_name ?? "Unknown";
+      const label = document.querySelector("[data-release-label]");
+      if (label) label.textContent = `Version ${release.tag_name.replace(/^v/, "")} · `;
 
-      const assets: { name: string; browser_download_url: string }[] = Array.isArray(release.assets) ? release.assets : [];
+      const assets = release.assets;
 
       for (const [key, pattern] of Object.entries(MATCHERS)) {
         const asset = assets.find((a) => pattern.test(a.name));
@@ -223,11 +220,15 @@ import { GITHUB_BASE } from "@/lib/site";
       }
 
     } catch {
-      const badge = document.getElementById("version-badge");
-      const badgeValue = document.getElementById("version-value");
-      badge?.classList.remove("is-loading");
-      document.querySelectorAll<HTMLElement>('[id^="asset-status-"]').forEach(status => { status.textContent = "Availability unknown. Browse GitHub Releases."; });
-      if (badgeValue) badgeValue.textContent = "Release unavailable";
+      // Usually GitHub's 60-requests-per-hour limit for this visitor's IP.
+      // Keep the page usable: every button opens the latest release instead.
+      document.querySelectorAll<HTMLAnchorElement>("[data-asset]").forEach((link) => {
+        link.href = `https://github.com/${REPO}/releases/latest`;
+        link.classList.remove("opacity-50", "pointer-events-none");
+        link.removeAttribute("aria-disabled");
+        link.removeAttribute("tabindex");
+      });
+      document.querySelectorAll<HTMLElement>('[id^="asset-status-"]').forEach((status) => { status.textContent = ""; });
       document.getElementById("release-error")?.classList.remove("hidden");
     }
   }
@@ -260,39 +261,6 @@ import { GITHUB_BASE } from "@/lib/site";
 
   .platform-icon-linux {
     background: radial-gradient(circle at 30% 16%, #2a2d31 0%, #1c1f23 52%, #121418 100%);
-  }
-
-  .version-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.65rem;
-    border-radius: 9999px;
-    padding: 0.45rem 0.85rem;
-    border: 1px solid color-mix(in oklab, var(--accent-blue) 45%, var(--border) 55%);
-    background:
-      linear-gradient(130deg, color-mix(in oklab, var(--accent-blue) 26%, transparent) 0%, transparent 54%),
-      color-mix(in oklab, var(--card) 88%, black 12%);
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklab, white 20%, transparent),
-      0 10px 32px color-mix(in oklab, var(--accent-blue) 26%, transparent);
-  }
-
-  .version-pill-label {
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: color-mix(in oklab, var(--foreground) 82%, var(--muted-foreground) 18%);
-  }
-
-  .version-pill-value {
-    font-size: 0.96rem;
-    font-weight: 650;
-    color: var(--foreground);
-  }
-
-  .version-pill.is-loading .version-pill-value {
-    color: var(--muted-foreground);
   }
 </style>
 
