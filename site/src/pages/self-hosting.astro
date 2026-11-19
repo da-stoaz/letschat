@@ -1,7 +1,5 @@
 ---
-import Layout from "@/layouts/Layout.astro";
-import SiteHeader from "@/components/SiteHeader.astro";
-import SiteFooter from "@/components/SiteFooter.astro";
+import PageLayout from "@/layouts/PageLayout.astro";
 import Callout from "@/components/Callout.astro";
 
 const paths = [
@@ -45,97 +43,94 @@ const mistakes = [
 ];
 ---
 
-<Layout
+<PageLayout
   title="LetsChat Self-Hosting Guide"
   description="Self-host LetsChat with Docker Compose behind Cloudflare Tunnel or a Caddy reverse proxy."
+  active="self-hosting"
+  heading="Self-host LetsChat"
 >
-  <SiteHeader active="self-hosting" />
+  <p slot="lead">
+    One Docker Compose stack runs chat, sign-in, voice and file storage. People connect with the desktop app,
+    or in the browser if you host the web client. Pick how HTTPS reaches your server, then follow that guide.
+  </p>
 
-  <main class="max-w-7xl mx-auto px-5 sm:px-6 py-14 space-y-14">
-    <section>
-      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight mb-3">Self-host LetsChat</h1>
-      <p class="text-lg text-muted-foreground leading-relaxed max-w-2xl">
-        One Docker Compose stack runs chat, sign-in, voice and file storage. People connect with the desktop app,
-        or in the browser if you host the web client. Pick how HTTPS reaches your server, then follow that guide.
-      </p>
-    </section>
-
-    <section class="space-y-5">
-      <div>
-        <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">Choose a deployment path</h2>
-        <p class="text-muted-foreground">Both paths deploy the same stack. They differ only in how traffic reaches it.</p>
-      </div>
-      <div class="grid md:grid-cols-2 gap-4">
-        {paths.map((path) => (
-          <a href={path.href} class="path-card">
-            <p class="path-label">{path.label}</p>
-            <h3>{path.title}</h3>
-            <p>{path.summary}</p>
-            <p><strong>Best for</strong> {path.bestFor}</p>
-            <div class="flex flex-wrap items-center gap-2 pt-1">
-              {path.tags.map((tag) => <span class="tag">{tag}</span>)}
-              <span class="path-cta">Read the guide →</span>
-            </div>
-          </a>
-        ))}
-      </div>
-      <Callout type="note" title="Upgrading an existing server?">
-        Check <a href="/breaking-changes" class="text-foreground underline underline-offset-4">Breaking Changes</a> first
-        for anything you need to migrate.
-      </Callout>
-    </section>
-
-    <section class="space-y-5">
-      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight">What's in the stack</h2>
-      <dl class="stack-grid">
-        {services.map((service) => (
-          <div>
-            <dt>
-              {service.name}
-              {service.host ? <code>{service.host}.&lt;domain&gt;</code> : <span class="text-xs text-muted-foreground">internal</span>}
-            </dt>
-            <dd>{service.role}</dd>
+  <section class="space-y-5">
+    <div>
+      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">Choose a deployment path</h2>
+      <p class="text-muted-foreground">Both paths deploy the same stack. They differ only in how traffic reaches it.</p>
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      {paths.map((path) => (
+        <a href={path.href} class="card path-card">
+          <p class="path-label">{path.label}</p>
+          <h3>{path.title}</h3>
+          <p>{path.summary}</p>
+          <p><strong>Best for</strong> {path.bestFor}</p>
+          <div class="flex flex-wrap items-center gap-2 pt-1">
+            {path.tags.map((tag) => <span class="chip">{tag}</span>)}
+            <span class="path-cta">Read the guide →</span>
           </div>
-        ))}
-      </dl>
-    </section>
+        </a>
+      ))}
+    </div>
+    <Callout type="note" title="Upgrading an existing server?">
+      Check <a href="/breaking-changes" class="text-foreground underline underline-offset-4">Breaking Changes</a> first
+      for anything you need to migrate.
+    </Callout>
+  </section>
 
-    <section class="space-y-5">
-      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight">Troubleshooting</h2>
-      <div class="data-table-wrap">
-        <table class="data-table">
-          <thead>
+  <section class="space-y-5">
+    <div>
+      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">What's in the stack</h2>
+      <p class="text-muted-foreground">
+        How these fit together and where your data lives:{" "}
+        <a href="/architecture" class="underline underline-offset-2 hover:text-foreground">Architecture</a>.
+      </p>
+    </div>
+    <dl class="stack-grid">
+      {services.map((service) => (
+        <div>
+          <dt>
+            {service.name}
+            {service.host ? <code>{service.host}.&lt;domain&gt;</code> : <span class="text-xs text-muted-foreground">internal</span>}
+          </dt>
+          <dd>{service.role}</dd>
+        </div>
+      ))}
+    </dl>
+  </section>
+
+  <section class="space-y-5">
+    <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight">Troubleshooting</h2>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Problem</th>
+            <th>Likely cause</th>
+            <th>Fix</th>
+          </tr>
+        </thead>
+        <tbody>
+          {mistakes.map(([problem, cause, fix]) => (
             <tr>
-              <th>Problem</th>
-              <th>Likely cause</th>
-              <th>Fix</th>
+              <td set:html={problem} />
+              <td set:html={cause} />
+              <td set:html={fix} />
             </tr>
-          </thead>
-          <tbody>
-            {mistakes.map(([problem, cause, fix]) => (
-              <tr>
-                <td set:html={problem} />
-                <td set:html={cause} />
-                <td set:html={fix} />
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </main>
-  <SiteFooter />
-</Layout>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</PageLayout>
 
 <style>
   .path-card {
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
-    border: 1px solid oklch(1 0 0 / 0.13);
-    border-radius: 1rem;
     padding: 1.4rem;
-    background: linear-gradient(175deg, oklch(0.22 0.01 245 / 0.95), oklch(0.19 0.01 245 / 0.92));
     transition: transform 160ms ease, border-color 160ms ease;
   }
 
@@ -168,14 +163,6 @@ const mistakes = [
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--color-accent-cyan);
-  }
-
-  .tag {
-    border: 1px solid oklch(1 0 0 / 0.14);
-    border-radius: 9999px;
-    padding: 0.2rem 0.6rem;
-    font-size: 0.72rem;
-    color: var(--color-muted-foreground);
   }
 
   .path-cta {

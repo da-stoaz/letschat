@@ -1,6 +1,6 @@
 # LetsChat codebase map
 
-> Architecture baseline reviewed 2026-09-15 at version 1.0.14.
+> Architecture baseline reviewed 2026-11-19 at version 1.7.0.
 >
 > This document describes the current system. Security findings and feature
 > gaps belong in `Findings/BUG_ANALYSIS.md`, so they cannot silently turn this map into
@@ -11,23 +11,26 @@
 | Layer | Technology | Authority |
 |---|---|---|
 | Client | React 19, TypeScript, Vite, Tailwind CSS 4, Zustand | Presentation and local cache only |
-| Desktop | Tauri 2 | Native shell and packaging |
-| Control plane | .NET 10, ASP.NET Core Identity, PostgreSQL | Accounts, sessions, OIDC, administration, upload grants, LiveKit grants |
+| Desktop | Tauri 2 | Native shell, packaging and signed self-updates |
+| Control plane | .NET 10, ASP.NET Core Identity, PostgreSQL | Accounts, sessions, OIDC, administration, upload grants, LiveKit grants, video processing |
+| Chat edge | Caddy (`chat-edge`) | Allowlist in front of core-api's chat gateway |
 | Chat data plane | SpacetimeDB 2.10, Rust module | Chat records and authorization for every reducer call |
 | Media plane | LiveKit | Ephemeral voice/video rooms |
-| Object storage | MinIO/S3 | Attachment bytes; access is brokered by `core-api` |
-| Archive | Rust worker | Exports configured historical data from SpacetimeDB |
+| Object storage | MinIO-compatible S3 (Silo image) | Attachment bytes and derived video files; access is brokered by `core-api` |
+| Archive | .NET worker | Mirrors every durable SpacetimeDB table into a PostgreSQL archive database |
 | Public site | Astro | Static marketing and self-hosting documentation |
 
 ```text
 React/Tauri client
-  ├─ HTTPS ───────────────> core-api ─────> PostgreSQL
-  │                           ├───────────> MinIO
-  │                           └─ token ───> LiveKit
-  └─ WebSocket + OIDC JWT ─> core-api gateway ─> SpacetimeDB
-                                └─ subscription updates ─> client stores
+  ├─ HTTPS ─────────────────> core-api ─────> PostgreSQL (accounts, uploads)
+  │                             ├───────────> MinIO (presigning, video jobs)
+  │                             └─ token ───> LiveKit
+  ├─ WebSocket + OIDC JWT ──> chat-edge ─> core-api gateway ─> SpacetimeDB
+  │                             └─ subscription updates ─> client stores
+  ├─ signed PUT/GET ────────> MinIO
+  └─ WebRTC media ──────────> LiveKit
 
-archive-worker ────────────> SpacetimeDB
+archive-worker: SpacetimeDB archive views ─> PostgreSQL (archive database)
 ```
 
 `core-api` is the only supported identity/control-plane backend. References to
@@ -40,9 +43,11 @@ choice.
 |---|---|---|
 | Accounts, password hashes, roles, sessions, registration policy | PostgreSQL via `core-api` | ASP.NET Core Identity; Argon2id password hashes |
 | OIDC signing key | Deployment secret consumed by `core-api` | Public key is published through the issuer's JWKS endpoint |
-| Servers, memberships, channels, messages, social graph, presence | SpacetimeDB | Mutations happen only through Rust reducers |
-| Upload metadata and daily quota | PostgreSQL via `core-api` | Pending grants reserve quota before upload confirmation |
+| Servers, memberships, channels, messages, social graph, presence | SpacetimeDB | Mutations happen only through Rust reducers; the archive worker keeps a copy of the 14 durable tables in PostgreSQL |
+| Upload registry, reservations and quotas | PostgreSQL via `core-api` | Pending grants reserve quota before upload confirmation |
 | Attachment bytes | MinIO | Objects are private; clients receive short-lived presigned URLs |
+| Video posters and HLS renditions | MinIO, tracked in PostgreSQL | Derived from an original, share its read rule, count toward storage quotas and are deleted with it |
+| Device preferences (audio devices, volumes, notifications) | Client `localStorage` | Never sent to the server |
 | Voice/video state | LiveKit plus SpacetimeDB presence | LiveKit transports media; reducers model app-visible participation |
 
 The client is never an authorization authority. UI checks improve usability;
@@ -53,8 +58,9 @@ authorize the caller.
 
 ```text
 core-api/
-  src/CoreApi/             control-plane service and Razor admin UI
-  tests/CoreApi.Tests/     endpoint, service, and security regression tests
+  src/CoreApi/             control-plane service, Razor admin UI, public
+                           landing, download and invite pages
+  tests/CoreApi.Tests/     endpoint, service, security and archive-worker tests
   tools/CoreApi.Migrator/  legacy SQLite-to-PostgreSQL rescue tool
 server/                    SpacetimeDB schema, reducers, and Rust tests
 src/
@@ -62,13 +68,20 @@ src/
   generated/               generated SpacetimeDB bindings; never hand-edit
   lib/                     auth, uploads, LiveKit, Tauri, and DB integration
   stores/                  Zustand projections of server state
-  test/                    frontend test support
-src-tauri/                 native commands, capabilities, and packaging
-archive-worker/            archive process
+src-tauri/                 native commands, capabilities, updater and packaging
+archive-worker/            .NET archive replication and rebuild process
+deploy/                    Caddy ingress, web client image, example configs
+livekit/, spacetimedb/     mounted production configuration
+tests/
+  ui/                      frontend unit tests outside src/
+  security/                black-box tests against a disposable stack
+  compatibility/           released-client/backend compatibility matrix
+  load/                    archive throughput and rebuild benchmarks
+  rtc/                     voice transport regression in Docker + Chrome
 site/                      static Astro site
 docs/                      architecture, security, deployment, and feature backlog
 Findings/                  detailed audits and remediation register
-scripts/                   publishing, deployment, and security helpers
+scripts/                   versioning, updater feed, and dependency helpers
 docker-compose.dev.yml     local dependencies
 docker-compose.prod.base.yml
 docker-compose.prod.tunnel.yml
@@ -129,9 +142,9 @@ including from the blocked-login screen. Admin user details also support email
 changes. Both paths preserve account identity, require confirmation of the new
 address, and revoke old confirmation links and tokens; see `core-api/README.md`.
 
-The client separates account identity, credential security, connection details,
-and notification preferences into Account, Security, Connection, and
-Notifications tabs. Private account metadata such as email comes from the
+The client separates account identity and password changes, connection
+details, notification preferences, and call audio into Account, Connection,
+Notifications, and Audio tabs. Private account metadata such as email comes from the
 session-authenticated `/auth/account` endpoint; chat profile data remains owned
 by SpacetimeDB. This keeps PostgreSQL account data out of public chat views.
 
@@ -155,12 +168,16 @@ by SpacetimeDB. This keeps PostgreSQL account data out of public chat views.
    between the cleanup decision and MinIO deletion. A protected claim view must
    return its authorization/readiness sentinel before Core API deletes anything.
    Failed storage deletion retains the registry row and claim for retry.
-5. Confirmed videos queue a poster job; `VideoThumbnailWorker` renders
-   `{videoKey}.thumb.jpg` with ffmpeg via range reads. Chat renders that poster
-   and mounts the `<video>` only on click.
-5. Download endpoints re-check channel or DM access before returning a
-   short-lived URL.
-6. A background sweeper aborts expired multipart sessions or removes expired
+5. Confirmed videos queue two jobs. `VideoThumbnailWorker` renders
+   `{videoKey}.thumb.jpg` with ffmpeg via range reads; chat renders that poster
+   and mounts the player only on click. `VideoPlaybackWorker` encodes HLS
+   renditions (up to 720p and 1080p) under `derived/hls/`. Both run sandboxed
+   ffmpeg (see `SECURITY.md`); the original stays playable while processing or
+   if conversion fails. Limits and player behavior are in `core-api/README.md`.
+6. Download endpoints re-check channel or DM access before returning a
+   short-lived URL. `/uploads/video-playback` does the same, then returns a
+   one-hour, video-scoped playlist grant whose segments are signed MinIO URLs.
+7. A background sweeper aborts expired multipart sessions or removes expired
    single-PUT objects before releasing their reservations. MinIO's stale-upload
    cleanup is the fallback for an initiation crash before the upload ID is saved.
 
@@ -232,11 +249,37 @@ An `Everyone` space supports direct join, while a `ModeratorsOnly` space uses a
 moderator-reviewed join request. Non-members receive only the scoped discovery
 metadata and aggregate member count, not the space's membership rows.
 
+### Invite links
+
+A shared invite is `https://<auth host>/invite/<token>`, advertised as `invite`
+in discovery. core-api renders that page for link unfurlers: the space name
+only for a live invite open to anyone (the module's `invite_preview`
+procedure), a generic card otherwise. It offers the desktop deep link
+`letschat://join?…&i=<token>` and, when the instance hosts the web client,
+"Continue in browser". Joining still goes through the module's invite reducers.
+
+### Desktop updates and client compatibility
+
+Discovery declares `serverVersion`, `recommendedClient`, `minClient` and a
+compiled-in `clientProtocol`. The client refuses to connect below `minClient`
+or with another protocol. The desktop app (1.6.5 and later) offers the highest
+`recommendedClient` among its saved servers, never a newer release. It fetches
+exactly that release's feed from GitHub Releases, verifies the signed package,
+and installs only after the user restarts (`src/lib/appUpdates.ts`,
+`src-tauri/src/main.rs`). Release CI writes the feed after every platform
+build. See `tests/compatibility/README.md` for the release policy.
+
+core-api also serves a public landing page at `/` and `/downloads/{os}`, which
+streams operator-hosted installers from `wwwroot/downloads/` or redirects to the
+recommended GitHub release.
+
 ### Archiving
 
-The archive worker reads the module through its configured credentials and
-exports only the configured retention scope. It is an operator component and
-must not be exposed as a public endpoint.
+The archive worker (.NET) subscribes to the module's gated `archive_*` views
+with its own registered identity and mirrors every durable table into the
+PostgreSQL `archive` database in real time. In rebuild mode it restores those
+rows after a destructive migration; see `DEPLOYMENT.md`. It is an operator
+component and must not be exposed as a public endpoint.
 
 ## SpacetimeDB schema groups
 
@@ -269,8 +312,9 @@ overlay:
 - `docker-compose.prod.tunnel.yml` for Cloudflare Tunnel
 - `docker-compose.prod.caddy.yml` for direct Caddy TLS
 
-The base stack contains PostgreSQL, `core-api`, SpacetimeDB, module init, MinIO,
-LiveKit, the archive worker, and the web client. The admin listener is separate
+The base stack contains PostgreSQL, `core-api`, SpacetimeDB (with its config
+init), `chat-edge`, `module-init`, MinIO (the MinIO-compatible Silo image) with
+`minio-init`, LiveKit, the archive worker, and the web client. The admin listener is separate
 from the public API listener and is bound to loopback by the documented compose
 configuration. See `DEPLOYMENT.md` for the exact ports and bootstrap procedure.
 
@@ -279,11 +323,12 @@ configuration. See `DEPLOYMENT.md` for the exact ports and bootstrap procedure.
 | Changed area | Minimum relevant checks |
 |---|---|
 | Frontend/client integration | `bun run build`, `bun run lint`, `bun run test:unit` |
-| `core-api` | `bun run core-api:test`, `dotnet format core-api/CoreApi.slnx --verify-no-changes` |
+| `core-api`, `archive-worker` | `bun run core-api:test`, `dotnet format core-api/CoreApi.slnx --verify-no-changes` |
 | SpacetimeDB module | `cargo test --manifest-path server/Cargo.toml` plus regenerated bindings |
 | Tauri Rust | `cargo check --manifest-path src-tauri/Cargo.toml` |
 | Security boundary | Relevant unit tests plus `bun run test:security` against its required stack |
-| Compose/deployment | `docker compose ... config` for the affected base and overlay |
+| Compose/deployment | `docker compose ... config` for the affected base and overlay; `python3 deploy/caddy/test_config.py` for Caddy |
+| Public site | `bun run lint` (covers `site/`), `cd site && npm run build` |
 
 ## Maintenance rules
 

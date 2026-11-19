@@ -1,49 +1,59 @@
 name: CodeQL
 
-# Replaces GitHub's CodeQL "default setup", which cannot skip anything and
-# uploaded each language the moment it finished. Rust takes ~10 minutes, the
-# rest ~2, so every PR showed "N configurations not found" until Rust caught
-# up. Here every language is analyzed first and all results are uploaded
-# together, and PRs that change no code are not scanned at all.
+# Runs once per change, after it lands on main, and never on pull requests: a
+# PR would pay for the same analysis twice and wait ~10 minutes on Rust. Each
+# push analyzes only the languages whose files it changed; the weekly run
+# re-analyzes everything so every language stays current.
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'site/**'
-      - '**/*.md'
-      - '.claude/**'
-      - '.agents/**'
-      - 'graphify-out/**'
-      - 'LICENSE'
-      - '.gitignore'
-      - 'skills-lock.json'
-  pull_request:
-    paths-ignore:
-      - 'site/**'
-      - '**/*.md'
-      - '.claude/**'
-      - '.agents/**'
-      - 'graphify-out/**'
-      - 'LICENSE'
-      - '.gitignore'
-      - 'skills-lock.json'
   schedule:
     - cron: '23 4 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  languages:
+    runs-on: ubuntu-latest
+    outputs:
+      languages: ${{ steps.pick.outputs.languages }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: pick
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # Scheduled and manual runs, or a push whose base can't be fetched,
+          # analyze everything.
+          changed=ALL
+          if [ "$GITHUB_EVENT_NAME" = push ] && git fetch --quiet --depth=1 origin "$BEFORE"; then
+            changed=$(git diff --name-only "$BEFORE" HEAD) || changed=ALL
+          fi
+          pick() {
+            if [ "$changed" = ALL ] || grep -qE "$2" <<<"$changed"; then echo "$1"; fi
+          }
+          {
+            pick actions '^\.github/(workflows|actions)/'
+            pick csharp '\.(cs|csproj|cshtml|razor|slnx?|props|targets)$'
+            pick javascript-typescript '\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|html)$'
+            pick python '\.py$'
+            pick rust '\.rs$|(^|/)Cargo\.(toml|lock)$'
+          } | jq -Rnc '[inputs]' | sed 's/^/languages=/' | tee -a "$GITHUB_OUTPUT"
+
   analyze:
     name: Analyze (${{ matrix.language }})
+    needs: languages
+    if: needs.languages.outputs.languages != '[]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: read
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
-        language: [actions, csharp, javascript-typescript, python, rust]
+        language: ${{ fromJSON(needs.languages.outputs.languages) }}
     steps:
       - uses: actions/checkout@v6
       - uses: github/codeql-action/init@v4
@@ -52,32 +62,4 @@ jobs:
           build-mode: none
       - uses: github/codeql-action/analyze@v4
         with:
-          category: /language:${{ matrix.language }}
-          upload: never
-          output: sarif
-      - uses: actions/upload-artifact@v7
-        with:
-          name: sarif-${{ matrix.language }}
-          path: sarif
-          retention-days: 1
-
-  upload:
-    name: Upload (${{ matrix.language }})
-    needs: analyze
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    strategy:
-      matrix:
-        language: [actions, csharp, javascript-typescript, python, rust]
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v8
-        with:
-          name: sarif-${{ matrix.language }}
-          path: sarif
-      - uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: sarif
           category: /language:${{ matrix.language }}

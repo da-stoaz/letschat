@@ -1,21 +1,284 @@
 ---
-import Layout from "@/layouts/Layout.astro";
-import SiteHeader from "@/components/SiteHeader.astro";
-import SiteFooter from "@/components/SiteFooter.astro";
+import PageLayout from "@/layouts/PageLayout.astro";
+import { GITHUB_BASE } from "@/lib/site";
+
+const services = [
+  { name: "core-api", tech: ".NET", does: "The front door: sign-in and sessions, tokens for chat and calls, file permissions and the admin panel." },
+  { name: "SpacetimeDB", tech: "Rust module", does: "The chat database: spaces, channels, messages, friends and presence. Every change passes a permission check in the chat module." },
+  { name: "PostgreSQL", tech: "SQL", does: "Accounts and password hashes, file records, and an archive copy of all chat data." },
+  { name: "MinIO", tech: "S3 storage", does: "Files, avatars and space icons. Private: every link is signed and expires." },
+  { name: "LiveKit", tech: "WebRTC", does: "Forwards voice, video and screen shares between the people in a call." },
+  { name: "Archive worker", tech: ".NET", does: "Copies chat data into PostgreSQL as it changes, so the chat database can be rebuilt from it." },
+];
+
+const paths = [
+  {
+    title: "Signing in",
+    touches: ["core-api", "PostgreSQL", "SpacetimeDB"],
+    steps: [
+      "The app reads your server's discovery file to find its addresses.",
+      "core-api checks your password against PostgreSQL and returns a session and a token for the chat database. The chat database never sees your password.",
+      "The chat connection runs through core-api's gateway, which rechecks your account every few seconds, so a suspended account is cut off at once.",
+    ],
+  },
+  {
+    title: "Sending a message",
+    touches: ["SpacetimeDB", "Archive worker", "PostgreSQL"],
+    steps: [
+      "The app asks the chat module to post the message.",
+      "The module checks that you may post there, then saves it.",
+      "Everyone viewing the channel receives it over their live connection, and the archive worker copies it into PostgreSQL.",
+    ],
+  },
+  {
+    title: "Joining a call",
+    touches: ["SpacetimeDB", "core-api", "LiveKit"],
+    steps: [
+      "The chat module records you as present in the call.",
+      "core-api issues a call token only once it sees that presence.",
+      "Audio and video then flow through LiveKit. Anyone who is kicked or no longer present is removed from the call within a minute.",
+    ],
+  },
+  {
+    title: "Sharing a file",
+    touches: ["core-api", "MinIO", "SpacetimeDB"],
+    steps: [
+      "core-api checks the file against your upload limits and hands out a signed upload link.",
+      "The app uploads straight to MinIO, so files never pass through core-api.",
+      "The message refers to the file. Viewers get a short-lived download link only after core-api checks they can see that channel or DM.",
+    ],
+  },
+];
+
+const data = [
+  { what: "Accounts, email addresses, password hashes, sessions", where: "PostgreSQL", note: "Passwords are hashed with Argon2id." },
+  { what: "Spaces, channels, messages, DMs, friends, presence", where: "SpacetimeDB", note: "With an archive copy in PostgreSQL." },
+  { what: "Files, avatars, space icons", where: "MinIO", note: "Private. Links are signed and expire." },
+  { what: "Voice, video, screen shares", where: "Nowhere", note: "LiveKit relays them live. Nothing is recorded." },
+  { what: "Audio devices, volumes, notification settings", where: "Your device", note: "Kept by the app, not sent to the server." },
+];
+
+const rules = [
+  { title: "The app is never trusted", text: "Hiding a button is only a convenience. core-api or the chat module checks every action again on the server." },
+  { title: "One identity authority", text: "core-api issues the tokens the chat database accepts. Your chat identity is derived from it, so it survives a rebuild of the chat database." },
+  { title: "A small public surface", text: "The chat address accepts only token exchange and the live connection. The raw database API stays private, and the admin panel listens only on the server itself, for an SSH tunnel." },
+  { title: "Not end-to-end encrypted yet", text: "Traffic is encrypted in transit, but the server stores messages readably, so whoever runs it can read them. End-to-end encryption is on the roadmap." },
+];
+
+const docs = [
+  { href: `${GITHUB_BASE}/blob/main/docs/CODEBASE.md`, label: "Codebase map", text: "Repository layout and every request flow in detail." },
+  { href: `${GITHUB_BASE}/blob/main/docs/SECURITY.md`, label: "Security model", text: "Trust boundaries, token lifetimes and limits." },
+  { href: `${GITHUB_BASE}/blob/main/docs/DEPLOYMENT.md`, label: "Deployment reference", text: "Every service, port and setting in production." },
+];
 ---
 
-<Layout title="LetsChat Architecture" description="Technical deep dive for LetsChat architecture.">
-  <SiteHeader active="architecture" />
+<PageLayout
+  title="LetsChat Architecture"
+  description="How LetsChat works: the services in one self-hosted stack, where your data lives, and what happens when you sign in, send a message, join a call or share a file."
+  active="architecture"
+  heading="Architecture"
+>
+  <p slot="lead">
+    What runs where, where your data lives, and what happens when you sign in, send a message, join a call
+    or share a file.
+  </p>
 
-  <main class="max-w-4xl mx-auto px-6 py-20">
-    <section class="rounded-2xl border border-border bg-card p-8 md:p-10">
-      <p class="text-xs text-muted-foreground border border-border rounded-full inline-flex px-3 py-1">Coming soon</p>
-      <h1 class="text-4xl font-semibold tracking-tight mt-4 mb-3">Architecture</h1>
-      <p class="text-muted-foreground leading-relaxed">
-        This page is intentionally kept minimal for now. The system architecture is currently changing, and the deep-dive documentation will be published once the next major structure settles.
+  <section class="space-y-5" aria-labelledby="overview">
+    <h2 id="overview" class="text-2xl sm:text-3xl font-semibold tracking-tight">One app, one server</h2>
+    <div class="overview">
+      <div class="card p-5 space-y-2">
+        <p class="eyebrow">Your device</p>
+        <p class="font-semibold">Desktop app or browser</p>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          React and TypeScript, packaged with Tauri for macOS, Windows and Linux. Your server can also serve the
+          same app to browsers.
+        </p>
+      </div>
+      <div class="connector" aria-hidden="true">
+        <span>HTTPS · WebSocket · WebRTC</span>
+      </div>
+      <div class="card p-5 space-y-4">
+        <p class="eyebrow">Your server · one Docker Compose stack</p>
+        <dl class="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {services.map((service) => (
+            <div class="service">
+              <dt class="flex flex-wrap items-center gap-2 font-semibold">
+                {service.name}
+                <span class="chip">{service.tech}</span>
+              </dt>
+              <dd class="text-sm text-muted-foreground leading-relaxed">{service.does}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="space-y-5" aria-labelledby="paths">
+    <div>
+      <h2 id="paths" class="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">Four paths through the stack</h2>
+      <p class="text-muted-foreground">Each step is checked by the server, never by the app.</p>
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      {paths.map((path) => (
+        <article class="card p-6 space-y-4">
+          <div class="space-y-2">
+            <h3 class="text-xl font-semibold tracking-tight">{path.title}</h3>
+            <p class="flex flex-wrap gap-1.5">
+              {path.touches.map((name) => <span class="chip">{name}</span>)}
+            </p>
+          </div>
+          <ol class="steps guide-prose">
+            {path.steps.map((step) => <li>{step}</li>)}
+          </ol>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="space-y-5" aria-labelledby="data">
+    <div>
+      <h2 id="data" class="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">Where your data lives</h2>
+      <p class="text-muted-foreground max-w-3xl">
+        Everything stays on the server you run. The app sends no analytics; apart from your servers, it only
+        contacts GitHub to check for desktop updates.
       </p>
-    </section>
-  </main>
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th scope="col">Data</th><th scope="col">Stored in</th><th scope="col">Notes</th></tr>
+        </thead>
+        <tbody>
+          {data.map((row) => (
+            <tr><td>{row.what}</td><td>{row.where}</td><td>{row.note}</td></tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p class="text-sm text-muted-foreground max-w-3xl">
+      With the <a href="/self-hosting/cloudflare-tunnel" class="underline underline-offset-2 hover:text-foreground">Cloudflare Tunnel</a> path,
+      Cloudflare decrypts web traffic at its edge before passing it to your server. With{" "}
+      <a href="/self-hosting/caddy" class="underline underline-offset-2 hover:text-foreground">Caddy</a>, HTTPS ends on your
+      own server. Call audio and video reach LiveKit directly either way.
+    </p>
+  </section>
 
-  <SiteFooter />
-</Layout>
+  <section class="space-y-5" aria-labelledby="rules">
+    <h2 id="rules" class="text-2xl sm:text-3xl font-semibold tracking-tight">Rules the system keeps</h2>
+    <div class="grid md:grid-cols-2 gap-4">
+      {rules.map((rule) => (
+        <div class="card p-5 space-y-2">
+          <h3 class="font-semibold">{rule.title}</h3>
+          <p class="text-sm text-muted-foreground leading-relaxed">{rule.text}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="space-y-5" aria-labelledby="more">
+    <h2 id="more" class="text-2xl sm:text-3xl font-semibold tracking-tight">Go deeper</h2>
+    <div class="grid md:grid-cols-3 gap-4">
+      {docs.map((doc) => (
+        <a href={doc.href} target="_blank" rel="noopener" class="card doc-link p-5 space-y-1">
+          <p class="font-semibold">{doc.label} →</p>
+          <p class="text-sm text-muted-foreground">{doc.text}</p>
+        </a>
+      ))}
+    </div>
+    <p class="text-sm text-muted-foreground">
+      Ready to run it? Follow the <a href="/self-hosting" class="underline underline-offset-2 hover:text-foreground">self-hosting guide</a>.
+    </p>
+  </section>
+</PageLayout>
+
+<style>
+  .overview {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  @media (min-width: 1024px) {
+    .overview {
+      grid-template-columns: 17rem 9rem 1fr;
+      align-items: center;
+      gap: 0;
+    }
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-accent-cyan);
+  }
+
+  /* A line with a label between the device and the server: vertical when the
+     two cards stack, horizontal beside each other. */
+  .connector {
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: 3.5rem;
+  }
+
+  .connector::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 50%;
+    width: 2px;
+    background: linear-gradient(var(--color-accent-blue), var(--color-accent-cyan));
+    opacity: 0.6;
+  }
+
+  @media (min-width: 1024px) {
+    .connector::before {
+      inset: 50% 0 auto 0;
+      width: auto;
+      height: 2px;
+      background: linear-gradient(90deg, var(--color-accent-blue), var(--color-accent-cyan));
+    }
+  }
+
+  .connector span {
+    position: relative;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-background);
+    font-size: 0.7rem;
+    color: var(--color-muted-foreground);
+    text-align: center;
+  }
+
+  .service {
+    display: grid;
+    gap: 0.35rem;
+    align-content: start;
+    padding: 0.9rem 1rem;
+    border: 1px solid oklch(1 0 0 / 0.08);
+    border-radius: 0.75rem;
+    background: oklch(0.16 0.01 245 / 0.6);
+  }
+
+  .steps {
+    margin: 0;
+    padding-left: 1.2rem;
+    display: grid;
+    gap: 0.5rem;
+    list-style: decimal;
+  }
+
+  .steps li::marker {
+    color: var(--color-accent-cyan);
+    font-weight: 600;
+  }
+
+  .doc-link {
+    transition: border-color 160ms ease;
+  }
+
+  .doc-link:hover {
+    border-color: oklch(0.75 0.1 220 / 0.45);
+  }
+</style>

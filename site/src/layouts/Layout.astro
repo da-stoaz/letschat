@@ -1,12 +1,19 @@
 ---
+import type { ComponentProps } from "astro/types";
+import SiteHeader from "@/components/SiteHeader.astro";
+import SiteFooter from "@/components/SiteFooter.astro";
+
 interface Props {
   title: string;
   description?: string;
+  /** The nav item to mark as the current page. */
+  active?: ComponentProps<typeof SiteHeader>["active"];
 }
 
 const {
   title,
   description = "LetsChat - Self-hosted desktop app for real-time team communication. Voice, video, and messaging under your control.",
+  active,
 } = Astro.props;
 ---
 
@@ -24,7 +31,9 @@ const {
   </head>
   <body>
     <div id="site-shell">
+      <SiteHeader active={active} />
       <slot />
+      <SiteFooter />
     </div>
   </body>
 </html>

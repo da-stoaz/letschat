@@ -1,7 +1,5 @@
 ---
 import Layout from "@/layouts/Layout.astro";
-import SiteHeader from "@/components/SiteHeader.astro";
-import SiteFooter from "@/components/SiteFooter.astro";
 import ConversationPreview from "@/components/ConversationPreview.astro";
 import {
   GITHUB_BASE,
@@ -16,8 +14,7 @@ import {
 const latestVersion: string = (await githubApi("/releases/latest"))?.tag_name?.replace(/^v/, "") ?? "";
 ---
 
-<Layout title="LetsChat | Self-Hosted Team Chat and Voice" description="LetsChat is a self-hosted desktop app for team messaging, voice, video, notifications, and controlled operations.">
-  <SiteHeader active="home" />
+<Layout title="LetsChat | Self-Hosted Team Chat and Voice" description="LetsChat is a self-hosted desktop app for team messaging, voice, video, notifications, and controlled operations." active="home">
 
   <main>
     <section id="product" class="relative overflow-hidden">
@@ -208,7 +205,6 @@ const latestVersion: string = (await githubApi("/releases/latest"))?.tag_name?.r
     </section>
   </main>
 
-  <SiteFooter />
 </Layout>
 
 <script>

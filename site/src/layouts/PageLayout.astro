@@ -1,0 +1,31 @@
+---
+// Every page but the home page: the same heading block, then the page's own
+// sections. Shared card, chip and prose styles live in styles/global.css.
+import type { ComponentProps } from "astro/types";
+import Layout from "@/layouts/Layout.astro";
+
+type Props = ComponentProps<typeof Layout> & {
+  heading: string;
+  /** The section this page belongs to, linked above the heading. */
+  parent?: { href: string; label: string };
+};
+
+const { heading, parent, ...layout } = Astro.props;
+---
+
+<Layout {...layout}>
+  <main class="max-w-7xl mx-auto px-5 sm:px-6 py-14 space-y-14">
+    <header class="space-y-3">
+      {parent && (
+        <a href={parent.href} class="inline-block text-sm text-muted-foreground hover:text-foreground transition-colors">
+          ← {parent.label}
+        </a>
+      )}
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight">{heading}</h1>
+      <div class="max-w-2xl space-y-3 text-lg leading-relaxed text-muted-foreground">
+        <slot name="lead" />
+      </div>
+    </header>
+    <slot />
+  </main>
+</Layout>

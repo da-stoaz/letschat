@@ -1,74 +1,59 @@
 ---
-import Layout from "@/layouts/Layout.astro";
-import SiteHeader from "@/components/SiteHeader.astro";
-import SiteFooter from "@/components/SiteFooter.astro";
+import PageLayout from "@/layouts/PageLayout.astro";
 import CodeBlock from "@/components/CodeBlock.astro";
 import Callout from "@/components/Callout.astro";
 import GuideToc from "@/components/GuideToc.astro";
 import { GITHUB_REPO } from "@/lib/site";
 ---
 
-<Layout
+<PageLayout
   title="Path B: Caddy Reverse Proxy — LetsChat Self-Hosting"
   description="Deploy LetsChat using Caddy as a reverse proxy with automatic HTTPS and direct DNS to your host."
+  active="self-hosting"
+  heading="Path B: Caddy Reverse Proxy"
+  parent={{ href: "/self-hosting", label: "Self-hosting" }}
 >
-  <SiteHeader active="self-hosting" />
+  <p slot="lead">
+    Caddy runs on your host, terminates HTTPS automatically, and routes by hostname to internal Docker services.
+    Simpler moving parts than a tunnel — but your host directly exposes ports 80 and 443.
+  </p>
 
-  <main class="max-w-7xl mx-auto px-5 sm:px-6 py-14 space-y-10">
-    <div class="space-y-4">
-      <nav class="flex items-center gap-2 text-sm text-muted-foreground">
-        <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
-        <span>/</span>
-        <span class="text-foreground">Path B: Caddy</span>
-      </nav>
-      <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">Path B: Caddy Reverse Proxy</h1>
-      <p class="guide-lead max-w-2xl">
-        Caddy runs on your host, terminates HTTPS automatically, and routes by hostname to internal Docker services.
-        Simpler moving parts than a tunnel — but your host directly exposes ports 80 and 443.
-      </p>
-      <div class="flex flex-wrap gap-2 text-xs pt-1">
-        <span class="mini-pill">Direct HTTPS</span>
-        <span class="mini-pill">Classic Reverse Proxy</span>
-        <span class="mini-pill">Auto TLS via ACME</span>
-      </div>
-    </div>
+  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_15rem] lg:gap-10">
+  <section class="space-y-7 min-w-0">
 
-    <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_15rem] lg:gap-10">
-    <section class="space-y-7 min-w-0">
+    <article class="step-card p-7 space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">Requirements (read first)</h2>
+      <ul class="list-disc pl-5 guide-prose space-y-1.5">
+        <li>Ubuntu host with Docker Engine 25+ and the Compose plugin 2.23.1+ (for health checks and inline proxy configuration).</li>
+        <li>Cloudflare DNS records set to your host public IP (DNS-only mode for ACME issuance).</li>
+        <li>A routable public IPv4, <strong>not</strong> CGNAT. This track exposes the host directly, so CGNAT breaks everything, not just voice. Step 2 shows how to check.</li>
+        <li>Router/firewall forwards to the host's LAN IP: <code>80/tcp</code> + <code>443/tcp</code> (Caddy TLS/HTTP) and <code>44382/udp</code> + <code>44381/tcp</code> (LiveKit media). All a manual router step.</li>
+      </ul>
+    </article>
 
-      <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Requirements (read first)</h2>
-        <ul class="list-disc pl-5 guide-prose space-y-1.5">
-          <li>Ubuntu host with Docker Engine 25+ and the Compose plugin 2.23.1+ (for health checks and inline proxy configuration).</li>
-          <li>Cloudflare DNS records set to your host public IP (DNS-only mode for ACME issuance).</li>
-          <li>A routable public IPv4, <strong>not</strong> CGNAT. This track exposes the host directly, so CGNAT breaks everything, not just voice. Step 2 shows how to check.</li>
-          <li>Router/firewall forwards to the host's LAN IP: <code>80/tcp</code> + <code>443/tcp</code> (Caddy TLS/HTTP) and <code>44382/udp</code> + <code>44381/tcp</code> (LiveKit media). All a manual router step.</li>
-        </ul>
-      </article>
+    <article class="step-card p-7 space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">How this path works</h2>
+      <p class="guide-prose">Caddy runs on your host, terminates HTTPS, and routes by hostname to internal Docker services. This removes Cloudflare Tunnel complexity, but your host directly exposes <code>80/443</code> to the internet.</p>
+      <p class="guide-prose">You'll publish these hostnames — five if you host the browser client, four without it:</p>
+      <ul class="domain-list">
+        <li><code>auth</code> <span>login, tokens &amp; first-run discovery</span></li>
+        <li><code>chat</code> <span>realtime database</span></li>
+        <li><code>files</code> <span>uploads &amp; downloads</span></li>
+        <li><code>lk</code> <span>voice signalling</span></li>
+        <li><code>app</code> <span>browser client (optional)</span></li>
+      </ul>
+      <Callout type="note" title="Desktop and browser, same stack">
+        Users can install the <strong>desktop app</strong> (and paste <code>auth.example.com</code> as the server) or
+        just open the <strong>hosted browser client</strong> at <code>app.example.com</code> — no install, voice
+        included. The browser client is optional; leave <code>app</code> out and the desktop app still works.
+        There is no separate <code>connect</code> subdomain — <code>auth</code> is the discovery entrypoint.
+      </Callout>
+    </article>
 
-      <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">How this path works</h2>
-        <p class="guide-prose">Caddy runs on your host, terminates HTTPS, and routes by hostname to internal Docker services. This removes Cloudflare Tunnel complexity, but your host directly exposes <code>80/443</code> to the internet.</p>
-        <p class="guide-prose">You'll publish these hostnames — five if you host the browser client, four without it:</p>
-        <ul class="domain-list">
-          <li><code>auth</code> <span>login, tokens &amp; first-run discovery</span></li>
-          <li><code>chat</code> <span>realtime database</span></li>
-          <li><code>files</code> <span>uploads &amp; downloads</span></li>
-          <li><code>lk</code> <span>voice signalling</span></li>
-          <li><code>app</code> <span>browser client (optional)</span></li>
-        </ul>
-        <Callout type="note" title="Desktop and browser, same stack">
-          Users can install the <strong>desktop app</strong> (and paste <code>auth.example.com</code> as the server) or
-          just open the <strong>hosted browser client</strong> at <code>app.example.com</code> — no install, voice
-          included. The browser client is optional; leave <code>app</code> out and the desktop app still works.
-          There is no separate <code>connect</code> subdomain — <code>auth</code> is the discovery entrypoint.
-        </Callout>
-      </article>
-
-      <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 0: Get shared files</h2>
-        <p class="guide-prose">Download the shared base compose file, the LiveKit config and the SpacetimeDB config:</p>
-        <CodeBlock label="terminal" code={`mkdir letschat && cd letschat
+    <article class="step-card p-7 space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">Step 0: Get shared files</h2>
+      <p class="guide-prose">Download the shared base compose file, the LiveKit config and the SpacetimeDB config:</p>
+      <CodeBlock label="terminal" code={`mkdir letschat && cd letschat
 
 wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
 
@@ -79,50 +64,50 @@ wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/${GITHUB_REPO
 # Docker mounts an empty folder and the database never starts
 mkdir spacetimedb
 wget -O spacetimedb/config.prod.toml https://raw.githubusercontent.com/${GITHUB_REPO}/main/spacetimedb/config.prod.toml`} />
-        <p class="guide-prose text-sm">Every service — the browser client included — is a pre-built image that GitHub Actions publishes with each release. Nothing is compiled on your server. To upgrade later, download the compose files again (they change with releases) and pull.</p>
-      </article>
+      <p class="guide-prose text-sm">Every service — the browser client included — is a pre-built image that GitHub Actions publishes with each release. Nothing is compiled on your server. To upgrade later, download the compose files again (they change with releases) and pull.</p>
+    </article>
 
-      <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 1: Download Path B files</h2>
-        <p class="guide-prose">Inside the <code>letschat</code> directory:</p>
-        <CodeBlock label="terminal" code={`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.caddy.yml
+    <article class="step-card p-7 space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">Step 1: Download Path B files</h2>
+      <p class="guide-prose">Inside the <code>letschat</code> directory:</p>
+      <CodeBlock label="terminal" code={`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.caddy.yml
 
 wget -O .env https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.caddy.example
 
 mkdir -p deploy/caddy
 wget -O deploy/caddy/Caddyfile https://raw.githubusercontent.com/${GITHUB_REPO}/main/deploy/caddy/Caddyfile`} />
-      </article>
+    </article>
 
-      <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 2: DNS + network setup</h2>
-        <p class="guide-prose">Point these A records to your host public IP (DNS-only, no Cloudflare proxy):</p>
-        <ul class="list-disc pl-5 guide-prose space-y-1">
-          <li><code>auth.example.com</code></li>
-          <li><code>chat.example.com</code></li>
-          <li><code>files.example.com</code></li>
-          <li><code>lk.example.com</code></li>
-          <li><code>app.example.com</code> <span class="text-sm">— only if you host the browser client</span></li>
-        </ul>
-        <Callout type="warning" title="First confirm you are not behind CGNAT">
-          Compare your true public IP to your router's WAN IP. If they differ, this track cannot work at all
-          (you'd need the Cloudflare Tunnel track, or a public-IP VPS):
-          <CodeBlock label="terminal" code={`curl -4 ifconfig.me        # compare to the WAN IP on your router's status page`} />
-        </Callout>
-        <p class="guide-prose">Give the server a static DHCP reservation, then forward these on your router/firewall to its LAN IP:</p>
-        <ul class="list-disc pl-5 guide-prose space-y-1.5">
-          <li><code>80/tcp</code> and <code>443/tcp</code> → Caddy (HTTP + TLS for all web services)</li>
-          <li><code>44382/udp</code> (primary media) and <code>44381/tcp</code> (fallback) → LiveKit media</li>
-        </ul>
-        <p class="guide-prose text-sm">Port <code>44380</code> (LiveKit signalling) does <strong>not</strong> need forwarding — Caddy proxies it on 443 as <code>wss://lk.example.com</code>.</p>
-      </article>
+    <article class="step-card p-7 space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">Step 2: DNS + network setup</h2>
+      <p class="guide-prose">Point these A records to your host public IP (DNS-only, no Cloudflare proxy):</p>
+      <ul class="list-disc pl-5 guide-prose space-y-1">
+        <li><code>auth.example.com</code></li>
+        <li><code>chat.example.com</code></li>
+        <li><code>files.example.com</code></li>
+        <li><code>lk.example.com</code></li>
+        <li><code>app.example.com</code> <span class="text-sm">— only if you host the browser client</span></li>
+      </ul>
+      <Callout type="warning" title="First confirm you are not behind CGNAT">
+        Compare your true public IP to your router's WAN IP. If they differ, this track cannot work at all
+        (you'd need the Cloudflare Tunnel track, or a public-IP VPS):
+        <CodeBlock label="terminal" code={`curl -4 ifconfig.me        # compare to the WAN IP on your router's status page`} />
+      </Callout>
+      <p class="guide-prose">Give the server a static DHCP reservation, then forward these on your router/firewall to its LAN IP:</p>
+      <ul class="list-disc pl-5 guide-prose space-y-1.5">
+        <li><code>80/tcp</code> and <code>443/tcp</code> → Caddy (HTTP + TLS for all web services)</li>
+        <li><code>44382/udp</code> (primary media) and <code>44381/tcp</code> (fallback) → LiveKit media</li>
+      </ul>
+      <p class="guide-prose text-sm">Port <code>44380</code> (LiveKit signalling) does <strong>not</strong> need forwarding — Caddy proxies it on 443 as <code>wss://lk.example.com</code>.</p>
+    </article>
 
-      <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 3: Configure secrets and hostnames</h2>
-        <p class="guide-prose">Open <code>.env</code> and replace every placeholder. Generate secrets with:</p>
-        <CodeBlock label="terminal" code={`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
+    <article class="step-card p-7 space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">Step 3: Configure secrets and hostnames</h2>
+      <p class="guide-prose">Open <code>.env</code> and replace every placeholder. Generate secrets with:</p>
+      <CodeBlock label="terminal" code={`openssl rand -hex 32      # for AUTH_JWT_SECRET, MINIO_SECRET_KEY
 openssl rand -base64 32   # for LIVEKIT_API_SECRET`} />
-        <p class="guide-prose"><strong>Every field below must be set</strong> — the stack will not start without <code>POSTGRES_PASSWORD</code>, and you cannot sign in without the bootstrap admin. Grouped by purpose:</p>
-        <CodeBlock label=".env" code={`# Secrets — generate each one
+      <p class="guide-prose"><strong>Every field below must be set</strong> — the stack will not start without <code>POSTGRES_PASSWORD</code>, and you cannot sign in without the bootstrap admin. Grouped by purpose:</p>
+      <CodeBlock label=".env" code={`# Secrets — generate each one
 AUTH_JWT_SECRET=            # openssl rand -hex 32
 POSTGRES_PASSWORD=         # openssl rand -hex 32
 LIVEKIT_API_SECRET=        # openssl rand -base64 32
@@ -149,156 +134,111 @@ SMTP_USER=
 SMTP_PASSWORD=
 EMAIL_FROM_ADDRESS=no-reply@example.com`} />
 
-        <Callout type="note" title="Signing keys and service identities are automatic">
-          Fresh installs generate the signing key once in <code>core_api_data</code>.
-          core-api reads the publisher token and registers the archive worker automatically.
-          Keep these volumes in your backups. When upgrading an existing instance, keep its
-          configured <code>SPACETIME_OIDC_PRIVATE_KEY</code> unchanged.
-        </Callout>
+      <Callout type="note" title="Signing keys and service identities are automatic">
+        Fresh installs generate the signing key once in <code>core_api_data</code>.
+        core-api reads the publisher token and registers the archive worker automatically.
+        Keep these volumes in your backups. When upgrading an existing instance, keep its
+        configured <code>SPACETIME_OIDC_PRIVATE_KEY</code> unchanged.
+      </Callout>
 
-        <h3 class="text-lg font-medium pt-1">Hosting the browser client (optional)</h3>
-        <p class="guide-prose">
-          For the browser client at <code>app.example.com</code>, set its hostname below. It supplies
-          Caddy routing and the "Continue in browser" option on invite links. Leave <code>APP_DOMAIN</code> empty to omit
-          the browser site.
-        </p>
-        <CodeBlock label=".env" code={`# Browser site; invite links then also offer "Continue in browser".
+      <h3 class="text-lg font-medium pt-1">Hosting the browser client (optional)</h3>
+      <p class="guide-prose">
+        For the browser client at <code>app.example.com</code>, set its hostname below. It supplies
+        Caddy routing and the "Continue in browser" option on invite links. Leave <code>APP_DOMAIN</code> empty to omit
+        the browser site.
+      </p>
+      <CodeBlock label=".env" code={`# Browser site; invite links then also offer "Continue in browser".
 APP_DOMAIN=app.example.com
 
 # DB WebSocket compression in the browser: "gzip" (default) or "none".
 VITE_WEB_WS_COMPRESSION=gzip`} />
-        <p class="guide-prose text-sm">
-          Leave <code>MINIO_CORS_ALLOW_ORIGIN=*</code> as the example file has it. Narrowing it to
-          <code>https://app.example.com</code> blocks every upload from the desktop app, whose origin is
-          <code>tauri://localhost</code> / <code>http://tauri.localhost</code>.
-        </p>
+      <p class="guide-prose text-sm">
+        Leave <code>MINIO_CORS_ALLOW_ORIGIN=*</code> as the example file has it. Narrowing it to
+        <code>https://app.example.com</code> blocks every upload from the desktop app, whose origin is
+        <code>tauri://localhost</code> / <code>http://tauri.localhost</code>.
+      </p>
 
-        <Callout type="tip" title="Don't want to set up SMTP yet?">
-          Set <code>REQUIRE_EMAIL_CONFIRMATION=false</code> and <code>EMAIL_SENDER=log</code> — accounts then
-          work without email (links are written to the container log instead).
-        </Callout>
-        <p class="guide-prose text-sm">Everything else in <code>.env</code> already has a working default and is documented inline — <code>LIVEKIT_API_KEY</code>, <code>POSTGRES_USER</code>/<code>POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them. The publisher token is read automatically; no <code>SPACETIMEDB_SERVICE_TOKEN</code> input is required.</p>
-      </article>
+      <Callout type="tip" title="Don't want to set up SMTP yet?">
+        Set <code>REQUIRE_EMAIL_CONFIRMATION=false</code> and <code>EMAIL_SENDER=log</code> — accounts then
+        work without email (links are written to the container log instead).
+      </Callout>
+      <p class="guide-prose text-sm">Everything else in <code>.env</code> already has a working default and is documented inline — <code>LIVEKIT_API_KEY</code>, <code>POSTGRES_USER</code>/<code>POSTGRES_DB</code>, registration policy, rate limits, client-version pins. Leave them unless you have a reason to change them. The publisher token is read automatically; no <code>SPACETIMEDB_SERVICE_TOKEN</code> input is required.</p>
+    </article>
 
 
-      <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 4: Pull images, start, and connect core-api to the chat module</h2>
-        <p class="guide-prose">
-          Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
-          (e.g. <code>LETSCHAT_VERSION=1.2.4</code>) to make upgrades explicit. Before an upgrade, save
-          the current deployment files and keep the deployed images. To roll back, restore those files
-          together with <code>.env</code>, then run <code>docker compose … up -d --pull never</code>.
-          Desktop apps follow your server: they offer the app version released with the backend you
-          run, so they update when you upgrade and not before.
-          See <a href={`https://github.com/${GITHUB_REPO}/blob/main/docs/DEPLOYMENT.md#upgrading-a-running-deployment`}>the upgrade and rollback guide</a>.
-        </p>
-        <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
+    <article class="step-card p-7 space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">Step 4: Pull images, start, and connect core-api to the chat module</h2>
+      <p class="guide-prose">
+        Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
+        (e.g. <code>LETSCHAT_VERSION=1.2.4</code>) to make upgrades explicit. Before an upgrade, save
+        the current deployment files and keep the deployed images. To roll back, restore those files
+        together with <code>.env</code>, then run <code>docker compose … up -d --pull never</code>.
+        Desktop apps follow your server: they offer the app version released with the backend you
+        run, so they update when you upgrade and not before.
+        See <a href={`https://github.com/${GITHUB_REPO}/blob/main/docs/DEPLOYMENT.md#upgrading-a-running-deployment`}>the upgrade and rollback guide</a>.
+      </p>
+      <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`} />
-        <p class="guide-prose"><code>module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
-        <CodeBlock label="terminal" code={`docker logs letschat-module-init`} />
-        <Callout type="note">
-          Changed a hostname? Run <code>docker compose … up -d</code> so Caddy, core-api and web
-          all receive it. No rebuild; each address is configured once.</Callout>
+      <p class="guide-prose"><code>module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
+      <CodeBlock label="terminal" code={`docker logs letschat-module-init`} />
+      <Callout type="note">
+        Changed a hostname? Run <code>docker compose … up -d</code> so Caddy, core-api and web
+        all receive it. No rebuild; each address is configured once.</Callout>
 
-        <h3 class="text-lg font-medium pt-3">Check automatic setup</h3>
-        <p class="guide-prose">
-          core-api reads the publisher token, pins its trusted issuer and registers the archive worker
-          automatically. Until the issuer is pinned, new chat registrations are rejected. No token
-          copying or manual reducer calls are needed. Check setup and actual replication:
-        </p>
-        <CodeBlock label="terminal" code={`docker logs letschat-core-api
+      <h3 class="text-lg font-medium pt-3">Check automatic setup</h3>
+      <p class="guide-prose">
+        core-api reads the publisher token, pins its trusted issuer and registers the archive worker
+        automatically. Until the issuer is pinned, new chat registrations are rejected. No token
+        copying or manual reducer calls are needed. Check setup and actual replication:
+      </p>
+      <CodeBlock label="terminal" code={`docker logs letschat-core-api
 # Expect: Pinned SpacetimeDB trusted issuer to http://core-api:8787.
 # Expect: Registered archive-worker identity ...
 docker compose -f docker-compose.prod.base.yml exec postgres \\
-  psql -U letschat -d archive -c 'SELECT count(*) FROM archive_user;'
+psql -U letschat -d archive -c 'SELECT count(*) FROM archive_user;'
 # The module-owner row should already be replicated.`} />
-        <Callout type="warning" title="Keep the identity volumes">
-          Back up <code>module_init_home</code>, <code>archive_worker_data</code> and
-          <code>core_api_data</code>. The publisher identity is required for future module updates.
-        </Callout>
-      </article>
+      <Callout type="warning" title="Keep the identity volumes">
+        Back up <code>module_init_home</code>, <code>archive_worker_data</code> and
+        <code>core_api_data</code>. The publisher identity is required for future module updates.
+      </Callout>
+    </article>
 
-      <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 5: Validate public endpoints</h2>
-        <CodeBlock label="terminal" code={`curl -i https://auth.example.com/health
+    <article class="step-card p-7 space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">Step 5: Validate public endpoints</h2>
+      <CodeBlock label="terminal" code={`curl -i https://auth.example.com/health
 curl -i https://files.example.com/minio/health/live
 curl -i https://auth.example.com/.well-known/letschat.json`} />
-        <Callout type="note" title="Your admin account">
-          The instance admin is the <code>ADMIN_BOOTSTRAP_*</code> account from Step 3 — a public registration
-          never becomes admin. Sign in with it once, then remove <code>ADMIN_BOOTSTRAP_PASSWORD</code> from
-          <code>.env</code>. The admin panel stays on the server's loopback (<code>127.0.0.1:48788</code>); reach it
-          over an SSH tunnel.
-        </Callout>
-      </article>
+      <Callout type="note" title="Your admin account">
+        The instance admin is the <code>ADMIN_BOOTSTRAP_*</code> account from Step 3 — a public registration
+        never becomes admin. Sign in with it once, then remove <code>ADMIN_BOOTSTRAP_PASSWORD</code> from
+        <code>.env</code>. The admin panel stays on the server's loopback (<code>127.0.0.1:48788</code>); reach it
+        over an SSH tunnel.
+      </Callout>
+    </article>
 
-      <article class="step-card rounded-xl p-7 space-y-4">
-        <h2 class="text-2xl font-semibold tracking-tight">Step 6: Client onboarding</h2>
-        <p class="guide-prose">
-          <strong>Desktop:</strong> users enter <code>https://auth.example.com</code> in the setup screen.
-          <strong>Browser:</strong> users open <code>https://app.example.com</code> and go straight to login.
-          Both read the same discovery document, which should point to your public endpoints:
-        </p>
-        <CodeBlock label="auth.example.com/.well-known/letschat.json" code={`{
-  "spacetimedb": "wss://chat.example.com",
-  "auth": "https://auth.example.com",
-  "livekit": "wss://lk.example.com",
-  "database": "letschat"
+    <article class="step-card p-7 space-y-4">
+      <h2 class="text-2xl font-semibold tracking-tight">Step 6: Client onboarding</h2>
+      <p class="guide-prose">
+        <strong>Desktop:</strong> users enter <code>https://auth.example.com</code> in the setup screen.
+        <strong>Browser:</strong> users open <code>https://app.example.com</code> and go straight to login.
+        Both read the same discovery document, which should point to your public endpoints:
+      </p>
+      <CodeBlock label="auth.example.com/.well-known/letschat.json" code={`{
+"spacetimedb": "wss://chat.example.com",
+"auth": "https://auth.example.com",
+"livekit": "wss://lk.example.com",
+"database": "letschat"
 }`} />
-      </article>
+    </article>
 
-    </section>
-    <GuideToc />
-    </div>
+  </section>
+  <GuideToc />
+  </div>
 
-    <div class="flex items-center justify-between pt-4 border-t border-border text-sm">
-      <a href="/self-hosting/cloudflare-tunnel" class="text-muted-foreground hover:text-foreground transition-colors">← Path A: Cloudflare Tunnel</a>
-      <a href="/self-hosting" class="text-muted-foreground hover:text-foreground transition-colors">Back to overview →</a>
-    </div>
-  </main>
-  <SiteFooter />
-</Layout>
+  <div class="flex items-center justify-between pt-4 border-t border-border text-sm">
+    <a href="/self-hosting/cloudflare-tunnel" class="text-muted-foreground hover:text-foreground transition-colors">← Path A: Cloudflare Tunnel</a>
+    <a href="/self-hosting" class="text-muted-foreground hover:text-foreground transition-colors">Back to overview →</a>
+  </div>
+</PageLayout>
 
-<style>
-  .mini-pill {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 9999px;
-    padding: 0.3rem 0.6rem;
-    border: 1px solid oklch(1 0 0 / 0.16);
-    font-size: 0.7rem;
-    color: var(--color-muted-foreground);
-    background: oklch(0.16 0 0 / 0.6);
-  }
-
-  .step-card {
-    border: 1px solid oklch(1 0 0 / 0.12);
-    background:
-      linear-gradient(180deg, oklch(0.22 0 0 / 0.82), oklch(0.185 0 0 / 0.8)),
-      linear-gradient(90deg, oklch(0.74 0.16 190 / 0.18) 0 4px, transparent 4px 100%);
-    box-shadow: 0 14px 34px oklch(0 0 0 / 0.2);
-  }
-
-  .domain-list {
-    display: grid;
-    gap: 0.5rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .domain-list li {
-    display: flex;
-    align-items: baseline;
-    gap: 0.7rem;
-    font-size: 1rem;
-    color: var(--color-muted-foreground);
-  }
-
-  .domain-list li code {
-    flex: none;
-    min-width: 3.4rem;
-    text-align: center;
-  }
-
-</style>
