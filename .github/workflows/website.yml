@@ -7,7 +7,6 @@ on:
     paths:
       - 'site/**'
       - 'eslint.config.js'
-      - 'tests/ui/siteFeedback.test.ts'
       - '.github/workflows/website.yml'
 
 permissions:
@@ -19,14 +18,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
-      # The ESLint config and plugins live in the root package.
+      # ESLint and Vitest live in the root package.
       - run: bun install --frozen-lockfile
       - run: bunx eslint site
-      # Root unit test that runs the download page's script.
-      - run: bunx vitest run --project unit tests/ui/siteFeedback.test.ts
+      # Before the site tests: site/tsconfig.json extends Astro's.
       - run: npm ci
         working-directory: site
+      - run: bunx vitest run --config site/vitest.config.ts
       - run: npm run build
         working-directory: site
-      - run: npm test
+      # The security backports, then the built download page.
+      - run: node --test tests/*.test.mjs
         working-directory: site

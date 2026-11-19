@@ -1,5 +1,4 @@
-// Relative, not "@/lib/site": the root unit tests import this file directly.
-import { GITHUB_RELEASES, GITHUB_REPO, type ReleaseAsset } from "./site";
+import { GITHUB_RELEASES, GITHUB_REPO, type ReleaseAsset } from "@/lib/site";
 
 export interface Release {
   tag_name: string;
