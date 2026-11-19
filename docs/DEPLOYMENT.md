@@ -21,9 +21,9 @@ The deployment invariants and known residual risks are summarized in
 
 Shared core services:
 
-- `docker-compose.prod.base.yml` — `spacetimedb`, `chat-edge`, `postgres`, `core-api`,
-  `module-init`, `archive-worker`, `livekit`, `minio`, `minio-init`, `web`
-  (hosted browser SPA).
+- `docker-compose.prod.base.yml` — `spacetimedb` (with the one-shot
+  `spacetimedb-config-init`), `chat-edge`, `postgres`, `core-api`, `module-init`,
+  `archive-worker`, `livekit`, `minio`, `minio-init`, `web` (hosted browser SPA).
 
 Topology overlays:
 
@@ -256,7 +256,7 @@ wget -O docker-compose.prod.base.yml https://raw.githubusercontent.com/da-stoaz/
 wget -O docker-compose.prod.<track>.yml https://raw.githubusercontent.com/da-stoaz/letschat/main/docker-compose.prod.<track>.yml
 wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/da-stoaz/letschat/main/livekit/config.prod.yaml
 wget -O spacetimedb/config.prod.toml https://raw.githubusercontent.com/da-stoaz/letschat/main/spacetimedb/config.prod.toml
-LETSCHAT_VERSION=1.2.4   # in .env
+LETSCHAT_VERSION=1.7.0   # in .env
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml pull
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml up -d
 ```
@@ -609,12 +609,30 @@ chat-domain admin is therefore required for cleanup, but an outage cannot make
 the collector guess and delete live data.
 
 Video posters are rendered by core-api in the background (`VideoThumbnailWorker`):
-one job at a time, below-normal priority, 60 s timeout, three attempts. ffmpeg
-reads the video through range requests (index plus a few frames, never the whole
-file) and stores `{videoKey}.thumb.jpg` next to it, which inherits the video's
-read rule and is deleted with it. The core-api image ships ffmpeg; outside the
-image set `FFMPEG_PATH` or install it on `PATH`. Without ffmpeg the worker logs a
-warning and videos show a play placeholder; jobs stay pending until it is available.
+one job at a time, below-normal priority, a 30-second budget per job, three
+attempts, new jobs before retries. ffmpeg reads the video through range
+requests (index plus a few frames, never the whole file) and stores
+`{videoKey}.thumb.jpg` next to it, which inherits the video's read rule and is
+deleted with it.
+
+Videos are also converted for streaming (`VideoPlaybackWorker`): HLS renditions
+up to 720p and 1080p (H.264/AAC, never upscaled), stored in MinIO under
+`derived/hls/`. Plan for the cost on the host:
+
+- One encoder per installation (a PostgreSQL advisory lock), using two threads
+  at below-normal priority, 30 minutes per job, inputs up to two hours.
+- Up to 2 GiB of temporary disk inside the core-api container per job, and up
+  to 2 GiB of output per video.
+- Renditions count toward the uploader's and the installation's stored-byte
+  limits; a video that does not fit is not converted.
+- The original stays downloadable and playable while processing and if
+  conversion fails after three attempts.
+
+Both workers run ffmpeg sandboxed (see `SECURITY.md`). The core-api image ships
+`ffmpeg` and `ffprobe`; outside the image set `FFMPEG_PATH` / `FFPROBE_PATH` or
+install them on `PATH`, then restart. Without them the workers log a warning,
+videos show a play placeholder and play the original, and jobs stay pending
+until the tools are available.
 
 Stop Core API during any destructive SpacetimeDB reset. Restore the chat-domain
 data and run the reference rebuild before starting it again; this prevents an
@@ -688,23 +706,35 @@ LetsChat setup auto-discovery expects this shape:
 
 ```json
 {
-  "spacetimedb": "wss://chat.example.com",
+  "spacetimedb": "https://chat.example.com",
   "auth": "https://auth.example.com",
-  "livekit": "wss://lk.example.com",
+  "livekit": "https://lk.example.com",
   "database": "letschat",
-  "web": "https://app.example.com",
-  "serverVersion": "1.6.2",
-  "recommendedClient": "1.6.2",
+  "serverVersion": "1.7.0",
+  "recommendedClient": "1.7.0",
   "minClient": "1.6.2",
-  "clientProtocol": 1
+  "clientProtocol": 1,
+  "uploadPartSizeBytes": 67108864,
+  "uploadMaxFileSizeBytes": 524288000,
+  "dailyUploadQuotaBytes": 2147483648,
+  "userStorageLimitBytes": 0,
+  "instanceStorageLimitBytes": 0,
+  "web": "https://app.example.com",
+  "invite": "https://auth.example.com/invite"
 }
 ```
+
+Compose derives the three service URLs as HTTP(S); the SDKs open WS(S)
+connections from them. The upload fields are the effective limits from
+`/admin/config` (`0` means unlimited). `web` is `null` without `APP_DOMAIN`.
+`invite` is the base of shareable invite links.
 
 `serverVersion` is the running core-api version. `recommendedClient` defaults
 to that release; `minClient` defaults to the first client in the protocol family
 (1.6.2 for protocol 1). Operators can override both version settings via env.
-The client checks `clientProtocol` and `minClient` before connecting; the
-recommendation only selects the instance’s manual downloads.
+The client checks `clientProtocol` and `minClient` before connecting. The
+recommendation selects the instance's manual downloads and the version that
+desktop apps offer to update to (see "Desktop and web client compatibility").
 
 LiveKit scheme by track:
 
@@ -788,11 +818,9 @@ Two exceptions where the order DOES matter:
 
 Before pulling a release, update the checkout (or deployment files) to that
 release as well as `LETSCHAT_VERSION`. Image pulls do not update Compose files
-or mounted configuration. In **1.4.2**, this includes the LiveKit network fix in
-`docker-compose.prod.base.yml`: LiveKit uses only `proxy`, which is also shared
-by core-api and both supported proxies. The normal `up -d` below recreates it
-with the corrected network; active calls are interrupted during recreation.
-No firewall changes, database reset, or hand-edited network override is needed.
+or mounted configuration (see "Upgrading a running deployment"). Recreating
+LiveKit interrupts active calls. Release-specific steps are on the site's
+Breaking Changes page.
 
 Tunnel update cycle:
 
@@ -808,17 +836,35 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
 docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
 ```
 
-Minimum backups:
+Minimum backups, taken together (a partial restore can break identities or
+attachment links):
 
-- `postgres_data` volume (Identity store, system config, audit log)
-- `minio_data` volume (attachments)
-- `spacetimedb_home` volume (chat history)
+- `postgres_data` — accounts, system config, audit log, upload registry, and
+  the `archive` database with the chat copy
+- `spacetimedb_home` — live chat data
+- `minio_data` — attachments and derived video files
+- `core_api_data` — the generated OIDC signing key and service identities
+- `module_init_home` — the module owner identity (see the warning above)
+- `archive_worker_data` — the archive worker's identity
 
-Postgres backup example:
+PostgreSQL backup example (both databases):
 
 ```bash
 docker exec letschat-postgres pg_dump -U letschat auth | gzip > auth-$(date +%F).sql.gz
+docker exec letschat-postgres pg_dump -U letschat archive | gzip > archive-$(date +%F).sql.gz
 ```
+
+## Instance landing page and installers
+
+core-api serves a public page at `https://<AUTH_DOMAIN>/` that detects the
+visitor's platform, links installers through `/downloads/{os}`, and opens the
+desktop app with this instance preconfigured. `/downloads/{os}` streams a
+matching file from `/app/wwwroot/downloads/` in the core-api container when
+one exists (`macos-universal.dmg`, `macos-arm64.dmg`, `windows-x64.msi`,
+`windows-x64.exe`, `linux-x64.AppImage`, `linux-x64.deb`); otherwise it
+redirects to that platform's asset in the GitHub release named by
+`recommendedClient`. Mount a read-only folder there to serve installers from
+your own bandwidth.
 
 ## Desktop and web client compatibility
 
@@ -835,5 +881,7 @@ web image, Core API, and SpacetimeDB module on a tested deployment combination.
 
 Clients check discovery before authentication and realtime connections. Older
 backends without protocol metadata require an explicit compatibility warning
-acknowledgment; network failures offer retry. No client update is installed
-automatically. See [compatibility tests and release policy](../tests/compatibility/README.md).
+acknowledgment; network failures offer retry. Desktop updates are offered, not
+forced: the app installs a signed release only after the user chooses to
+restart, so a running call is never cut off. Apps older than 1.6.5 have no
+updater and need one manual update. See [compatibility tests and release policy](../tests/compatibility/README.md).

@@ -1,6 +1,6 @@
 # LetsChat security model
 
-> Security baseline reviewed 2026-09-18 at version 1.0.18.
+> Security baseline reviewed 2026-11-19 at version 1.7.0.
 
 This document defines the trust boundaries and invariants that security fixes
 must preserve. [`Findings/BUG_ANALYSIS.md`](../Findings/BUG_ANALYSIS.md) is the actionable finding
@@ -20,8 +20,17 @@ key, role, or claimed file metadata merely because the client supplied it.
 Application and SpacetimeDB tokens are currently persisted in webview
 `localStorage`, including desktop builds; they are not protected by an OS
 keychain. Preventing script injection therefore matters directly to credential
-protection: the hosted web client ships an enforced CSP (no `'unsafe-inline'`
-scripts, `connect-src` limited to the instance's own services).
+protection:
+
+- The hosted web client ships an enforced CSP (`deploy/web/Caddyfile`). It
+  withholds `'unsafe-inline'` scripts and limits `connect-src` to the
+  instance's own services. `'unsafe-eval'` is required: the SpacetimeDB SDK
+  builds its row decoders at runtime.
+- The desktop CSP (`src-tauri/tauri.conf.json`) also withholds inline scripts,
+  but allows any HTTPS/WSS `connect-src`, because the app connects to whatever
+  servers the user adds.
+- The app sets `no-referrer`, so signed media URLs never leak to other origins
+  through the `Referer` header.
 
 ### `core-api` is the identity authority
 
@@ -29,13 +38,17 @@ scripts, `connect-src` limited to the instance's own services).
 - Passwords are Argon2id hashes and inputs are limited to 8–128 characters.
 - Five failed sign-in attempts lock an account for five minutes.
 - The public JSON API has a 256 KiB request-body limit. Files never transit it.
+- Every `/auth` path shares a per-IP token bucket (burst 20, then 5 per
+  second). At most four password-hashing requests run at once across the
+  process; further ones are rejected instead of queued, so Argon2id cannot be
+  used to exhaust CPU and memory.
 - Abuse-prone auth endpoints use IP-partitioned fixed-window rate limiters,
   one budget each for registration, email actions, and password actions, so
   flooding one flow cannot lock another. Sign-in gets ten times the budget,
   because the per-account lockout already stops guessing and many people can
   share one CGNAT or VPN address. Confirmation and reset mails are also capped
-  at three per account per hour. Only the adjacent private/loopback proxy is
-  trusted for forwarded headers.
+  at three per account per hour, at least 60 seconds apart. Only the adjacent
+  private/loopback proxy is trusted for forwarded headers.
 - Application access tokens live for one hour and refresh tokens for seven
   days. A per-account token generation immediately invalidates older HTTP
   sessions after a credential change.
@@ -82,7 +95,8 @@ URLs:
   an admin independently of optional per-user and installation stored limits;
 - upload requests reserve the declared bytes under a PostgreSQL config-row
   lock, preventing concurrent users from overbooking the installation limit;
-- the exact `Content-Length` is signed for a single PUT or each multipart part;
+- the exact `Content-Length` is signed for a single PUT or each multipart part,
+  and signed upload URLs expire after ten minutes;
   multipart completion checks every part and HEAD-verifies the assembled size;
 - single-PUT grants expire after 15 minutes; multipart sessions after two hours.
   The sweeper deletes or aborts them before releasing quota, with MinIO's stale
@@ -96,11 +110,48 @@ URLs:
 - an unavailable dependency or stale credential fails closed and retains the
   object and registry row for retry;
 - download grants are issued only after the caller's channel, DM, or own-object
-  access is checked; batch requests are capped at 128 keys.
+  access is checked, and expire after one hour; batch requests are capped at
+  128 keys;
+- executable MIME types are refused at upload, but the type is the one the
+  client declares, so this is a convenience rather than a boundary. Download
+  URLs never reuse the uploader's `Content-Type`: types the client shows inline
+  get their canonical type and everything else is forced to download, so an
+  uploaded HTML file never runs as a page on the files domain.
 
 The one-hour lifecycle grace period is intentional: a successful PUT can briefly
 precede the SpacetimeDB commit that binds it, but it can no longer become an
 unknown or permanent orphan.
+
+### Untrusted media is processed in a sandboxed ffmpeg
+
+core-api renders video posters and HLS playback renditions from user uploads
+with ffmpeg. Each run:
+
+- executes as `nobody` with `no_new_privs` (via `setpriv` in the image) and an
+  empty environment, so it can read neither core-api's secrets nor its `/proc`
+  environment;
+- accepts only the `http,https,tcp,tls` protocols and a fixed list of container
+  formats, which stops a crafted playlist from making the server fetch other
+  URLs;
+- reads the source through a short-lived internal signed URL, at below-normal
+  priority, with bounded work: 30 seconds per poster, and per rendition job
+  30 minutes, at most two hours of input, 8K frames and 2 GiB of output. One
+  encoder runs per installation (a PostgreSQL advisory lock).
+
+Playback grants are HMAC-signed with a key derived from `AUTH_JWT_SECRET` for
+that purpose only, so a grant can never act as a session token. Each grant is
+scoped to one video and lasts one hour. Playlists are `no-store` and
+`no-referrer`, and their segments are private signed MinIO URLs; no account
+token appears in a media URL.
+
+### Invite links reveal at most a space name
+
+`/invite/{token}` on core-api renders the link-preview card for messengers.
+Tokens that do not match the module's format are never looked up. The page is
+`no-store`, `no-referrer` and `noindex`. The module's `invite_preview` returns
+the space name only for a live invite open to anyone, since its holder could
+join and read it anyway; username-restricted, expired and used-up invites get
+the same generic card.
 
 ### LiveKit is an ephemeral media authority
 
@@ -111,12 +162,27 @@ core-api compares each LiveKit room with the module's voice presence and removes
 participants who have had none for two consecutive rounds (kick, ban, timeout,
 leave). An unreachable module pauses the comparison instead of removing anyone.
 
+### Desktop updates come only from signed project releases
+
+A saved server can only name a version (`recommendedClient` in discovery). The
+app parses it as a version, requests that exact release's feed from the
+project's GitHub Releases, rejects a feed describing any other version, and
+offers only versions newer than itself. Packages are verified against the
+updater public key compiled into the app before installing, and nothing
+installs until the user restarts to update. A hostile server can therefore
+neither supply a binary nor force a downgrade. The private key is the
+`TAURI_SIGNING_PRIVATE_KEY` release secret. macOS builds are signed and
+notarized; Windows installers are not yet Authenticode-signed, which affects
+SmartScreen but not this updater check.
+
 ### Administration is a separate listener
 
 The public listener rejects `/admin/*`; the admin listener rejects public API
 paths. Production compose publishes the admin listener only on
 `127.0.0.1:48788`, intended for an SSH tunnel. Never route it through the public
-Cloudflare or Caddy ingress.
+Cloudflare or Caddy ingress. Admin sign-in uses its own `letschat.admin` cookie,
+which expires after eight hours without activity, and shares the
+password-work limit above.
 
 core-api automatically reads the persisted module-owner token and registers the
 archive worker. New chat registration fails closed until the issuer is pinned.
@@ -141,17 +207,18 @@ never implicitly promoted. Remove the account-bootstrap values after first use.
   URLs exact and stable. Issuer changes alter SpacetimeDB identities.
 - Preserve MinIO CORS restrictions and the web security headers documented in
   `DEPLOYMENT.md`.
-- Back up PostgreSQL, SpacetimeDB data, MinIO objects, and persistent OIDC key
-  material together; partial recovery can break identity or attachment links.
+- Back up PostgreSQL (accounts and the chat archive), SpacetimeDB data, MinIO
+  objects, `core_api_data` (OIDC signing key), `module_init_home` (module owner
+  identity) and `archive_worker_data` together; partial recovery can break
+  identity or attachment links.
 
 ## Current operational security debt
 
-The 2026-09-16 dependency refresh upgraded the web app, static site, Rust,
-.NET, Tauri, and SpacetimeDB dependency sets. `bun audit`, the static site's
-`npm audit`, and NuGet's transitive vulnerability scan are clean; the former
-`quinn-proto` alert is patched by `0.11.18`.
+The 2026-11-10 dependency refresh (PR #112) left advisories only in build
+tooling (`minimatch`, `zod` 3 through `eslint-plugin-react-hooks`, `deepmerge`
+through `shadcn`); none of them reaches shipped code.
 
-One known Cargo alert remains: stable Tauri 2's Linux GTK stack still resolves
+One Cargo alert remains: stable Tauri 2's Linux GTK stack still resolves
 `glib 0.18.5`, while the advisory is fixed in `glib 0.20`. The fixed release is
 not compatible with that dependency chain, and Tauri 3 is still prerelease, so
 the application does not take an alpha framework upgrade solely to force the
@@ -161,9 +228,16 @@ Use the live [Dependabot alerts](https://github.com/da-stoaz/letschat/security/d
 for package versions and remediation status; do not copy that changing list into
 the architecture document.
 
-The remaining code findings are prioritized in
-[`Findings/BUG_ANALYSIS.md`](../Findings/BUG_ANALYSIS.md). As of 2026-09-24 there is no open S1 or S2
-finding.
+Every entry in the overview of
+[`Findings/BUG_ANALYSIS.md`](../Findings/BUG_ANALYSIS.md) is fixed or accepted
+(checked 2026-11-19). Documented residual risks remain, notably:
+
+- ffmpeg still runs inside the core-api container and keeps network access
+  (limited by the protocol whitelist). A separate worker container would be
+  the next step.
+- The video job queue is not limited per uploader, so one account can delay
+  everyone else's posters and renditions.
+- Tokens live in webview `localStorage` (see "The client is untrusted").
 
 ## Security review workflow
 
