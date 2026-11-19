@@ -124,6 +124,10 @@ export const tauriCommands = {
   },
   getAppVersion: async () =>
     isTauriRuntime() ? invoke<string>('get_app_version') : CLIENT_VERSION,
+  /** Resolves to the version when exactly that published release can be installed over this app. */
+  checkAppUpdate: async (version: string) => invoke<string | null>('check_app_update', { version }),
+  /** Installs the release last returned by {@link checkAppUpdate} and restarts the app. */
+  installAppUpdate: async () => invoke<void>('install_app_update'),
   saveAttachmentFile: async (url: string, fileName: string, operationId: string): Promise<boolean> => {
     if (!isTauriRuntime()) return false
     return invoke<boolean>('save_attachment_file', { url, fileName, operationId })

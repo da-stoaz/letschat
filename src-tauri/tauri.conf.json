@@ -38,13 +38,18 @@
     "macOS": {
       "entitlements": "Entitlements.plist",
       "infoPlist": "Info.plist"
-    }
+    },
+    "createUpdaterArtifacts": true
   },
   "plugins": {
     "deep-link": {
       "desktop": {
         "schemes": ["letschat"]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM3MUNDNzZDQjhDNTAxQUQKUldTdEFjVzRiTWNjTndsdFE4emptRkF2aFo5VlBUMi84SjhMOHJzNU9Ocm16YTJXSGNnS09WdlQK",
+      "windows": { "installMode": "passive" }
     }
   }
 }

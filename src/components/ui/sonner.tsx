@@ -1,4 +1,7 @@
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
+// sonner injects its styles with a <style> tag at runtime, which the packaged app's
+// CSP blocks (Tauri's style nonce disables 'unsafe-inline'). Ship them as a file.
+import 'sonner/dist/styles.css'
 
 const Toaster = ({ ...props }: ToasterProps) => {
   return (

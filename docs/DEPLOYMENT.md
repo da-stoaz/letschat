@@ -826,7 +826,11 @@ Discovery now declares a compiled-in `clientProtocol` independently of the app
 version. Protocol 1 starts with client 1.6.2; its default `minClient` remains
 1.6.2 across compatible backend releases. `MIN_CLIENT_VERSION` overrides that
 floor; `RECOMMENDED_CLIENT_VERSION` selects the version offered by the instance's
-download page and does not by itself reject other compatible clients. Keep the
+download page and does not by itself reject other compatible clients. Desktop
+apps (1.6.5 and later) also update to it: an app offers the highest version
+recommended by any of its saved servers, never a newer release, so desktop apps
+move forward when you upgrade the backend. Set it to a newer published release to
+hand out a client fix without upgrading the backend. Keep the
 web image, Core API, and SpacetimeDB module on a tested deployment combination.
 
 Clients check discovery before authentication and realtime connections. Older

@@ -8,9 +8,10 @@ use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, State, Url};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_updater::{Update, UpdaterExt};
 
 const MAIN_WINDOW_LABEL: &str = "main";
 static CANCELLED_ATTACHMENT_DOWNLOADS: LazyLock<Mutex<HashSet<String>>> =
@@ -107,6 +108,66 @@ fn minimize_to_tray(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+/// The update the user was last offered; installing consumes it.
+#[derive(Default)]
+struct OfferedUpdate(Mutex<Option<Update>>);
+
+/// Update feed of one published release. A connected server names the version, so
+/// only a real version may reach the URL; drafts and unknown versions are a 404.
+fn release_feed(version: &str) -> Result<(semver::Version, Url), String> {
+    let version = semver::Version::parse(version).map_err(|error| error.to_string())?;
+    let feed =
+        format!("https://github.com/da-stoaz/letschat/releases/download/v{version}/latest.json");
+    Ok((
+        version,
+        Url::parse(&feed).map_err(|error| error.to_string())?,
+    ))
+}
+
+/// Looks for exactly the given release and returns its version when it is newer than
+/// this app and correctly signed metadata exists for this platform.
+#[tauri::command]
+async fn check_app_update(
+    app: AppHandle,
+    offered: State<'_, OfferedUpdate>,
+    version: String,
+) -> Result<Option<String>, String> {
+    let (version, feed) = release_feed(&version)?;
+    let update = app
+        .updater_builder()
+        .endpoints(vec![feed])
+        .map_err(|error| error.to_string())?
+        .build()
+        .map_err(|error| error.to_string())?
+        .check()
+        .await
+        .map_err(|error| error.to_string())?
+        // The feed of a release must describe that release, never a newer one.
+        .filter(|update| update.version == version.to_string());
+    let found = update.as_ref().map(|update| update.version.clone());
+    *offered.0.lock().map_err(|error| error.to_string())? = update;
+    Ok(found)
+}
+
+/// Downloads the offered update, verifies its signature, installs it and restarts.
+#[tauri::command]
+async fn install_app_update(
+    app: AppHandle,
+    offered: State<'_, OfferedUpdate>,
+) -> Result<(), String> {
+    let update = offered
+        .0
+        .lock()
+        .map_err(|error| error.to_string())?
+        .take()
+        .ok_or("No update has been offered.")?;
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|error| error.to_string())?;
+    app.restart()
 }
 
 #[tauri::command]
@@ -249,12 +310,16 @@ fn main() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(OfferedUpdate::default())
         .invoke_handler(tauri::generate_handler![
             open_url,
             show_notification,
             set_badge_count,
             minimize_to_tray,
             get_app_version,
+            check_app_update,
+            install_app_update,
             cancel_attachment_download,
             save_attachment_file
         ])
@@ -310,4 +375,34 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::release_feed;
+
+    #[test]
+    fn release_feed_accepts_only_versions() {
+        let (version, feed) = release_feed("1.7.0").unwrap();
+        assert_eq!(version.to_string(), "1.7.0");
+        assert_eq!(
+            feed.as_str(),
+            "https://github.com/da-stoaz/letschat/releases/download/v1.7.0/latest.json"
+        );
+        assert!(release_feed("1.7.0-rc.1").is_ok());
+        for hostile in [
+            "",
+            "latest",
+            "1.7",
+            "v1.7.0",
+            "1.7.0/../../../evil/x",
+            "1.7.0?x=1",
+            "1.7.0#x",
+            "1.7.0 ",
+            "../1.7.0",
+            "1.7.0%2F..",
+        ] {
+            assert!(release_feed(hostile).is_err(), "{hostile}");
+        }
+    }
 }

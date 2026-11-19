@@ -23,7 +23,8 @@ be updated for synchronization outside the recent-message window.
 `SUPPORTED_CLIENT_PROTOCOLS` declares client support. The protocol is compiled in,
 not an operator override. `FirstCompatibleClient` stays 1.6.2 for protocol 1.
 `MIN_CLIENT_VERSION` can raise the operator's minimum (for example, to require a
-security fix); `RECOMMENDED_CLIENT_VERSION` only recommends a manual download.
+security fix); `RECOMMENDED_CLIENT_VERSION` names the release desktop apps update to
+(see Desktop updates).
 Neither a newer server release nor a different recommendation alone blocks access.
 
 ## Local real-backend test
@@ -102,8 +103,33 @@ first family release runs candidate/candidate only because no released family ba
 exists yet. A baseline counts only once its GitHub release is published (not a draft).
 
 For the matrix, fetch all git tags and provide `GITHUB_TOKEN` if needed for the
-read-only Releases API. These release queries exist only in test tooling. The app
-has no GitHub-latest update feed and performs no automatic installation.
+read-only Releases API.
+
+## Desktop updates
+
+The desktop app follows its servers, not the newest release. At start, every six
+hours, and when a server is saved or selected, it reads `recommendedClient` from
+the discovery document of every saved server and takes the highest valid version.
+A backend recommends the app released with it unless the operator sets
+`RECOMMENDED_CLIENT_VERSION`, so an app whose servers stay on an old release for
+months stays on that release's client: the pair that was tested together.
+
+If that version is newer than the installed app, the app loads exactly that
+release's update metadata (`releases/download/v<version>/latest.json`, signed with
+the Tauri updater key) and offers it; it installs only when the user chooses
+"Restart to update". It never downgrades, never installs a draft (a draft has no
+public download), and ignores metadata that names a different version. A server
+only supplies a version number: the download location and the signing key are
+compiled into the app, so a hostile server can at most name another published
+release.
+
+One install serves all saved servers. With servers on different releases the app
+follows the newest recommendation, so that client must still work with the older
+backends: this is the candidate-client-against-released-backend half of the
+matrix, and a new protocol family must stay in `SUPPORTED_CLIENT_PROTOCOLS`
+until its predecessor's backends are retired. When a second family first exists,
+extend the matrix to test the candidate client against each listed family.
+Releases before 1.6.5 have no updater; those apps are replaced by hand once.
 
 ## Admission and recovery
 
@@ -116,8 +142,7 @@ older entries fall back to their auth URL. Endpoint changes still require trust
 confirmation. A failed proposed switch retains the current session.
 
 Manual recovery links lead to the selected backend's download page or advertised
-HTTP(S) web client. Installing its recommended desktop release may affect other
-saved backends; this phase does not assess that global update decision.
+HTTP(S) web client.
 
 UI verification: use `tests/ui/compatibility.html` on the local Vite server. Check
 legacy acknowledgment/cancel, incompatible download messaging, retry, hosted-web

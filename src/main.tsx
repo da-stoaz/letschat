@@ -1,4 +1,5 @@
 import { CompatibilityNotice } from './features/setup/CompatibilityNotice'
+import { AppUpdateNotice } from './features/app/AppUpdateNotice'
 import { HostConfirmDialog } from './features/setup/HostConfirmDialog'
 import { isHostedWebBuild } from './lib/tauri'
 import { StrictMode } from 'react'
@@ -43,6 +44,7 @@ createRoot(document.getElementById('root')!).render(
             <VideoPlayerHost />
           </BrowserRouter>
           <Toaster richColors closeButton position="top-right" />
+          <AppUpdateNotice />
         </TooltipProvider>
       </QueryClientProvider>
     </AppErrorBoundary>
