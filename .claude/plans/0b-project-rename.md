@@ -1,6 +1,6 @@
 # Plan: Project Rename (LetsChat → `<NEWNAME>`)
 
-> **Status (reviewed 2026-09-16): unscheduled and not started.** No replacement
+> **Status (reviewed 2026-11-19): unscheduled and not started.** No replacement
 > name has been chosen and the repository, protocols, packages, and deployment
 > identifiers still use LetsChat. This document is migration planning only.
 

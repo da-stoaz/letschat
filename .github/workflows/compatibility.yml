@@ -2,6 +2,17 @@ name: Backend compatibility
 
 on:
   pull_request:
+    # Skipped when a PR changes nothing that reaches the app, the module or the
+    # backend. The website is linted, built and tested by website.yml instead.
+    paths-ignore:
+      - 'site/**'
+      - '**/*.md'
+      - '.claude/**'
+      - '.agents/**'
+      - 'graphify-out/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'skills-lock.json'
   workflow_dispatch:
   workflow_call:
 

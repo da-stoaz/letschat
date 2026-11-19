@@ -4,6 +4,7 @@ import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
 import CodeBlock from "@/components/CodeBlock.astro";
 import Callout from "@/components/Callout.astro";
+import GuideToc from "@/components/GuideToc.astro";
 import { GITHUB_REPO } from "@/lib/site";
 ---
 
@@ -13,10 +14,8 @@ import { GITHUB_REPO } from "@/lib/site";
 >
   <SiteHeader active="self-hosting" />
 
-  <main class="relative max-w-6xl mx-auto px-6 py-16 space-y-9 overflow-hidden">
-    <div class="hero-glow hero-glow-b"></div>
-
-    <div class="relative z-10 space-y-4">
+  <main class="max-w-7xl mx-auto px-5 sm:px-6 py-14 space-y-10">
+    <div class="space-y-4">
       <nav class="flex items-center gap-2 text-sm text-muted-foreground">
         <a href="/self-hosting" class="hover:text-foreground transition-colors">Self-Hosting</a>
         <span>/</span>
@@ -34,7 +33,8 @@ import { GITHUB_REPO } from "@/lib/site";
       </div>
     </div>
 
-    <section class="space-y-7">
+    <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_15rem] lg:gap-10">
+    <section class="space-y-7 min-w-0">
 
       <article class="step-card rounded-xl p-7 space-y-4">
         <h2 class="text-2xl font-semibold tracking-tight">Requirements (read first)</h2>
@@ -248,6 +248,8 @@ curl -i https://auth.example.com/.well-known/letschat.json`} />
       </article>
 
     </section>
+    <GuideToc />
+    </div>
 
     <div class="flex items-center justify-between pt-4 border-t border-border text-sm">
       <a href="/self-hosting/cloudflare-tunnel" class="text-muted-foreground hover:text-foreground transition-colors">← Path A: Cloudflare Tunnel</a>
@@ -258,23 +260,6 @@ curl -i https://auth.example.com/.well-known/letschat.json`} />
 </Layout>
 
 <style>
-  .hero-glow {
-    position: absolute;
-    pointer-events: none;
-    border-radius: 9999px;
-    filter: blur(56px);
-    opacity: 0.22;
-  }
-
-  .hero-glow-b {
-    width: 340px;
-    height: 240px;
-    top: -60px;
-    right: -80px;
-    background: radial-gradient(circle at 60% 50%, color-mix(in oklch, var(--accent-blue) 70%, cyan 30%), transparent 72%);
-    animation: drift 15s ease-in-out infinite reverse;
-  }
-
   .mini-pill {
     display: inline-flex;
     align-items: center;
@@ -316,9 +301,4 @@ curl -i https://auth.example.com/.well-known/letschat.json`} />
     text-align: center;
   }
 
-  @keyframes drift {
-    0% { transform: translate3d(0, 0, 0) scale(1); }
-    50% { transform: translate3d(8px, -12px, 0) scale(1.04); }
-    100% { transform: translate3d(0, 0, 0) scale(1); }
-  }
 </style>

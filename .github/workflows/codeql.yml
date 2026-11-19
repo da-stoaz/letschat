@@ -1,0 +1,83 @@
+name: CodeQL
+
+# Replaces GitHub's CodeQL "default setup", which cannot skip anything and
+# uploaded each language the moment it finished. Rust takes ~10 minutes, the
+# rest ~2, so every PR showed "N configurations not found" until Rust caught
+# up. Here every language is analyzed first and all results are uploaded
+# together, and PRs that change no code are not scanned at all.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'site/**'
+      - '**/*.md'
+      - '.claude/**'
+      - '.agents/**'
+      - 'graphify-out/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'skills-lock.json'
+  pull_request:
+    paths-ignore:
+      - 'site/**'
+      - '**/*.md'
+      - '.claude/**'
+      - '.agents/**'
+      - 'graphify-out/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'skills-lock.json'
+  schedule:
+    - cron: '23 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, csharp, javascript-typescript, python, rust]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+          upload: never
+          output: sarif
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sarif-${{ matrix.language }}
+          path: sarif
+          retention-days: 1
+
+  upload:
+    name: Upload (${{ matrix.language }})
+    needs: analyze
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        language: [actions, csharp, javascript-typescript, python, rust]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          name: sarif-${{ matrix.language }}
+          path: sarif
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: sarif
+          category: /language:${{ matrix.language }}

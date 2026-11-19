@@ -11,6 +11,8 @@ on:
     # trigger a release here.
     paths-ignore:
       - 'site/**'
+      # Test-only changes never reach a built artifact.
+      - 'tests/**'
       - '**/*.md'
       - 'docker-compose*.yml'
       - '.env*.example'
