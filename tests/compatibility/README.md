@@ -131,6 +131,12 @@ until its predecessor's backends are retired. When a second family first exists,
 extend the matrix to test the candidate client against each listed family.
 Releases before 1.6.5 have no updater; those apps are replaced by hand once.
 
+The release workflow creates the draft once, then every platform build uploads only
+its installers and `.sig` files. The `updater-feed` job writes `latest.json` from
+those signatures after all builds, so parallel builds cannot overwrite each other's
+entries, and it fails when a platform is missing. Publish a release only when that
+job is green; re-running a failed platform build re-runs it.
+
 ## Admission and recovery
 
 All connection entry points use the same preflight. Known incompatibility blocks

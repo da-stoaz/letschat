@@ -315,9 +315,10 @@
   height: var(--app-height, 100dvh);
   max-width: none;
   max-height: none;
-  /* Tailwind's dialog centering uses the independent translate property. */
+  /* Tailwind's dialog centering uses the independent translate property.
+     No `transform` beside it: Lightning CSS folds the pair into one transform
+     in production builds, which leaves Tailwind's translate in place. */
   translate: none;
-  transform: none;
   animation: none;
   overflow: hidden;
   border-radius: 0;
