@@ -58,11 +58,27 @@ fn is_attachment_download_cancelled(operation_id: &str) -> bool {
     false
 }
 
+/// Opens a web page in the default browser. The OS opener behind it also runs
+/// programs, opens local files and network shares and starts any registered
+/// protocol handler, so only plain http(s) links get through. Otherwise any
+/// script in the webview could run code on the machine.
 #[tauri::command]
 fn open_url(app: AppHandle, url: String) -> Result<(), String> {
+    let url = web_url(&url)?;
+    // Hand over the re-serialized URL, so what opens is exactly what was checked.
     app.opener()
-        .open_url(url, None::<String>)
+        .open_url(url.as_str(), None::<String>)
         .map_err(|e| e.to_string())
+}
+
+fn web_url(raw: &str) -> Result<Url, String> {
+    let url = Url::parse(raw).map_err(|_| "Not a valid link.".to_string())?;
+    let web = matches!(url.scheme(), "http" | "https") && url.host_str().is_some();
+    // Credentials in a link only serve to disguise the real host.
+    if !web || !url.username().is_empty() || url.password().is_some() {
+        return Err("Only web links can be opened.".to_string());
+    }
+    Ok(url)
 }
 
 /// Opens the system page where this app's camera or microphone access is
@@ -500,8 +516,35 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_app_url, release_feed};
+    use super::{is_app_url, release_feed, web_url};
     use tauri::Url;
+
+    #[test]
+    fn open_url_opens_only_web_links() {
+        for web in [
+            "https://github.com/da-stoaz/letschat",
+            "http://192.168.1.5:8080/x?y=1",
+        ] {
+            assert!(web_url(web).is_ok(), "{web}");
+        }
+        for hostile in [
+            "file:///C:/Windows/System32/calc.exe",
+            "file://attacker/share/payload.exe",
+            r"\\attacker\share\payload.exe",
+            r"C:\Windows\System32\calc.exe",
+            "/Applications/Calculator.app",
+            "smb://attacker/share",
+            "ms-msdt:/id PCWDiagnostic",
+            "search-ms:query=x&crumb=location:\\\\attacker",
+            "javascript:alert(1)",
+            "letschat://join/x",
+            "https://github.com@attacker.example/",
+            "https://user:pass@example.com/",
+            "",
+        ] {
+            assert!(web_url(hostile).is_err(), "{hostile}");
+        }
+    }
 
     #[test]
     fn media_is_granted_only_to_app_pages() {
