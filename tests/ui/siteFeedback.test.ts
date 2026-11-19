@@ -1,71 +1,54 @@
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
-import ts from 'typescript'
-import { expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
+import { downloadUrl, latestRelease } from '../../site/src/lib/latest-release'
 
-const download = readFileSync('site/src/pages/download.astro', 'utf8')
-// The page script imports the cached release lookup; inline the real module
-// (minus its own import) so the test runs the code the page ships.
-const releaseLookup = readFileSync('site/src/lib/latest-release.ts', 'utf8')
-  .replace(/^import .*$/m, 'const GITHUB_REPO = "da-stoaz/letschat";')
-  .replace(/^export /gm, '')
-const script = download.match(/<script>([\s\S]*?)<\/script>/i)![1]
-  .replace(/^\s*import \{ latestRelease \} from .*$/m, releaseLookup)
-const keys = ['mac', 'windows-x64-msi', 'windows-x64-exe', 'windows-arm-msi', 'windows-arm-exe', 'linux-deb', 'linux-appimage']
-function element() {
-  const classes = new Set<string>()
-  return { textContent: '', href: '', style: { borderColor: '' },
-    attributes: new Map([['aria-disabled', 'true'], ['tabindex', '-1']]),
-    removeAttribute(name: string) { this.attributes.delete(name) },
-    classList: { add: (...names: string[]) => names.forEach(name => classes.add(name)), remove: (...names: string[]) => names.forEach(name => classes.delete(name)), contains: (name: string) => classes.has(name) },
-  }
-}
-async function releaseFeedback(fail: boolean) {
-  const nodes = new Map<string, ReturnType<typeof element>>()
-  for (const id of ['release-label', 'release-error', 'card-mac', ...keys, ...keys.map(key => `asset-status-${key}`)]) nodes.set(id, element())
-  nodes.get('release-error')!.classList.add('hidden')
-  const context = {
-    document: {
-      getElementById: (id: string) => nodes.get(id),
-      querySelector: (selector: string) => selector === '[data-release-label]'
-        ? nodes.get('release-label')
-        : nodes.get(selector.match(/data-asset="([^"]+)"/)![1]),
-      querySelectorAll: (selector: string) => selector === '[data-asset]'
-        ? keys.map(key => nodes.get(key))
-        : keys.map(key => nodes.get(`asset-status-${key}`)),
-    },
-    navigator: { userAgent: 'iPhone Mac OS', maxTouchPoints: 5 },
-    fetch: async () => { if (fail) throw new Error('Offline'); return { ok: true, json: async () => ({ tag_name: 'test', assets: [{ name: 'client.dmg', browser_download_url: 'https://example.com/client.dmg' }, { name: 'client_arm64_en-US.msi', browser_download_url: 'https://example.com/arm.msi' }, { name: 'client_x64_en-US.msi', browser_download_url: 'https://example.com/x64.msi' }] }) } },
-    finished: Promise.resolve(),
-  }
-  runInNewContext(ts.transpileModule(script.replace('loadRelease();', 'globalThis.finished = loadRelease();'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context)
-  await context.finished
-  return nodes
+const RELEASE_PAGE = 'https://github.com/da-stoaz/letschat/releases/latest'
+const release = {
+  tag_name: 'v9.9.9',
+  assets: [
+    { name: 'LetsChat_9.9.9_universal.dmg', browser_download_url: 'https://example.com/mac.dmg' },
+    { name: 'LetsChat_9.9.9_x64_en-US.msi', browser_download_url: 'https://example.com/x64.msi' },
+    { name: 'LetsChat_9.9.9_arm64_en-US.msi', browser_download_url: 'https://example.com/arm.msi' },
+  ],
 }
 
-it('keeps unavailable formats disabled and explains missing release assets', async () => {
-  expect(download).not.toContain('href="#"')
-  const nodes = await releaseFeedback(false)
-  expect(nodes.get('mac')!.href).toBe('https://example.com/client.dmg')
-  expect(nodes.get('mac')!.attributes.has('aria-disabled')).toBe(false)
-  expect(nodes.get('windows-x64-msi')!.href).toBe('https://example.com/x64.msi')
-  expect(nodes.get('windows-arm-msi')!.href).toBe('https://example.com/arm.msi')
-  expect(nodes.get('linux-deb')!.attributes.get('aria-disabled')).toBe('true')
-  expect(nodes.get('asset-status-linux-deb')!.textContent).toContain('Not included')
-  expect(nodes.get('card-mac')!.style.borderColor).toBe('')
-  expect(nodes.get('release-label')!.textContent).toBe('Version test · ')
-  expect(nodes.get('release-error')!.classList.contains('hidden')).toBe(true)
+afterEach(() => vi.unstubAllGlobals())
+
+it('links each format to its file, and anything missing to the release page', () => {
+  expect(downloadUrl(release, 'mac')).toBe('https://example.com/mac.dmg')
+  expect(downloadUrl(release, 'windows-x64-msi')).toBe('https://example.com/x64.msi')
+  expect(downloadUrl(release, 'windows-arm-msi')).toBe('https://example.com/arm.msi')
+  expect(downloadUrl(release, 'linux-deb')).toBe(RELEASE_PAGE)
+  expect(downloadUrl(null, 'mac')).toBe(RELEASE_PAGE)
 })
 
-it('sends every format to the latest release page when GitHub refuses', async () => {
-  const nodes = await releaseFeedback(true)
-  for (const key of keys) {
-    expect(nodes.get(key)!.href).toBe('https://github.com/da-stoaz/letschat/releases/latest')
-    expect(nodes.get(key)!.attributes.has('aria-disabled')).toBe(false)
-    expect(nodes.get(`asset-status-${key}`)!.textContent).toBe('')
+it('resolves null rather than throwing when GitHub or storage fails', async () => {
+  vi.stubGlobal('localStorage', { getItem: () => { throw new Error('blocked') }, setItem: () => { throw new Error('blocked') } })
+  for (const fetch of [
+    async () => { throw new Error('offline') },
+    async () => ({ ok: false, json: async () => ({}) }),
+    async () => ({ ok: true, json: async () => ({ message: 'API rate limit exceeded' }) }),
+    async () => ({ ok: true, json: async () => { throw new SyntaxError('bad json') } }),
+  ]) {
+    vi.stubGlobal('fetch', fetch)
+    expect(await latestRelease()).toBeNull()
   }
-  expect(nodes.get('release-error')!.classList.contains('hidden')).toBe(false)
-  expect(nodes.get('release-label')!.textContent).toBe('')
+  vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => release }))
+  expect(await latestRelease()).toEqual(release)
+})
+
+it('serves a fresh cached release without asking GitHub, and ignores a malformed one', async () => {
+  const store = new Map<string, string>()
+  vi.stubGlobal('localStorage', { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => store.set(key, value) })
+  const fetch = vi.fn(async () => ({ ok: true, json: async () => release }))
+  vi.stubGlobal('fetch', fetch)
+  await latestRelease()
+  expect(await latestRelease()).toEqual(release)
+  expect(fetch).toHaveBeenCalledTimes(1)
+  store.set('letschat:latest-release', JSON.stringify({ at: Date.now(), release: { tag_name: 1 } }))
+  expect(await latestRelease()).toEqual(release)
+  expect(fetch).toHaveBeenCalledTimes(2)
 })
 
 it('keeps all desktop choices for mobile and unknown instance visitors', () => {

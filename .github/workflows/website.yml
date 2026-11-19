@@ -28,5 +28,5 @@ jobs:
         working-directory: site
       - run: npm run build
         working-directory: site
-      - run: npm run test:security
+      - run: npm test
         working-directory: site

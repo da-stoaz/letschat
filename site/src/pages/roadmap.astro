@@ -1,7 +1,5 @@
 ---
-import Layout from "@/layouts/Layout.astro";
-import SiteHeader from "@/components/SiteHeader.astro";
-import SiteFooter from "@/components/SiteFooter.astro";
+import PageLayout from "@/layouts/PageLayout.astro";
 import { GITHUB_DISCUSSIONS, GITHUB_ISSUE_NEW } from "@/lib/site";
 
 const updatedAt = "November 19, 2026";
@@ -219,82 +217,80 @@ const groups = [
 ].map((group) => ({ ...group, items: upcoming.filter((m) => m.status === group.status) }));
 ---
 
-<Layout title="LetsChat Roadmap | Plans and Delivery" description="LetsChat roadmap: shipped milestones and the plans ahead — signed Windows installers, one-command server upgrades, storage tiering, call quality, a full UI redesign, and end-to-end encryption.">
-  <SiteHeader active="roadmap" />
+<PageLayout
+  title="LetsChat Roadmap | Plans and Delivery"
+  description="LetsChat roadmap: shipped milestones and the plans ahead — signed Windows installers, one-command server upgrades, storage tiering, call quality, a full UI redesign, and end-to-end encryption."
+  active="roadmap"
+  heading="Roadmap"
+>
+  <Fragment slot="lead">
+    <p>
+      LetsChat is built plan by plan, each one building on the last. There are no calendar dates;
+      plans land in order as they're finished.
+    </p>
+    <p class="text-sm">Last updated {updatedAt}</p>
+  </Fragment>
 
-  <main class="max-w-7xl mx-auto px-5 sm:px-6 py-14 space-y-14">
-    <section>
-      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight mb-3">Roadmap</h1>
-      <p class="text-lg text-muted-foreground leading-relaxed max-w-2xl">
-        LetsChat is built plan by plan, each one building on the last. There are no calendar dates;
-        plans land in order as they're finished.
-      </p>
-      <p class="text-sm text-muted-foreground mt-3">Last updated {updatedAt}</p>
-    </section>
-
-    <section class="space-y-10">
-      {groups.map((group) => (
-        <div class="space-y-4">
-          <h2 class={`group-title group-${group.status.toLowerCase()}`}>
-            {group.title}
-            <span>{group.items.length}</span>
-          </h2>
-          <div class="timeline-list">
-            {group.items.map((milestone) => (
-              <article class={`timeline-card card-${group.status.toLowerCase()}`}>
-                <div class="timeline-head">
-                  <div>
-                    <p class="timeline-window">{milestone.id}</p>
-                    <h3>{milestone.focus}</h3>
-                  </div>
-                  <div class="timeline-meta">
-                    <span class={`chip priority-${milestone.priority.toLowerCase()}`}>{milestone.priority}</span>
-                    <span class="chip">{milestone.effort}</span>
-                  </div>
+  <section class="space-y-10">
+    {groups.map((group) => (
+      <div class="space-y-4">
+        <h2 class={`group-title group-${group.status.toLowerCase()}`}>
+          {group.title}
+          <span>{group.items.length}</span>
+        </h2>
+        <div class="timeline-list">
+          {group.items.map((milestone) => (
+            <article class={`card timeline-card card-${group.status.toLowerCase()}`}>
+              <div class="timeline-head">
+                <div>
+                  <p class="timeline-window">{milestone.id}</p>
+                  <h3>{milestone.focus}</h3>
                 </div>
-                <ul class="timeline-goals">
-                  {milestone.goals.map((goal) => <li>{goal}</li>)}
-                </ul>
-              </article>
-            ))}
-          </div>
-        </div>
-      ))}
-    </section>
-
-    <section class="space-y-4">
-      <h2 class="group-title group-shipped">Shipped <span>{shipped.length}</span></h2>
-      <div class="shipped-grid">
-        {[...shipped].reverse().map((milestone) => (
-          <article class="shipped-card">
-            <p class="timeline-window">{milestone.id}</p>
-            <h3>{milestone.focus}</h3>
-            <p class="shipped-blurb">{milestone.blurb}</p>
-            <details>
-              <summary>What shipped</summary>
+                <div class="timeline-meta">
+                  <span class={`chip priority-${milestone.priority.toLowerCase()}`}>{milestone.priority}</span>
+                  <span class="chip">{milestone.effort}</span>
+                </div>
+              </div>
               <ul class="timeline-goals">
-                {milestone.items.map((item) => <li>{item}</li>)}
+                {milestone.goals.map((goal) => <li>{goal}</li>)}
               </ul>
-            </details>
-          </article>
-        ))}
+            </article>
+          ))}
+        </div>
       </div>
-    </section>
+    ))}
+  </section>
 
-    <section class="feedback-strip">
-      <div>
-        <h2 class="text-2xl font-semibold tracking-tight mb-1">Shape what comes next</h2>
-        <p class="text-sm text-muted-foreground">Ideas go to GitHub Discussions; bugs that block you go to the issue tracker.</p>
-      </div>
-      <div class="flex flex-col sm:flex-row gap-3">
-        <a href={GITHUB_DISCUSSIONS} target="_blank" rel="noopener" class="feedback-primary">Request a feature</a>
-        <a href={GITHUB_ISSUE_NEW} target="_blank" rel="noopener" class="feedback-secondary">Report a bug</a>
-      </div>
-    </section>
-  </main>
+  <section class="space-y-4">
+    <h2 class="group-title group-shipped">Shipped <span>{shipped.length}</span></h2>
+    <div class="shipped-grid">
+      {[...shipped].reverse().map((milestone) => (
+        <article class="card shipped-card">
+          <p class="timeline-window">{milestone.id}</p>
+          <h3>{milestone.focus}</h3>
+          <p class="shipped-blurb">{milestone.blurb}</p>
+          <details>
+            <summary>What shipped</summary>
+            <ul class="timeline-goals">
+              {milestone.items.map((item) => <li>{item}</li>)}
+            </ul>
+          </details>
+        </article>
+      ))}
+    </div>
+  </section>
 
-  <SiteFooter />
-</Layout>
+  <section class="feedback-strip">
+    <div>
+      <h2 class="text-2xl font-semibold tracking-tight mb-1">Shape what comes next</h2>
+      <p class="text-sm text-muted-foreground">Ideas go to GitHub Discussions; bugs that block you go to the issue tracker.</p>
+    </div>
+    <div class="flex flex-col sm:flex-row gap-3">
+      <a href={GITHUB_DISCUSSIONS} target="_blank" rel="noopener" class="feedback-primary">Request a feature</a>
+      <a href={GITHUB_ISSUE_NEW} target="_blank" rel="noopener" class="feedback-secondary">Report a bug</a>
+    </div>
+  </section>
+</PageLayout>
 
 <style>
   .group-title {
@@ -352,10 +348,7 @@ const groups = [
   .timeline-card {
     position: relative;
     margin-left: 1.5rem;
-    border: 1px solid oklch(1 0 0 / 0.12);
-    border-radius: 1rem;
     padding: 1.1rem 1.2rem;
-    background: linear-gradient(175deg, oklch(0.21 0.01 245 / 0.95), oklch(0.18 0.01 245 / 0.92));
   }
 
   .timeline-card::before {
@@ -412,16 +405,6 @@ const groups = [
     flex-wrap: wrap;
   }
 
-  .chip {
-    border-radius: 999px;
-    padding: 0.2rem 0.6rem;
-    font-size: 0.72rem;
-    border: 1px solid oklch(1 0 0 / 0.15);
-    white-space: nowrap;
-    color: var(--color-muted-foreground);
-    background: oklch(0.17 0.01 245 / 0.85);
-  }
-
   .priority-p0 {
     background: oklch(0.66 0.2 25 / 0.16);
     color: oklch(0.88 0.08 30);
@@ -453,10 +436,7 @@ const groups = [
   }
 
   .shipped-card {
-    border: 1px solid oklch(1 0 0 / 0.12);
-    border-radius: 1rem;
     padding: 1.1rem 1.2rem;
-    background: oklch(0.19 0.01 245 / 0.9);
   }
 
   .shipped-blurb {

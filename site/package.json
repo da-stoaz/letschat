@@ -6,7 +6,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "test:security": "node --test tests/cache-security.test.mjs"
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
