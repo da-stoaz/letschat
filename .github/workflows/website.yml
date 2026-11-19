@@ -1,0 +1,29 @@
+name: Website
+
+# Site-only PRs skip Backend compatibility, whose repo-wide `eslint .` used to
+# be the only lint covering site/. This keeps that coverage for the website.
+on:
+  pull_request:
+    paths:
+      - 'site/**'
+      - 'eslint.config.js'
+      - '.github/workflows/website.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      # The ESLint config and plugins live in the root package.
+      - run: bun install --frozen-lockfile
+      - run: bunx eslint site
+      - run: npm ci
+        working-directory: site
+      - run: npm run build
+        working-directory: site
+      - run: npm run test:security
+        working-directory: site
