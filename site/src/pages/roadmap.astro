@@ -4,7 +4,7 @@ import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
 import { GITHUB_DISCUSSIONS, GITHUB_ISSUE_NEW } from "@/lib/site";
 
-const updatedAt = "November 17, 2026";
+const updatedAt = "November 19, 2026";
 
 // Delivered and merged to main.
 const shipped = [
@@ -111,7 +111,7 @@ const upcoming = [
     goals: [
       "Tauri auto-updater for the desktop client over a signed update feed (its own Ed25519 signature; does not need Windows code signing).",
       "Automate the self-hosted server upgrade — today it's 100% manual (docker compose pull + spacetime publish); make it a one-command, safe update.",
-      "Desktop first: the app offers the release its servers recommend and installs it on restart, so it never runs ahead of a backend that stays on an older version.",
+      "Desktop shipped in 1.7.0: the app offers the release its servers recommend and installs it on restart, so it never runs ahead of a backend that stays on an older version.",
     ],
   },
   {
