@@ -144,8 +144,9 @@ the builds.
 
 The updater's `.sig` (Tauri Ed25519) covers the exact installer bytes. Authenticode
 signing changes the file, so once SignPath signs `.msi`/`.exe`, **re-run
-`tauri signer sign` on the signed files and rewrite their entries in `latest.json`**
-before attaching them, or every Windows update fails verification.
+`tauri signer sign` on the signed files and attach the new `.sig` files** before the
+`updater-feed` job runs (it builds `latest.json` from the attached `.sig` files), or
+every Windows update fails verification.
 
 ## Implementation surface
 

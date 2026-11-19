@@ -139,8 +139,41 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  build-tauri:
+  # One draft for every platform build. When each build created the release
+  # itself, two finishing together split 1.6.6 into two drafts.
+  prepare-release:
     needs: compatibility
+    runs-on: ubuntu-latest
+    outputs:
+      id: ${{ steps.release.outputs.id }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v$(jq -r .version package.json)"
+          # A re-run reuses the release, published or not.
+          ID=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq "[.[] | select(.tag_name == \"$TAG\")][0].id // empty")
+          if [ -z "$ID" ]; then
+            BODY=$(sed "s/__TAG__/$TAG/" <<'EOF'
+          ## LetsChat __TAG__
+
+          | Platform | Download |
+          |----------|----------|
+          | macOS Universal | `.dmg` |
+          | Windows x64 | `.msi` · `.exe` |
+          | Windows ARM64 | `.msi` · `.exe` |
+          | Linux | `.AppImage` · `.deb` · `.rpm` |
+          EOF
+            )
+            ID=$(gh api "repos/$GITHUB_REPOSITORY/releases" -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
+              -f name="LetsChat $TAG" -f body="$BODY" -F draft=true --jq .id)
+          fi
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+  build-tauri:
+    needs: prepare-release
     environment: production
     strategy:
       fail-fast: false
@@ -224,24 +257,14 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
-          # Signs the updater artifacts and latest.json the desktop app installs from.
+          # Signs the updater artifacts (.sig) the desktop app verifies before installing.
           # Losing this key means installed apps can never be updated again.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v__VERSION__
-          releaseName: LetsChat v__VERSION__
-          releaseBody: |
-            ## LetsChat v__VERSION__
-
-            | Platform | Download |
-            |----------|----------|
-            | macOS Universal | `.dmg` |
-            | Windows x64 | `.msi` · `.exe` |
-            | Windows ARM64 | `.msi` |
-            | Linux | `.AppImage` · `.deb` |
-          releaseDraft: true
-          prerelease: false
+          releaseId: ${{ needs.prepare-release.outputs.id }}
+          # updater-feed writes latest.json once all builds are done.
+          includeUpdaterJson: false
           args: ${{ matrix.tauri-args }}
 
       - name: Verify macOS signature
@@ -251,3 +274,16 @@ jobs:
             -name "*.app" | head -1)
           codesign --verify --deep --strict --verbose=2 "$APP"
           spctl --assess --type exec --verbose "$APP"
+
+  # Every build only uploads its installers and .sig files, so none can overwrite
+  # another's feed entries. Fails when a platform is missing; re-running that
+  # platform's failed build runs this again.
+  updater-feed:
+    needs: [prepare-release, build-tauri]
+    if: ${{ !cancelled() && needs.prepare-release.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/updater_manifest.py "$GITHUB_REPOSITORY" "${{ needs.prepare-release.outputs.id }}" --upload
