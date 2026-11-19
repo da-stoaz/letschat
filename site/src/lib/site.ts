@@ -12,8 +12,11 @@ export const LICENSE_NAME = "GNU GPLv3";
 // Build-time GitHub API reads, shared across every page of one build (and the
 // dev server's lifetime). Unauthenticated calls get 60/hour per IP; without
 // this the header alone spent one per rendered page. Failures aren't cached.
-const githubCache = new Map<string, Promise<any>>();
-export function githubApi(path: string): Promise<any> {
+// Only the fields the site reads: the repo's star count and a release's tag.
+type GitHubResponse = { stargazers_count?: number; tag_name?: string } | null;
+
+const githubCache = new Map<string, Promise<GitHubResponse>>();
+export function githubApi(path: string): Promise<GitHubResponse> {
   let pending = githubCache.get(path);
   if (!pending) {
     pending = fetch(`https://api.github.com/repos/${GITHUB_REPO}${path}`, {
