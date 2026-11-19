@@ -1,6 +1,6 @@
 # Efficiency Plan: Client-Side Local Cache & Search — LetsChat
 
-> **Status (reviewed 2026-09-16): deferred and not implemented.** It remains
+> **Status (reviewed 2026-11-19): deferred and not implemented.** It remains
 > blocked on Part B of storage tiering. Current channel search operates on
 > loaded messages and does not use the proposed SQLite cache.
 

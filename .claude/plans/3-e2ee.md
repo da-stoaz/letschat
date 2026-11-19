@@ -1,6 +1,6 @@
 # Security Plan: End-to-End Encryption — LetsChat
 
-> **Status (reviewed 2026-09-16): proposed, not implemented.** LetsChat does not
+> **Status (reviewed 2026-11-19): proposed, not implemented.** LetsChat does not
 > currently provide end-to-end encryption; operators must not infer E2EE
 > guarantees from this design document. The implemented security model is
 > documented in [`SECURITY.md`](../../docs/SECURITY.md).

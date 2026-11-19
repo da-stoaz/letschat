@@ -1,6 +1,6 @@
 # Plan: Message storage tiering
 
-> **Status (reviewed 2026-09-19): durability is implemented; eviction is
+> **Status (reviewed 2026-11-19): durability is implemented; eviction is
 > deferred until measurements justify it.** This document describes only the
 > remaining hot/cold split. The production archive and rebuild procedure are
 > documented in [`DEPLOYMENT.md`](../../docs/DEPLOYMENT.md).

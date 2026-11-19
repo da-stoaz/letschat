@@ -3,7 +3,7 @@
 ## Status
 
 **Deferred / idea-stage.** Captured from the 2026-05 product-positioning
-discussion. Not scheduled. Reviewed 2026-09-16: the app can remember known hosts
+discussion. Not scheduled. Reviewed 2026-11-19: the app can remember known hosts
 but still has one active instance/connection at a time; that does not constitute
 the concurrent multi-instance design proposed below.
 

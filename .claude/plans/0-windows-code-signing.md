@@ -1,9 +1,11 @@
 # P0 Plan: Windows Code Signing (via SignPath Foundation)
 
-> **Status (reviewed 2026-11-14): not started; application material prepared
-> below.** The owner cannot pay for a certificate (Azure ~$10/mo, Certum ~€25/yr),
-> so SignPath Foundation is the only route. Desktop auto-update (branch
-> `feat/desktop-auto-update`) does **not** depend on this. Current operational
+> **Status (reviewed 2026-11-19): not started; application material prepared
+> below, application not yet submitted.** The owner cannot pay for a certificate
+> (Azure ~$10/mo, Certum ~€25/yr), so SignPath Foundation is the only route.
+> Desktop auto-update shipped in 1.7.0 without it; once Windows builds are
+> signed, the updater files must be re-signed (see *Interaction with the
+> desktop updater*). Current operational
 > documentation lives in [`DEPLOYMENT.md`](../../docs/DEPLOYMENT.md).
 
 ## Context

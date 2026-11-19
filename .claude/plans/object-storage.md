@@ -1,8 +1,10 @@
 # Plan: Object storage lifecycle, quotas, and resilient transfers
 
-> **Status (2026-09-23): Phases 0 and 2 committed on `feature/object-storage`;
-> Phase 1 is being implemented locally, not yet production-accepted.**
-> Resumable downloads remain a later phase. This plan is
+> **Status (reviewed 2026-11-19): Phases 0 and 2 shipped in v1.1.0 (PR #92);
+> Phase 1 (stored-byte limits) shipped in v1.1.1 (PR #93). Phase 3, resumable
+> downloads, is not started.** The production-acceptance checks left unchecked
+> below (staging topology, packaged-app downloads, >100 MB through the tunnel,
+> MinIO stale-multipart cleanup) were never recorded as done. This plan is
 > separate from `2-storage-tiering.md`, which concerns
 > hot/cold message rows.
 
