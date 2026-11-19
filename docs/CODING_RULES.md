@@ -27,3 +27,9 @@
   the title, label or control doesn't: a consequence ("Your other devices will
   be signed out"), why something is disabled, or an error/loading state. Text
   that restates the heading or what a switch obviously does gets cut.
+- Tell "not right now" apart from "can't here". A control that will work in a
+  moment (call still connecting) uses plain `disabled` and fades. A control
+  this device or runtime can never use (no camera, no screen-capture API) uses
+  `UnavailableButton`: dashed outline, the crossed-out icon, text that names
+  the state ("No camera"), and the reason in a tooltip and to screen readers.
+  Never leave such a control clickable only to fail.

@@ -88,12 +88,23 @@ export function supportsScreenCapture(): boolean {
   return typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getDisplayMedia === 'function'
 }
 
+type CaptureDevice = 'camera' | 'microphone'
+
+function captureUnavailableReason(device: CaptureDevice): string {
+  // The runtime details are for bug reports, not for the person in the call.
+  console.warn(`[livekit] ${device} capture unavailable: ${getMediaRuntimeSummary()}`)
+  const noun = device === 'camera' ? 'Camera' : 'Microphone'
+  return typeof window !== 'undefined' && !window.isSecureContext
+    ? `${noun} access needs a secure (HTTPS) connection.`
+    : `${noun} access isn't supported here.`
+}
+
 export function getMicrophoneUnavailableReason(): string {
-  return `Microphone APIs are unavailable in this runtime (${getMediaRuntimeSummary()}).`
+  return captureUnavailableReason('microphone')
 }
 
 export function getCameraUnavailableReason(): string {
-  return `Camera APIs are unavailable in this runtime (${getMediaRuntimeSummary()}).`
+  return captureUnavailableReason('camera')
 }
 
 export async function requestMicrophonePermission(): Promise<void> {
@@ -147,20 +158,32 @@ function isCameraDeviceNotFoundError(error: unknown): boolean {
   return name === 'notfounderror' || /requested device not found|device not found|no device/i.test(message)
 }
 
-export function getCameraErrorMessage(error: unknown): string {
+/** A sentence for the person in the call, for a camera or microphone that would not start. */
+export function getCaptureErrorMessage(device: CaptureDevice, error: unknown): string {
   if (!supportsMicrophoneCapture()) {
-    return getCameraUnavailableReason()
+    return captureUnavailableReason(device)
   }
+  const name = errorName(error).toLowerCase()
+  const message = errorMessage(error)
   if (isPermissionDeniedError(error)) {
-    return 'Camera permission denied. Allow camera access and try again.'
+    // Chromium says "Permission denied by system" when the OS privacy switch is off.
+    return /system/i.test(message)
+      ? `Your system is blocking ${device} access. Allow it in your privacy settings, then try again.`
+      : `${device === 'camera' ? 'Camera' : 'Microphone'} access was blocked. Allow it for LetsChat, then try again.`
   }
   if (isCameraDeviceNotFoundError(error)) {
-    return 'No camera device is available (or the selected camera was disconnected).'
+    return `No ${device} found. Connect one, then try again.`
+  }
+  // Windows hands a device to one app at a time, so "busy" is the usual cause here.
+  // A disabled Windows privacy switch can surface the same way.
+  if (name === 'notreadableerror' || name === 'aborterror' || /could not start|timeout starting|failed to allocate/i.test(message)) {
+    return `Couldn't start your ${device}. Close other apps that may be using it and check your system privacy settings, then try again.`
   }
   if (isCameraConstraintError(error)) {
-    return 'Camera constraints were rejected by this runtime. Falling back to safer defaults did not succeed.'
+    return `Your ${device} doesn't support the required settings. Choose another one.`
   }
-  return errorMessage(error) || 'Could not toggle camera.'
+  console.warn(`[livekit] ${device} failed`, error)
+  return message || `Couldn't start your ${device}.`
 }
 
 function normalizeLiveKitUrl(raw: string): string {
@@ -587,7 +610,7 @@ export async function setLocalCameraEnabled(
   }
 
   if (!(await waitForLocalCameraTrack(room, 1_000))) {
-    throw new Error('Camera was enabled, but no local camera track became available.')
+    throw new Error('Your camera started but sent no video. Try again or choose another camera.')
   }
 }
 
@@ -693,21 +716,33 @@ function queueCallWork<T>(work: () => Promise<T>): Promise<T> {
   return result
 }
 
+const CALL_CANCELLED = 'Call cancelled.'
+
+function callCancelled(): DOMException {
+  return new DOMException(CALL_CANCELLED, 'AbortError')
+}
+
+/**
+ * Only this module's own cancellation. getUserMedia also rejects with an
+ * AbortError when a device fails to start (Chromium on Windows: "Timeout
+ * starting video source"; Firefox: camera busy). Matching on the name alone
+ * silently swallowed those, so the camera button did nothing at all.
+ */
 export function isCallCancelled(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError'
+  return error instanceof Error && error.name === 'AbortError' && error.message === CALL_CANCELLED
 }
 
 function assertCurrentCall(attempt: CallAttempt): void {
   if (activeCall !== attempt || attempt.epoch !== callEpoch ||
     attempt.identity !== useConnectionStore.getState().identity) {
-    throw new DOMException('Call cancelled.', 'AbortError')
+    throw callCancelled()
   }
 }
 
 async function waitForCallStep<T>(attempt: CallAttempt, step: Promise<T>): Promise<T> {
   let onCancel!: () => void
   const cancelled = new Promise<never>((_resolve, reject) => {
-    onCancel = () => reject(new DOMException('Call cancelled.', 'AbortError'))
+    onCancel = () => reject(callCancelled())
     attempt.cancellation.signal.addEventListener('abort', onCancel, { once: true })
     if (attempt.cancellation.signal.aborted) onCancel()
   })
@@ -886,7 +921,7 @@ function endCall(target: CallTarget, room: Room | null): Promise<void> {
 export function assertActiveCallRoom(room: Room): void {
   if (!activeCall || activeCall.room !== room) {
     stopRoom(room)
-    throw new DOMException('Call cancelled.', 'AbortError')
+    throw callCancelled()
   }
   assertCurrentCall(activeCall)
 }

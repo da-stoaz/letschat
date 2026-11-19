@@ -24,11 +24,17 @@ export function CallOptions({ call, open, onOpenChange, inline = false, collapse
   useEffect(() => {
     if (!visible) return
     let cancelled = false
-    void Promise.all(kinds.map((kind) => listLivekitDevices(kind, false))).then(([audioinput, audiooutput, videoinput]) => {
+    // Camera names only appear once camera access is granted, so reload when it starts.
+    const load = () => void Promise.all(kinds.map((kind) => listLivekitDevices(kind, false))).then(([audioinput, audiooutput, videoinput]) => {
       if (!cancelled) setDevices({ audioinput, audiooutput, videoinput })
     })
-    return () => { cancelled = true }
-  }, [visible, call.room])
+    load()
+    navigator.mediaDevices?.addEventListener?.('devicechange', load)
+    return () => {
+      cancelled = true
+      navigator.mediaDevices?.removeEventListener?.('devicechange', load)
+    }
+  }, [visible, call.room, call.sharingCamera])
 
   const selectDevice = async (kind: DeviceKind, deviceId: string) => {
     const room = call.room
@@ -64,7 +70,7 @@ export function CallOptions({ call, open, onOpenChange, inline = false, collapse
         <div aria-label={inline ? 'Call devices and options' : undefined} role={inline ? 'group' : undefined} className={cn('min-h-0', inline ? 'flex flex-wrap items-end justify-center gap-3' : 'space-y-4 overflow-y-auto px-4 pb-4')}>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" disabled={!call.joined} aria-pressed={call.deafened} onClick={() => void call.onToggleDeafen()}>{call.deafened ? <VolumeXIcon /> : <Volume2Icon />}{call.deafened ? 'Unmute call audio' : 'Mute call audio'}</Button>
-            {call.hasScreenCapture ? <ScreenShareMenu size="default" showLabel disabled={!call.joined} sharing={call.sharingScreen} onToggle={call.onToggleScreenShare} /> : null}
+            <ScreenShareMenu disabled={!call.joined} sharing={call.sharingScreen} onToggle={call.onToggleScreenShare} />
             <NoiseFilterToggle compact />
             <CallVolumeMixer />
           </div>
@@ -84,7 +90,9 @@ export function CallOptions({ call, open, onOpenChange, inline = false, collapse
           {kinds.map((kind) => (
             <label key={kind} className={cn('block min-w-0 space-y-1 text-sm font-medium', inline && !collapseDevices && 'w-48 max-w-full')}>
               <span>{labels[kind]}</span>
-              {kind === 'audiooutput' && !canChooseOutput ? <span className="flex h-8 items-center rounded-lg border px-2.5 text-sm text-muted-foreground">System output</span> : <select data-slot="call-device-select" className="h-8 w-full min-w-0 truncate rounded-lg border bg-background px-2.5 text-sm outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground/70" value={selected[kind] ?? 'default'} disabled={!call.joined || changing || devices[kind].length === 0} onChange={(event) => void selectDevice(kind, event.target.value)}>
+              {kind === 'audiooutput' && !canChooseOutput ? <span className="flex h-8 items-center rounded-lg border px-2.5 text-sm text-muted-foreground">System output</span>
+                : kind === 'videoinput' && call.cameraUnavailable ? <span className="flex h-8 items-center rounded-lg border border-dashed px-2.5 text-sm text-muted-foreground">No camera</span>
+                : <select data-slot="call-device-select" className="h-8 w-full min-w-0 truncate rounded-lg border bg-background px-2.5 text-sm outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground/70" value={selected[kind] ?? 'default'} disabled={!call.joined || changing || devices[kind].length === 0} onChange={(event) => void selectDevice(kind, event.target.value)}>
                 {!devices[kind].some((device) => device.deviceId === 'default') ? <option value="default">System default</option> : null}
                 {devices[kind].map((device) => <option key={device.deviceId} value={device.deviceId}>{device.label}</option>)}
               </select>}

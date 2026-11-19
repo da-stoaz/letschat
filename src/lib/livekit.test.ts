@@ -75,7 +75,7 @@ vi.mock('livekit-client', () => {
 const {
   joinLiveKitVoice, joinLiveKitDmVoice, leaveLiveKitVoice, leaveLiveKitDmVoice,
   resetCallSessions, retryCallCleanup,
-  setLocalCameraEnabled,
+  setLocalCameraEnabled, isCallCancelled, getCaptureErrorMessage,
   prepareCallReload, restoreCallAfterReload,
 } = await import('./livekit')
 
@@ -375,7 +375,9 @@ describe('call ownership and recovery', () => {
     await vi.waitFor(() => expect(room.localParticipant.setCameraEnabled).toHaveBeenCalled())
     await leaveLiveKitVoice(42, room)
     camera.resolve()
-    expect(await enabling).toMatchObject({ name: 'AbortError' })
+    const error = await enabling
+    expect(error).toMatchObject({ name: 'AbortError' })
+    expect(isCallCancelled(error)).toBe(true)
     expect(stop).toHaveBeenCalled()
     expect(room.localParticipant.setCameraEnabled).toHaveBeenCalledTimes(1)
   })
@@ -414,5 +416,20 @@ describe('call ownership and recovery', () => {
     mocks.identity = 'new-account'
     await retryCallCleanup()
     expect(mocks.leaveDm).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('camera start failures', () => {
+  // Chromium on Windows rejects a camera that won't start with an AbortError, the
+  // same name call cancellation uses. Treating it as a hang-up made the camera
+  // button silently do nothing.
+  it('reports a camera that fails to start instead of treating it as a hang-up', () => {
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn() } })
+    const timeout = new DOMException('Timeout starting video source', 'AbortError')
+    expect(isCallCancelled(timeout)).toBe(false)
+    expect(getCaptureErrorMessage('camera', timeout)).toMatch(/^Couldn.t start your camera/)
+    expect(getCaptureErrorMessage('camera', new DOMException('Could not start video source', 'NotReadableError'))).toMatch(/^Couldn.t start your camera/)
+    expect(getCaptureErrorMessage('camera', new DOMException('Permission denied by system', 'NotAllowedError'))).toMatch(/^Your system is blocking camera access/)
+    expect(getCaptureErrorMessage('microphone', new DOMException('Requested device not found', 'NotFoundError'))).toBe('No microphone found. Connect one, then try again.')
   })
 })
