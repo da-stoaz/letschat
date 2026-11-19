@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::webview::{PermissionKind, PermissionResponse};
 use tauri::{AppHandle, Emitter, Manager, State, Url};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
@@ -62,6 +63,122 @@ fn open_url(app: AppHandle, url: String) -> Result<(), String> {
     app.opener()
         .open_url(url, None::<String>)
         .map_err(|e| e.to_string())
+}
+
+/// Opens the system page where this app's camera or microphone access is
+/// switched on. Fixed URLs per OS, so the page can't pass in arbitrary links.
+#[tauri::command]
+fn open_privacy_settings(app: AppHandle, device: String) -> Result<(), String> {
+    let url = match (device.as_str(), std::env::consts::OS) {
+        ("camera", "windows") => "ms-settings:privacy-webcam",
+        ("microphone", "windows") => "ms-settings:privacy-microphone",
+        ("camera", "macos") => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
+        }
+        ("microphone", "macos") => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        }
+        _ => return Err("This system has no privacy settings page to open.".to_string()),
+    };
+    app.opener()
+        .open_url(url, None::<String>)
+        .map_err(|e| e.to_string())
+}
+
+/// Pages this app ships, as opposed to anything the window might navigate to.
+fn is_app_url(url: &Url) -> bool {
+    match (url.scheme(), url.host_str()) {
+        ("tauri", Some("localhost")) => true,
+        ("http" | "https", Some("tauri.localhost")) => true,
+        // `tauri dev` serves the frontend from the Vite dev server.
+        ("http", Some("localhost")) => cfg!(debug_assertions),
+        _ => false,
+    }
+}
+
+/// Clicking Camera, Mute or Share is the consent; the OS privacy controls stay
+/// in charge. The webview's own prompt only added a second question, and on
+/// Windows WebView2 remembered a "Block" forever with no way to undo it.
+fn media_permission<R: tauri::Runtime>(
+    webview: &tauri::Webview<R>,
+    kind: PermissionKind,
+) -> PermissionResponse {
+    let media = matches!(
+        kind,
+        PermissionKind::Camera | PermissionKind::Microphone | PermissionKind::DisplayCapture
+    );
+    if media && webview.url().is_ok_and(|url| is_app_url(&url)) {
+        PermissionResponse::Allow
+    } else {
+        PermissionResponse::Default
+    }
+}
+
+/// Clears camera/microphone "Block" decisions WebView2 saved from its own
+/// prompt before `media_permission` existed. While one is stored, WebView2
+/// answers from it and never asks the handler again.
+#[cfg(windows)]
+fn forget_blocked_media_permissions(window: &tauri::WebviewWindow) {
+    use webview2_com::{
+        CoTaskMemPWSTR, GetNonDefaultPermissionSettingsCompletedHandler,
+        Microsoft::Web::WebView2::Win32::{
+            COREWEBVIEW2_PERMISSION_KIND, COREWEBVIEW2_PERMISSION_KIND_CAMERA,
+            COREWEBVIEW2_PERMISSION_KIND_MICROPHONE, COREWEBVIEW2_PERMISSION_STATE,
+            COREWEBVIEW2_PERMISSION_STATE_DEFAULT, COREWEBVIEW2_PERMISSION_STATE_DENY,
+            ICoreWebView2_13, ICoreWebView2Profile4,
+        },
+        SetPermissionStateCompletedHandler,
+    };
+    use windows_core::{HSTRING, Interface, PWSTR};
+
+    let _ = window.with_webview(|webview| unsafe {
+        // Older WebView2 runtimes lack these interfaces; they also never saved the state.
+        let Ok(profile) = webview
+            .controller()
+            .CoreWebView2()
+            .and_then(|core| core.cast::<ICoreWebView2_13>())
+            .and_then(|core| core.Profile())
+            .and_then(|profile| profile.cast::<ICoreWebView2Profile4>())
+        else {
+            return;
+        };
+        let reset = profile.clone();
+        let handler = GetNonDefaultPermissionSettingsCompletedHandler::create(Box::new(
+            move |result, settings| {
+                result?;
+                let Some(settings) = settings else {
+                    return Ok(());
+                };
+                let mut count = 0;
+                settings.Count(&mut count)?;
+                for index in 0..count {
+                    let setting = settings.GetValueAtIndex(index)?;
+                    let mut kind = COREWEBVIEW2_PERMISSION_KIND::default();
+                    let mut state = COREWEBVIEW2_PERMISSION_STATE::default();
+                    setting.PermissionKind(&mut kind)?;
+                    setting.PermissionState(&mut state)?;
+                    let media = kind == COREWEBVIEW2_PERMISSION_KIND_CAMERA
+                        || kind == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE;
+                    if !media || state != COREWEBVIEW2_PERMISSION_STATE_DENY {
+                        continue;
+                    }
+                    let mut origin = PWSTR::null();
+                    setting.PermissionOrigin(&mut origin)?;
+                    let origin = HSTRING::from(CoTaskMemPWSTR::from(origin).to_string());
+                    reset.SetPermissionState(
+                        kind,
+                        &origin,
+                        COREWEBVIEW2_PERMISSION_STATE_DEFAULT,
+                        &SetPermissionStateCompletedHandler::create(Box::new(|result| result)),
+                    )?;
+                }
+                Ok(())
+            },
+        ));
+        if let Err(error) = profile.GetNonDefaultPermissionSettings(&handler) {
+            eprintln!("permissions: could not read saved WebView2 permissions: {error}");
+        }
+    });
 }
 
 #[tauri::command]
@@ -312,8 +429,10 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(OfferedUpdate::default())
+        .on_permission_request(|webview, kind| media_permission(&webview, kind))
         .invoke_handler(tauri::generate_handler![
             open_url,
+            open_privacy_settings,
             show_notification,
             set_badge_count,
             minimize_to_tray,
@@ -347,6 +466,8 @@ fn main() {
 
             if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
                 let _ = window.set_icon(app_icon);
+                #[cfg(windows)]
+                forget_blocked_media_permissions(&window);
             }
 
             let app_handle = app.handle().clone();
@@ -379,7 +500,32 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::release_feed;
+    use super::{is_app_url, release_feed};
+    use tauri::Url;
+
+    #[test]
+    fn media_is_granted_only_to_app_pages() {
+        for app in [
+            "tauri://localhost/app",
+            "http://tauri.localhost/",
+            "https://tauri.localhost/x",
+        ] {
+            assert!(is_app_url(&Url::parse(app).unwrap()), "{app}");
+        }
+        for other in [
+            "https://localhost.evil.example/",
+            "https://tauri.localhost.evil.example/",
+            "tauri://evil/",
+            "file:///C:/x.html",
+            "https://example.com/",
+        ] {
+            assert!(!is_app_url(&Url::parse(other).unwrap()), "{other}");
+        }
+        assert_eq!(
+            is_app_url(&Url::parse("http://localhost:5173/").unwrap()),
+            cfg!(debug_assertions)
+        );
+    }
 
     #[test]
     fn release_feed_accepts_only_versions() {

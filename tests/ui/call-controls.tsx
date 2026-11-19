@@ -9,10 +9,12 @@ import { useConnectionStore } from '../../src/stores/connectionStore'
 import { useVoiceSessionStore } from '../../src/stores/voiceSessionStore'
 import { useVoiceStore } from '../../src/stores/voiceStore'
 import type { VoiceParticipant } from '../../src/types/domain'
+import { getCaptureErrorMessage } from '../../src/lib/livekit'
 import '../../src/index.css'
 
 // Simulated devices: no permission prompt, no capture. `?nocamera` removes the camera,
-// `?noscreen` removes screen capture, `?connecting` shows the transient disabled state.
+// `?noscreen` removes screen capture, `?connecting` shows the transient disabled state,
+// `?blocked` shows the desktop app's error for a camera the OS blocks.
 const params = new URLSearchParams(location.search)
 document.documentElement.classList.toggle('dark', !params.has('light'))
 const device = (kind: MediaDeviceKind, label: string) => ({ kind, label, deviceId: `${kind}-1`, groupId: 'g' }) as MediaDeviceInfo
@@ -20,10 +22,12 @@ const devices = [device('audioinput', 'Studio microphone'), device('audiooutput'
 navigator.mediaDevices.enumerateDevices = async () => devices
 if (params.has('noscreen')) Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', { value: undefined })
 
+// Pretend to be the desktop app so the privacy settings action shows; its command is a no-op here.
+if (params.has('blocked')) Object.assign(window, { __TAURI_INTERNALS__: { invoke: async () => undefined } })
 const room = new Room()
 Object.assign(room, { state: params.has('connecting') ? ConnectionState.Connecting : ConnectionState.Connected })
 useConnectionStore.setState({ identity: 'self' })
-useVoiceSessionStore.setState({ room, joinedChannelId: 1 })
+useVoiceSessionStore.setState({ room, joinedChannelId: 1, error: params.has('blocked') ? getCaptureErrorMessage('camera', new DOMException('Permission denied', 'NotAllowedError')) : null })
 useVoiceStore.setState({ participantsByChannel: { 1: [{ userIdentity: 'self', muted: false, deafened: false, sharingCamera: false, sharingScreen: false }] as VoiceParticipant[] } })
 
 function Panel() {
@@ -33,7 +37,7 @@ function Panel() {
 export function Fixture() {
   return <TooltipProvider><main className="space-y-6 p-4">
     <nav className="flex gap-3 text-sm underline">
-      <a href="?">Camera + screen</a><a href="?nocamera">No camera</a><a href="?noscreen">No screen capture</a><a href="?connecting">Connecting</a>
+      <a href="?">Camera + screen</a><a href="?nocamera">No camera</a><a href="?noscreen">No screen capture</a><a href="?connecting">Connecting</a><a href="?blocked">Blocked by system</a>
     </nav>
     <div className="flex flex-wrap items-start gap-4">
       {[220, 300].map(width => <div key={width} style={{ width }}><p className="mb-1 text-xs text-muted-foreground">Sidebar {width}px</p><ActiveCallCard /></div>)}

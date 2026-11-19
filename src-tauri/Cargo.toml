@@ -19,6 +19,12 @@ tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 
+# Only to clear camera/microphone denials WebView2 saved before the permission
+# handler existed. Versions must match what tauri/wry use.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows-core = "0.62"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

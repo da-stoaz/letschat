@@ -10,6 +10,7 @@ import type { ActiveCall } from '../hooks/useActiveCall'
 import { NoiseFilterToggle } from './NoiseFilterToggle'
 import { ScreenShareMenu } from './ScreenShareMenu'
 import { CallVolumeMixer } from './CallVolumeMixer'
+import { CallError } from './CallError'
 
 type DeviceKind = 'audioinput' | 'audiooutput' | 'videoinput'
 type Devices = Record<DeviceKind, { deviceId: string; label: string }[]>
@@ -78,7 +79,7 @@ export function CallOptions({ call, open, onOpenChange, inline = false, collapse
             <PopoverTrigger render={<Button variant="outline" />}><Settings2Icon />Devices</PopoverTrigger>
             <PopoverContent side="top" align="end" className="max-h-[calc(100dvh-6rem)] overflow-y-auto p-4">{deviceControls()}</PopoverContent>
           </Popover> : deviceControls()}
-          {!inline && call.error ? <p role="alert" className="text-sm break-words text-destructive">{call.error}</p> : null}
+          {!inline ? <CallError message={call.error} className="text-sm" /> : null}
           {!inline ? <div className="space-y-2 border-t pt-3">
             <h3 className="text-sm font-medium">Participants · {profiles.length}</h3>
             {profiles.map((tile) => <p className="text-sm break-words" key={tile.key}>{tile.displayName}{tile.isLocal ? ' (you)' : ''}{tile.muted ? ' · Muted' : ''}</p>)}

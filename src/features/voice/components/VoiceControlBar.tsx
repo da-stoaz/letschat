@@ -2,11 +2,12 @@ import { ArrowLeftIcon, MicIcon, MicOffIcon, MoreHorizontalIcon, PhoneOffIcon, V
 import { Button } from '@/components/ui/button'
 import { UnavailableButton } from '@/components/UnavailableButton'
 import type { ActiveCall } from '../hooks/useActiveCall'
+import { CallError } from './CallError'
 
 export function VoiceControlBar({ call, onMore, onBack }: { call: ActiveCall; onMore?: () => void; onBack?: () => void }) {
   return (
     <div className="shrink-0 border-t pt-2">
-      {call.error ? <p role="alert" className="mb-2 max-h-20 overflow-y-auto text-sm break-words text-destructive">{call.error}</p> : null}
+      <CallError message={call.error} className="mb-2 max-h-20 overflow-y-auto text-sm" />
       <div role="group" aria-label="Call controls" className="flex flex-wrap justify-center gap-2">
         {onBack ? <Button variant="outline" onClick={onBack}><ArrowLeftIcon />Back</Button> : null}
         <Button variant={call.muted ? 'secondary' : 'outline'} disabled={!call.joined} aria-pressed={call.muted} aria-label={call.muted ? 'Unmute microphone' : 'Mute microphone'} onClick={() => void call.onToggleMute()}>

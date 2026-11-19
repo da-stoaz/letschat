@@ -41,6 +41,7 @@ import { CallLatencyBadge } from '../../features/voice/components/CallLatencyBad
 import { NoiseFilterToggle } from '../../features/voice/components/NoiseFilterToggle'
 import { ScreenShareMenu } from '../../features/voice/components/ScreenShareMenu'
 import { CallVolumeMixer } from '../../features/voice/components/CallVolumeMixer'
+import { CallError } from '../../features/voice/components/CallError'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -680,7 +681,7 @@ export function ActiveCallCard({ className }: { className?: string }) {
           </Button>
         </div>
 
-        {localError ? <p className="text-[11px] text-destructive">{localError}</p> : null}
+        <CallError message={localError} className="text-[11px]" />
       </CardContent>
     </Card>
   )

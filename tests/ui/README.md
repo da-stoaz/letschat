@@ -85,5 +85,6 @@ window/display selection is handled by the browser's native sharing dialog.
 Open `/tests/ui/call-controls.html` for the call controls with simulated
 devices: the sidebar card at 220 and 300px and the call panel. Use the links to
 compare **Connecting** (faded, temporarily disabled) with **No camera** and
-**No screen capture** (dashed, crossed-out icon, reason on hover and focus). It
-captures nothing and uses no backend.
+**No screen capture** (dashed, crossed-out icon, reason on hover and focus).
+**Blocked by system** shows the desktop app's error with its "Open privacy
+settings" action (a no-op here). It captures nothing and uses no backend.

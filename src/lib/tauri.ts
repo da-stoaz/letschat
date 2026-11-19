@@ -99,6 +99,7 @@ export const tauriCommands = {
     if (isTauriRuntime()) return invoke<void>('open_url', { url })
     window.open(url, '_blank', 'noopener,noreferrer')
   },
+  openPrivacySettings: async (device: 'camera' | 'microphone') => invoke<void>('open_privacy_settings', { device }),
   showNotification: async (title: string, body: string) => {
     if (isTauriRuntime()) return invoke<void>('show_notification', { title, body })
     if (typeof window === 'undefined' || typeof Notification === 'undefined') return

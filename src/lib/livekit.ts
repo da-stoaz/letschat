@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { RoomConnectOptions, RoomOptions, VideoCaptureOptions } from 'livekit-client'
 import { ConnectionState, Room, Track } from 'livekit-client'
 import { reducers } from './spacetimedb'
-import { tauriCommands } from './tauri'
+import { isDesktopTauriRuntime, tauriCommands } from './tauri'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useVoiceSessionStore } from '../stores/voiceSessionStore'
 import { useDmVoiceSessionStore } from '../stores/dmVoiceSessionStore'
@@ -158,6 +158,19 @@ function isCameraDeviceNotFoundError(error: unknown): boolean {
   return name === 'notfounderror' || /requested device not found|device not found|no device/i.test(message)
 }
 
+const systemBlockedMessage = (device: CaptureDevice) =>
+  `Your system is blocking ${device} access. Allow LetsChat in your privacy settings, then try again.`
+const deviceBusyMessage = (device: CaptureDevice) =>
+  `Couldn't start your ${device}. Close other apps that may be using it and check your system privacy settings, then try again.`
+
+/** The device whose OS privacy setting a call error points to, or null. */
+export function privacySettingsDevice(message: string | null): CaptureDevice | null {
+  for (const device of ['camera', 'microphone'] as const) {
+    if (message === systemBlockedMessage(device) || message === deviceBusyMessage(device)) return device
+  }
+  return null
+}
+
 /** A sentence for the person in the call, for a camera or microphone that would not start. */
 export function getCaptureErrorMessage(device: CaptureDevice, error: unknown): string {
   if (!supportsMicrophoneCapture()) {
@@ -166,10 +179,12 @@ export function getCaptureErrorMessage(device: CaptureDevice, error: unknown): s
   const name = errorName(error).toLowerCase()
   const message = errorMessage(error)
   if (isPermissionDeniedError(error)) {
-    // Chromium says "Permission denied by system" when the OS privacy switch is off.
-    return /system/i.test(message)
-      ? `Your system is blocking ${device} access. Allow it in your privacy settings, then try again.`
-      : `${device === 'camera' ? 'Camera' : 'Microphone'} access was blocked. Allow it for LetsChat, then try again.`
+    // The desktop app grants media to its own pages (`media_permission` in
+    // src-tauri), so a denial there comes from the OS. Chromium also says
+    // "Permission denied by system" when the OS privacy switch is off.
+    return isDesktopTauriRuntime() || /system/i.test(message)
+      ? systemBlockedMessage(device)
+      : `${device === 'camera' ? 'Camera' : 'Microphone'} access is blocked for this site. Allow it in your browser’s site settings, then try again.`
   }
   if (isCameraDeviceNotFoundError(error)) {
     return `No ${device} found. Connect one, then try again.`
@@ -177,7 +192,7 @@ export function getCaptureErrorMessage(device: CaptureDevice, error: unknown): s
   // Windows hands a device to one app at a time, so "busy" is the usual cause here.
   // A disabled Windows privacy switch can surface the same way.
   if (name === 'notreadableerror' || name === 'aborterror' || /could not start|timeout starting|failed to allocate/i.test(message)) {
-    return `Couldn't start your ${device}. Close other apps that may be using it and check your system privacy settings, then try again.`
+    return deviceBusyMessage(device)
   }
   if (isCameraConstraintError(error)) {
     return `Your ${device} doesn't support the required settings. Choose another one.`
