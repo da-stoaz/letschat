@@ -7,6 +7,7 @@ on:
     paths:
       - 'site/**'
       - 'eslint.config.js'
+      - 'tests/ui/siteFeedback.test.ts'
       - '.github/workflows/website.yml'
 
 permissions:
@@ -21,6 +22,8 @@ jobs:
       # The ESLint config and plugins live in the root package.
       - run: bun install --frozen-lockfile
       - run: bunx eslint site
+      # Root unit test that runs the download page's script.
+      - run: bunx vitest run --project unit tests/ui/siteFeedback.test.ts
       - run: npm ci
         working-directory: site
       - run: npm run build
