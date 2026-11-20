@@ -18,6 +18,7 @@ import type { ServerChannelBarProps } from './types'
 import type { Channel } from '../../../types/domain'
 import { serverInitials } from '../helpers'
 import { useVoiceSessionStore } from '../../../stores/voiceSessionStore'
+import { useUiStore } from '../../../stores/uiStore'
 import { useLiveKitRoom } from '../../../lib/livekit'
 import { callConnection } from '../../../features/voice/callConnection'
 
@@ -55,6 +56,8 @@ export function ServerChannelBar({
   const joining = useVoiceSessionStore((s) => s.joining)
   const { connectionState } = useLiveKitRoom(room)
   const { status } = callConnection(connectionState, joining)
+  const spaceMuted = useUiStore((s) => activeServer !== null && Boolean(s.mutedServers[activeServer.id]))
+  const toggleMutedServer = useUiStore((s) => s.toggleMutedServer)
   const ownerCannotLeave = role === 'Owner'
   const canAccessServerPanel = role === 'Owner' || role === 'Moderator'
   const canInvite =
@@ -116,6 +119,7 @@ export function ServerChannelBar({
                   </AvatarFallback>
                 </Avatar>
                 <span className="truncate">{activeServer?.name ?? 'Space'}</span>
+                {spaceMuted ? <BellOffIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Notifications muted" /> : null}
               </span>
               <ChevronsUpDownIcon className="size-4 text-muted-foreground" />
             </DropdownMenuTrigger>
@@ -124,6 +128,12 @@ export function ServerChannelBar({
                 <DropdownMenuItem onClick={onOpenServerPanel}>
                   <Settings2Icon className="size-3.5" />
                   Manage space
+                </DropdownMenuItem>
+              ) : null}
+              {activeServer ? (
+                <DropdownMenuItem onClick={() => toggleMutedServer(activeServer.id)}>
+                  {spaceMuted ? <BellIcon className="size-3.5" /> : <BellOffIcon className="size-3.5" />}
+                  {spaceMuted ? 'Unmute space' : 'Mute space'}
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem

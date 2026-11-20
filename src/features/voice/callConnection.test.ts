@@ -83,7 +83,7 @@ describe('consistent call connection status', () => {
     useVoiceSessionStore.setState({ joinedChannelId: 2, joining, room: state === null ? null : roomWithState(state) })
     const sidebar = renderToStaticMarkup(createElement(ServerChannelBar, barProps))
     const panel = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(Panel)))
-    const card = renderToStaticMarkup(createElement(ActiveCallCard, { variant: 'sidebar' }))
+    const card = renderToStaticMarkup(createElement(ActiveCallCard))
     for (const html of [sidebar, panel, card]) {
       expect(html).toContain(status)
       expect(html).not.toContain('>Joined<')

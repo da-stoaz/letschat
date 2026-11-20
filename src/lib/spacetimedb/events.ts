@@ -127,15 +127,20 @@ export function handleIncomingMessage(message: Message): void {
   const ui = useUiStore.getState()
   const channelId = message.channelId
   const serverId = findServerIdByChannelId(channelId)
+  // The store holds every channel the client can read, so a channel missing
+  // from it became visible in this very transaction (a join request approved,
+  // a promotion into a moderator-only channel): its rows are history, not news.
+  if (serverId === null) return
   const channelMuted = Boolean(ui.mutedChannels[channelId])
-  const serverMuted = serverId !== null ? Boolean(ui.mutedServers[serverId]) : false
+  const serverMuted = Boolean(ui.mutedServers[serverId])
   const userMuted = Boolean(ui.mutedUsers[normalizeIdentity(message.senderIdentity) as Identity])
   if (channelMuted || serverMuted || userMuted) return
 
   const senderLabel = findDisplayNameByIdentity(message.senderIdentity)
   const body = message.deleted ? '[message deleted]' : message.content
   const channelName = findChannelNameById(channelId) ?? undefined
-  const isMention = isMentionForSelf(body)
+  // A mention is still a message: with mention alerts off it notifies as one.
+  const isMention = ui.notificationSettings.eventToggles.mentions && isMentionForSelf(body)
   const isActiveView = ui.activeChannelId === channelId
 
   void notify(isMention ? 'mention' : 'channel_message', {
@@ -258,14 +263,23 @@ export function cancelPendingRefreshes(): void {
 
 // ─── Live table watcher ───────────────────────────────────────────────────────
 
+type RowContext = { event: { tag: string } }
+
 export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void {
-  // Every handler bails before doing any work until the subscription has been
-  // applied. During the initial apply `onInsert` fires once per row, and each
-  // of those used to rebuild every store from the rows received so far — O(N²)
-  // over the whole history, inside the same budget that has to cover connecting
-  // at all. `syncAll` in `onApplied` does that work once instead.
-  const stale = (key: string, refresh: () => void, alsoUnread = false) => () => {
-    if (!isLive()) return
+  // The initial snapshot is not a change: `syncAll` in `onApplied` handles it
+  // once. The SDK emits `onApplied` BEFORE it dispatches the snapshot's
+  // per-row `onInsert` callbacks, so `isLive()` is already true for every one
+  // of them — they are told apart by their `SubscribeApplied` event tag.
+  // Gating on `isLive()` alone re-notified the whole recent history on every
+  // connect (a new device, a restart, a network blip).
+  const changed = (ctx: RowContext) =>
+    isLive() && (ctx.event.tag === 'Transaction' || ctx.event.tag === 'Reducer')
+  // Only someone else's transaction is news. Rows our own reducer call made
+  // visible (joining a space, accepting an invite, unblocking) are history.
+  const news = (ctx: RowContext) => isLive() && ctx.event.tag === 'Transaction'
+
+  const stale = (key: string, refresh: () => void, alsoUnread = false) => (ctx: RowContext) => {
+    if (!changed(ctx)) return
     scheduleRefresh(key, refresh, alsoUnread)
   }
 
@@ -288,14 +302,14 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
   // BUG_ANALYSIS C7.
   const serverScoped = stale('serverScoped', () => syncServerScopedState(conn))
   const members = stale('members', () => syncMembers(conn))
-  const memberChanged = (row: Parameters<typeof mapServerMember>[0]) => {
+  const memberChanged = (ctx: RowContext, row: Parameters<typeof mapServerMember>[0]) => {
     const me = useConnectionStore.getState().identity
-    if (me && sameIdentity(mapServerMember(row).userIdentity, me)) serverScoped()
-    else members()
+    if (me && sameIdentity(mapServerMember(row).userIdentity, me)) serverScoped(ctx)
+    else members(ctx)
   }
-  conn.db.my_server_members.onInsert((_ctx, row) => memberChanged(row))
-  conn.db.my_server_members.onUpdate((_ctx, _old, row) => memberChanged(row))
-  conn.db.my_server_members.onDelete((_ctx, row) => memberChanged(row))
+  conn.db.my_server_members.onInsert((ctx, row) => memberChanged(ctx, row))
+  conn.db.my_server_members.onUpdate((ctx, _old, row) => memberChanged(ctx, row))
+  conn.db.my_server_members.onDelete((ctx, row) => memberChanged(ctx, row))
 
   // Had no handler at all: new requests reached moderators, and a decline its
   // requester, only when some unrelated membership event re-synced everything.
@@ -320,9 +334,9 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
   conn.db.my_voice_participants.onDelete(voice)
 
   const friends = stale('friends', () => syncFriends(conn))
-  conn.db.my_friends.onInsert((_ctx, row) => {
-    if (!isLive()) return
-    scheduleRefresh('friends', () => syncFriends(conn))
+  conn.db.my_friends.onInsert((ctx, row) => {
+    friends(ctx)
+    if (!news(ctx)) return
     const me = useConnectionStore.getState().identity
     if (!me) return
 
@@ -331,9 +345,9 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
       handleIncomingFriendRequest(findDisplayNameByIdentity(mapped.requestedBy))
     }
   })
-  conn.db.my_friends.onUpdate((_ctx, _oldRow, row) => {
-    if (!isLive()) return
-    scheduleRefresh('friends', () => syncFriends(conn))
+  conn.db.my_friends.onUpdate((ctx, _oldRow, row) => {
+    friends(ctx)
+    if (!news(ctx)) return
     const me = useConnectionStore.getState().identity
     if (!me) return
 
@@ -348,10 +362,9 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
   conn.db.my_blocks.onDelete(friends)
 
   const dms = stale('directMessages', () => syncDirectMessages(conn), true)
-  conn.db.my_direct_messages.onInsert((_ctx, row) => {
-    if (!isLive()) return
-    scheduleRefresh('directMessages', () => syncDirectMessages(conn), true)
-    handleIncomingDirectMessage(mapDirectMessage(row))
+  conn.db.my_direct_messages.onInsert((ctx, row) => {
+    dms(ctx)
+    if (news(ctx)) handleIncomingDirectMessage(mapDirectMessage(row))
   })
   conn.db.my_direct_messages.onUpdate(dms)
   conn.db.my_direct_messages.onDelete(dms)
@@ -385,9 +398,9 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
   conn.db.my_invites.onDelete(invites)
 
   const dmServerInvites = stale('dmServerInvites', () => syncDmServerInvites(conn))
-  conn.db.my_dm_server_invites.onInsert((_ctx, row) => {
-    if (!isLive()) return
-    scheduleRefresh('dmServerInvites', () => syncDmServerInvites(conn))
+  conn.db.my_dm_server_invites.onInsert((ctx, row) => {
+    dmServerInvites(ctx)
+    if (!news(ctx)) return
     const me = useConnectionStore.getState().identity
     if (!me) return
     const inv = mapDmServerInvite(row)
@@ -404,10 +417,9 @@ export function watchLiveTables(conn: DbConnection, isLive: () => boolean): void
   conn.db.my_dm_server_invites.onDelete(dmServerInvites)
 
   const messages = stale('messages', () => syncMessages(conn), true)
-  conn.db.my_channel_messages.onInsert((_ctx, row) => {
-    if (!isLive()) return
-    scheduleRefresh('messages', () => syncMessages(conn), true)
-    handleIncomingMessage(mapMessage(row))
+  conn.db.my_channel_messages.onInsert((ctx, row) => {
+    messages(ctx)
+    if (news(ctx)) handleIncomingMessage(mapMessage(row))
   })
   conn.db.my_channel_messages.onUpdate(messages)
   conn.db.my_channel_messages.onDelete(messages)

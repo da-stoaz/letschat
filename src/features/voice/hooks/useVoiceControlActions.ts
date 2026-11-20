@@ -5,7 +5,8 @@ import { useMediaDeviceStore } from '../../../stores/mediaDeviceStore'
 import {
   assertActiveCallRoom,
   isCallCancelled,
-  getCameraErrorMessage,
+  getCaptureErrorMessage,
+  getScreenShareErrorMessage,
   getMicrophoneUnavailableReason,
   requestMicrophonePermission,
   setLocalCameraEnabled,
@@ -72,8 +73,7 @@ export function useVoiceControlActions({
     } catch (error) {
       if (isCallCancelled(error)) return
       try { assertActiveCallRoom(room) } catch { return }
-      const message = error instanceof Error ? error.message : 'Could not toggle microphone.'
-      setError(message)
+      setError(getCaptureErrorMessage('microphone', error))
     }
   }, [audioInputId, ensureMicrophoneCapture, patchVoiceState, room, selfState, setError])
 
@@ -104,7 +104,7 @@ export function useVoiceControlActions({
     } catch (error) {
       if (isCallCancelled(error)) return
       try { assertActiveCallRoom(room) } catch { return }
-      setError(getCameraErrorMessage(error))
+      setError(getCaptureErrorMessage('camera', error))
     }
   }, [patchVoiceState, room, selfState, setError, videoInputId])
 
@@ -126,8 +126,7 @@ export function useVoiceControlActions({
     } catch (error) {
       if (isCallCancelled(error)) return
       try { assertActiveCallRoom(room) } catch { return }
-      const message = error instanceof Error ? error.message : 'Could not toggle screen share.'
-      setError(message)
+      setError(getScreenShareErrorMessage(error))
     }
   }, [hasScreenCapture, patchVoiceState, room, selfState, setError])
 

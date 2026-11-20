@@ -8,6 +8,7 @@ import type { ActiveCall } from '../hooks/useActiveCall'
 import { VoiceMediaStage } from './VoiceMediaStage'
 import { VoiceControlBar } from './VoiceControlBar'
 import { CallOptions } from './CallOptions'
+import { CallError } from './CallError'
 
 export function CallPanel({ call, onBack }: { call: ActiveCall; onBack?: () => void }) {
   const compact = useIsMobile()
@@ -30,7 +31,7 @@ export function CallPanel({ call, onBack }: { call: ActiveCall; onBack?: () => v
       {!docked || expanded ? <div className={expanded ? 'call-toolbar flex max-w-full shrink-0 flex-wrap items-center justify-center gap-2 self-center rounded-2xl border bg-background p-3' : 'shrink-0 space-y-3'}>
         <VoiceControlBar call={call} onMore={compact ? () => setOptionsOpen(true) : undefined} onBack={expanded ? undefined : onBack} />
         {!compact ? <CallOptions call={call} inline collapseDevices={expanded} open={false} onOpenChange={setOptionsOpen} /> : null}
-      </div> : call.error ? <p role="alert" className="shrink-0 text-sm break-words text-destructive">{call.error}</p> : null}
+      </div> : <CallError message={call.error} className="shrink-0 text-sm" />}
       {compact ? <CallOptions call={call} open={optionsOpen} onOpenChange={setOptionsOpen} /> : null}
     </section>
   )

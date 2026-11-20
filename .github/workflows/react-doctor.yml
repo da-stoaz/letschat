@@ -11,8 +11,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   # Scans `main` on every push so you get a health-score trend on the
   # default branch — useful for tracking the overall number commit-by-commit
-  # and catching regressions that slipped past PR review. PR-specific steps
-  # (the sticky summary comment) are skipped automatically on `push` events.
+  # and catching regressions that slipped past PR review.
   # Comment this block out if you only want PR-time scans.
   push:
     branches: [main]
@@ -20,16 +19,9 @@ on:
 permissions:
   # `actions/checkout` needs this to read the repo source.
   contents: read
-  # Two uses: (1) reads the PR's changed-file list so the scan only checks
-  # what the PR touched (faster, scoped to the diff), and (2) posts/updates
-  # the sticky React Doctor summary comment on the PR. Downgrade `write` to
-  # `read` to keep the changed-file scan but disable comment posting.
-  pull-requests: write
-  # The sticky-comment step uses GitHub's `issues.createComment` /
-  # `issues.updateComment` endpoints — those are the same APIs that back PR
-  # comments (PRs are issues under the hood). Not exercised on `push`
-  # events, so safe to drop if you only run on `main`.
-  issues: write
+  # Reads the PR's changed-file list so the scan only checks what the PR
+  # touched. Read-only on purpose: the action posts nothing (see below).
+  pull-requests: read
 
 # Cancels any in-flight scan for the same PR (or branch, on push) the moment
 # a new commit arrives, so reviewers only ever see the latest run.
@@ -53,6 +45,10 @@ jobs:
           scope: changed
           # Fail only on error-severity findings (warnings stay advisory).
           blocking: error
+          # No PR comments or inline reviews: each one emailed the author, on
+          # every PR. Findings stay in the check run; errors still fail it.
+          comment: false
+          review-comments: false
         # Other knobs (defaults shown) — uncomment to override.
         # Full reference: https://www.react.doctor/ci
         #   comment: true            # sticky PR summary comment

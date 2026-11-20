@@ -8,6 +8,7 @@ import { reducers } from './spacetimedb'
 
 const mocks = vi.hoisted(() => ({
   identity: 'identity-abc' as string | null,
+  desktop: false,
   order: [] as string[],
   rooms: [] as Room[],
   joinVoice: vi.fn<(id: number) => Promise<void>>(async () => {}),
@@ -31,6 +32,7 @@ vi.mock('./spacetimedb', () => ({
   },
 }))
 vi.mock('./tauri', () => ({
+  isDesktopTauriRuntime: () => mocks.desktop,
   tauriCommands: {
     getLivekitUrl: async () => 'ws://127.0.0.1:7880',
     generateLivekitToken: (room: string) => { mocks.order.push(`token:${room}`); return mocks.token(room) },
@@ -75,7 +77,7 @@ vi.mock('livekit-client', () => {
 const {
   joinLiveKitVoice, joinLiveKitDmVoice, leaveLiveKitVoice, leaveLiveKitDmVoice,
   resetCallSessions, retryCallCleanup,
-  setLocalCameraEnabled,
+  setLocalCameraEnabled, isCallCancelled, getCaptureErrorMessage, getScreenShareErrorMessage, privacySettingsDevice,
   prepareCallReload, restoreCallAfterReload,
 } = await import('./livekit')
 
@@ -94,6 +96,7 @@ beforeEach(async () => {
   vi.spyOn(console, 'error').mockImplementation(() => {})
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   mocks.identity = 'identity-abc'
+  mocks.desktop = false
   mocks.order.length = 0
   mocks.rooms.length = 0
   mocks.token.mockResolvedValue('livekit-token')
@@ -375,7 +378,9 @@ describe('call ownership and recovery', () => {
     await vi.waitFor(() => expect(room.localParticipant.setCameraEnabled).toHaveBeenCalled())
     await leaveLiveKitVoice(42, room)
     camera.resolve()
-    expect(await enabling).toMatchObject({ name: 'AbortError' })
+    const error = await enabling
+    expect(error).toMatchObject({ name: 'AbortError' })
+    expect(isCallCancelled(error)).toBe(true)
     expect(stop).toHaveBeenCalled()
     expect(room.localParticipant.setCameraEnabled).toHaveBeenCalledTimes(1)
   })
@@ -414,5 +419,45 @@ describe('call ownership and recovery', () => {
     mocks.identity = 'new-account'
     await retryCallCleanup()
     expect(mocks.leaveDm).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('camera start failures', () => {
+  // Chromium on Windows rejects a camera that won't start with an AbortError, the
+  // same name call cancellation uses. Treating it as a hang-up made the camera
+  // button silently do nothing.
+  it('reports a camera that fails to start instead of treating it as a hang-up', () => {
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn() } })
+    const timeout = new DOMException('Timeout starting video source', 'AbortError')
+    expect(isCallCancelled(timeout)).toBe(false)
+    expect(getCaptureErrorMessage('camera', timeout)).toMatch(/^Couldn.t start your camera/)
+    expect(getCaptureErrorMessage('camera', new DOMException('Could not start video source', 'NotReadableError'))).toMatch(/^Couldn.t start your camera/)
+    const blocked = getCaptureErrorMessage('camera', new DOMException('Permission denied by system', 'NotAllowedError'))
+    expect(blocked).toMatch(/^Your system is blocking camera access/)
+    expect(privacySettingsDevice(blocked)).toBe('camera')
+    expect(privacySettingsDevice(getCaptureErrorMessage('microphone', timeout))).toBe('microphone')
+    expect(privacySettingsDevice('Not in this voice channel')).toBeNull()
+    expect(getCaptureErrorMessage('microphone', new DOMException('Requested device not found', 'NotFoundError'))).toBe('No microphone found. Connect one, then try again.')
+  })
+})
+
+describe('blocked camera or microphone', () => {
+  it('points the browser at its site settings and the desktop app at the OS, since the app grants itself', () => {
+    const denied = new DOMException('Permission denied', 'NotAllowedError')
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn() } })
+    expect(getCaptureErrorMessage('camera', denied)).toMatch(/site settings/)
+    expect(privacySettingsDevice(getCaptureErrorMessage('camera', denied))).toBeNull()
+    mocks.desktop = true
+    expect(privacySettingsDevice(getCaptureErrorMessage('camera', denied))).toBe('camera')
+  })
+})
+
+describe('screen share failures', () => {
+  it('stays quiet when the picker is closed and names a system block', () => {
+    // Chromium (and WebView2) report a closed picker as "Permission denied".
+    expect(getScreenShareErrorMessage(new DOMException('Permission denied', 'NotAllowedError'))).toBeNull()
+    expect(getScreenShareErrorMessage(new DOMException('The request is not allowed by the user agent or the platform in the current context.', 'NotAllowedError'))).toBeNull()
+    expect(getScreenShareErrorMessage(new DOMException('Permission denied by system', 'NotAllowedError'))).toMatch(/^Your system is blocking screen recording/)
+    expect(getScreenShareErrorMessage(new DOMException('Could not start video source', 'NotReadableError'))).toBe('Could not start video source')
   })
 })

@@ -97,7 +97,7 @@ export function Fixture() {
   }
   return <main className="mx-auto max-w-3xl space-y-4 p-6">
     <h1 className="text-xl font-semibold">Screen sharing verification</h1>
-    <div className="flex items-center gap-3"><span>Selected: {quality}</span><ScreenShareMenu size="default" showLabel sharing={false} disabled={running} onToggle={run} /></div>
+    <div className="flex items-center gap-3"><span>Selected: {quality}</span><ScreenShareMenu sharing={false} disabled={running} onToggle={run} /></div>
     <p role="status">{result}</p>
     <video ref={output} muted autoPlay playsInline className="aspect-video w-full rounded border bg-black" />
   </main>

@@ -6,6 +6,7 @@ import {
   MicIcon,
   MicOffIcon,
   VideoIcon,
+  VideoOffIcon,
   Volume2Icon,
   VolumeXIcon,
 } from 'lucide-react'
@@ -14,6 +15,7 @@ import {
   dmVoiceRoomKey,
   isCallCancelled,
   leaveLiveKitDmVoice,
+  getCaptureErrorMessage,
   leaveLiveKitVoice,
   listLivekitDevices,
   setLocalCameraEnabled,
@@ -40,16 +42,19 @@ import { CallLatencyBadge } from '../../features/voice/components/CallLatencyBad
 import { NoiseFilterToggle } from '../../features/voice/components/NoiseFilterToggle'
 import { ScreenShareMenu } from '../../features/voice/components/ScreenShareMenu'
 import { CallVolumeMixer } from '../../features/voice/components/CallVolumeMixer'
+import { CallError } from '../../features/voice/components/CallError'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { toast } from 'sonner'
+import { UnavailableButton } from '@/components/UnavailableButton'
+import { useCameraUnavailableReason } from '../../features/voice/hooks/useCameraUnavailableReason'
 import { cn } from '../../lib/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -72,6 +77,8 @@ function selectInitialDevice(
   activeDeviceId: string | undefined,
   options: LivekitDeviceOption[],
 ): string | null {
+  // Nothing listed yet (no permission for that kind): keep the saved choice.
+  if (options.length === 0) return explicitDeviceId
   if (explicitDeviceId && options.some((device) => device.deviceId === explicitDeviceId)) {
     return explicitDeviceId
   }
@@ -119,35 +126,27 @@ function supportsAudioOutputSwitching(): boolean {
 }
 
 /**
- * The output-device control for both card variants.
- *
- * One component rather than the two near-copies this replaced — they had
- * already drifted ("System" in the compact card, "System output" in the wide
- * one), and the disabled branch is the one the desktop app actually reaches.
+ * The output-device control. The disabled branch is the one the desktop app
+ * actually reaches.
  *
  * That branch used to be a bare `<div>` reading "System", which looks like a
  * selected value rather than an explanation. It now says why there is nothing
  * to pick.
  */
 function OutputDevicePicker({
-  compact,
   canSwitch,
   label,
   devices,
   selectedId,
   onSelect,
 }: {
-  compact: boolean
   canSwitch: boolean
   label: string
   devices: LivekitDeviceOption[]
   selectedId: string | null
   onSelect: (deviceId: string) => void
 }) {
-  const base = cn(
-    'inline-flex min-w-0 flex-1 items-center border-l border-border/70',
-    compact ? 'h-8 px-1.5 text-[11px]' : 'h-9 px-2 text-xs',
-  )
+  const base = 'inline-flex h-8 min-w-0 flex-1 items-center border-l border-border/70 px-1.5 text-[11px]'
 
   if (!canSwitch) {
     return (
@@ -170,11 +169,7 @@ function OutputDevicePicker({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className={cn(
-          base,
-          'justify-between text-muted-foreground hover:bg-muted/60',
-          !compact && 'gap-1',
-        )}
+        className={cn(base, 'justify-between text-muted-foreground hover:bg-muted/60')}
       >
         <span className="truncate">{label}</span>
         <ChevronDownIcon className="size-3.5" />
@@ -195,22 +190,7 @@ function OutputDevicePicker({
   )
 }
 
-function isUserAgentPermissionContextError(message: string): boolean {
-  const normalized = message.toLowerCase()
-  return (
-    normalized.includes('request is not allowed by the user agent')
-    || normalized.includes('user denied permission')
-    || normalized.includes('the user denied permission')
-  )
-}
-
-export function ActiveCallCard({
-  className,
-  variant = 'wide',
-}: {
-  className?: string
-  variant?: 'wide' | 'sidebar'
-}) {
+export function ActiveCallCard({ className }: { className?: string }) {
   const selfIdentity = useConnectionStore((s) => s.identity)
   const voiceRoom = useVoiceSessionStore((s) => s.room)
   const joinedVoiceChannelId = useVoiceSessionStore((s) => s.joinedChannelId)
@@ -322,6 +302,7 @@ export function ActiveCallCard({
   const sharingCamera = selfParticipant?.sharingCamera ?? false
   const sharingScreen = activeRoom?.localParticipant.isScreenShareEnabled ?? false
   const hasScreenCapture = supportsScreenCapture()
+  const cameraUnavailable = useCameraUnavailableReason()
   const screenShareButtonClass = cn(
     'transition-all duration-150',
     sharingScreen
@@ -337,7 +318,10 @@ export function ActiveCallCard({
       const [nextAudioInputs, nextAudioOutputs, nextVideoInputs] = await Promise.all([
         listLivekitDevices('audioinput', true),
         listLivekitDevices('audiooutput', true),
-        listLivekitDevices('videoinput', true),
+        // Never ask for the camera just to fill this list: joining a voice call
+        // used to pop a camera prompt, and a "no" or a busy camera left the
+        // list empty for the whole call. Names appear once the camera starts.
+        listLivekitDevices('videoinput', false),
       ])
       if (cancelled) return
       setAudioInputs(nextAudioInputs)
@@ -378,11 +362,15 @@ export function ActiveCallCard({
     }
 
     void loadDevices()
+    const reload = () => void loadDevices()
+    navigator.mediaDevices?.addEventListener?.('devicechange', reload)
     return () => {
       cancelled = true
+      navigator.mediaDevices?.removeEventListener?.('devicechange', reload)
     }
   }, [
     activeRoom,
+    sharingCamera,
     setAudioInputId,
     setAudioOutputId,
     setVideoInputId,
@@ -399,17 +387,6 @@ export function ActiveCallCard({
   }, [mode])
 
   const setCurrentError = (message: string | null) => {
-    if (message && isUserAgentPermissionContextError(message)) {
-      toast.error('Permission denied. Please allow media access and try again.')
-      setLocalError(null)
-      if (mode === 'server') {
-        setVoiceError(null)
-      } else {
-        setDmError(null)
-      }
-      return
-    }
-
     setLocalError(message)
     if (mode === 'server') {
       setVoiceError(message)
@@ -512,7 +489,9 @@ export function ActiveCallCard({
       // `switchRoomDevice` no longer surfaces LiveKit's user-agent refusal as a
       // failure, so anything arriving here is a device that genuinely would not
       // take the audio, and its message already reads as a sentence.
-      const message = error instanceof Error ? error.message : 'Could not switch media device.'
+      const message = kind === 'audiooutput'
+        ? error instanceof Error ? error.message : 'Could not switch media device.'
+        : getCaptureErrorMessage(kind === 'videoinput' ? 'camera' : 'microphone', error)
       setSelectedDeviceId(kind, previousDeviceId)
       setCurrentError(message)
     }
@@ -561,172 +540,47 @@ export function ActiveCallCard({
   const cameraLabel = shortLabel(selectedDeviceLabel(videoInputId, videoInputs, 'Camera'))
   const outputLabel = shortLabel(selectedDeviceLabel(audioOutputId, audioOutputs, 'Output'))
   const canSwitchAudioOutput = audioOutputSwitchSupported
-  const compact = variant === 'sidebar'
 
   if (mode === null || !selfIdentity) {
     return null
   }
 
-  if (compact) {
-    return (
-      <Card
-        className={cn(
-          'border-border/60 bg-card/95 transition-all duration-300',
-          entered ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0',
-          className,
-        )}
-      >
-        <CardContent className="space-y-1.5 px-2.5">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold leading-5">{callTitle}</p>
-              <p className="text-[11px] text-muted-foreground">
-                {participants.length} participant{participants.length === 1 ? '' : 's'}
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {connected ? (
-                <CallLatencyBadge room={activeRoom} compact />
-              ) : (
-                <Badge variant={connecting ? 'outline' : 'secondary'} className="px-2 py-0.5 text-[11px]">
-                  {statusLabel}
-                </Badge>
-              )}
-              <NoiseFilterToggle compact />
-              <CallVolumeMixer compact className="size-8 rounded-md" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1.5">
-            <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={muted ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" aria-label={muted ? 'Unmute microphone' : 'Mute microphone'} aria-pressed={muted} onClick={onToggleMute}>
-                {muted ? <MicOffIcon className="size-4" /> : <MicIcon className="size-4" />}
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex h-8 min-w-0 flex-1 items-center justify-between border-l border-border/70 px-1.5 text-[11px] text-muted-foreground hover:bg-muted/60">
-                  <span className="truncate">{micLabel}</span>
-                  <ChevronDownIcon className="size-3.5" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>Microphone Source</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={audioInputId ?? ''}
-                      onValueChange={(value) => void applyDeviceSelection('audioinput', value)}
-                    >
-                      {audioInputs.map((device) => (
-                        <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
-                          {device.label}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={deafened ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" aria-label={deafened ? 'Unmute call audio' : 'Mute call audio'} aria-pressed={deafened} onClick={onToggleDeafen}>
-                {deafened ? <VolumeXIcon className="size-4" /> : <Volume2Icon className="size-4" />}
-              </Button>
-              <OutputDevicePicker
-                compact
-                canSwitch={canSwitchAudioOutput}
-                label={outputLabel}
-                devices={audioOutputs}
-                selectedId={audioOutputId}
-                onSelect={(value) => void applyDeviceSelection('audiooutput', value)}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1.5">
-            <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
-              <Button size="icon-xs" variant={sharingCamera ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" aria-label={sharingCamera ? 'Stop camera' : 'Start camera'} aria-pressed={sharingCamera} onClick={onToggleCamera}>
-                <VideoIcon className="size-4" />
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex h-8 min-w-0 flex-1 items-center justify-between border-l border-border/70 px-1.5 text-[11px] text-muted-foreground hover:bg-muted/60">
-                  <span className="truncate">{cameraLabel}</span>
-                  <ChevronDownIcon className="size-3.5" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>Camera Source</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={videoInputId ?? ''}
-                      onValueChange={(value) => void applyDeviceSelection('videoinput', value)}
-                    >
-                      {videoInputs.map((device) => (
-                        <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
-                          {device.label}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            <ScreenShareMenu
-              size="icon-xs"
-              className={cn('h-8 w-8', screenShareButtonClass)}
-              sharing={sharingScreen}
-              onToggle={onToggleScreenShare}
-              disabled={!connected || !hasScreenCapture}
-            />
-
-            <Button size="icon-xs" variant="destructive" className="call-leave-button h-8 w-auto gap-0 p-0" aria-label={connecting ? 'Cancel call' : 'End call'} onClick={onLeave}>
-              <span className="flex h-full w-[calc(2rem-2px)] shrink-0 items-center justify-center"><LogOutIcon className="size-4" /></span>
-              <span className="call-leave-label" aria-hidden="true"><span><span className="block pr-2">{connecting ? 'Cancel' : 'Leave'}</span></span></span>
-            </Button>
-          </div>
-
-          {localError ? <p className="text-[11px] text-destructive">{localError}</p> : null}
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
     <Card
       className={cn(
-        'border-border/60 bg-card/90 shadow-xl transition-all duration-300',
-        entered ? 'translate-y-0 opacity-100' : 'translate-y-5 opacity-0',
+        'border-border/60 bg-card/95 transition-all duration-300',
+        entered ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0',
         className,
       )}
     >
-      <CardContent className="space-y-2 p-3">
-        <div className="flex items-start justify-between gap-2">
+      <CardContent className="space-y-1.5 px-2.5">
+        <div className="flex items-start justify-between gap-1.5">
           <div className="min-w-0">
-            <p className="truncate text-base font-semibold">{callTitle}</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="truncate text-sm font-semibold leading-5">{callTitle}</p>
+            <p className="text-[11px] text-muted-foreground">
               {participants.length} participant{participants.length === 1 ? '' : 's'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {connected ? (
-              <CallLatencyBadge room={activeRoom} />
+              <CallLatencyBadge room={activeRoom} compact />
             ) : (
-              <Badge variant={connecting ? 'outline' : 'secondary'}>{statusLabel}</Badge>
+              <Badge variant={connecting ? 'outline' : 'secondary'} className="px-2 py-0.5 text-[11px]">
+                {statusLabel}
+              </Badge>
             )}
-            <NoiseFilterToggle />
-            <CallVolumeMixer compact className="size-9 rounded-md" />
+            <NoiseFilterToggle compact />
+            <CallVolumeMixer compact className="size-8 rounded-md" />
           </div>
         </div>
 
-        <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto_auto] gap-2 max-md:grid-cols-2">
-          <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-lg border border-border/70 bg-background/40">
-            <Button
-              size="icon"
-              variant={muted ? 'secondary' : 'ghost'}
-              className="h-9 w-10 rounded-none border-0"
-              onClick={onToggleMute}
-            >
-              {muted ? <MicOffIcon className="size-5" /> : <MicIcon className="size-5" />}
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1.5">
+          <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
+            <Button size="icon-xs" variant={muted ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" aria-label={muted ? 'Unmute microphone' : 'Mute microphone'} aria-pressed={muted} onClick={onToggleMute}>
+              {muted ? <MicOffIcon className="size-4" /> : <MicIcon className="size-4" />}
             </Button>
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex h-9 min-w-0 flex-1 items-center justify-between gap-1 border-l border-border/70 px-2 text-xs text-muted-foreground hover:bg-muted/60">
+              <DropdownMenuTrigger className="inline-flex h-8 min-w-0 flex-1 items-center justify-between border-l border-border/70 px-1.5 text-[11px] text-muted-foreground hover:bg-muted/60">
                 <span className="truncate">{micLabel}</span>
                 <ChevronDownIcon className="size-3.5" />
               </DropdownMenuTrigger>
@@ -748,17 +602,11 @@ export function ActiveCallCard({
             </DropdownMenu>
           </div>
 
-          <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-lg border border-border/70 bg-background/40">
-            <Button
-              size="icon"
-              variant={deafened ? 'secondary' : 'ghost'}
-              className="h-9 w-10 rounded-none border-0"
-              onClick={onToggleDeafen}
-            >
-              {deafened ? <VolumeXIcon className="size-5" /> : <Volume2Icon className="size-5" />}
+          <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40">
+            <Button size="icon-xs" variant={deafened ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" aria-label={deafened ? 'Unmute call audio' : 'Mute call audio'} aria-pressed={deafened} onClick={onToggleDeafen}>
+              {deafened ? <VolumeXIcon className="size-4" /> : <Volume2Icon className="size-4" />}
             </Button>
             <OutputDevicePicker
-              compact={false}
               canSwitch={canSwitchAudioOutput}
               label={outputLabel}
               devices={audioOutputs}
@@ -766,24 +614,26 @@ export function ActiveCallCard({
               onSelect={(value) => void applyDeviceSelection('audiooutput', value)}
             />
           </div>
+        </div>
 
-          <div className="inline-flex min-w-0 items-stretch overflow-hidden rounded-lg border border-border/70 bg-background/40">
-            <Button
-              size="icon"
-              variant={sharingCamera ? 'secondary' : 'ghost'}
-              className="h-9 w-10 rounded-none border-0"
-              onClick={onToggleCamera}
-            >
-              <VideoIcon className="size-5" />
-            </Button>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1.5">
+          <div className={cn('inline-flex min-w-0 items-stretch overflow-hidden rounded-md border border-border/70 bg-background/40', cameraUnavailable && !sharingCamera && 'border-dashed border-border bg-transparent')}>
+            {cameraUnavailable && !sharingCamera
+              ? <UnavailableButton size="icon-xs" variant="ghost" className="h-8 w-8 rounded-none border-0" aria-label="Camera unavailable" reason={cameraUnavailable}>
+                <VideoOffIcon className="size-4" />
+              </UnavailableButton>
+              : <Button size="icon-xs" variant={sharingCamera ? 'secondary' : 'ghost'} className="h-8 w-8 rounded-none border-0" aria-label={sharingCamera ? 'Stop camera' : 'Start camera'} aria-pressed={sharingCamera} onClick={onToggleCamera}>
+                <VideoIcon className="size-4" />
+              </Button>}
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex h-9 min-w-0 flex-1 items-center justify-between gap-1 border-l border-border/70 px-2 text-xs text-muted-foreground hover:bg-muted/60">
-                <span className="truncate">{cameraLabel}</span>
+              <DropdownMenuTrigger className="inline-flex h-8 min-w-0 flex-1 items-center justify-between border-l border-border/70 px-1.5 text-[11px] text-muted-foreground hover:bg-muted/60">
+                <span className="truncate">{cameraUnavailable && !sharingCamera ? 'No camera' : cameraLabel}</span>
                 <ChevronDownIcon className="size-3.5" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
                 <DropdownMenuGroup>
                   <DropdownMenuLabel>Camera Source</DropdownMenuLabel>
+                  {videoInputs.length === 0 ? <DropdownMenuItem disabled>{cameraUnavailable ?? 'Turn on your camera once to choose one.'}</DropdownMenuItem> : null}
                   <DropdownMenuRadioGroup
                     value={videoInputId ?? ''}
                     onValueChange={(value) => void applyDeviceSelection('videoinput', value)}
@@ -800,19 +650,20 @@ export function ActiveCallCard({
           </div>
 
           <ScreenShareMenu
-            size="icon-sm"
-            className={screenShareButtonClass}
+            compact
+            className={cn('h-8 gap-1 rounded-md px-2 text-xs', screenShareButtonClass)}
             sharing={sharingScreen}
             onToggle={onToggleScreenShare}
-            disabled={!connected || !hasScreenCapture}
+            disabled={!connected}
           />
-          <Button size="icon-sm" variant="destructive" className="call-leave-button w-auto gap-0 p-0" aria-label={connecting ? 'Cancel call' : 'End call'} onClick={onLeave}>
-            <span className="flex h-full w-[calc(1.75rem-2px)] shrink-0 items-center justify-center"><LogOutIcon className="size-5" /></span>
+
+          <Button size="icon-xs" variant="destructive" className="call-leave-button h-8 w-auto gap-0 p-0" aria-label={connecting ? 'Cancel call' : 'End call'} onClick={onLeave}>
+            <span className="flex h-full w-[calc(2rem-2px)] shrink-0 items-center justify-center"><LogOutIcon className="size-4" /></span>
             <span className="call-leave-label" aria-hidden="true"><span><span className="block pr-2">{connecting ? 'Cancel' : 'Leave'}</span></span></span>
           </Button>
         </div>
 
-        {localError ? <p className="text-xs text-destructive">{localError}</p> : null}
+        <CallError message={localError} className="text-[11px]" />
       </CardContent>
     </Card>
   )

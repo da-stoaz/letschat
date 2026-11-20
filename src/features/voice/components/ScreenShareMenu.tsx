@@ -1,19 +1,22 @@
 import { useId, useState, type ComponentProps } from 'react'
-import { CheckIcon, LoaderCircleIcon, MonitorUpIcon, Volume2Icon } from 'lucide-react'
+import { CheckIcon, LoaderCircleIcon, MonitorOffIcon, MonitorUpIcon, Volume2Icon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
+import { UnavailableButton } from '@/components/UnavailableButton'
 import { cn } from '@/lib/utils'
+import { supportsScreenCapture } from '../../../lib/livekit'
 import { screenShareProfiles } from '../../../lib/screenShare'
 import { useMediaDeviceStore } from '../../../stores/mediaDeviceStore'
 
 type ScreenShareMenuProps = Pick<ComponentProps<typeof Button>, 'size' | 'className' | 'disabled'> & {
   sharing: boolean
-  showLabel?: boolean
+  /** Short text for tight rows. */
+  compact?: boolean
   onToggle: () => Promise<void>
 }
 
-export function ScreenShareMenu({ sharing, onToggle, disabled, size = 'icon-sm', className, showLabel = false }: ScreenShareMenuProps) {
+export function ScreenShareMenu({ sharing, onToggle, disabled, size, className, compact = false }: ScreenShareMenuProps) {
   const [open, setOpen] = useState(false)
   const [choosing, setChoosing] = useState(false)
   const id = useId()
@@ -23,8 +26,12 @@ export function ScreenShareMenu({ sharing, onToggle, disabled, size = 'icon-sm',
   const setAudio = useMediaDeviceStore(s => s.setScreenShareAudio)
   const selectedQuality = Object.hasOwn(screenShareProfiles, quality) ? quality : 'auto'
   const label = sharing ? 'Stop sharing screen' : 'Share screen'
+  const text = compact ? (sharing ? 'Stop' : 'Share') : (sharing ? 'Stop sharing' : 'Share screen')
+  if (!supportsScreenCapture()) {
+    return <UnavailableButton variant="outline" size={size} className={className} reason="Screen sharing isn’t supported in this browser or app."><MonitorOffIcon />{text}</UnavailableButton>
+  }
   const button = <Button variant="outline" size={size} className={className} disabled={disabled || choosing} aria-label={label} aria-pressed={sharing || undefined} onClick={sharing ? () => void onToggle() : undefined}>
-    <MonitorUpIcon />{showLabel ? label : null}
+    <MonitorUpIcon />{text}
   </Button>
 
   async function chooseSource() {

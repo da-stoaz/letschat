@@ -67,14 +67,6 @@ const NOTIFICATION_TOGGLE_ROWS: NotificationToggleRow[] = [
 
 const PRIORITY_NOTIFICATION_KEYS: NotificationToggleRow['key'][] = ['mentions', 'directMessages', 'incomingCalls']
 
-function normalizeTimeInput(value: string): string {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim())
-  if (!match) return value
-  const hours = Math.min(23, Math.max(0, Number(match[1])))
-  const minutes = Math.min(59, Math.max(0, Number(match[2])))
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
-}
-
 export function NotificationsTab() {
   const notificationSettings = useUiStore((s) => s.notificationSettings)
   const setNotificationsEnabled = useUiStore((s) => s.setNotificationsEnabled)
@@ -83,8 +75,6 @@ export function NotificationsTab() {
   const setNotificationQuietHoursEnabled = useUiStore((s) => s.setNotificationQuietHoursEnabled)
   const setNotificationQuietHoursRange = useUiStore((s) => s.setNotificationQuietHoursRange)
 
-  const [quietHoursStart, setQuietHoursStart] = useState(notificationSettings.quietHoursStart)
-  const [quietHoursEnd, setQuietHoursEnd] = useState(notificationSettings.quietHoursEnd)
   const [permissionState, setPermissionState] = useState<'granted' | 'denied' | 'default' | 'unsupported'>('default')
   const [isRequestingPermission, setIsRequestingPermission] = useState(false)
   const [isSendingTest, setIsSendingTest] = useState(false)
@@ -190,14 +180,16 @@ export function NotificationsTab() {
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label htmlFor="quiet-hours-start">Start</Label>
+                    {/* Uncontrolled and saved on every complete value: a half-typed
+                        time reads as "", and saving only on blur lost edits when the
+                        panel closed with the field still focused. */}
                     <Input
                       id="quiet-hours-start"
                       type="time"
-                      value={quietHoursStart}
-                      onChange={(event) => setQuietHoursStart(event.target.value)}
-                      onBlur={() =>
-                        setNotificationQuietHoursRange(normalizeTimeInput(quietHoursStart), normalizeTimeInput(quietHoursEnd))
-                      }
+                      defaultValue={notificationSettings.quietHoursStart}
+                      onChange={(event) => {
+                        if (event.target.value) setNotificationQuietHoursRange(event.target.value, notificationSettings.quietHoursEnd)
+                      }}
                     />
                   </div>
                   <div className="space-y-1">
@@ -205,11 +197,10 @@ export function NotificationsTab() {
                     <Input
                       id="quiet-hours-end"
                       type="time"
-                      value={quietHoursEnd}
-                      onChange={(event) => setQuietHoursEnd(event.target.value)}
-                      onBlur={() =>
-                        setNotificationQuietHoursRange(normalizeTimeInput(quietHoursStart), normalizeTimeInput(quietHoursEnd))
-                      }
+                      defaultValue={notificationSettings.quietHoursEnd}
+                      onChange={(event) => {
+                        if (event.target.value) setNotificationQuietHoursRange(notificationSettings.quietHoursStart, event.target.value)
+                      }}
                     />
                   </div>
                 </div>
@@ -227,46 +218,33 @@ export function NotificationsTab() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-card/70 p-3">
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Permission state</p>
-              <p className="text-xs text-muted-foreground">Current runtime notification permission: {permissionState}</p>
-              {isTauri ? (
-                <p className="text-xs text-muted-foreground">
-                  Desktop permission is managed by macOS/Windows system settings for LetsChat.
-                </p>
-              ) : null}
-            </div>
+            {/* The desktop runtime cannot read the OS permission (the plugin
+                reports "granted" unconditionally), so it is not shown there. */}
+            <p className="text-xs text-muted-foreground">
+              {isTauri ? 'Alerts only appear if LetsChat is allowed in your system notification settings.'
+              : permissionState === 'denied' ? 'Blocked by your browser. Allow notifications for this site in its site settings.'
+              : permissionState === 'unsupported' ? 'This browser does not support notifications.'
+              : `Browser permission: ${permissionState}`}
+            </p>
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isRequestingPermission}
-                onClick={async () => {
-                  setIsRequestingPermission(true)
-                  try {
-                    if (isTauri) {
-                      const permission = await getNotificationPermission()
-                      setPermissionState(permission)
-                      toast.message('Notification permission is managed by your OS settings for LetsChat.')
-                      return
+              {!isTauri && permissionState === 'default' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isRequestingPermission}
+                  onClick={async () => {
+                    setIsRequestingPermission(true)
+                    try {
+                      setPermissionState(await ensureNotificationPermission({ prompt: true }))
+                    } finally {
+                      setIsRequestingPermission(false)
                     }
-                    const permission = await ensureNotificationPermission({ prompt: true })
-                    setPermissionState(permission)
-                    if (permission === 'granted') {
-                      toast.success('Notification permission granted')
-                    } else if (permission === 'denied') {
-                      toast.error('Notification permission denied')
-                    } else if (permission === 'unsupported') {
-                      toast.error('Notifications are not supported in this runtime')
-                    }
-                  } finally {
-                    setIsRequestingPermission(false)
-                  }
-                }}
-              >
-                {isRequestingPermission ? 'Requesting…' : 'Request Permission'}
-              </Button>
+                  }}
+                >
+                  {isRequestingPermission ? 'Requesting…' : 'Request Permission'}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 size="sm"
@@ -280,7 +258,7 @@ export function NotificationsTab() {
                     if (shown) {
                       toast.success('Test notification sent')
                     } else {
-                      toast.error('Could not send test notification. Check permission/settings.')
+                      toast.error('Could not show a test notification.')
                     }
                   } finally {
                     setIsSendingTest(false)

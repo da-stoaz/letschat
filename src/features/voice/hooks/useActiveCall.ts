@@ -14,6 +14,7 @@ import { useMediaDeviceStore } from '../../../stores/mediaDeviceStore'
 import { buildVoiceMediaTiles } from '../mediaTiles'
 import { encodeDmSystemMessage, getCallDurationSeconds } from '../../dm/systemMessages'
 import { useVoiceControlActions } from './useVoiceControlActions'
+import { useCameraUnavailableReason } from './useCameraUnavailableReason'
 import { useOngoingCallDuration } from './useOngoingCallDuration'
 import { callConnection } from '../callConnection'
 import type { Channel, Identity, VoiceParticipant, DmVoiceParticipant } from '../../../types/domain'
@@ -60,6 +61,7 @@ export function useActiveCall() {
   const { localParticipant, remoteParticipants, activeSpeakerIds, connectionState } = useLiveKitRoom(room)
   const { connected: joined, connecting, status } = callConnection(connectionState, session.joining)
   const hasScreenCapture = supportsScreenCapture()
+  const cameraUnavailable = useCameraUnavailableReason()
   const muted = self?.muted ?? !room?.localParticipant.isMicrophoneEnabled
   const deafened = self?.deafened ?? false
   const sharingCamera = self?.sharingCamera ?? false
@@ -118,7 +120,7 @@ export function useActiveCall() {
   const duration = useOngoingCallDuration(self?.joinedAt ?? null, joined)
   return {
     active, channelId, partnerIdentity, room, joined, connecting, muted, deafened, sharingCamera, sharingScreen,
-    hasScreenCapture, tiles, participants, duration, setError, error: session.error ?? (!active ? dm.error : null),
+    cameraUnavailable, tiles, participants, duration, setError, error: session.error ?? (!active ? dm.error : null),
     ...callDetails(channel, partnerIdentity, names.displayNameByIdentity.get(key(partnerIdentity ?? ''))),
     status: joined && isDm && !dm.answered ? 'Calling…' : status,
     ...actions,
