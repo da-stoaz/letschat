@@ -69,7 +69,7 @@ const build = await Bun.build({ entrypoints: [join(import.meta.dir, 'browser.ts'
       if (args.importer.endsWith('/src/lib/livekit.ts')) return { path: args.path, namespace: 'rtc-test' }
     })
     builder.onLoad({ filter: /.*/, namespace: 'rtc-test' }, args => ({ loader: 'js', contents: args.path === './tauri'
-      ? `export const tauriCommands={getLivekitUrl:async()=>window.rtcSignalUrl,generateLivekitToken:async(room,identity)=>(await(await fetch('/token',{method:'POST',body:JSON.stringify({room,identity})})).json()).token}`
+      ? `export const isDesktopTauriRuntime=()=>false;export const tauriCommands={getLivekitUrl:async()=>window.rtcSignalUrl,generateLivekitToken:async(room,identity)=>(await(await fetch('/token',{method:'POST',body:JSON.stringify({room,identity})})).json()).token}`
       : 'export const reducers=new Proxy({}, {get:()=>async()=>{}})' }))
   },
 }] })
