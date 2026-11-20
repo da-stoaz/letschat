@@ -1234,6 +1234,15 @@ live ist; `syncAll` in `onApplied` macht den einen vollständigen Durchlauf. Das
 Budget wurde zusätzlich von 5 s auf 45 s angehoben und dokumentiert, was es
 tatsächlich abdeckt.
 
+**Nachtrag (2026-11-20):** Der `isLive()`-Guard griff beim initialen Anwenden
+nie. Das SDK (2.10) feuert `onApplied` **vor** den `onInsert`-Callbacks des
+Snapshots, `isLive()` war dort also schon `true`. Folgen: ein überflüssiger
+Rebuild nach jedem Connect, und jede Nachricht im Snapshot-Fenster wurde erneut
+als OS-Benachrichtigung ausgelöst (neues Gerät, Neustart, Reconnect). Behoben in
+`events.ts`: Die Handler prüfen den Event-Tag (`SubscribeApplied` = Snapshot,
+keine Änderung). Benachrichtigt wird nur bei `Transaction`, also bei Zeilen aus
+der Transaktion eines anderen Nutzers.
+
 ---
 
 <a id="c3"></a>
