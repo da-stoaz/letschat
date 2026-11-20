@@ -77,7 +77,7 @@ vi.mock('livekit-client', () => {
 const {
   joinLiveKitVoice, joinLiveKitDmVoice, leaveLiveKitVoice, leaveLiveKitDmVoice,
   resetCallSessions, retryCallCleanup,
-  setLocalCameraEnabled, isCallCancelled, getCaptureErrorMessage, privacySettingsDevice,
+  setLocalCameraEnabled, isCallCancelled, getCaptureErrorMessage, getScreenShareErrorMessage, privacySettingsDevice,
   prepareCallReload, restoreCallAfterReload,
 } = await import('./livekit')
 
@@ -449,5 +449,15 @@ describe('blocked camera or microphone', () => {
     expect(privacySettingsDevice(getCaptureErrorMessage('camera', denied))).toBeNull()
     mocks.desktop = true
     expect(privacySettingsDevice(getCaptureErrorMessage('camera', denied))).toBe('camera')
+  })
+})
+
+describe('screen share failures', () => {
+  it('stays quiet when the picker is closed and names a system block', () => {
+    // Chromium (and WebView2) report a closed picker as "Permission denied".
+    expect(getScreenShareErrorMessage(new DOMException('Permission denied', 'NotAllowedError'))).toBeNull()
+    expect(getScreenShareErrorMessage(new DOMException('The request is not allowed by the user agent or the platform in the current context.', 'NotAllowedError'))).toBeNull()
+    expect(getScreenShareErrorMessage(new DOMException('Permission denied by system', 'NotAllowedError'))).toMatch(/^Your system is blocking screen recording/)
+    expect(getScreenShareErrorMessage(new DOMException('Could not start video source', 'NotReadableError'))).toBe('Could not start video source')
   })
 })

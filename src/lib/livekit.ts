@@ -201,6 +201,20 @@ export function getCaptureErrorMessage(device: CaptureDevice, error: unknown): s
   return message || `Couldn't start your ${device}.`
 }
 
+/**
+ * A sentence for a screen share that would not start, or null when the person
+ * closed the picker: browsers report that as "Permission denied", but it was a choice.
+ */
+export function getScreenShareErrorMessage(error: unknown): string | null {
+  if (isPermissionDeniedError(error)) {
+    return /system/i.test(errorMessage(error))
+      ? 'Your system is blocking screen recording. Allow LetsChat in your privacy settings, then try again.'
+      : null
+  }
+  console.warn('[livekit] screen share failed', error)
+  return errorMessage(error) || 'Couldn’t start screen sharing.'
+}
+
 function normalizeLiveKitUrl(raw: string): string {
   const trimmed = raw.trim()
   if (!trimmed) return 'ws://127.0.0.1:7880'

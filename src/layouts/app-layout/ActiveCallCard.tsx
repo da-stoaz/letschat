@@ -15,6 +15,7 @@ import {
   dmVoiceRoomKey,
   isCallCancelled,
   leaveLiveKitDmVoice,
+  getCaptureErrorMessage,
   leaveLiveKitVoice,
   listLivekitDevices,
   setLocalCameraEnabled,
@@ -48,7 +49,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { UnavailableButton } from '@/components/UnavailableButton'
 import { useCameraUnavailableReason } from '../../features/voice/hooks/useCameraUnavailableReason'
-import { toast } from 'sonner'
 import { cn } from '../../lib/utils'
 import {
   DropdownMenu,
@@ -187,15 +187,6 @@ function OutputDevicePicker({
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
-  )
-}
-
-function isUserAgentPermissionContextError(message: string): boolean {
-  const normalized = message.toLowerCase()
-  return (
-    normalized.includes('request is not allowed by the user agent')
-    || normalized.includes('user denied permission')
-    || normalized.includes('the user denied permission')
   )
 }
 
@@ -396,17 +387,6 @@ export function ActiveCallCard({ className }: { className?: string }) {
   }, [mode])
 
   const setCurrentError = (message: string | null) => {
-    if (message && isUserAgentPermissionContextError(message)) {
-      toast.error('Permission denied. Please allow media access and try again.')
-      setLocalError(null)
-      if (mode === 'server') {
-        setVoiceError(null)
-      } else {
-        setDmError(null)
-      }
-      return
-    }
-
     setLocalError(message)
     if (mode === 'server') {
       setVoiceError(message)
@@ -509,7 +489,9 @@ export function ActiveCallCard({ className }: { className?: string }) {
       // `switchRoomDevice` no longer surfaces LiveKit's user-agent refusal as a
       // failure, so anything arriving here is a device that genuinely would not
       // take the audio, and its message already reads as a sentence.
-      const message = error instanceof Error ? error.message : 'Could not switch media device.'
+      const message = kind === 'audiooutput'
+        ? error instanceof Error ? error.message : 'Could not switch media device.'
+        : getCaptureErrorMessage(kind === 'videoinput' ? 'camera' : 'microphone', error)
       setSelectedDeviceId(kind, previousDeviceId)
       setCurrentError(message)
     }

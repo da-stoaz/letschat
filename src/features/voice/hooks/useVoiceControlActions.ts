@@ -6,6 +6,7 @@ import {
   assertActiveCallRoom,
   isCallCancelled,
   getCaptureErrorMessage,
+  getScreenShareErrorMessage,
   getMicrophoneUnavailableReason,
   requestMicrophonePermission,
   setLocalCameraEnabled,
@@ -125,8 +126,7 @@ export function useVoiceControlActions({
     } catch (error) {
       if (isCallCancelled(error)) return
       try { assertActiveCallRoom(room) } catch { return }
-      const message = error instanceof Error ? error.message : 'Could not toggle screen share.'
-      setError(message)
+      setError(getScreenShareErrorMessage(error))
     }
   }, [hasScreenCapture, patchVoiceState, room, selfState, setError])
 
