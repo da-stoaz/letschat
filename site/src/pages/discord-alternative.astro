@@ -1,0 +1,135 @@
+---
+import PageLayout from "@/layouts/PageLayout.astro";
+
+const carriesOver = [
+  ["Servers", "Spaces. Same idea, different name: a space has its own channels, members and invite links."],
+  ["Text channels and categories", "Text channels, grouped into sections you can reorder."],
+  ["Announcement channels and read-only channels", "Announcement channels. Any channel can also be switched so only moderators can post."],
+  ["Voice channels", "Voice channels. Click to join, then turn on your camera or share your screen."],
+  ["Screen sharing", "Up to 1080p at 60 fps."],
+  ["DMs and calls", "Direct messages, with voice and video calls."],
+  ["Friends and blocking", "Friend requests by username, and blocking."],
+  ["Moderation", "Owner, moderator and member roles. Moderators can kick, ban and time people out."],
+  ["Server Discovery", "Discover. A space can choose to be listed with a description and tags. Invite-only spaces take join requests."],
+  ["The everyday stuff", "Markdown, mentions, edits, pins, typing indicators, unread badges and desktop notifications."],
+  ["Noise suppression", "RNNoise or DeepFilterNet 3, running on your own device."],
+  ["Using it in a browser", "Your server can host a web version, so people can join without installing anything."],
+];
+
+const missing = [
+  ["No mobile app.", "LetsChat runs on macOS, Windows and Linux, and in the browser if you host the web client."],
+  ["No bots, webhooks or public API.", "Nothing can post into a channel except people."],
+  ["No reactions, threads, custom emoji or stickers.", ""],
+  ["Roles are fixed.", "There are three levels: owner, moderator and member. Custom roles per space are planned."],
+  ["Search only covers the messages loaded in the channel you have open.", "Searching full history is planned."],
+  ["No group DMs yet.", "They're up next on the roadmap."],
+  ["No end-to-end encryption yet.", "Whoever runs the server can read what's stored on it, just like Discord can today. The difference is that it's your server. Encryption is planned, starting with DMs."],
+];
+---
+
+<PageLayout
+  title="A Self-Hosted Discord Alternative | LetsChat"
+  description="LetsChat has spaces, voice channels, DMs and screen sharing like Discord, but runs on your own server. See what carries over, what's missing and how to start."
+  heading="A Discord alternative you host yourself"
+>
+  <Fragment slot="lead">
+    <p>
+      LetsChat is for the same kind of group as Discord: friends, clubs, a small team. It just runs on a server
+      you control, and the code is open under GPLv3.
+    </p>
+    <p>If you've used Discord, you'll find your way around in a few minutes.</p>
+  </Fragment>
+
+  <section class="space-y-5" aria-labelledby="carries-over">
+    <div>
+      <h2 id="carries-over" class="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">What carries over</h2>
+      <p class="text-muted-foreground max-w-3xl">Most of what your group does on Discord every day works the same way.</p>
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th scope="col">On Discord</th><th scope="col">In LetsChat</th></tr>
+        </thead>
+        <tbody>
+          {carriesOver.map(([discord, letschat]) => <tr><td>{discord}</td><td>{letschat}</td></tr>)}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="space-y-5" aria-labelledby="missing">
+    <div>
+      <h2 id="missing" class="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">What's missing</h2>
+      <p class="text-muted-foreground max-w-3xl">
+        Better you hear it here than after you've moved everyone over. The{" "}
+        <a href="/roadmap/" class="underline underline-offset-2 hover:text-foreground">roadmap</a> says what's being
+        worked on.
+      </p>
+    </div>
+    <ul class="guide-prose list-disc pl-5 space-y-2 max-w-3xl">
+      {missing.map(([gap, detail]) => <li><strong>{gap}</strong> {detail}</li>)}
+    </ul>
+  </section>
+
+  <section class="space-y-5" aria-labelledby="running">
+    <h2 id="running" class="text-2xl sm:text-3xl font-semibold tracking-tight">What it takes to run</h2>
+    <div class="guide-prose space-y-4 max-w-3xl">
+      <p>
+        Someone in your group needs to run the server. That means a machine with Docker, a domain you can add DNS
+        records to, and two ports forwarded for voice (44382/udp and 44381/tcp).
+      </p>
+      <p>
+        Everything comes as one Docker Compose stack. You can put it behind a{" "}
+        <a href="/self-hosting/cloudflare-tunnel/" class="underline underline-offset-2 hover:text-foreground">Cloudflare Tunnel</a>,
+        so no web ports are open on your network, or behind{" "}
+        <a href="/self-hosting/caddy/" class="underline underline-offset-2 hover:text-foreground">Caddy</a> if your
+        server has a public IP. Upgrades are still manual for now: pull the new images and restart.
+      </p>
+      <p>
+        Everyone else downloads the app, types in your server's address and signs up. In the admin panel you decide
+        whether new accounts need to confirm their email, and whether you approve each one before it can sign in.
+      </p>
+    </div>
+  </section>
+
+  <section class="space-y-5" aria-labelledby="moving">
+    <h2 id="moving" class="text-2xl sm:text-3xl font-semibold tracking-tight">Moving your group over</h2>
+    <div class="guide-prose space-y-4 max-w-3xl">
+      <p>
+        There's no way to import your Discord history, so plan on starting fresh. Create a space, set up only
+        the channels people actually use, and post the invite link in your old server. Invite links open the
+        desktop app straight at the invite, and show a preview card when you paste them into other messengers.
+      </p>
+      <p>
+        You'll probably want to keep the Discord server around for a few weeks while people switch.
+      </p>
+    </div>
+  </section>
+
+  <section class="space-y-5" aria-labelledby="fit">
+    <h2 id="fit" class="text-2xl sm:text-3xl font-semibold tracking-tight">Is it a good fit?</h2>
+    <div class="grid md:grid-cols-2 gap-4">
+      <article class="card p-6 space-y-3">
+        <h3 class="text-xl font-semibold tracking-tight">LetsChat suits you if</h3>
+        <ul class="guide-prose list-disc pl-5 space-y-2">
+          <li>you want your group's messages and files on hardware you control</li>
+          <li>you can run a server, or someone in your group can</li>
+          <li>your group mostly talks from a computer</li>
+        </ul>
+      </article>
+      <article class="card p-6 space-y-3">
+        <h3 class="text-xl font-semibold tracking-tight">Stay on Discord if</h3>
+        <ul class="guide-prose list-disc pl-5 space-y-2">
+          <li>most of your group is on their phone</li>
+          <li>you rely on bots</li>
+          <li>you run a big public community that people find through Discord itself</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <section class="flex flex-col sm:flex-row gap-3">
+    <a href="/self-hosting/" class="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-accent-blue text-white font-semibold text-sm hover:opacity-90 transition-opacity">Set up a server</a>
+    <a href="/download/" class="inline-flex items-center justify-center px-6 py-3 rounded-xl border border-border text-sm text-muted-foreground hover:text-foreground hover:border-border-hover transition-colors">Download the app</a>
+  </section>
+</PageLayout>

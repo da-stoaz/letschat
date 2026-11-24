@@ -14,7 +14,23 @@ import {
 const latestVersion: string = (await githubApi("/releases/latest"))?.tag_name?.replace(/^v/, "") ?? "";
 ---
 
-<Layout title="LetsChat | Self-Hosted Team Chat and Voice" description="LetsChat is a self-hosted desktop app for team messaging, voice, video, notifications, and controlled operations." active="home">
+<Layout
+  title="LetsChat — Self-Hosted Discord Alternative for Chat & Voice"
+  description="Open-source, self-hosted team chat with voice, video and screen sharing. A Discord alternative that runs on your own server. Free for macOS, Windows and Linux."
+  active="home"
+  schema={{
+    "@type": "SoftwareApplication",
+    name: "LetsChat",
+    description: "Self-hosted team chat with voice, video and screen sharing.",
+    applicationCategory: "CommunicationApplication",
+    operatingSystem: "macOS, Windows, Linux",
+    license: "https://www.gnu.org/licenses/gpl-3.0.html",
+    url: Astro.site?.href,
+    downloadUrl: new URL("/download/", Astro.site).href,
+    image: new URL("/letschat-logo.png", Astro.site).href,
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  }}
+>
 
   <main>
     <section id="product" class="relative overflow-hidden">
@@ -168,6 +184,9 @@ const latestVersion: string = (await githubApi("/releases/latest"))?.tag_name?.r
 
       <p class="text-xs text-muted-foreground mt-4">
         Comparison context date: May 18, 2026.
+      </p>
+      <p class="text-sm mt-3">
+        <a href="/discord-alternative/" class="underline underline-offset-4 decoration-border hover:text-foreground">What carries over from Discord, and what's missing →</a>
       </p>
     </section>
 

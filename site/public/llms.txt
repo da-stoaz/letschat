@@ -1,0 +1,22 @@
+# LetsChat
+
+> LetsChat is a free, open-source (GNU GPLv3), self-hosted team chat app with text channels, direct messages, voice and video calls and screen sharing. It is a self-hosted alternative to Discord: the desktop app runs on macOS, Windows and Linux, and the server runs on your own infrastructure with Docker Compose.
+
+## Product
+
+- [Home](https://letschat.stoaz.net/): features and a comparison with Discord
+- [Download](https://letschat.stoaz.net/download/): desktop installers for macOS, Windows and Linux
+- [Roadmap](https://letschat.stoaz.net/roadmap/): shipped and planned features
+
+## Self-hosting
+
+- [Self-hosting guide](https://letschat.stoaz.net/self-hosting/): requirements and choosing a setup
+- [Cloudflare Tunnel setup](https://letschat.stoaz.net/self-hosting/cloudflare-tunnel/): no open inbound ports except voice
+- [Caddy setup](https://letschat.stoaz.net/self-hosting/caddy/): reverse proxy with automatic HTTPS
+- [Architecture](https://letschat.stoaz.net/architecture/): services in the stack and where data lives
+- [Breaking changes](https://letschat.stoaz.net/breaking-changes/): upgrade notes per release
+
+## Optional
+
+- [Source code](https://github.com/da-stoaz/letschat)
+- [Releases](https://github.com/da-stoaz/letschat/releases)

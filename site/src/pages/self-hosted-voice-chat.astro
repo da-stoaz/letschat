@@ -1,0 +1,106 @@
+---
+import PageLayout from "@/layouts/PageLayout.astro";
+
+const features = [
+  ["Voice channels", "Hop in and out whenever you like. Everyone in the space can see who's in a channel before joining."],
+  ["Calls in DMs", "Ring a friend directly, with voice or video."],
+  ["Camera and screen sharing", "Share your screen at up to 1080p and 60 fps. People on a slow connection automatically get a lower-quality version instead of a frozen picture."],
+  ["Noise suppression", "Pick RNNoise or DeepFilterNet 3. Both run on your own device, in the desktop app and in the browser."],
+  ["Volume control", "Mute, deafen, a master volume, and a separate volume for each person. Right-click someone in the call to change theirs."],
+];
+---
+
+<PageLayout
+  title="Self-Hosted Voice and Video Chat Server | LetsChat"
+  description="Run your own voice chat server with LetsChat: voice channels, video calls, 1080p screen sharing and noise suppression, powered by LiveKit on your own hardware."
+  heading="Voice and video chat on your own server"
+>
+  <Fragment slot="lead">
+    <p>
+      LetsChat has voice channels you can drop into, calls in DMs, and screen sharing. Calls run through LiveKit on
+      your own server, and nothing is recorded.
+    </p>
+  </Fragment>
+
+  <section class="space-y-5" aria-labelledby="features">
+    <h2 id="features" class="text-2xl sm:text-3xl font-semibold tracking-tight">What you get</h2>
+    <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {features.map(([title, text]) => (
+        <article class="card p-6 space-y-2">
+          <h3 class="text-lg font-semibold tracking-tight">{title}</h3>
+          <p class="guide-prose">{text}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="space-y-5" aria-labelledby="how">
+    <h2 id="how" class="text-2xl sm:text-3xl font-semibold tracking-tight">How a call works</h2>
+    <div class="guide-prose space-y-4 max-w-3xl">
+      <p>
+        <a href="https://livekit.io" target="_blank" rel="noopener" class="underline underline-offset-2 hover:text-foreground">LiveKit</a>{" "}
+        is an open-source WebRTC media server, and it runs as part of your LetsChat stack. Each person sends their
+        audio and video to it once, and LiveKit passes it on to everyone else in the call.
+      </p>
+      <p>
+        Nobody gets into a call just by knowing its address. The chat server first has to record you as present in
+        that channel or DM, and only then will it give you a call token. If someone is kicked or leaves, they're
+        dropped from the call within a minute.
+      </p>
+      <p>
+        Calls go straight to your server, even if your website traffic goes through a Cloudflare Tunnel. No third
+        party relays or stores them. More detail is on the{" "}
+        <a href="/architecture/" class="underline underline-offset-2 hover:text-foreground">architecture page</a>.
+      </p>
+    </div>
+  </section>
+
+  <section class="space-y-5" aria-labelledby="server">
+    <h2 id="server" class="text-2xl sm:text-3xl font-semibold tracking-tight">What your server needs</h2>
+    <div class="guide-prose space-y-4 max-w-3xl">
+      <p>
+        Forward two ports to the machine: <strong>44382/udp</strong> for calls, and <strong>44381/tcp</strong> as
+        a fallback for networks that block UDP. If people can join a voice channel but nobody hears anything, these
+        ports are almost always the reason.
+      </p>
+      <p>
+        LiveKit forwards streams without re-encoding them, so it doesn't need much CPU. Upload bandwidth runs out
+        first, because every stream leaves your server once for each person receiving it. Video and screen shares
+        use far more than voice.
+      </p>
+      <p>
+        Voice comes with the rest of LetsChat in one Docker Compose stack, so there's nothing extra to install. The{" "}
+        <a href="/self-hosting/" class="underline underline-offset-2 hover:text-foreground">self-hosting guide</a>{" "}
+        covers the setup.
+      </p>
+    </div>
+  </section>
+
+  <section class="space-y-5" aria-labelledby="compare">
+    <h2 id="compare" class="text-2xl sm:text-3xl font-semibold tracking-tight">LetsChat, Mumble or TeamSpeak?</h2>
+    <div class="guide-prose space-y-4 max-w-3xl">
+      <p>
+        If all your group needs is voice, Mumble and TeamSpeak are lighter to run and very good at it. LetsChat
+        makes sense when you also want text channels, DMs, file sharing and screen sharing in the same app, the way
+        Discord does it. There's a page on{" "}
+        <a href="/discord-alternative/" class="underline underline-offset-2 hover:text-foreground">how LetsChat compares to Discord</a>.
+      </p>
+    </div>
+  </section>
+
+  <section class="space-y-5" aria-labelledby="missing">
+    <h2 id="missing" class="text-2xl sm:text-3xl font-semibold tracking-tight">Not there yet</h2>
+    <ul class="guide-prose list-disc pl-5 space-y-2 max-w-3xl">
+      <li><strong>No push-to-talk.</strong> Your mic is either open or muted.</li>
+      <li><strong>No group calls outside spaces.</strong> They arrive with group DMs, which are up next.</li>
+      <li><strong>No sounds when people join or leave.</strong> They're planned.</li>
+      <li><strong>No end-to-end encryption for calls yet.</strong> Calls are encrypted on the way to your server, and your server can decrypt them. End-to-end encryption is on the <a href="/roadmap/" class="underline underline-offset-2 hover:text-foreground">roadmap</a>.</li>
+      <li><strong>No phone app.</strong> Calls work in the desktop app and in the browser.</li>
+    </ul>
+  </section>
+
+  <section class="flex flex-col sm:flex-row gap-3">
+    <a href="/self-hosting/" class="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-accent-blue text-white font-semibold text-sm hover:opacity-90 transition-opacity">Set up a server</a>
+    <a href="/download/" class="inline-flex items-center justify-center px-6 py-3 rounded-xl border border-border text-sm text-muted-foreground hover:text-foreground hover:border-border-hover transition-colors">Download the app</a>
+  </section>
+</PageLayout>
