@@ -26,3 +26,12 @@ test('every page has a self-canonical and a unique title and description', () =>
   }
   assert.match(readFileSync(new URL('../dist/404.html', import.meta.url), 'utf8'), /<meta name="robots" content="noindex">/);
 });
+
+// llms.txt must be Markdown with an H1 and link only to pages that exist.
+test('llms.txt has an H1 and links to built pages', () => {
+  const md = readFileSync(new URL('../dist/llms.txt', import.meta.url), 'utf8');
+  assert.match(md, /^# LetsChat\n/);
+  for (const [, path] of md.matchAll(/\(https:\/\/letschat\.stoaz\.net(\/[^)]*)\)/g)) {
+    assert.ok(existsSync(new URL(`../dist${path}index.html`, import.meta.url)), path);
+  }
+});
