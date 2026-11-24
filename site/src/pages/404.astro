@@ -1,0 +1,9 @@
+---
+// Cloudflare Pages serves this with a 404 status for unknown paths, instead of
+// answering 200 with the home page (which search engines index as duplicates).
+import PageLayout from "@/layouts/PageLayout.astro";
+---
+
+<PageLayout title="Page not found | LetsChat" heading="Page not found">
+  <p slot="lead">That page doesn't exist. <a href="/" class="underline underline-offset-4">Go to the home page</a>.</p>
+</PageLayout>

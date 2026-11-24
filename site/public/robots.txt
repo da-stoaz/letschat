@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://letschat.stoaz.net/sitemap.xml

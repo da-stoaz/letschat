@@ -8,13 +8,19 @@ interface Props {
   description?: string;
   /** The nav item to mark as the current page. */
   active?: ComponentProps<typeof SiteHeader>["active"];
+  /** Structured data for this page, rendered as JSON-LD. */
+  schema?: Record<string, unknown>;
 }
 
 const {
   title,
   description = "LetsChat - Self-hosted desktop app for real-time team communication. Voice, video, and messaging under your control.",
   active,
+  schema,
 } = Astro.props;
+// Absolute URLs from `site` in astro.config.mjs; pages are served with a trailing slash.
+const canonical = new URL(Astro.url.pathname.replace(/([^/])$/, "$1/"), Astro.site);
+const image = new URL("/letschat-logo.png", Astro.site);
 ---
 
 <!doctype html>
@@ -26,8 +32,17 @@ const {
     <meta name="description" content={description} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
+    {Astro.url.pathname.startsWith("/404") ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="LetsChat" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={image} />
+    <meta property="og:image:alt" content="LetsChat logo" />
+    <meta name="twitter:card" content="summary" />
     <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="apple-touch-icon" href="/letschat-logo.png" />
+    <link rel="sitemap" href="/sitemap.xml" />
+    {schema && <script type="application/ld+json" set:html={JSON.stringify({ "@context": "https://schema.org", ...schema })} />}
   </head>
   <body>
     <div id="site-shell">
