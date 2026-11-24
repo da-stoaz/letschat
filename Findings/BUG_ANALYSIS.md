@@ -69,6 +69,7 @@ Revokations-Pushes, lesende Views und Token-Speicherung in [A4](#a4).
 | [A14](#a14) | ~~ffmpeg verarbeitet unvertrauenswürdige Dateien im core-api-Container~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [A15](#a15) | ~~Uploader bestimmt den ausgelieferten Content-Type; PDF-Vorschau-iframe ohne Sandbox~~ · **✅ behoben** | ~~S3~~ | Storage |
 | [A16](#a16) | ~~Legacy-Keys umgehen die 10-MiB-/`image/*`-Grenze für Avatare und Icons~~ · **✅ behoben** | ~~S3~~ | Storage |
+| [A17](#a17) | ~~Desktop-Befehl `open_url` reicht beliebige URLs an den OS-Opener weiter~~ · **✅ behoben** | ~~S2~~ | Desktop |
 | [B1](#b1) | ~~`transfer_ownership` auf sich selbst sperrt den Owner dauerhaft aus~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B2](#b2) | ~~Owner kann sich selbst kicken/bannen → verwaister Space~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
 | [B3](#b3) | ~~`edit_direct_message` prüft weder Block noch Freundschaft~~ · **✅ behoben (PR #82)** | ~~S2~~ | Modul |
@@ -805,6 +806,29 @@ Uploads verlangen.
 
 ---
 
+## A17 — Desktop-Befehl `open_url` reicht beliebige URLs an den OS-Opener weiter · ✅ **behoben**
+
+**Behoben auf Branch `fix/call-media-permissions`.** `open_url` öffnet nur noch
+`http`/`https`-Links mit Host und ohne Zugangsdaten und übergibt die neu
+serialisierte URL. Regressionstest `open_url_opens_only_web_links` in
+`src-tauri/src/main.rs`. Die ursprüngliche Analyse:
+
+**Stelle:** `src-tauri/src/main.rs`, Befehl `open_url`
+
+Jedes Skript in der Webview konnte `open_url` mit einer beliebigen Zeichenkette
+aufrufen; sie ging ungeprüft an `tauri-plugin-opener` und damit an
+`ShellExecute`/`open`. Die heutigen Aufrufer übergeben nur feste GitHub-Links bzw.
+per `safeWebUrl` auf http(s) gefilterte Server-URLs, direkt ausnutzbar war es
+also nicht.
+
+**Auswirkung:** Jede Skript-Injection in der Desktop-App wäre zur Ausführung von
+Code auf dem Rechner geworden: lokale Programme (`file:///…/calc.exe`),
+Dateien von fremden SMB-Freigaben (inkl. NTLM-Hash-Leak), beliebige
+Protokoll-Handler (`ms-msdt:`, `search-ms:`). Die Prüfung gehört an die
+IPC-Grenze, nicht in jeden Aufrufer.
+
+---
+
 # B — SpacetimeDB-Modul: Logik und Berechtigungen
 
 <a id="b1"></a>
@@ -1209,6 +1233,15 @@ Jeder Handler bricht jetzt ab, bevor er Arbeit tut, solange das Abonnement nicht
 live ist; `syncAll` in `onApplied` macht den einen vollständigen Durchlauf. Das
 Budget wurde zusätzlich von 5 s auf 45 s angehoben und dokumentiert, was es
 tatsächlich abdeckt.
+
+**Nachtrag (2026-11-20):** Der `isLive()`-Guard griff beim initialen Anwenden
+nie. Das SDK (2.10) feuert `onApplied` **vor** den `onInsert`-Callbacks des
+Snapshots, `isLive()` war dort also schon `true`. Folgen: ein überflüssiger
+Rebuild nach jedem Connect, und jede Nachricht im Snapshot-Fenster wurde erneut
+als OS-Benachrichtigung ausgelöst (neues Gerät, Neustart, Reconnect). Behoben in
+`events.ts`: Die Handler prüfen den Event-Tag (`SubscribeApplied` = Snapshot,
+keine Änderung). Benachrichtigt wird nur bei `Transaction`, also bei Zeilen aus
+der Transaktion eines anderen Nutzers.
 
 ---
 

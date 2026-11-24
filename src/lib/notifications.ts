@@ -383,16 +383,13 @@ export async function ensureNotificationPermission(options?: { prompt?: boolean 
   return tauriCommands.requestNotificationPermission()
 }
 
+/**
+ * Tests delivery, so it skips the preference gates (master switch, quiet
+ * hours): those failing a test said nothing about whether alerts can arrive.
+ */
 export async function sendTestNotification(): Promise<boolean> {
-  const permission = await ensureNotificationPermission({ prompt: true })
-  if (permission === 'denied' || permission === 'unsupported') {
-    return false
-  }
-  return notify('system', {
-    title: 'LetsChat',
-    body: 'Notifications are configured correctly.',
-    dedupeKey: `test:${Date.now()}`,
-  })
+  if ((await ensureNotificationPermission({ prompt: true })) !== 'granted') return false
+  return tauriCommands.showNotification('LetsChat', 'Notifications are working.').then(() => true, () => false)
 }
 
 export function normalizeNotificationIdentity(identity: Identity): Identity {

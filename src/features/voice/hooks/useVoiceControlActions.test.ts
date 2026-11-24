@@ -9,7 +9,8 @@ const guard = vi.hoisted(() => vi.fn())
 vi.mock('../../../lib/livekit', () => ({
   assertActiveCallRoom: guard,
   isCallCancelled: (error: Error) => error.name === 'AbortError',
-  getCameraErrorMessage: (error: Error) => error.message,
+  getCaptureErrorMessage: (_device: string, error: Error) => error.message,
+  getScreenShareErrorMessage: (error: Error) => error.message,
   getMicrophoneUnavailableReason: () => '', requestMicrophonePermission: vi.fn(),
   setLocalCameraEnabled: vi.fn(), supportsMicrophoneCapture: () => true, switchRoomDevice: vi.fn(),
 }))

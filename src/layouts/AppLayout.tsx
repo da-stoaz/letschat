@@ -709,10 +709,7 @@ export function AppLayout() {
               </div>
 
               {activeCallDockVisible ? (
-                <ActiveCallCard
-                  variant="sidebar"
-                  className="max-md:hidden"
-                />
+                <ActiveCallCard className="max-md:hidden" />
               ) : null}
             </div>
           )}

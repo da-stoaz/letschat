@@ -1,5 +1,4 @@
 import { connectionKey, useCompatibilityStore } from './lib/compatibility'
-import { useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
 import { AuthPage } from './pages/AuthPage'
@@ -17,7 +16,6 @@ import { SettingsPage } from './pages/SettingsPage'
 import { DiscoverPage } from './pages/DiscoverPage'
 import { useSelfStore } from './stores/selfStore'
 import { useConnectionStore } from './stores/connectionStore'
-import { useUiStore } from './stores/uiStore'
 import { useServerConfigStore } from './stores/serverConfigStore'
 import { useDeepLink } from './hooks/useDeepLink'
 import { useWebAutoConfig } from './hooks/useWebAutoConfig'
@@ -25,7 +23,6 @@ import { WebJoinPage } from './pages/WebJoinPage'
 import { WebConnectErrorPage } from './pages/WebConnectErrorPage'
 import { DesktopAppBanner } from './features/web/DesktopAppBanner'
 import { usePresenceLifecycle } from './hooks/usePresenceLifecycle'
-import { ensureNotificationPermission } from './lib/notifications'
 import { useVoiceLifecycle } from './hooks/useVoiceLifecycle'
 import { initializeSpacetime, REAUTHENTICATION_REQUIRED_MESSAGE } from './lib/spacetimedb'
 import { SplashScreen } from './components/SplashScreen'
@@ -43,7 +40,6 @@ function App() {
   const connectionStatus = useConnectionStore((s) => s.status)
   const connectionError = useConnectionStore((s) => s.errorMessage)
   const clearServerConfig = useServerConfigStore((s) => s.clearConfig)
-  const notificationsEnabled = useUiStore((s) => s.notificationSettings.enabled)
   const config = useServerConfigStore((s) => s.config)
   const isConfigured = config !== null
   const admittedKey = useCompatibilityStore((s) => s.admittedKey)
@@ -54,11 +50,6 @@ function App() {
   const onSetupRoute = location.pathname.startsWith('/setup')
   const onJoinRoute = location.pathname.startsWith('/join')
   const authenticationRequired = connectionError === REAUTHENTICATION_REQUIRED_MESSAGE
-
-  useEffect(() => {
-    if (!notificationsEnabled) return
-    void ensureNotificationPermission({ prompt: false })
-  }, [notificationsEnabled])
 
   if (!hasHydrated) {
     return <SplashScreen />

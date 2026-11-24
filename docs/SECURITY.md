@@ -32,6 +32,13 @@ protection:
 - The app sets `no-referrer`, so signed media URLs never leak to other origins
   through the `Referer` header.
 
+The desktop app grants camera, microphone and screen capture to its own pages
+without a webview prompt (`media_permission` in `src-tauri/src/main.rs`); the
+click on Camera, Mute or Share is the consent and the OS privacy controls still
+apply. Any other page the window might reach gets the platform default. Script
+injection into the app could therefore capture media without a prompt, which
+is one more reason the CSP above matters.
+
 ### `core-api` is the identity authority
 
 - Accounts and roles use ASP.NET Core Identity backed by PostgreSQL.
