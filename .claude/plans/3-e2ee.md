@@ -1,6 +1,6 @@
 # Security Plan: End-to-End Encryption — LetsChat
 
-> **Status (reviewed 2026-11-19): proposed, not implemented.** LetsChat does not
+> **Status (reviewed 2026-11-19; schema section revised 2026-11-24): proposed, not implemented.** LetsChat does not
 > currently provide end-to-end encryption; operators must not infer E2EE
 > guarantees from this design document. The implemented security model is
 > documented in [`SECURITY.md`](../../docs/SECURITY.md).
@@ -14,13 +14,15 @@ The trade-off: no per-message forward secrecy. It is softened with **key epochs*
 
 This is **plan 3 of 4** — the `core-api` control plane and **Part A
 (durability)** of `2-storage-tiering.md` are already implemented. Part A is a
-real prerequisite: this plan's Phase 7 **drops** the
-`deleted`/`deleted_by_*` columns, a destructive migration — Part A's cold
-archive + rebuild path turns that from "wipe history" into "rebuild from
-Postgres" (see the migration note below). Part B (eviction) of storage-tiering
+prerequisite because the new key tables must be archived and restorable (see
+the schema section); the schema changes themselves are all additive. Group DMs
+([`group-dms.md`](group-dms.md)) land first so `group:<id>` conversations are
+covered from the start. Part B (eviction) of storage-tiering
 is **not** a prerequisite and may still be deferred. The companion
 `4-efficiency-cache.md` (client-side local cache and search) depends on this
-plan and is only sound because decryption here is repeatable.
+plan and is only sound because decryption here is repeatable. Full-history
+search is scheduled **after** this plan, so it is built client-side over
+decrypted messages from the start.
 
 ---
 
@@ -135,6 +137,45 @@ Whichever client detects a trigger performs the rotation: it generates `K_{e+1}`
 
 ## SpacetimeDB Schema Changes (`server/src/schema.rs`)
 
+> **Revised 2026-11-24 against v1.8.0.** Follows the module's current
+> conventions: base tables are private and clients read them through scoped
+> `my_*` views (the archive worker through `archive_*` views); ids come from
+> `next_id!` or a natural string key, never a bare `#[auto_inc]` insert; every
+> change is additive, so no `--delete-data` and no archive rebuild is needed.
+
+### Scope: E2EE is a per-conversation mode
+
+A **conversation** is identified by the scope key the module already uses for
+typing and read state:
+
+| Kind | `conversation_id` |
+|---|---|
+| Space channel | `channel:<channel_id>` |
+| 1:1 DM | `dm:<identityA>:<identityB>` (ordered — same as `dm_room_key`) |
+| Group DM | `group:<group_id>` (see [`group-dms.md`](group-dms.md)) |
+
+Each conversation is either **plaintext** (no `conversation_security` row — the
+default, today's behaviour) or **E2EE** (a row exists). Both kinds coexist on
+one instance and in one client. Device keys are per-user infrastructure that a
+client creates the first time its user enters an E2EE conversation; users who
+never do are unaffected.
+
+Rules:
+
+- **One-way switch.** `enable_conversation_e2ee` creates the row; no reducer
+  removes it. History sent before the switch stays plaintext (the server
+  already holds it); everything after is ciphertext.
+- **The server enforces the mode on writes.** Plaintext send/edit reducers
+  reject E2EE conversations, so an old client cannot leak plaintext into one;
+  the encrypted reducers reject plaintext conversations.
+- **Clients pin the mode.** A client that has seen a conversation as E2EE
+  records that locally and refuses to send plaintext there even if the server
+  later reports no row — otherwise a malicious server could downgrade it.
+- **Who may enable:** 1:1 DM — either participant; group — the group owner;
+  channel — a space Owner/Moderator. Channels in discoverable spaces and
+  announcement channels may enable it, but the UI warns that anyone who can
+  join receives the keys.
+
 ### New enums
 
 ```rust
@@ -145,87 +186,182 @@ pub enum DeviceStatus { Pending, Trusted, Revoked }
 pub enum HistoryMode { JoinOnward, FullHistory }
 ```
 
-### New tables
+### New tables (all private)
 
 ```rust
-// A device belonging to a user. Public keys only — world-readable so peers can encrypt to it.
-#[spacetimedb::table(accessor = user_device, public,
-    index(accessor = by_owner, btree(columns = [owner_identity])))]
+/// A device's public keys. Read via `my_devices` (own, every status) and
+/// `my_peer_devices` (Trusted devices of people the caller shares a
+/// conversation with: friends, space co-members, group co-members).
+#[spacetimedb::table(accessor = user_device)]
 pub struct UserDevice {
     #[primary_key]
     pub device_id: String,                 // random UUID generated on the device
+    #[index(btree)]
     pub owner_identity: Identity,
-    pub signing_public_key: String,         // base64 Ed25519
-    pub kex_public_key: String,             // base64 X25519
+    pub signing_public_key: String,        // base64 Ed25519
+    pub kex_public_key: String,            // base64 X25519
     pub status: DeviceStatus,
-    pub signed_by_device: String,           // device_id of the authorizer (self for TOFU anchor)
-    pub authorization_signature: String,    // base64 Ed25519 signature over the device's keys
-    pub display_name: String,               // e.g. "Felix's Laptop"
+    pub signed_by_device: String,          // authorizer's device_id (self for the TOFU anchor)
+    pub authorization_signature: String,   // base64 Ed25519 over device_id ‖ keys ‖ owner
+    pub display_name: String,
     pub created_at: Timestamp,
 }
 
-// Current epoch for a conversation (channel or DM).
-#[spacetimedb::table(accessor = conversation_epoch, public)]
-pub struct ConversationEpoch {
+/// One row per E2EE conversation; absence means plaintext. Replaces the
+/// earlier `ConversationEpoch` table and `Channel.history_mode` column, so the
+/// existing `channel` table is not touched at all.
+/// Read via `my_conversation_security` (conversations the caller belongs to).
+#[spacetimedb::table(accessor = conversation_security)]
+pub struct ConversationSecurity {
     #[primary_key]
-    pub conversation_id: String,            // "channel:<id>" | "dm:<idA>:<idB>"
+    pub conversation_id: String,
     pub current_epoch: u32,
+    pub history_mode: HistoryMode,          // DMs are always FullHistory
+    /// Set by membership-removal and device-revocation reducers; cleared by
+    /// `rotate_conversation_epoch`. The server cannot rotate (it holds no keys),
+    /// so this tells the next online member's client to rotate before sending.
+    pub rotation_required_since: Option<Timestamp>,
+    pub enabled_by: Identity,
+    pub enabled_at: Timestamp,
     pub rotated_at: Timestamp,
 }
 
-// One epoch key wrapped to one recipient device. Ciphertext only — safe to be public.
-#[spacetimedb::table(accessor = conversation_key, public,
-    index(accessor = by_recipient_device, btree(columns = [recipient_device_id])),
-    index(accessor = by_conversation, btree(columns = [conversation_id])))]
+/// One epoch key wrapped to one recipient device. Read via
+/// `my_conversation_keys` (rows where `recipient_identity` is the caller).
+#[spacetimedb::table(
+    accessor = conversation_key,
+    index(accessor = by_conversation_epoch, btree(columns = [conversation_id, epoch]))
+)]
 pub struct ConversationKey {
+    /// Natural key `"<conversation_id>|<epoch>|<recipient_device_id>"`:
+    /// re-publishing the same wrap is an idempotent upsert, and there is no id
+    /// to allocate or to collide after an archive rebuild.
     #[primary_key]
-    #[auto_inc]
-    pub id: u64,
+    pub key_id: String,
     pub conversation_id: String,
     pub epoch: u32,
+    #[index(btree)]
     pub recipient_device_id: String,
-    pub wrapped_key: String,                // base64: ephemeralPub ‖ nonce ‖ ciphertext+tag
+    /// Denormalised so the view filters by caller without joining `user_device`.
+    #[index(btree)]
+    pub recipient_identity: Identity,
+    pub wrapped_key: String,               // base64: ephemeralPub ‖ nonce ‖ ciphertext+tag
+    /// The wrap is signed by the sending device. Without this the server could
+    /// publish a key it chose itself as a "new epoch" and read everything sent
+    /// under it; recipients reject wraps whose signer is not a verified
+    /// Trusted device of a conversation member.
+    pub wrapped_by_device: String,
+    pub wrap_signature: String,            // base64 Ed25519 over key_id ‖ wrapped_key
     pub created_at: Timestamp,
 }
 ```
 
-### Modified tables
+### Modified tables (additive)
 
 ```rust
-// Channel — add history mode (migration-safe default)
-#[default(HistoryMode::JoinOnward)]
-pub history_mode: HistoryMode,
-
-// Message — add epoch + encrypted flag, DROP `deleted`
-#[default(false)]
-pub encrypted: bool,
-#[default(0)]
-pub epoch: u32,
-
-// DirectMessage — add epoch + encrypted flag, DROP `deleted_by_sender` and `deleted_by_recipient`
-#[default(false)]
-pub encrypted: bool,
-#[default(0)]
-pub epoch: u32,
+// Message, DirectMessage, and GroupMessage (group-dms.md) each gain:
+#[default(None::<u32>)]
+pub epoch: Option<u32>,   // None = plaintext; Some(e) = `content` is ciphertext under epoch e
 ```
 
-Legacy rows keep `encrypted = false`, `epoch = 0`, and render as plaintext — no decryption attempted.
+`content` holds `base64(nonce ‖ ciphertext+tag)` when `epoch` is `Some`; AAD
+binds `conversation_id`, `epoch`, and the sender identity.
 
-> **Migration note — needs a decision at implementation time.** Adding fields with `#[default(...)]` is non-destructive. **Dropping** `deleted` / `deleted_by_sender` / `deleted_by_recipient` is a destructive migration; `spacetime publish` will halt on the "requires deleting data" prompt. Options, best first: (a) **rebuild from the cold archive** — with `2-storage-tiering.md` Part A shipped, drain the archive, `--delete-data`, then rebuild via `archive_restore` with a transform that drops the three columns: non-lossy, and the reason Part A precedes this plan; (b) leave the old columns in place, unused, and drop them in a later deliberate migration; (c) a one-time `bun run spacetime:reset` — **only** acceptable if there is no real message history yet (the app is past pre-release at v0.7.x, so real data likely exists — prefer (a)). Confirm which before running Phase 1's publish. If `#[default(HistoryMode::JoinOnward)]` is rejected by the toolchain, fall back to `Option<HistoryMode>` with `None` treated as `JoinOnward`.
+The `deleted` / `deleted_by_*` columns are **kept** (left `false` on encrypted
+rows, which are hard-deleted instead). This drops the destructive migration
+from the earlier draft, and with it the dependency on a full-table archive
+restore.
+
+### Views
+
+| View | Returns |
+|---|---|
+| `my_devices` | the caller's own devices, every status (key-management UI, pending approvals) |
+| `my_peer_devices` | `Trusted` devices whose owner shares a conversation with the caller |
+| `my_conversation_security` | rows for channels in the caller's spaces, the caller's DMs and groups |
+| `my_conversation_keys` | `conversation_key` rows with `recipient_identity == caller` |
+| `archive_user_devices`, `archive_conversation_security`, `archive_conversation_keys` | worker-only full tables |
+
+The three new tables **must be replicated to the cold archive and restorable**
+(`archive_restore_*` reducers, Postgres archive entities, archive-worker
+replication + rebuild) before E2EE ships. The wrapped keys are the only copy
+outside the devices: a rebuild that drops them leaves every encrypted message
+readable only on devices that still hold the keys locally.
 
 ### New reducers
-- `register_device(device_id, signing_pub, kex_pub, display_name)` — insert `UserDevice`; status `Trusted` if it is the owner's first device, else `Pending`
-- `authorize_device(device_id, signed_by_device, signature)` — caller's identity must own the device; set `Trusted`, store signature
-- `revoke_device(device_id)` — owner only; set `Revoked`
-- `rotate_conversation_epoch(conversation_id, new_epoch)` — upsert `ConversationEpoch`; only accepts a strictly higher epoch
-- `publish_conversation_key(conversation_id, epoch, recipient_device_id, wrapped_key)` — insert a `ConversationKey` row (caller must be a conversation member)
-- `set_channel_history_mode(channel_id, mode)` — moderator/owner only
+
+Existing reducer signatures do not change (reducers are a compatibility
+boundary); encrypted traffic goes through new reducers.
+
+```rust
+pub struct WrappedKeyInput {               // SpacetimeType
+    pub recipient_device_id: String,
+    pub wrapped_key: String,
+    pub wrapped_by_device: String,
+    pub wrap_signature: String,
+}
+```
+
+| Reducer | Gate |
+|---|---|
+| `register_device(device_id, signing_pub, kex_pub, display_name, self_signature)` | account; `Trusted` if the owner's first device, else `Pending` |
+| `authorize_device(device_id, signed_by_device, signature)` | caller owns both devices; signer is `Trusted` |
+| `revoke_device(device_id)` | owner; sets `rotation_required_since` on every E2EE conversation the owner is in |
+| `enable_conversation_e2ee(conversation_id, history_mode, epoch0_keys: Vec<WrappedKeyInput>)` | per-kind permission above; creates the row at epoch 0 and its wraps atomically; fails if a row exists |
+| `set_conversation_history_mode(conversation_id, mode)` | same permission; applies to future joins only |
+| `rotate_conversation_epoch(conversation_id, new_epoch, keys: Vec<WrappedKeyInput>)` | member; `new_epoch == current + 1`; wraps and epoch bump in one transaction; clears `rotation_required_since`; a concurrent loser gets an error and re-reads |
+| `publish_conversation_keys(conversation_id, epoch, keys: Vec<WrappedKeyInput>)` | member; for existing epochs only (`FullHistory` joins, a newly authorized device) |
+| `send_encrypted_message(channel_id, epoch, ciphertext, attachment_keys)` | as `send_message`; conversation must be E2EE |
+| `send_encrypted_direct_message(recipient, epoch, ciphertext, attachment_keys)` | as `send_direct_message` |
+| `send_encrypted_group_message(group_id, epoch, ciphertext, attachment_keys)` | as `send_group_message` |
+| `edit_encrypted_message` / `edit_encrypted_direct_message` / `edit_encrypted_group_message` `(message_id, epoch, ciphertext, attachment_keys)` | as the plaintext edit |
+
+For every `WrappedKeyInput` the module checks: `wrapped_by_device` is the
+caller's `Trusted` device, and the recipient device is `Trusted` and owned by a
+current member. Signatures are verified by clients, not the module.
+
+Encrypted send/edit checks: `epoch` is `current_epoch` or `current_epoch - 1`
+(grace for an in-flight rotation); ciphertext ≤ 16 000 bytes.
+
+**`attachment_keys: Vec<String>`** replaces the server-side parse of `content`
+for encrypted rows. `sync_message_references` currently extracts storage keys
+from the plaintext; on ciphertext it would find none, so the cleanup worker
+would delete every encrypted attachment. A new
+`sync_references_from_keys(owner_key, keys, sender, scope)` in
+`storage_refs.rs` applies the same per-scope key validation and claim checks to
+the explicit list. The list reveals only which objects a message references,
+which the server already knows from the upload.
 
 ### Modified reducers
-- `send_message` / `send_direct_message` — accept `encrypted: bool` and `epoch: u32`; relax content length from `1..=4000` (ciphertext is longer — allow up to `~16000`)
-- `edit_message` / `edit_direct_message` — same length relaxation (edited ciphertext)
-- `delete_message` — hard delete: `ctx.db.message().id().delete(message_id)`
-- `delete_direct_message` — hard delete (delete-for-everyone); drop the per-participant soft-delete logic
+
+- Plaintext `send_*` / `edit_*`: reject when the conversation has a
+  `conversation_security` row.
+- `delete_message` / `delete_direct_message` / `delete_group_message`: an
+  encrypted row (`epoch.is_some()`) is hard-deleted for everyone, with its
+  storage references. Plaintext rows keep today's behaviour.
+- Membership removal (kick, ban, leave space, group remove/leave): set
+  `rotation_required_since` on the affected E2EE conversations.
+
+### Calls (no schema)
+
+A call in an E2EE conversation derives its LiveKit frame key from the current
+epoch key: `HKDF(K_e, "letschat-call-v1" ‖ room)` fed to LiveKit's
+`ExternalE2EEKeyProvider`. A rotation mid-call re-keys the call. No table, and
+no core-api change: the token and presence gates stay as they are.
+
+### Open decision, schema-independent
+
+The **web client** has no Tauri backend or Stronghold. Decide before Phase 1:
+WebCrypto/WASM with keys in IndexedDB, or E2EE conversations desktop-only
+(the web client shows "open in the desktop app"). The per-conversation mode
+makes the second option degrade gracefully.
+
+### Rollout gate
+
+Older clients decode the new `epoch` column only after regenerating bindings,
+and would render ciphertext as text. Bump the client protocol with this
+release, and refuse `enable_conversation_e2ee` until the instance's minimum
+client protocol includes E2EE support.
 
 ---
 
@@ -235,9 +371,9 @@ E2EE blinds the server, so this plan uses SpacetimeDB outside its server-readabl
 
 1. **Reducers cannot return data to the caller.** Reducers only mutate tables; clients observe results via subscriptions. This plan already accommodates that — `register_device`, `authorize_device`, `publish_conversation_key`, `rotate_conversation_epoch` all write rows that clients pick up by subscribing to `UserDevice` / `ConversationEpoch` / `ConversationKey`. Keep it that way: any future "fetch X" step must be a subscription, never a reducer return value.
 
-2. **`ConversationKey` is world-readable metadata.** The table is `public` so a device can fetch its wrapped keys. The `wrapped_key` blobs are ciphertext (safe), but the rows still leak *which device has access to which conversation* (`recipient_device_id` ↔ `conversation_id`). For channels this is already implied by public `ServerMember`; for DMs it is largely redundant too. Accepted for now. If SpacetimeDB row-level security matures, restrict `ConversationKey` so a device sees only rows addressed to it. Call this out in any security review.
+2. **Key metadata is visible to the server, not to other users.** `conversation_key` is private and each user reads only their own rows through `my_conversation_keys`. The server (and the archive) still sees which device holds keys for which conversation. Accepted: membership is server-visible already.
 
-3. **Destructive migrations.** Column removal and other non-additive schema changes wipe table data (see the Migration note above). Keep schema changes additive (`Option<T>` / `#[default]`); batch any unavoidable destructive change into a deliberate reset.
+3. **Destructive migrations.** None are needed: the schema section keeps the `deleted*` columns. Keep it that way (`Option<T>` / `#[default]`).
 
 4. **No server-side content logic.** The server cannot validate, search, or moderate message content — it sees only ciphertext. Length checks become loose ciphertext-size bounds; any content moderation must be client-side.
 
@@ -338,16 +474,19 @@ If a message references an epoch this device has no `ConversationKey` row for (e
 
 | File | Change |
 |---|---|
-| `server/src/schema.rs` | New enums + tables; add `history_mode`/`encrypted`/`epoch`; drop `deleted*` fields |
-| `server/src/reducers/messages.rs` | Hard delete; accept `encrypted`/`epoch`; relax length on send + edit |
-| `server/src/reducers/direct_messages.rs` | Hard delete (delete-for-everyone); accept `encrypted`/`epoch`; relax length |
+| `server/src/schema.rs` | New enums + `user_device` / `conversation_security` / `conversation_key`; add `epoch: Option<u32>` to message tables |
+| `server/src/reducers/messages.rs` | New encrypted send/edit reducers; plaintext ones reject E2EE channels; hard delete for encrypted rows |
+| `server/src/reducers/direct_messages.rs` | Same for DMs (and `group_messages.rs` for groups) |
+| `server/src/storage_refs.rs` | `sync_references_from_keys` for explicit attachment keys |
+| `server/src/views.rs` | `my_devices`, `my_peer_devices`, `my_conversation_security`, `my_conversation_keys`, `archive_*` |
+| `core-api` archive entities + `archive-worker` | Replicate and restore the three new tables |
 | `server/src/reducers/` (new file) | `devices.rs` + `keys.rs` for the new reducers |
 | `src-tauri/Cargo.toml` | Add `tauri-plugin-stronghold` + RustCrypto crates |
 | `src-tauri/src/lib.rs` | Register Stronghold plugin + `crypto.rs` commands |
 | `src-tauri/tauri.conf.json` | Stronghold capability |
 | `src/lib/spacetimedb/reducers.ts` | Encrypt before calling send reducers |
 | `src/lib/spacetimedb/mappers.ts` | Async decrypt in `mapMessage` / `mapDirectMessage` |
-| `src/lib/spacetimedb/sync.ts` | Subscribe to `UserDevice`, `ConversationEpoch`, `ConversationKey`; await async mappers |
+| `src/lib/spacetimedb/sync.ts` | Subscribe to the four new views; await async mappers |
 
 ---
 
@@ -356,7 +495,7 @@ If a message references an epoch this device has no `ConversationKey` row for (e
 ### Phase 1 — Crypto foundation (days 1–3)
 - Add RustCrypto crates + `tauri-plugin-stronghold`; wire Stronghold open/close to login/logout.
 - `crypto.rs`: device keygen, conversation-key gen, wrap/unwrap, message + file encrypt/decrypt, verification-code hashing — all as `invoke` commands.
-- Add new SpacetimeDB enums/tables and the modified fields; resolve the migration note; publish.
+- Add the new SpacetimeDB enums/tables/views and the `epoch` fields (additive publish); archive replication + restore for the new tables.
 
 ### Phase 2 — Device identity & multi-device (days 4–8)
 - `devices.ts`: `register_device`, authorization flow, verification-code computation.
@@ -383,7 +522,7 @@ If a message references an epoch this device has no `ConversationKey` row for (e
 - Verify: a raw MinIO object is undecryptable without the in-message key.
 
 ### Phase 7 — Hard delete (days 24–25)
-- Hard-delete `delete_message` / `delete_direct_message`; client handles "row removed" events.
+- Hard-delete encrypted rows in `delete_message` / `delete_direct_message` / `delete_group_message`; client handles "row removed" events.
 - Verify: deleted row is gone from SpacetimeDB — no sender, timestamp, or content retained.
 
 ### Phase 8 — Backup (days 26–28)

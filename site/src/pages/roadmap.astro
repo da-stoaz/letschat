@@ -2,7 +2,7 @@
 import PageLayout from "@/layouts/PageLayout.astro";
 import { GITHUB_DISCUSSIONS, GITHUB_ISSUE_NEW } from "@/lib/site";
 
-const updatedAt = "November 19, 2026";
+const updatedAt = "November 24, 2026";
 
 // Delivered and merged to main.
 const shipped = [
@@ -125,6 +125,18 @@ const upcoming = [
     ],
   },
   {
+    id: "Groups",
+    focus: "Group DMs",
+    priority: "P2",
+    status: "Next",
+    effort: "~4 weeks",
+    goals: [
+      "Group conversations of up to 10 friends, with owner controls for members and naming.",
+      "Attachments and group calls, archived and restorable like every other conversation.",
+      "Lands before end-to-end encryption so group chats can be encrypted from the start.",
+    ],
+  },
+  {
     id: "Calls",
     focus: "Voice & media quality",
     priority: "P1",
@@ -174,17 +186,6 @@ const upcoming = [
     ],
   },
   {
-    id: "Search",
-    focus: "Search & group DMs",
-    priority: "P2",
-    status: "Planned",
-    effort: "~6 weeks",
-    goals: [
-      "Search full history across spaces and DMs. Today search covers only the messages loaded in the open channel.",
-      "Group direct messages.",
-    ],
-  },
-  {
     id: "Design",
     focus: "Full UI redesign",
     priority: "P2",
@@ -203,9 +204,21 @@ const upcoming = [
     status: "Planned",
     effort: "Multi-month",
     goals: [
+      "Opt-in per conversation: encrypted and plaintext DMs, groups and channels coexist; turning it on is one-way.",
       "Encrypt DMs first, then attachments and calls (LiveKit insertable streams), then spaces.",
       "Per-conversation keys wrapped per device; all decryption happens on-device.",
       "Key epochs rotate on membership change for re-readable, multi-device history.",
+    ],
+  },
+  {
+    id: "Search",
+    focus: "Search",
+    priority: "P2",
+    status: "Planned",
+    effort: "~3 weeks",
+    goals: [
+      "Search full history across spaces, DMs and groups. Today search covers only the messages loaded in the open channel.",
+      "Runs on-device over decrypted messages, so it works in encrypted conversations; scheduled after end-to-end encryption for that reason.",
     ],
   },
   {
