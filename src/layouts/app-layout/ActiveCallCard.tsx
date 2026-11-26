@@ -196,6 +196,7 @@ export function ActiveCallCard({ className }: { className?: string }) {
   const joinedVoiceChannelId = useVoiceSessionStore((s) => s.joinedChannelId)
   const voiceJoining = useVoiceSessionStore((s) => s.joining)
   const setVoiceError = useVoiceSessionStore((s) => s.setError)
+  const voiceError = useVoiceSessionStore((s) => s.error)
 
   const dmRoom = useDmVoiceSessionStore((s) => s.room)
   const joinedDmPartnerIdentity = useDmVoiceSessionStore((s) => s.joinedPartnerIdentity)
@@ -203,6 +204,7 @@ export function ActiveCallCard({ className }: { className?: string }) {
   const dmJoining = useDmVoiceSessionStore((s) => s.joining)
   const setDmAnswered = useDmVoiceSessionStore((s) => s.setAnswered)
   const setDmError = useDmVoiceSessionStore((s) => s.setError)
+  const dmError = useDmVoiceSessionStore((s) => s.error)
 
   const participantsByChannel = useVoiceStore((s) => s.participantsByChannel)
   const participantsByDmRoom = useDmVoiceStore((s) => s.participantsByRoom)
@@ -290,7 +292,6 @@ export function ActiveCallCard({ className }: { className?: string }) {
   const [audioInputs, setAudioInputs] = useState<LivekitDeviceOption[]>([])
   const [audioOutputs, setAudioOutputs] = useState<LivekitDeviceOption[]>([])
   const [videoInputs, setVideoInputs] = useState<LivekitDeviceOption[]>([])
-  const [localError, setLocalError] = useState<string | null>(null)
   const [entered, setEntered] = useState(false)
   // A window-level capability, not call state: nothing at runtime can change the
   // answer, so there is nothing to re-probe and nothing to flip off.
@@ -387,7 +388,6 @@ export function ActiveCallCard({ className }: { className?: string }) {
   }, [mode])
 
   const setCurrentError = (message: string | null) => {
-    setLocalError(message)
     if (mode === 'server') {
       setVoiceError(message)
       return
@@ -663,7 +663,7 @@ export function ActiveCallCard({ className }: { className?: string }) {
           </Button>
         </div>
 
-        <CallError message={localError} className="text-[11px]" />
+        <CallError message={mode === 'server' ? voiceError : dmError} className="text-[11px]" />
       </CardContent>
     </Card>
   )
