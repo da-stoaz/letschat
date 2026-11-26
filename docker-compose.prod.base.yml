@@ -7,6 +7,62 @@ x-public-urls: &public-urls
   MINIO_PUBLIC_ENDPOINT: "${PUBLIC_SCHEME:-https}://${FILES_DOMAIN:?Set FILES_DOMAIN}"
   DISCOVERY_WEB_URL: "${APP_DOMAIN:+${PUBLIC_SCHEME:-https}://${APP_DOMAIN}}"
 
+# Configuration files are inline, so an upgrade replaces only the Compose files.
+# Compose copies a config into a container when it creates the container, and
+# does NOT recreate it when only the content changes. Every service that reads
+# one therefore also carries the content as its `letschat.config` label: a
+# changed label makes `docker compose up -d` recreate it.
+configs:
+  chat-edge:
+    content: &chat-edge-caddyfile |
+      {
+        admin off
+        auto_https off
+      }
+      :3000 {
+        @preflight {
+          method OPTIONS
+          path /v1/identity/websocket-token
+        }
+        handle @preflight {
+          header Access-Control-Allow-Origin "*"
+          header Access-Control-Allow-Methods "POST"
+          header Access-Control-Allow-Headers "Authorization"
+          respond "" 204
+        }
+        @token {
+          method POST
+          path /v1/identity/websocket-token
+        }
+        handle @token {
+          reverse_proxy core-api:8787
+        }
+        @subscribe {
+          method GET
+          path /v1/database/letschat/subscribe
+        }
+        handle @subscribe {
+          reverse_proxy core-api:8787
+        }
+        handle {
+          respond "" 404
+        }
+      }
+
+  # SpacetimeDB standalone server config, installed as {data-dir}/config.toml.
+  # Docs: https://spacetimedb.com/docs/cli-reference/standalone-config/
+  spacetimedb:
+    content: &spacetimedb-config |
+      [websocket]
+      # How often the server sends WebSocket Ping frames. Must stay < idle-timeout.
+      ping-interval = "20s"
+      # How long the server waits for ANY client data (incl. Pong) before closing
+      # the socket. The stock 30s is aggressive behind a tunnel/proxy where Pong
+      # frames can be delayed: a long file upload would let it lapse and the
+      # server would drop the chat connection. The client also heartbeats every
+      # 25s (touch_presence), so this mainly buys slack for transient delays.
+      idle-timeout = "120s"
+
 services:
   # ── SpacetimeDB ─────────────────────────────────────────────────────────────
   # Administrative API stays on loopback :44302. Public proxies use the
@@ -26,6 +82,9 @@ services:
         aliases: [spacetimedb-internal]
     volumes:
       - spacetimedb_home:/home/spacetime
+    # The server reads config.toml only at start: restart it when it changes.
+    labels:
+      letschat.config: *spacetimedb-config
     # spacetimedb-config-init drops our WebSocket keepalive config.toml into the
     # data dir (in the shared volume) before the server starts.
     depends_on:
@@ -54,6 +113,8 @@ services:
     configs:
       - source: chat-edge
         target: /etc/caddy/Caddyfile
+    labels:
+      letschat.config: *chat-edge-caddyfile
     depends_on:
       spacetimedb:
         condition: service_healthy
@@ -62,24 +123,29 @@ services:
     restart: unless-stopped
 
   # ── SpacetimeDB config init ──────────────────────────────────────────────────
-  # One-shot: installs config.prod.toml as {data-dir}/config.toml in the shared
-  # spacetimedb_home volume, then exits. Runs as the image's `spacetime` user so
-  # the file lands with correct ownership. This indirection is required because a
-  # direct bind mount of config.toml would make Docker create the parent dirs as
-  # root, and the non-root server then can't create its log dir (startup panic).
-  # The WebSocket tuning (raised idle-timeout) keeps the chat connection alive
-  # through tunnel/proxy Pong delays — see spacetimedb/config.prod.toml.
+  # One-shot: installs the `spacetimedb` config above as {data-dir}/config.toml
+  # in the shared spacetimedb_home volume, then exits. Runs as the image's
+  # `spacetime` user so the file lands with correct ownership. This indirection
+  # is required because mounting config.toml directly would make Docker create
+  # the parent dirs as root, and the non-root server then can't create its log
+  # dir (startup panic). The WebSocket tuning (raised idle-timeout) keeps the
+  # chat connection alive through tunnel/proxy Pong delays.
   spacetimedb-config-init:
     image: clockworklabs/spacetime:v2.10.1
     container_name: letschat-spacetimedb-config-init
     entrypoint: ["/bin/sh", "-c"]
+    # -f: the copied config is read-only, so the next run replaces, not rewrites, it.
     command:
       - >-
         mkdir -p /home/spacetime/.local/share/spacetime/data &&
-        cp /config/config.toml /home/spacetime/.local/share/spacetime/data/config.toml
+        cp -f /config/config.toml /home/spacetime/.local/share/spacetime/data/config.toml
     volumes:
       - spacetimedb_home:/home/spacetime
-      - ./spacetimedb/config.prod.toml:/config/config.toml:ro
+    configs:
+      - source: spacetimedb
+        target: /config/config.toml
+    labels:
+      letschat.config: *spacetimedb-config
     restart: "no"
 
   # ── PostgreSQL (auth database) ──────────────────────────────────────────────
@@ -133,6 +199,10 @@ services:
       # Never use `Development` here — it disables the secret checks.
       <<: *public-urls
       ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Production}"
+      # Which release's Compose files these are. core-api warns (log + admin
+      # dashboard) when it differs from what its image was released with.
+      # Not an operator setting: it changes only with downloaded Compose files.
+      LETSCHAT_COMPOSE_REVISION: "1"
       AUTH_BIND: "0.0.0.0:8787"
       ADMIN_BIND: "0.0.0.0:8788"
       AUTH_DATABASE_URL: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-auth};Username=${POSTGRES_USER:-letschat};Password=${POSTGRES_PASSWORD}"
@@ -303,7 +373,7 @@ services:
   # Signalling (44380, HTTP/WS) is LOOPBACK-only — fronted by the tunnel/Caddy
   # (Docker service name) or a host proxy (127.0.0.1:44380), never public.
   # Media MUST stay publicly reachable and router-forwarded: 44382/udp (primary,
-  # udp_port) and 44381/tcp (fallback, tcp_port) — see livekit/config.prod.yaml.
+  # udp_port) and 44381/tcp (fallback, tcp_port) — see LIVEKIT_CONFIG below.
   livekit:
     # Pinned, NOT :latest — the same version the dev stack runs. A host-cached
     # :latest is whatever was pulled first (older builds break browser ICE, see
@@ -315,17 +385,38 @@ services:
     # the other NIC and signalling still works while every ICE check times out.
     # core-api, cloudflared and Caddy already share proxy.
     networks: [proxy]
-    command: --config /etc/livekit.yaml
     environment:
       # The API key pair, from the same .env values core-api signs voice tokens
-      # with, so the two can never disagree. Replaces any `keys:` in the file.
+      # with, so the two can never disagree. Replaces any `keys:` in the config.
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      # The server config, read natively from this variable (--config-body).
+      LIVEKIT_CONFIG: |
+        port: 44380
+        rtc:
+          # Auto-detects this host's public IP on startup. Set node_ip instead
+          # to pin it.
+          use_external_ip: true
+          use_ice_lite: false
+          use_mdns: false                   # disable mDNS in production
+          enable_loopback_candidate: false
+          allow_tcp_fallback: true
+          tcp_port: 44381
+          udp_port: 44382
+        log_level: info
+        # Speaking indicator. The SFU decides who is speaking (even for your own
+        # mic) per update_interval-ms window: a window counts if >= min_percentile%
+        # of it is louder than -active_level dBov, then the level is EMA-smoothed
+        # over smooth_intervals windows. Defaults (400 ms, 35, 40%, 2) lagged
+        # ~0.5 s and dropped quiet speech between syllables.
+        audio:
+          update_interval: 100
+          active_level: 45      # -45 dBov; was -35, quiet speech fell below it
+          min_percentile: 20    # syllable gaps no longer zero a whole window
+          smooth_intervals: 3   # longer release so the ring holds across pauses
     ports:
       - "127.0.0.1:44380:44380"
       - "44381:44381"
       - "44382:44382/udp"
-    volumes:
-      - ./livekit/config.prod.yaml:/etc/livekit.yaml:ro
     healthcheck:
       # The root endpoint checks node health without authentication. BusyBox
       # wget is included in the upstream image; /rtc/validate requires auth.
@@ -429,40 +520,3 @@ networks:
   default:
   proxy:
   chat:
-
-configs:
-  chat-edge:
-    content: |
-      {
-        admin off
-        auto_https off
-      }
-      :3000 {
-        @preflight {
-          method OPTIONS
-          path /v1/identity/websocket-token
-        }
-        handle @preflight {
-          header Access-Control-Allow-Origin "*"
-          header Access-Control-Allow-Methods "POST"
-          header Access-Control-Allow-Headers "Authorization"
-          respond "" 204
-        }
-        @token {
-          method POST
-          path /v1/identity/websocket-token
-        }
-        handle @token {
-          reverse_proxy core-api:8787
-        }
-        @subscribe {
-          method GET
-          path /v1/database/letschat/subscribe
-        }
-        handle @subscribe {
-          reverse_proxy core-api:8787
-        }
-        handle {
-          respond "" 404
-        }
-      }

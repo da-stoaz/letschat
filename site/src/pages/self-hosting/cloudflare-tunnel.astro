@@ -146,25 +146,16 @@ import { GITHUB_REPO } from "@/lib/site";
       <p class="guide-prose">On the server, in a fresh folder:</p>
       <CodeBlock label="terminal" code={`mkdir letschat && cd letschat
 
-# the stack + the cloudflared connector overlay
-wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
-wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.tunnel.yml
-
-# the LiveKit config
-mkdir livekit
-wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml
-
-# the SpacetimeDB server config (WebSocket keepalive) — required: without it
-# Docker mounts an empty folder and the database never starts
-mkdir spacetimedb
-wget -O spacetimedb/config.prod.toml https://raw.githubusercontent.com/${GITHUB_REPO}/main/spacetimedb/config.prod.toml
+# the stack + the cloudflared connector overlay, from the latest release
+wget https://github.com/${GITHUB_REPO}/releases/latest/download/docker-compose.prod.base.yml
+wget https://github.com/${GITHUB_REPO}/releases/latest/download/docker-compose.prod.tunnel.yml
 
 # your settings file
-wget -O .env https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.tunnel.example`} />
+wget -O .env https://github.com/${GITHUB_REPO}/releases/latest/download/tunnel.env`} />
       <Callout type="note">
         Every service — the browser client included — is a pre-built image that GitHub Actions publishes
-        with each release. Nothing is compiled on your server. To upgrade later, download the two compose
-        files again (they change with releases) and pull.
+        with each release. Nothing is compiled on your server. These three files are the whole
+        deployment: the LiveKit and SpacetimeDB configuration is inside the Compose files.
       </Callout>
     </article>
 
@@ -274,16 +265,17 @@ app.example.com    ->  http://web:80               # browser client (omit if not
     <article class="step-card p-7 space-y-4">
       <div class="step-head"><span class="step-num">5</span><h2 class="text-2xl font-semibold tracking-tight">Start the stack and connect core-api to the chat module</h2></div>
       <p class="guide-prose">
-        Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
-        (e.g. <code>LETSCHAT_VERSION=1.2.4</code>) to make upgrades explicit. Before an upgrade, save
-        the current deployment files and keep the deployed images. To roll back, restore those files
-        together with <code>.env</code>, then run <code>docker compose … up -d --pull never</code>.
+        Your <code>.env</code> names both Compose files in <code>COMPOSE_FILE</code>, so every command
+        is plain <code>docker compose</code>. It ships with <code>LETSCHAT_VERSION=latest</code>; pin it
+        to a release (e.g. <code>LETSCHAT_VERSION=1.9.0</code>) to make upgrades explicit. Upgrading
+        later is the same line, <code>docker compose pull &amp;&amp; docker compose up -d</code>. Before
+        an upgrade, save <code>.env</code> and both Compose files and keep the deployed images. To roll
+        back, restore those files, then run <code>docker compose up -d --pull never</code>.
         Desktop apps follow your server: they offer the app version released with the backend you
         run, so they update when you upgrade and not before.
         See <a href={`https://github.com/${GITHUB_REPO}/blob/main/docs/DEPLOYMENT.md#upgrading-a-running-deployment`}>the upgrade and rollback guide</a>.
       </p>
-      <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d`} />
+      <CodeBlock label="terminal" code={`docker compose pull && docker compose up -d`} />
       <p class="guide-prose text-sm">
         Always <code>pull</code> first. Docker otherwise reuses any older <code>:latest</code> images already
         on the server, and an old chat module then creates the database without its admin bootstrap.
@@ -294,7 +286,7 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml
       </p>
       <CodeBlock label="terminal" code={`docker logs -f letschat-module-init`} />
       <Callout type="note" title="Changing the browser client's address">
-        Changed a hostname later? Run <code>docker compose … up -d</code> so core-api
+        Changed a hostname later? Run <code>docker compose up -d</code> so core-api
         and web both receive it. No rebuild — the address is applied at start.
       </Callout>
 
@@ -307,7 +299,7 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml
       <CodeBlock label="terminal" code={`docker logs letschat-core-api
 # Expect: Pinned SpacetimeDB trusted issuer to http://core-api:8787.
 # Expect: Registered archive-worker identity ...
-docker compose -f docker-compose.prod.base.yml exec postgres \\
+docker compose exec postgres \\
 psql -U letschat -d archive -c 'SELECT count(*) FROM archive_user;'
 # The module-owner row should already be replicated.`} />
       <Callout type="warning" title="Keep the identity volumes">
@@ -377,9 +369,9 @@ curl -i https://auth.example.com/.well-known/letschat.json`} />
         use the bundled overlay. Two changes to the path above:
       </p>
       <ul class="list-disc pl-5 guide-prose space-y-1.5">
-        <li><strong>Step 1 &amp; 5:</strong> skip the bundled connector. Start with the base file only —
-          <code>docker compose -f docker-compose.prod.base.yml up -d</code> — and in Step 2 you don't need
-          <code>docker-compose.prod.tunnel.yml</code>. Leave <code>CLOUDFLARE_TUNNEL_TOKEN</code> blank;
+        <li><strong>Step 1 &amp; 5:</strong> skip the bundled connector. Use the base file only: in Step 2 you don't need
+          <code>docker-compose.prod.tunnel.yml</code>, and in <code>.env</code> set
+          <code>COMPOSE_FILE=docker-compose.prod.base.yml</code>. Leave <code>CLOUDFLARE_TUNNEL_TOKEN</code> blank;
           your existing connector has its own credentials.</li>
         <li><strong>Step 4:</strong> add the hostnames to your <span class="italic">existing</span> tunnel, pointing at the host's
           <code>localhost</code> ports instead of Docker names:</li>

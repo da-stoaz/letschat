@@ -2,7 +2,7 @@
 import PageLayout from "@/layouts/PageLayout.astro";
 import { GITHUB_DISCUSSIONS, GITHUB_ISSUE_NEW } from "@/lib/site";
 
-const updatedAt = "November 24, 2026";
+const updatedAt = "November 25, 2026";
 
 // Delivered and merged to main.
 const shipped = [
@@ -95,6 +95,18 @@ const shipped = [
       "Apps older than 1.6.5 have no updater and need one manual update.",
     ],
   },
+  {
+    id: "v1.9",
+    focus: "One-command server upgrades",
+    blurb: "Upgrading a self-hosted server is docker compose pull && docker compose up -d.",
+    items: [
+      "Two Compose files and .env are the whole deployment: the Caddy, LiveKit and SpacetimeDB configuration is inline, and COMPOSE_FILE in .env drops the -f flags.",
+      "Each release attaches its own Compose files, so operators download the copies that match its images instead of whatever is on main.",
+      "Only containers whose image or configuration changed are recreated, and a changed configuration can no longer be skipped silently.",
+      "core-api warns on the admin dashboard when the Compose files on the server don't match its release.",
+      "A schema change that would break older apps still stops for one explicit confirmation.",
+    ],
+  },
 ];
 
 // Ahead, roughly in priority order. `status` picks the group on the page:
@@ -111,17 +123,6 @@ const upcoming = [
       "Free for open source through the SignPath Foundation. The application is prepared; release CI is wired up once it is approved.",
       "Re-sign the updater files after Authenticode signing, so Windows auto-updates keep verifying.",
       "SmartScreen warnings fade gradually: the free certificate builds reputation over time.",
-    ],
-  },
-  {
-    id: "Operations",
-    focus: "One-command server upgrades",
-    priority: "P0",
-    status: "Next",
-    effort: "~2–4 weeks",
-    goals: [
-      "Upgrading a self-hosted server is still manual: download the new compose files, pull the images and restart.",
-      "Turn that into one safe command. (The desktop half of over-the-air updates shipped in 1.7.)",
     ],
   },
   {
@@ -245,7 +246,7 @@ const groups = [
 
 <PageLayout
   title="LetsChat Roadmap | Shipped and Planned Features"
-  description="LetsChat roadmap: shipped milestones and the plans ahead — signed Windows installers, one-command server upgrades, storage tiering, call quality, a full UI redesign, and end-to-end encryption."
+  description="LetsChat roadmap: shipped milestones and the plans ahead — signed Windows installers, storage tiering, call quality, a full UI redesign, and end-to-end encryption."
   active="roadmap"
   heading="Roadmap"
 >

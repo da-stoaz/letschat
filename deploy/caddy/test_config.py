@@ -35,9 +35,9 @@ def compose(track="caddy", **overrides):
                 "-f", str(ROOT / f"docker-compose.prod.{track}.yml"), "config", "--format", "json"], env=env)
 
 
-def container_args(folder, env):
+def container_args(caddyfile, env):
     args = ["docker", "run", "--rm", "--pull", "never", "--network", "none",
-            "-v", f"{ROOT}/deploy/{folder}/Caddyfile:/etc/caddy/Caddyfile:ro"]
+            "-v", f"{caddyfile}:/etc/caddy/Caddyfile:ro"]
     for key, value in env.items():
         args += ["-e", f"{key}={value}"]
     return args
@@ -53,9 +53,12 @@ def objects(value):
             yield from objects(child)
 
 
-def check_routes(services, port):
-    result = run(container_args("caddy", services["caddy"]["environment"])
-                 + ["caddy:2", "caddy", "adapt", "--config", "/etc/caddy/Caddyfile"])
+def check_routes(config, port):
+    services = config["services"]
+    with tempfile.TemporaryDirectory(prefix="letschat-caddy-test-") as td:
+        Path(td, "Caddyfile").write_text(config["configs"]["caddyfile"]["content"])
+        result = run(container_args(Path(td, "Caddyfile"), {})
+                     + ["caddy:2", "caddy", "adapt", "--config", "/etc/caddy/Caddyfile"])
     assert result.returncode == 0, result.stderr
     servers = json.loads(result.stdout)["apps"]["http"]["servers"].values()
     routes = {}
@@ -79,7 +82,7 @@ def check_web(env):
         # Template-looking asset content must remain literal outside /config.js.
         html = '<html>{{env "DISCOVERY_AUTH_URL"}}</html>'
         Path(td, "index.html").write_text(html)
-        args = container_args("web", env) + ["-d", "--name", name, "--tmpfs", "/data",
+        args = container_args(ROOT / "deploy/web/Caddyfile", env) + ["-d", "--name", name, "--tmpfs", "/data",
                 "--tmpfs", "/config", "-v", f"{td}:/srv:ro", "caddy:2"]
         try:
             started = run(args)
@@ -120,6 +123,13 @@ def check_isolation(services, track):
     mounts = {m["target"]: m for m in services["core-api"]["volumes"]}
     assert mounts["/module-init"]["read_only"] and mounts["/archive-worker"]["read_only"]
     assert mounts["/data"]["source"].endswith("core_api_data")
+
+
+def check_config_labels(config):
+    """Compose won't recreate a container for new config content alone; the label makes it."""
+    for name, service in config["services"].items():
+        for ref in service.get("configs", []):
+            assert service["labels"]["letschat.config"] == config["configs"][ref["source"]]["content"], name
 
 
 def check_edge(config):
@@ -195,6 +205,7 @@ if __name__ == "__main__":
         config = json.loads(result.stdout)
         services = config["services"]
         check_isolation(services, track)
+        check_config_labels(config)
         if track == "caddy" and not overrides:
             check_edge(config)
         for key in UPSTREAMS:
@@ -202,12 +213,12 @@ if __name__ == "__main__":
         assert "VITE_WEB_CONNECT_URL" not in services["web"]["environment"]
         if track == "caddy":
             assert services["caddy"].get("entrypoint") is None
-            assert len(services["caddy"]["volumes"]) == 3
-            check_routes(services, 80 if overrides.get("PUBLIC_SCHEME") == "http" else 443)
+            assert [v["type"] for v in services["caddy"]["volumes"]] == ["volume", "volume"]
+            check_routes(config, 80 if overrides.get("PUBLIC_SCHEME") == "http" else 443)
         if not overrides or overrides.get("PUBLIC_SCHEME") == "http":
             check_web(services["web"]["environment"])
     for domain in DOMAINS[:-1]:
         result = compose(**{domain: ""})
         assert result.returncode != 0 and domain in result.stderr, result
     assert not list((ROOT / "deploy").rglob("*.sh"))
-    print("PASS: one hostname per service, both tracks, HTTP/HTTPS, optional web, isolated API allowlist and CORS, native config.js, CSP, SPA fallback; no shell scripts")
+    print("PASS: one hostname per service, both tracks, HTTP/HTTPS, optional web, isolated API allowlist and CORS, native config.js, CSP, SPA fallback; inline configs recreate on change; no shell scripts")

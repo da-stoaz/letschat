@@ -1,3 +1,51 @@
+# LetsChat production reverse-proxy map. Hostnames come from .env; the same
+# values build the discovery URLs in docker-compose.prod.base.yml.
+#
+# core-api binds the public API on container port 8787 and the admin Razor
+# pages on 8788. Only 8787 is fronted by Caddy; the admin port stays bound to
+# 127.0.0.1 on the host and is reached over SSH port-forward.
+#
+# core-api fronts everything on one host: the public auth/token API, the
+# /.well-known/letschat.json discovery document the app fetches at first run,
+# the public landing page, and the /downloads/{os} installer resolver. There is
+# no separate `connect` subdomain: auth.<domain> IS the discovery entrypoint
+# that users paste into the desktop "pick a server" screen.
+configs:
+  caddyfile:
+    content: &caddyfile |
+      ${PUBLIC_SCHEME:-https}://${AUTH_DOMAIN} {
+        reverse_proxy core-api:8787
+      }
+
+      ${PUBLIC_SCHEME:-https}://${CHAT_DOMAIN} {
+        # On this network, spacetimedb is the client-only chat-edge filter.
+        reverse_proxy spacetimedb:3000
+      }
+
+      ${PUBLIC_SCHEME:-https}://${FILES_DOMAIN} {
+        reverse_proxy minio:44390
+      }
+
+      ${PUBLIC_SCHEME:-https}://${LIVEKIT_DOMAIN} {
+        reverse_proxy livekit:44380
+      }
+
+      # Hosted web client (browser SPA). Static files served by the `web`
+      # container; it self-discovers this instance via auth.<domain>.
+      (hosted-web) {
+        {args[0]} {
+          # HSTS belongs at the TLS edge (Caddy terminates TLS here). The app's
+          # CSP and other security headers travel with the response from the
+          # `web` container (deploy/web/Caddyfile). Under the Cloudflare-tunnel
+          # topology, enable HSTS at the tunnel/Cloudflare edge instead.
+          header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+          reverse_proxy web:80
+        }
+      }
+
+      # Empty when APP_DOMAIN is unset: no browser site or catch-all listener.
+      ${APP_DOMAIN:+import hosted-web ${PUBLIC_SCHEME:-https}://${APP_DOMAIN}}
+
 services:
   # ── Caddy reverse-proxy track ───────────────────────────────────────────────
   # Expose 80/443 publicly to this host. Caddy terminates TLS and proxies to
@@ -9,16 +57,13 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      PUBLIC_SCHEME: "${PUBLIC_SCHEME:-https}"
-      AUTH_DOMAIN: "${AUTH_DOMAIN:?Set AUTH_DOMAIN}"
-      CHAT_DOMAIN: "${CHAT_DOMAIN:?Set CHAT_DOMAIN}"
-      FILES_DOMAIN: "${FILES_DOMAIN:?Set FILES_DOMAIN}"
-      LIVEKIT_DOMAIN: "${LIVEKIT_DOMAIN:?Set LIVEKIT_DOMAIN}"
-      # Compose's native conditional expansion omits the optional browser site.
-      CADDY_WEB_SITE: "${APP_DOMAIN:+import hosted-web ${PUBLIC_SCHEME:-https}://${APP_DOMAIN}}"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    # Recreates Caddy when the Caddyfile changes; see `configs:` in the base file.
+    labels:
+      letschat.config: *caddyfile
     volumes:
-      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

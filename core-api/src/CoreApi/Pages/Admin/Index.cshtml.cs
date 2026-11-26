@@ -11,8 +11,9 @@ namespace CoreApi.Pages.Admin;
 [Authorize(Roles = DbInitializer.AdminRole)]
 public sealed class IndexModel(
     UserManager<ApplicationUser> users, AppDbContext db,
-    SystemConfigService config, StorageInventoryState inventory) : PageModel
+    SystemConfigService config, StorageInventoryState inventory, VersionInfo version) : PageModel
 {
+    public string? ComposeWarning => version.ComposeWarning;
     public Dictionary<AccountStatus, int> Accounts { get; private set; } = [];
     public int Total => Accounts.Values.Sum();
     public int PendingApproval => Accounts.GetValueOrDefault(AccountStatus.EmailVerified);

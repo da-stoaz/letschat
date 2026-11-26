@@ -39,6 +39,13 @@ jobs:
           # app version bump.
           non_app='(^site/)|(^tests/)|(^livekit/)|(^deploy/(caddy|examples)/)|(^\.claude/)|(^\.agents/)|(^graphify-out/)|(^docker-compose)|(^\.env.*\.example$)|(^\.github/)|(^\.gitignore$)|(^LICENSE$)|(^skills-lock\.json$)|(\.md$)'
 
+          # Operators find out about new Compose files from core-api's revision warning.
+          if echo "$changed" | grep -qE '^docker-compose\.prod\.' \
+             && [ "$(git show FETCH_HEAD:docker-compose.prod.base.yml | grep LETSCHAT_COMPOSE_REVISION)" = "$(grep LETSCHAT_COMPOSE_REVISION docker-compose.prod.base.yml)" ]; then
+            echo "::error file=docker-compose.prod.base.yml::A production Compose file changed: raise LETSCHAT_COMPOSE_REVISION here and VersionInfo.ComposeRevision together."
+            exit 1
+          fi
+
           app_changed=$(echo "$changed" | grep -vE "$non_app" || true)
           if [ -z "$app_changed" ]; then
             echo "Only docs / site / deploy-config files changed — no app version bump required. ✓"
@@ -92,6 +99,9 @@ jobs:
             $(grep -hoE 'clockworklabs/spacetime:v[0-9][0-9.]*' docker-compose.prod.base.yml docker-compose.dev.yml .github/compose.backend-tests.yml server/Dockerfile.module | sed 's/.*:v//') \
             $(awk '/^name = "spacetimedb"$/ { getline; gsub(/[^0-9.]/, ""); print }' server/Cargo.lock) \
             $(grep -oE '"spacetimedb@[0-9][0-9.]*"' bun.lock | grep -oE '[0-9][0-9.]*')
+          same compose-revision \
+            $(grep -oE 'LETSCHAT_COMPOSE_REVISION: "[0-9]+"' docker-compose.prod.base.yml | grep -oE '[0-9]+') \
+            $(grep -oE 'ComposeRevision = [0-9]+' core-api/src/CoreApi/Services/VersionInfo.cs | grep -oE '[0-9]+')
           for image in livekit/livekit-server pgsty/silo pgsty/mc; do
             same "$image" $(grep -hoE "$image:[^\"[:space:]]+" docker-compose.prod.base.yml docker-compose.dev.yml .github/compose.backend-tests.yml | sed 's/.*://')
           done

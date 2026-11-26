@@ -52,30 +52,19 @@ import { GITHUB_REPO } from "@/lib/site";
 
     <article class="step-card p-7 space-y-4">
       <h2 class="text-2xl font-semibold tracking-tight">Step 0: Get shared files</h2>
-      <p class="guide-prose">Download the shared base compose file, the LiveKit config and the SpacetimeDB config:</p>
+      <p class="guide-prose">Download the shared base compose file from the latest release:</p>
       <CodeBlock label="terminal" code={`mkdir letschat && cd letschat
 
-wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.base.yml
-
-mkdir livekit
-wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/${GITHUB_REPO}/main/livekit/config.prod.yaml
-
-# the SpacetimeDB server config (WebSocket keepalive) — required: without it
-# Docker mounts an empty folder and the database never starts
-mkdir spacetimedb
-wget -O spacetimedb/config.prod.toml https://raw.githubusercontent.com/${GITHUB_REPO}/main/spacetimedb/config.prod.toml`} />
-      <p class="guide-prose text-sm">Every service — the browser client included — is a pre-built image that GitHub Actions publishes with each release. Nothing is compiled on your server. To upgrade later, download the compose files again (they change with releases) and pull.</p>
+wget https://github.com/${GITHUB_REPO}/releases/latest/download/docker-compose.prod.base.yml`} />
+      <p class="guide-prose text-sm">Every service — the browser client included — is a pre-built image that GitHub Actions publishes with each release. Nothing is compiled on your server. The Compose files and <code>.env</code> are the whole deployment: the Caddy, LiveKit and SpacetimeDB configuration is inside them.</p>
     </article>
 
     <article class="step-card p-7 space-y-4">
       <h2 class="text-2xl font-semibold tracking-tight">Step 1: Download Path B files</h2>
       <p class="guide-prose">Inside the <code>letschat</code> directory:</p>
-      <CodeBlock label="terminal" code={`wget https://raw.githubusercontent.com/${GITHUB_REPO}/main/docker-compose.prod.caddy.yml
+      <CodeBlock label="terminal" code={`wget https://github.com/${GITHUB_REPO}/releases/latest/download/docker-compose.prod.caddy.yml
 
-wget -O .env https://raw.githubusercontent.com/${GITHUB_REPO}/main/.env.production.caddy.example
-
-mkdir -p deploy/caddy
-wget -O deploy/caddy/Caddyfile https://raw.githubusercontent.com/${GITHUB_REPO}/main/deploy/caddy/Caddyfile`} />
+wget -O .env https://github.com/${GITHUB_REPO}/releases/latest/download/caddy.env`} />
     </article>
 
     <article class="step-card p-7 space-y-4">
@@ -169,21 +158,22 @@ VITE_WEB_WS_COMPRESSION=gzip`} />
     <article class="step-card p-7 space-y-4">
       <h2 class="text-2xl font-semibold tracking-tight">Step 4: Pull images, start, and connect core-api to the chat module</h2>
       <p class="guide-prose">
-        Your <code>.env</code> ships with <code>LETSCHAT_VERSION=latest</code>. Pin it to a release
-        (e.g. <code>LETSCHAT_VERSION=1.2.4</code>) to make upgrades explicit. Before an upgrade, save
-        the current deployment files and keep the deployed images. To roll back, restore those files
-        together with <code>.env</code>, then run <code>docker compose … up -d --pull never</code>.
+        Your <code>.env</code> names both Compose files in <code>COMPOSE_FILE</code>, so every command
+        is plain <code>docker compose</code>. It ships with <code>LETSCHAT_VERSION=latest</code>; pin it
+        to a release (e.g. <code>LETSCHAT_VERSION=1.9.0</code>) to make upgrades explicit. Upgrading
+        later is the same line, <code>docker compose pull &amp;&amp; docker compose up -d</code>. Before
+        an upgrade, save <code>.env</code> and both Compose files and keep the deployed images. To roll
+        back, restore those files, then run <code>docker compose up -d --pull never</code>.
         Desktop apps follow your server: they offer the app version released with the backend you
         run, so they update when you upgrade and not before.
         See <a href={`https://github.com/${GITHUB_REPO}/blob/main/docs/DEPLOYMENT.md#upgrading-a-running-deployment`}>the upgrade and rollback guide</a>.
       </p>
-      <CodeBlock label="terminal" code={`docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml ps`} />
+      <CodeBlock label="terminal" code={`docker compose pull && docker compose up -d
+docker compose ps`} />
       <p class="guide-prose"><code>module-init</code> automatically publishes the SpacetimeDB module once the database is healthy. Watch its progress with:</p>
       <CodeBlock label="terminal" code={`docker logs letschat-module-init`} />
       <Callout type="note">
-        Changed a hostname? Run <code>docker compose … up -d</code> so Caddy, core-api and web
+        Changed a hostname? Run <code>docker compose up -d</code> so Caddy, core-api and web
         all receive it. No rebuild; each address is configured once.</Callout>
 
       <h3 class="text-lg font-medium pt-3">Check automatic setup</h3>
@@ -195,7 +185,7 @@ docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml 
       <CodeBlock label="terminal" code={`docker logs letschat-core-api
 # Expect: Pinned SpacetimeDB trusted issuer to http://core-api:8787.
 # Expect: Registered archive-worker identity ...
-docker compose -f docker-compose.prod.base.yml exec postgres \\
+docker compose exec postgres \\
 psql -U letschat -d archive -c 'SELECT count(*) FROM archive_user;'
 # The module-owner row should already be replicated.`} />
       <Callout type="warning" title="Keep the identity volumes">

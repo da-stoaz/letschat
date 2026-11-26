@@ -14,6 +14,8 @@ on:
       # Test-only changes never reach a built artifact.
       - 'tests/**'
       - '**/*.md'
+      # Production Compose files ship as release assets: a change here reaches
+      # operators with the next release. Bump the version to ship it sooner.
       - 'docker-compose*.yml'
       - '.env*.example'
       - 'livekit/**'
@@ -173,6 +175,18 @@ jobs:
               -f name="LetsChat $TAG" -f body="$BODY" -F draft=true --jq .id)
           fi
           echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      # Operators download the deployment files from the release, never from
+      # main, so they always match that release's images. GitHub renames asset
+      # names that start with a dot, hence <track>.env.
+      - name: Attach deployment files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for track in caddy tunnel; do cp ".env.production.$track.example" "$RUNNER_TEMP/$track.env"; done
+          gh release upload "v$(jq -r .version package.json)" --repo "$GITHUB_REPOSITORY" --clobber \
+            docker-compose.prod.base.yml docker-compose.prod.caddy.yml docker-compose.prod.tunnel.yml \
+            "$RUNNER_TEMP/caddy.env" "$RUNNER_TEMP/tunnel.env"
 
   build-tauri:
     needs: prepare-release

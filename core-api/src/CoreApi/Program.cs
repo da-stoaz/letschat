@@ -255,6 +255,9 @@ builder.Services.AddRazorPages();
 
 var app = builder.Build();
 
+if (app.Services.GetRequiredService<VersionInfo>().ComposeWarning is { } composeWarning)
+    app.Logger.LogWarning("{ComposeWarning}", composeWarning);
+
 // Fail fast: outside Development, refuse to boot on any secret left at its public
 // dev default. A silently-accepted dev secret is the worst failure mode — auth
 // and voice keep working, but anyone can forge tokens with the well-known key.
