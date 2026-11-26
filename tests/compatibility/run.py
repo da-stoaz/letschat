@@ -58,10 +58,12 @@ with tempfile.TemporaryDirectory(prefix=project) as temporary:
 
     def render(source, core_image, module_image):
         """Write the disposable Compose project for one backend; volumes keep their project names."""
+        # Releases before 1.9.0 bind-mount these two files; later ones inline them.
         for name in ('docker-compose.prod.base.yml', 'spacetimedb/config.prod.toml', 'livekit/config.prod.yaml'):
-            target = folder / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source / name, target)
+            if (source / name).exists():
+                target = folder / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source / name, target)
         config = json.loads(run('docker', 'compose', '--env-file', '/dev/null', '-p', project,
                                 '-f', str(folder / 'docker-compose.prod.base.yml'), 'config', '--format', 'json', env=env))
         for name, service in config['services'].items():

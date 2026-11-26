@@ -61,7 +61,7 @@ scheme in a later release.
 - Server: `core-api/src/CoreApi/Endpoints/MiscEndpoints.cs:19`
 - Client: `src/lib/discovery.ts:25` (and error strings 27/34)
 - Tests: `core-api/tests/.../DiscoveryTests.cs:35`
-- Docs/infra: `DEPLOYMENT.md`, `README.md`, `CLAUDE.md`, `deploy/caddy/Caddyfile`,
+- Docs/infra: `DEPLOYMENT.md`, `README.md`, `CLAUDE.md`, `docker-compose.prod.caddy.yml` (inline Caddyfile),
   `.env.*.example`, `site/src/pages/self-hosting*`, `core-api/README.md`,
   `scripts/core-api-lan.ts`
 

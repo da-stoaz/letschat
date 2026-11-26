@@ -60,10 +60,7 @@ def corrupt(token):
 
 with tempfile.TemporaryDirectory(prefix=PROJECT) as temporary:
     folder = Path(temporary)
-    for file in ("docker-compose.prod.base.yml", "spacetimedb/config.prod.toml", "livekit/config.prod.yaml"):
-        destination = folder / file
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / file, destination)
+    shutil.copyfile(ROOT / "docker-compose.prod.base.yml", folder / "docker-compose.prod.base.yml")
     password = secrets.token_hex(32)
     settings = dict(LETSCHAT_VERSION="1.2.5", PUBLIC_SCHEME="http", ASPNETCORE_ENVIRONMENT="Staging",
                     EMAIL_SENDER="log", ADMIN_BOOTSTRAP_USERNAME="admin", ADMIN_BOOTSTRAP_EMAIL="admin@test.local",

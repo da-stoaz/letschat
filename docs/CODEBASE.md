@@ -314,7 +314,14 @@ overlay:
 
 The base stack contains PostgreSQL, `core-api`, SpacetimeDB (with its config
 init), `chat-edge`, `module-init`, MinIO (the MinIO-compatible Silo image) with
-`minio-init`, LiveKit, the archive worker, and the web client. The admin listener is separate
+`minio-init`, LiveKit, the archive worker, and the web client. Configuration
+files are inline (`configs:` or `LIVEKIT_CONFIG`), and each service that reads
+an inline file carries its content as the `letschat.config` label so Compose
+recreates it when the content changes; `deploy/caddy/test_config.py` enforces
+that. Release CI attaches the Compose files and `.env` templates to each
+release. `LETSCHAT_COMPOSE_REVISION` (base file) must equal
+`VersionInfo.ComposeRevision` and rise with any production Compose change;
+`version-check.yml` enforces both, and core-api warns when they differ at runtime. The admin listener is separate
 from the public API listener and is bound to loopback by the documented compose
 configuration. See `DEPLOYMENT.md` for the exact ports and bootstrap procedure.
 

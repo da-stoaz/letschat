@@ -6,8 +6,8 @@ import { networkInterfaces, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 const root = resolve(import.meta.dir, '../..')
-type FixtureConfig = { services: Record<string, { networks: string[]; image: string }>; port: number; rtc: Record<string, unknown> }
-const readYaml = async (path: string) => Bun.YAML.parse(await readFile(join(root, path), 'utf8')) as FixtureConfig
+type ComposeFile = { services: Record<string, { networks: string[]; image: string; environment: Record<string, string> }> }
+const readYaml = async (path: string) => Bun.YAML.parse(await readFile(join(root, path), 'utf8')) as ComposeFile
 const production = await readYaml('docker-compose.prod.base.yml')
 const networks = production.services.livekit.networks as string[]
 const network = networks.find(name => production.services['core-api'].networks.includes(name)
@@ -41,7 +41,7 @@ const token = (room: string, identity: string, admin = false) => {
     exp: Math.floor(Date.now() / 1000) + 600, video: admin ? { roomList: true } : { roomJoin: true, room, canPublish: true, canSubscribe: true } })}`
   return `${payload}.${createHmac('sha256', secret).update(payload).digest('base64url')}`
 }
-const config = await readYaml('livekit/config.prod.yaml')
+const config = Bun.YAML.parse(production.services.livekit.environment.LIVEKIT_CONFIG) as { port: number; rtc: Record<string, unknown> }
 config.port = port
 Object.assign(config.rtc, { use_external_ip: false, node_ip: address, tcp_port: port + 1, udp_port: port + 2 })
 const writeConfig = () => writeFile(join(directory, 'livekit.yaml'), Bun.YAML.stringify(config))

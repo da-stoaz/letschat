@@ -30,6 +30,12 @@ Topology overlays:
 - Cloudflare Tunnel: `docker-compose.prod.tunnel.yml`
 - Caddy reverse proxy: `docker-compose.prod.caddy.yml`
 
+These two Compose files and `.env` are the whole deployment: every
+configuration file (Caddy, LiveKit, SpacetimeDB) is inline. `COMPOSE_FILE` in
+`.env` names the files, so every command below is plain `docker compose …`.
+Download them from a release, never from `main`: each release attaches the
+copies that match its images.
+
 Core API and LiveKit report Docker health status in `docker compose ps` using
 HTTP probes (`/health` on port 8787 and `/` on port 44380, respectively).
 Both check every 5 seconds, including during the 10-second startup grace period;
@@ -45,8 +51,8 @@ because it is unhealthy. Use a newly built/released Core API image with this
 Compose configuration: the probe requires the included `curl` executable.
 
 > **Already run a reverse proxy / `cloudflared` natively on the host?** Use
-> **neither overlay** — run the base stack alone (`docker compose -f
-> docker-compose.prod.base.yml up -d`) and point your existing proxy/connector
+> **neither overlay** — set `COMPOSE_FILE=docker-compose.prod.base.yml` in
+> `.env`, run `docker compose up -d`, and point your existing proxy/connector
 > at the host loopback ports it publishes: core-api `127.0.0.1:8787`,
 > SpacetimeDB `127.0.0.1:44300`, MinIO `127.0.0.1:44390`, LiveKit signalling
 > `127.0.0.1:44380` (keep `chat`/`lk` as WebSocket upgrades). The bundled
@@ -57,9 +63,12 @@ Compose configuration: the probe requires the included `curl` executable.
 ### Tunnel track
 
 ```bash
-cp .env.production.tunnel.example .env
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
+mkdir letschat && cd letschat
+wget https://github.com/da-stoaz/letschat/releases/latest/download/docker-compose.prod.base.yml
+wget https://github.com/da-stoaz/letschat/releases/latest/download/docker-compose.prod.tunnel.yml
+wget -O .env https://github.com/da-stoaz/letschat/releases/latest/download/tunnel.env
+# fill in .env, then:
+docker compose pull && docker compose up -d
 ```
 
 Both overlays route `spacetimedb:3000` through `chat-edge`. It allows only
@@ -91,26 +100,16 @@ Repository regression check: `python3 deploy/caddy/test_config.py` (Docker and
 the `caddy:2` image required). It checks the real Caddy configuration, Compose
 wiring and browser connect address without starting the application stack.
 
-When upgrading, download the overlay and Caddyfile together:
-
 ```bash
-mkdir -p deploy/caddy
-wget -O docker-compose.prod.caddy.yml https://raw.githubusercontent.com/da-stoaz/letschat/main/docker-compose.prod.caddy.yml
-wget -O deploy/caddy/Caddyfile https://raw.githubusercontent.com/da-stoaz/letschat/main/deploy/caddy/Caddyfile
+mkdir letschat && cd letschat
+wget https://github.com/da-stoaz/letschat/releases/latest/download/docker-compose.prod.base.yml
+wget https://github.com/da-stoaz/letschat/releases/latest/download/docker-compose.prod.caddy.yml
+wget -O .env https://github.com/da-stoaz/letschat/releases/latest/download/caddy.env
+# fill in .env, then:
+docker compose pull && docker compose up -d
 ```
 
-```bash
-cp .env.production.caddy.example .env
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
-```
-
-Validate config before start:
-
-```bash
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml config >/tmp/letschat-tunnel-config.yml
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml config >/tmp/letschat-caddy-config.yml
-```
+Validate config before start: `docker compose config --quiet`.
 
 Smoke-testing the base production compose on one machine? Set
 `PUBLIC_SCHEME=http`, `AUTH_DOMAIN=localhost:8787`, `CHAT_DOMAIN=localhost:44300`,
@@ -160,9 +159,9 @@ Routing:
 - **Tunnel track**: add an ingress rule `app.<domain> -> http://web:80` in the
   Cloudflare Zero Trust dashboard (WebSocket not required — static files only).
 
-> After changing a hostname, run `docker compose ... up -d` so core-api, web
+> After changing a hostname, run `docker compose up -d` so core-api, web
 > and (on the Caddy track) Caddy receive the same new value. Changing only
-> `VITE_WEB_WS_COMPRESSION` needs `docker compose ... up -d web`. Compose rejects
+> `VITE_WEB_WS_COMPRESSION` needs `docker compose up -d web`. Compose rejects
 > missing required hostnames. Use only `gzip` or `none` for compression.
 
 ## Legacy `auth.db` import
@@ -204,7 +203,7 @@ host CLI or second publish is needed. For administrative CLI commands, use the
 same identity inside Compose, for example:
 
 ```bash
-docker compose -f docker-compose.prod.base.yml run --rm module-init \
+docker compose run --rm module-init \
   sql -s http://spacetimedb:3000 letschat "SELECT trusted_issuer FROM system_settings"
 ```
 
@@ -229,8 +228,7 @@ new client protocol, so older apps are told to update instead of failing. After
 reading those notes, accept the change once for this upgrade:
 
 ```bash
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml \
-  run --rm module-init publish --server http://spacetimedb:3000 letschat \
+docker compose run --rm module-init publish --server http://spacetimedb:3000 letschat \
   --bin-path /module/letschat_server.wasm --yes=remote,skip-login,migrate,break-clients
 ```
 
@@ -239,43 +237,50 @@ add `--delete-data`; data-deleting migrations go through the cold-archive rebuil
 
 ## Upgrading a running deployment
 
-Before upgrading, save a private copy of `.env`, both Compose files and the
-mounted configuration files in `livekit/`, `spacetimedb/` and `deploy/caddy/`
-(when used). Keep the currently deployed Docker images until the upgrade is
-verified; do not prune them. A rollback needs the previous configuration and
-images together.
-
-Download the current compose files (they change with releases), set the
-matching release in `.env`, then pull and restart. For this release:
-
-On the Caddy track, also download `deploy/caddy/Caddyfile` using the
-[Caddy track commands](#caddy-track) above.
+From the deployment directory:
 
 ```bash
-wget -O docker-compose.prod.base.yml https://raw.githubusercontent.com/da-stoaz/letschat/main/docker-compose.prod.base.yml
-wget -O docker-compose.prod.<track>.yml https://raw.githubusercontent.com/da-stoaz/letschat/main/docker-compose.prod.<track>.yml
-wget -O livekit/config.prod.yaml https://raw.githubusercontent.com/da-stoaz/letschat/main/livekit/config.prod.yaml
-wget -O spacetimedb/config.prod.toml https://raw.githubusercontent.com/da-stoaz/letschat/main/spacetimedb/config.prod.toml
-LETSCHAT_VERSION=1.7.0   # in .env
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml pull
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml up -d
+docker compose pull && docker compose up -d
 ```
 
-To roll back, restore the saved configuration (including `.env` with its old
-`LETSCHAT_VERSION`) in the same deployment directory, then run:
+`up -d` recreates only the containers whose image or configuration changed;
+EF migrations and the module publish run on their own. With
+`LETSCHAT_VERSION=latest` this moves to the newest release; a pinned
+deployment raises `LETSCHAT_VERSION` in `.env` first.
+
+When a release changes the Compose files, its Breaking Changes entry says so,
+and core-api warns in its log and on the admin dashboard while the files on the
+server don't match its image (`LETSCHAT_COMPOSE_REVISION`). Download that
+release's copies before pulling (a pinned deployment uses
+`releases/download/v<version>/` instead of `releases/latest/download/`):
 
 ```bash
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.<track>.yml up -d --pull never
+wget -O docker-compose.prod.base.yml https://github.com/da-stoaz/letschat/releases/latest/download/docker-compose.prod.base.yml
+wget -O docker-compose.prod.<track>.yml https://github.com/da-stoaz/letschat/releases/latest/download/docker-compose.prod.<track>.yml
+docker compose pull && docker compose up -d
+```
+
+Releases before 1.9.0 also bind-mounted `livekit/config.prod.yaml`,
+`spacetimedb/config.prod.toml` and `deploy/caddy/Caddyfile`. Those are inline
+now: add the `COMPOSE_FILE` line from the `.env` template once, then delete the
+three files. Customisations of them go in a `compose.override.yml` listed last
+in `COMPOSE_FILE`, so a downloaded Compose file never overwrites them; after
+editing one, run `docker compose up -d --force-recreate <service>`.
+
+Before upgrading, save a private copy of `.env` and both Compose files, and
+keep the currently deployed Docker images until the upgrade is verified; do
+not prune them. To roll back, restore those files (including the old
+`LETSCHAT_VERSION`) and run:
+
+```bash
+docker compose up -d --pull never
 ```
 
 This uses the retained images. Changing only `LETSCHAT_VERSION` is insufficient:
-for example, the 1.2.1 web image requires `AUTH_DOMAIN`, `CHAT_DOMAIN`,
-`FILES_DOMAIN` and `LIVEKIT_DOMAIN` in its container environment, which the new
-Compose file no longer passes. Its old Compose file and `.env` restore those
-values together. Every release publishes `:<version>` and `:sha-<commit>` image
-tags. The third-party images
-(SpacetimeDB, LiveKit, the MinIO-compatible Silo server, Postgres) are pinned in
-the compose file itself, so downloading it is what moves them.
+an older image can need settings that only its own Compose file passes. Every
+release publishes `:<version>` and `:sha-<commit>` image tags. The third-party
+images (SpacetimeDB, LiveKit, the MinIO-compatible Silo server, Postgres) are
+pinned in the Compose file itself, so downloading it is what moves them.
 
 > **⚠️ Never delete the `module_init_home` volume.** `spacetime login` mints a
 > **new** identity every time it runs, and only the identity that created a
@@ -343,10 +348,10 @@ identity; explicitly configured tokens remain under operator control.
 Check both setup and actual replication:
 
 ```bash
-docker compose -f docker-compose.prod.base.yml logs core-api
+docker compose logs core-api
 # Pinned SpacetimeDB trusted issuer to http://core-api:8787.
 # Registered archive-worker identity ...
-docker compose -f docker-compose.prod.base.yml exec postgres \
+docker compose exec postgres \
   psql -U letschat -d archive -c 'SELECT count(*) FROM archive_user;'
 ```
 
@@ -369,7 +374,7 @@ After a destructive migration, restore the durable tables from Postgres by
 running the worker once in rebuild mode:
 
 ```bash
-docker compose -f docker-compose.prod.base.yml run --rm \
+docker compose run --rm \
   -e ARCHIVE_REBUILD=1 archive-worker
 ```
 
@@ -465,7 +470,7 @@ core-api sets `SPACETIME_OIDC_ISSUER` through the owner-authenticated
 succeeds. Before then, registration fails closed. Existing registered users
 are unaffected by a temporarily absent pin.
 
-Confirm setup through `docker compose ... logs core-api`: it logs
+Confirm setup through `docker compose logs core-api`: it logs
 `Pinned SpacetimeDB trusted issuer to …` on success. Persistent bootstrap
 warnings indicate a missing owner credential or an unreachable module.
 
@@ -539,7 +544,7 @@ the owner credential.
 | Email | `EMAIL_SENDER`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_STARTTLS`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME` | `EMAIL_SENDER=smtp` for real delivery; `log` only in dev |
 | Rate limiting | `RATE_LIMIT_PERMIT`, `RATE_LIMIT_WINDOW_SECONDS` | Per-IP fixed window, separate budgets for registration, email, and password actions; sign-in allows 10× |
 | Client versions | `RECOMMENDED_CLIENT_VERSION`, `MIN_CLIENT_VERSION` | Optional; recommended defaults to the backend version, minimum to the protocol family's first client (1.6.2 for protocol 1) |
-| LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Compose passes the pair to LiveKit as `LIVEKIT_KEYS` and to core-api, so they cannot disagree. `LIVEKIT_KEYS` replaces any `keys:` block still in `livekit/config.prod.yaml` |
+| LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Compose passes the pair to LiveKit as `LIVEKIT_KEYS` and to core-api, so they cannot disagree. The server config itself is `LIVEKIT_CONFIG` in `docker-compose.prod.base.yml` |
 | MinIO | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `FILES_DOMAIN` | Served by the pinned MinIO-compatible Silo image. Compose derives `MINIO_PUBLIC_ENDPOINT` from `FILES_DOMAIN` and `PUBLIC_SCHEME`; presigned URLs use this public address. Existing `minio_data` volumes are reused |
 | MinIO CORS | `MINIO_CORS_ALLOW_ORIGIN` | Keep `*`. Gates the presigned **upload** PUT as well as downloads, and the desktop app's origin is `tauri://localhost` / `http://tauri.localhost` — pinning to `https://app.<domain>` alone silently blocks every desktop upload at the CORS preflight |
 | Discovery JSON | Derived automatically | Core-api serves `/.well-known/letschat.json`. Compose builds the `DISCOVERY_*` container settings from the hostnames below; no second set of URLs in `.env`. `database` is fixed to `letschat` |
@@ -587,7 +592,7 @@ by the sweeper. Multipart sessions remain retryable until cancelled or expired.
 
 What the proxy adds on top:
 
-- **Caddy track** — `deploy/caddy/Caddyfile` sets no `request_body max_size`;
+- **Caddy track** — the Caddyfile in `docker-compose.prod.caddy.yml` sets no `request_body max_size`;
   the configured app limit applies.
 - **Tunnel track** — Cloudflare caps each request body at **100 MB on Free and
   Pro**. The default 64 MiB multipart parts stay below that cap, so a larger
@@ -654,7 +659,7 @@ enforces CORS like any browser and its page origin is `tauri://localhost`
 (macOS/Linux) or `http://tauri.localhost` (Windows). Dev never shows this
 because the dev MinIO runs with MinIO's default of `*`.
 
-**Fix:** set `MINIO_CORS_ALLOW_ORIGIN=*` and `docker compose ... up -d minio`.
+**Fix:** set `MINIO_CORS_ALLOW_ORIGIN=*` and `docker compose up -d minio`.
 The presigned URL's SigV4 signature — not the `Origin` header — is what
 authorises the request, so `*` gives up no access control. If you must pin it,
 list every client origin:
@@ -687,7 +692,7 @@ Since v1.0.5 the two are distinguished:
 For the `503`, check core-api's log for the line naming the address it tried:
 
 ```bash
-docker compose -f docker-compose.prod.base.yml logs core-api | grep -i "CANNOT REACH\|Voice presence"
+docker compose logs core-api | grep -i "CANNOT REACH\|Voice presence"
 ```
 
 core-api probes SpacetimeDB once at startup and logs at `Error` if it is
@@ -816,25 +821,10 @@ Two exceptions where the order DOES matter:
 
 ## Operations Basics
 
-Before pulling a release, update the checkout (or deployment files) to that
-release as well as `LETSCHAT_VERSION`. Image pulls do not update Compose files
-or mounted configuration (see "Upgrading a running deployment"). Recreating
-LiveKit interrupts active calls. Release-specific steps are on the site's
-Breaking Changes page.
-
-Tunnel update cycle:
-
-```bash
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml pull
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.tunnel.yml up -d
-```
-
-Caddy update cycle:
-
-```bash
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml pull
-docker compose -f docker-compose.prod.base.yml -f docker-compose.prod.caddy.yml up -d
-```
+Update cycle (both tracks): `docker compose pull && docker compose up -d`.
+Image pulls do not update the Compose files; a release that changes them says
+so (see "Upgrading a running deployment"). Recreating LiveKit interrupts active
+calls. Release-specific steps are on the site's Breaking Changes page.
 
 Minimum backups, taken together (a partial restore can break identities or
 attachment links):

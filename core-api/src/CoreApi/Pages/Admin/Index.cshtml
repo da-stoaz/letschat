@@ -11,6 +11,11 @@
     <a class="btn btn-primary" href="/admin/users/create">Create user</a>
 </div>
 
+@if (Model.ComposeWarning is { } composeWarning)
+{
+    <div class="alert alert-error" role="alert">@composeWarning</div>
+}
+
 <div class="stat-grid dashboard-stats">
     <a class="stat" href="/admin/users"><div class="label">Total accounts</div><div class="value">@Model.Total.ToString("N0")</div><div class="small muted">@Model.Accounts.GetValueOrDefault(AccountStatus.Active) active · @Model.Admins administrators</div></a>
     <a class="stat" href="/admin/pending"><div class="label">Awaiting approval</div><div class="value">@Model.PendingApproval</div><div class="small muted">@(Model.PendingApproval > 0 ? "Review access requests →" : "No requests to review")</div></a>

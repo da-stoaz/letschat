@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 
 namespace CoreApi.Services;
@@ -14,6 +15,16 @@ public sealed class VersionInfo
     // Protocol families describe the required HTTP + SpacetimeDB contract, not releases.
     public const int ClientProtocol = 1;
     public const string FirstCompatibleClient = "1.6.2";
+
+    // Raised by every release that changes a production Compose file. CI keeps
+    // LETSCHAT_COMPOSE_REVISION in docker-compose.prod.base.yml equal to it.
+    public const int ComposeRevision = 1;
+
+    /// <summary>
+    /// Set when the deployment's Compose files are not the ones released with this
+    /// build: `docker compose pull` updates images, never the Compose files.
+    /// </summary>
+    public string? ComposeWarning { get; }
     public string ServerVersion { get; }
 
     /// <summary>The app version the landing page will offer for download.</summary>
@@ -24,7 +35,7 @@ public sealed class VersionInfo
 
     public bool IsDevBuild => ServerVersion.StartsWith("0.0.0", StringComparison.Ordinal);
 
-    public VersionInfo(IConfiguration config)
+    public VersionInfo(IConfiguration config, IHostEnvironment env)
     {
         var raw = Assembly.GetEntryAssembly()
             ?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
@@ -42,5 +53,15 @@ public sealed class VersionInfo
         MinClientVersion =
             (config["MIN_CLIENT_VERSION"]?.Trim() is { Length: > 0 } min)
                 ? min : FirstCompatibleClient;
+
+        var compose = config["LETSCHAT_COMPOSE_REVISION"];
+        if ((env.IsProduction() || env.IsStaging())
+            && compose != ComposeRevision.ToString(CultureInfo.InvariantCulture))
+        {
+            ComposeWarning = $"The Compose files ({(compose is null ? "from before 1.9.0" : $"revision {compose}")}) "
+                + $"do not match core-api {ServerVersion} (revision {ComposeRevision}). Download "
+                + $"docker-compose.prod.base.yml and your overlay from the v{ServerVersion} release, "
+                + "then run docker compose up -d.";
+        }
     }
 }

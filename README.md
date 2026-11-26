@@ -75,7 +75,8 @@ documented local stack.
 ## Production and documentation
 
 Production uses `docker-compose.prod.base.yml` with either the tunnel or Caddy
-overlay. Follow [`DEPLOYMENT.md`](docs/DEPLOYMENT.md); do not expose internal service
+overlay, downloaded from a release; upgrades are `docker compose pull && docker compose up -d`.
+Follow [`DEPLOYMENT.md`](docs/DEPLOYMENT.md); do not expose internal service
 ports directly.
 
 | Document | Purpose |

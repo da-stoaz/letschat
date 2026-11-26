@@ -4,6 +4,17 @@ import Callout from "@/components/Callout.astro";
 
 const changes = [
   {
+    version: "v1.9.0",
+    date: "November 2026",
+    items: [
+      "The LiveKit, SpacetimeDB and Caddy configuration is now inline in the Compose files. livekit/config.prod.yaml, spacetimedb/config.prod.toml and deploy/caddy/Caddyfile are no longer used.",
+      "COMPOSE_FILE in .env names the Compose files, so every command is plain docker compose and a routine upgrade is docker compose pull && docker compose up -d.",
+      "Each release attaches its Compose files and .env templates. Download them from github.com/da-stoaz/letschat/releases/latest/download/, not from main.",
+      "core-api warns in its log and on the admin dashboard when the Compose files on the server are not the ones released with its image, so a missed Compose download no longer goes unnoticed.",
+    ],
+    migration: "Download docker-compose.prod.base.yml and your track's overlay from the 1.9.0 release. Add COMPOSE_FILE=docker-compose.prod.base.yml:docker-compose.prod.caddy.yml (or …tunnel.yml; only the base file behind a host-managed proxy) to .env, then run docker compose pull && docker compose up -d. Delete the three old configuration files afterwards. If you customised one of them, move the change into a compose.override.yml listed last in COMPOSE_FILE. This upgrade recreates SpacetimeDB, LiveKit and the proxies once, so active calls drop.",
+  },
+  {
     version: "v1.6.3",
     date: "November 2026",
     items: [
