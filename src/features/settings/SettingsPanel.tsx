@@ -1,4 +1,3 @@
-import { AudioLinesIcon, BellIcon, ServerIcon, UserRoundIcon } from 'lucide-react'
 import { AccountTab } from './AccountTab'
 import { ConnectionTab } from './ConnectionTab'
 import { NotificationsTab } from './NotificationsTab'
@@ -14,23 +13,11 @@ export function SettingsPanel() {
       </header>
 
       <Tabs defaultValue="account" className="space-y-3">
-        <TabsList className="max-w-full flex-wrap justify-start">
-          <TabsTrigger value="account" className="flex-none">
-            <UserRoundIcon className="size-3.5" />
-            Account
-          </TabsTrigger>
-          <TabsTrigger value="connection" className="flex-none">
-            <ServerIcon className="size-3.5" />
-            Connection
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="flex-none">
-            <BellIcon className="size-3.5" />
-            Notifications
-          </TabsTrigger>
-          <TabsTrigger value="audio" className="flex-none">
-            <AudioLinesIcon className="size-3.5" />
-            Audio
-          </TabsTrigger>
+        <TabsList className="w-full flex-wrap">
+          <TabsTrigger value="account" className="flex-1">Account</TabsTrigger>
+          <TabsTrigger value="connection" className="flex-1">Connection</TabsTrigger>
+          <TabsTrigger value="notifications" className="flex-1">Notifications</TabsTrigger>
+          <TabsTrigger value="audio" className="flex-1">Audio</TabsTrigger>
         </TabsList>
 
         <TabsContent value="account" keepMounted>
