@@ -134,10 +134,15 @@
     overscroll-behavior: none;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground select-none;
     margin: 0;
     overflow: hidden;
     }
+  /* App chrome is not selectable (native-app feel); content people copy is.
+     WebKit needs editable fields opted back in explicitly. */
+  :where(input, textarea, [contenteditable]:not([contenteditable='false']), .message-content, pre, code, [role='alert']) {
+    @apply select-text;
+  }
   html {
     @apply font-sans;
     color-scheme: dark;
