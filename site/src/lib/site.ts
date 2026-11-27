@@ -8,6 +8,8 @@ export const GITHUB_ISSUE_NEW = `${GITHUB_BASE}/issues/new/choose`;
 export const GITHUB_DISCUSSIONS = `${GITHUB_BASE}/discussions`;
 export const GITHUB_RELEASES = `${GITHUB_BASE}/releases`;
 export const LICENSE_NAME = "GNU GPLv3";
+// A public instance the maintainer keeps on (nearly) the latest version.
+export const WEB_APP_URL = "https://lc-app.stoaz.net";
 
 // Build-time GitHub API reads, shared across every page of one build (and the
 // dev server's lifetime). Unauthenticated calls get 60/hour per IP; without

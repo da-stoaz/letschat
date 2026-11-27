@@ -8,6 +8,7 @@ import {
   GITHUB_ISSUE_NEW,
   GITHUB_RELEASES,
   LICENSE_NAME,
+  WEB_APP_URL,
 } from "@/lib/site";
 
 // Baked in at build time; the script below refreshes it, since releases don't rebuild the site.
@@ -85,6 +86,21 @@ const latestVersion: string = (await githubApi("/releases/latest"))?.tag_name?.r
 
         <div class="relative z-10 lg:pl-6">
           <ConversationPreview />
+        </div>
+      </div>
+    </section>
+
+    <section id="try" class="max-w-7xl mx-auto px-5 sm:px-6 pt-4 pb-2">
+      <div class="portal-banner">
+        <div>
+          <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">Try it in your browser</h2>
+          <p class="text-sm text-muted-foreground max-w-2xl">
+            No download and no server needed. Create an account on the public instance and look around: chat, start a call, share your screen. It usually runs the latest version.
+          </p>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <a href={WEB_APP_URL} target="_blank" rel="noopener" class="portal-btn-primary">Open the web app</a>
+          <a href="/self-hosting" class="portal-btn-secondary">Host your own</a>
         </div>
       </div>
     </section>
