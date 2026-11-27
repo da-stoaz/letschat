@@ -109,8 +109,9 @@ const shipped = [
   },
 ];
 
-// Ahead, roughly in priority order. `status` picks the group on the page:
-// Now = in progress, Next = up next, Planned, Deferred = later.
+// Ahead. `status` picks the group on the page (Now = in progress, Next = up
+// next, Planned, Deferred = later); each group lists P0 first, then P1, P2, Idea.
+// Items of equal priority keep the order they have here.
 const upcoming = [
   {
     id: "Release",
@@ -236,12 +237,18 @@ const upcoming = [
   },
 ];
 
+// P0, P1, P2 by number; anything else (Idea) after them.
+const priorityRank = (priority: string) => (/^P\d+$/.test(priority) ? Number(priority.slice(1)) : Infinity);
+
 const groups = [
   { status: "Now", title: "In progress" },
   { status: "Next", title: "Up next" },
   { status: "Planned", title: "Planned" },
   { status: "Deferred", title: "Later" },
-].map((group) => ({ ...group, items: upcoming.filter((m) => m.status === group.status) }));
+].map((group) => ({
+  ...group,
+  items: upcoming.filter((m) => m.status === group.status).sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority)),
+}));
 ---
 
 <PageLayout

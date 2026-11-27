@@ -184,7 +184,7 @@ export function getCaptureErrorMessage(device: CaptureDevice, error: unknown): s
     // "Permission denied by system" when the OS privacy switch is off.
     return isDesktopTauriRuntime() || /system/i.test(message)
       ? systemBlockedMessage(device)
-      : `${device === 'camera' ? 'Camera' : 'Microphone'} access is blocked for this site. Allow it in your browser’s site settings, then try again.`
+      : `${device === 'camera' ? 'Camera' : 'Microphone'} is blocked for this site. Allow it in the site settings next to the address bar, then try again.`
   }
   if (isCameraDeviceNotFoundError(error)) {
     return `No ${device} found. Connect one, then try again.`
