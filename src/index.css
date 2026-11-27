@@ -157,8 +157,12 @@
     height: var(--app-height, 100dvh);
   }
 
+  /* Only as wide as its text: WebKit paints a selection across messages to the
+     right edge of each block, which turned a drag-select into full-width bars. */
   .message-content {
     overflow-wrap: anywhere;
+    display: inline-block; /* capped by max-w-full on the element */
+    vertical-align: top;
   }
   .message-content pre, .message-content table {
     display: block;
